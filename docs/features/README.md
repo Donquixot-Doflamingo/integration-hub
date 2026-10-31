@@ -10,10 +10,10 @@ Several features share one epic and therefore one ticket range; the feature fiel
 | F-02 | Mock vendor (programmable fake vendor) | M0 · EP-01 | shipped (M0) | [F-02](F-02-mock-vendor.md) | US-0201–0203 | HUB-020–039 |
 | F-03 | Config registry & snapshots | M1 · EP-02 | shipped (M1) | [F-03](F-03-config-registry.md) | US-0301–0304 | HUB-040–059 |
 | F-04 | Transformation engine & golden fixtures | M2 · EP-03 | shipped (M2) | [F-04](F-04-transformation-engine.md) | US-0401–0405 | HUB-060–079 |
-| F-05 | Tenant auth, grants & edge validation | M3 · EP-04 | proposed | [F-05](F-05-tenant-auth-edge.md) | US-0501–0504 | HUB-080–109 |
-| F-06 | Sync invoke path & canonical error envelope | M3 · EP-04 | proposed | [F-06](F-06-sync-invoke-errors.md) | US-0601–0605 | HUB-080–109 |
-| F-07 | Credentials & vendor auth schemes | M3 · EP-04 | proposed | [F-07](F-07-credentials-auth-schemes.md) | US-0701–0703 | HUB-080–109 |
-| F-08 | Audit trail | M3 · EP-04 | proposed | [F-08](F-08-audit-trail.md) | US-0801–0804 | HUB-080–109 |
+| F-05 | Tenant auth, grants & edge validation | M3 · EP-04 | shipped | [F-05](F-05-tenant-auth-edge.md) | US-0501–0504 | HUB-080–109 |
+| F-06 | Sync invoke path & canonical error envelope | M3 · EP-04 | in-progress | [F-06](F-06-sync-invoke-errors.md) | US-0601–0605 | HUB-080–109 |
+| F-07 | Credentials & vendor auth schemes | M3 · EP-04 | shipped | [F-07](F-07-credentials-auth-schemes.md) | US-0701–0703 | HUB-080–109 |
+| F-08 | Audit trail | M3 · EP-04 | in-progress | [F-08](F-08-audit-trail.md) | US-0801–0804 | HUB-080–109 |
 | F-09 | Durable delivery: outbox, worker, wait/async/async_callback | M4 · EP-05 | proposed | [F-09](F-09-durable-delivery.md) | US-0901–0906 | HUB-110–139 |
 | F-10 | Idempotency | M4 · EP-05 | proposed | [F-10](F-10-idempotency.md) | US-1001–1004 | HUB-110–139 |
 | F-11 | Outbound callbacks & registrar (signed webhooks, SSRF guard) | M4 · EP-05 | proposed | [F-11](F-11-outbound-callbacks.md) | US-1101–1103 | HUB-110–139 |
@@ -26,7 +26,7 @@ Several features share one epic and therefore one ticket range; the feature fiel
 | F-18 | Observability: metrics, traces, alerts, dashboards, load tests | M8 · EP-09 | proposed | [F-18](F-18-observability.md) | US-1801–1804 | HUB-230–249 |
 | F-19 | Admin console (SvelteKit frontend) | Parallel · EP-10 | proposed | [F-19](F-19-admin-console.md) | US-1901–1906 | HUB-250–299 |
 | F-20 | Hub MCP server (`hubmcp`) | After M3 · EP-11 | proposed | [F-20](F-20-hub-mcp-server.md) | US-2001–2006 | HUB-300–329 |
-| F-21 | Consumer Claude skill & Go SDK (`hubclient`) | After M3 · EP-11 | proposed | [F-21](F-21-claude-skill-sdk.md) | US-2101–2104 | HUB-300–329 |
+| F-21 | Consumer Claude skill & Go SDK (`hubclient`) | After M3 · EP-11 | in-progress | [F-21](F-21-claude-skill-sdk.md) | US-2101–2104 | HUB-300–329 |
 | F-22 | Release-2 capabilities | Release 2 · EP-12 | proposed | [F-22](F-22-release-2.md) | US-2201–2208 | HUB-330–399 |
 
 ## Dependency graph

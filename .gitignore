@@ -33,6 +33,10 @@ __pycache__/
 *.key
 backend/config/dev/credentials*.enc
 !backend/config/dev/credentials.example.*
+# dev credential source (HUB-084): the encrypted file and its key, wherever they are written
+backend/**/dev-secrets.enc
+backend/**/*.enc
+backend/**/dev.key
 
 # Claude Code local-only settings
 .claude/settings.local.json

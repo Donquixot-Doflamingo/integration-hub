@@ -6,6 +6,86 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `perf(edge)` · add the overhead benchmark and the M3 summary · HUB-097 · F-06
+  - BenchmarkInvokeOverhead measures Hub overhead (handler time minus vendor time) through the real credential cache, upstream client, audit writer and metrics: p99 0.42–0.51 ms with mockvendor at 0 ms (budget 5 ms), each stage reported against DESIGN §18.6
+  - docs/milestones/M3.md: acceptance evidence, what was built, deferred work and deviations; F-05 and F-07 shipped, F-06, F-08 and F-21 in progress
+- 2026-10-31 · `test(edge)` · prove every error class and the audit trail end to end · HUB-095 · F-06
+  - make itest runs caller → hub → mockvendor for every sync outcome of DESIGN §10.2 plus validation, authentication and unknown-integration errors, asserting status, code, retryable and retry_after_ms
+  - The same run checks each stored timeline (gap-free seq, first and final event, vendor stages when the vendor was called, attempt rows) and greps every stored payload, event meta and captured log line for credential values, the API key and x-pii values; a positive control proves the search works
+  - With the audit database stalled, the sync path still answers 20 requests at full speed
+  - Failed requests now log one request failed line (integration, code, status, attempts; never bodies)
+- 2026-10-31 · `feat(hub)` · wire the gateway role to the edge, credentials, upstream and audit · HUB-088 · F-06
+  - hub gateway now serves the caller API: discovery, dry-run and invoke over the warm credential cache, the per-account upstream client and the audit writer
+  - Credentials of every account in a snapshot are loaded before that snapshot serves traffic (at boot and on every config change); upstream pools of removed accounts are pruned after the swap
+  - New settings: HUB_AUDIT_MASK_KEY, HUB_DEBUG_HEADERS, and HUB_CRED_SOURCE now defaults to localfile://.data/dev-secrets.enc
+- 2026-10-31 · `feat(edge)` · add the sync invoke pipeline · HUB-088 · F-06
+  - POST /v1/integrations/{id}/invoke and /invoke/{operation} validate, resolve, transform, call the upstream, map the response and return the canonical body (200) or a canonical error
+  - Paused integrations answer 503 INTEGRATION_PAUSED; integrations that move money or quota need an Idempotency-Key (400 IDEMPOTENCY_KEY_REQUIRED); X-Request-Deadline caps the upstream time
+  - Each request records the full audit timeline (received → validated → resolved → transformed → vendor.sent → vendor.responded → response.transformed → completed or failed), one attempt row per vendor call, and per-stage plus hub_overhead_ms metrics
+  - Dry-run now also shows headers added by the vendor's auth scheme (bearer, basic), masked
+- 2026-10-31 · `feat(edge)` · classify upstream outcomes and apply the sync retry rule · HUB-087 · F-06
+  - Timeouts (endpoint or X-Request-Deadline) map to 504 UPSTREAM_TIMEOUT; refused, DNS, TLS, reset, protocol and egress failures to 503 UPSTREAM_UNAVAILABLE; vendor 5xx/429/401-403/other 4xx keep the response transformer's classification
+  - A sync attempt is retried once, immediately, only after a timeout or reset and only if the endpoint is idempotent or an Idempotency-Key was sent; a caller deadline is never retried
+  - 429 without a rule-set retry_after_ms gets it from Retry-After (seconds or HTTP date); UPSTREAM_REJECTED carries the vendor's own message and code when no rule sets one
+- 2026-10-31 · `fix(edge)` · answer 404 for integrations outside the tenant's set in discovery · HUB-090 · F-05
+  - GET /v1/integrations/{id} for an integration the tenant neither owns nor is granted now returns 404 INTEGRATION_NOT_FOUND instead of 403, so integration ids cannot be enumerated
+- 2026-10-31 · `feat(edge)` · audit every authorized request through the shared pipeline · HUB-092 · F-08
+  - Every request past authorization records request.received (tenant key as id and hash), request.validated, integration.resolved (version, vendor, account, transformers, policy, snapshot version) and a final request.completed or request.failed with its requests record
+  - Dry-run calls are audited with dry_run on the record and the masked upstream request as request.transformed
+  - Validation, operation, session and credential failures are audited; unauthenticated and unauthorized calls are not
+- 2026-10-31 · `feat(audit)` · apply the audit payload policies per request · HUB-093 · F-08
+  - audit.Trail records each §13.1 event with sequence number, sha256 and byte size of the exact bytes seen, under every policy
+  - full stores raw bytes; masked (default) masks x-pii fields by pointer in canonical stages and by value in vendor stages (identifiers HMAC'd per tenant, free_text replaced by hash and size); metadata_only and, until HUB-208, sealed store no bodies
+  - Credential values are replaced by *** in every stored payload; payloads over 64 KB are stored truncated (spill to object storage: HUB-098)
+- 2026-10-31 · `feat(audit)` · add the audit ledger tables and the buffered writer · HUB-091 · F-08
+  - Migration 00003 adds day-partitioned hub.requests, hub.request_events and hub.request_attempts; partitions are created from yesterday to 7 days ahead at start and every 6 h
+  - audit.Writer.Emit never blocks: a full buffer drops the batch and counts it in audit_events_dropped_total{reason=buffer_full}; failed writes count as write_error
+  - Rows are written in bulk (COPY for events and attempts, upsert for the request record) and drained on shutdown; audit_buffer_fill_ratio shows the buffer level
+- 2026-10-31 · `feat(edge)` · add the dry-run endpoint and the shared request pipeline · HUB-089 · F-06
+  - POST /v1/integrations/{id}/dry-run (key scope dry_run) returns the exact upstream method, URL, headers and body, with credentials shown as *** and listed in redacted
+  - Dry-run sends nothing upstream and creates no queue entry or idempotency record
+  - Unknown operation → 404 OPERATION_NOT_FOUND; X-Hub-Session before multi-step support → 404 SESSION_NOT_FOUND
+- 2026-10-31 · `feat(edge)` · add the discovery endpoints · HUB-090 · F-05
+  - GET /v1/integrations lists only integrations the tenant owns or is granted, filterable by capability, with opaque cursor paging
+  - GET /v1/integrations/{id} describes delivery mode, wait window, TTL, circuit-open behaviour and callback events; GET /v1/capabilities/{capability} returns the canonical schemas per operation
+  - No vendor, account, transformer or version appears in any discovery response
+- 2026-10-31 · `feat(edge)` · validate bodies against the capability schema with size limits · HUB-082 · F-05
+  - Bodies over 1 MB (4 MB for llm.* capabilities) get 413 PAYLOAD_TOO_LARGE, refused from Content-Length before reading
+  - Schema violations return 400 VALIDATION_FAILED, reason schema, one detail per violation with its JSON pointer and keyword
+- 2026-10-31 · `feat(edge)` · authenticate tenant keys and check grants · HUB-081 · F-05
+  - Bearer keys are hashed and matched against the snapshot's key index (no DB), hashes compared in constant time; revoked keys 401, suspended tenants 403
+  - Unknown integration 404 INTEGRATION_NOT_FOUND; not owner or grantee 403 not_granted; missing scope (invoke, dry_run, or <scope>:<integration>) 403 missing_scope; no snapshot 503 NOT_READY
+  - Auth middleware records hub_stage_duration_ms{stage=auth}: p99 11 µs
+- 2026-10-31 · `feat(resolve)` · resolve the active version and a sticky weighted target · HUB-083 · F-06
+  - resolve.Resolve returns version (active or exact), target, failover chain, delivery policy and snapshot version; owner or grantee only
+  - The weighted target is chosen by an FNV hash of the idempotency key or request id: the same key always gets the same target; 90/10 within ±2 % over 100 000 keys
+  - p99 84 ns vs the 0.05 ms budget
+- 2026-10-31 · `feat(edge)` · add the gateway server, request ids and the error envelope · HUB-080 · F-06
+  - Every gateway response carries X-Hub-Request-Id (req_ + ULID), also in the logging context
+  - Panics become a 500 INTERNAL_ERROR envelope; the log has the panic and stack, never the body
+  - WriteError writes the canonical envelope with the status of its code and Retry-After (s) for 429/503; every code validated against the public contract
+- 2026-10-31 · `feat(hubclient)` · add Go SDK with sealed Result/Queued outcomes and typed errors · HUB-094 · F-21
+  - `hubclient.New(baseURL, apiKey, opts...)` gives a client for the caller API; every call takes a context and sends `User-Agent: hubclient-go/0.1.0`
+  - `Invoke` returns `*Result` for a 200 or `*Queued` for a 202, through a sealed `Outcome` interface, so an accepted request can never be mistaken for a completed one; options set `Idempotency-Key`, the operation (`/invoke/{op}`), `Prefer: respond-async`, `X-Request-Deadline`, `X-Hub-Session` and `traceparent`
+  - Hub errors arrive as `*hubclient.Error` with the canonical code, retryable flag, retry-after, request id, reason and field details; a non-Hub failure such as a proxy's HTML 502 still yields an `*Error` (code `INTERNAL_ERROR`); `IsRetryable(err)` helps decide on a retry
+  - `GetRequest`, `DryRun`, `ListIntegrations` (plus the `AllIntegrations` iterator), `GetIntegration`, `GetCapability` and `NewIdempotencyKey` cover polling, onboarding and discovery
+  - The API key never appears in errors, formatted clients or logs
+- 2026-10-31 · `feat(upstream)` · add per-account upstream client with deadlines and egress allowlist · HUB-086 · F-06
+  - Vendor calls use one connection pool per account (64 connections by default), the endpoint's `timeout_ms` and `connect_timeout_ms`, and a caller deadline that is lower than the endpoint timeout wins
+  - Only hosts declared in the vendor's regions are reachable, refused before any connection is opened; TLS 1.2+ with verification, plain http only to loopback
+  - Timeouts, refused connections, resets and egress refusals come back as typed errors for the error classifier; vendor answers of any status come back as responses, with JSON parsed and bodies capped at 4 MiB
+  - `vendor_latency_ms`, `upstream_egress_denied_total` and an `upstream {vendor}.{endpoint}` client span; trace context goes to vendors only when they opt in
+
+- 2026-10-31 · `feat(creds)` · add static_headers, bearer and basic auth schemes · HUB-085 · F-07
+  - The vendor definition's `auth:` picks the scheme: bearer sets `Authorization: Bearer <token>`, basic sets `Authorization: Basic base64(username:password)`, static_headers checks the transformer mapped every credential into a header
+  - Unknown schemes and missing credential values fail with errors that name the key, never the value
+  - Injection runs after the transformer and never edits the header map it was given, so the `request.transformed` snapshot cannot pick up injected values
+
+- 2026-10-31 · `feat(creds)` · add local encrypted credential source with warmed cache · HUB-084 · F-07
+  - Dev credentials live in one AES-256-GCM file (`.data/dev-secrets.enc`, key from `HUB_DEV_KEY_FILE`); a tampered, truncated or wrongly keyed file is refused with a clear error and yields nothing
+  - The request path reads credentials only from a cache warmed at snapshot load (TTL 5 min, background refresh); a miss is a typed error counted in `creds_cache_miss_total`, never an inline decrypt
+  - Every loaded secret, including the base64 basic-auth form, is registered with the log redactor before it can be used
+  - `hubctl creds init-key | set | list` creates the dev key and file for `ct-brandA-in` and `ct-brandB-us`; `list` prints key names only
 - 2026-10-31 · `build(frontend)` · regenerate the admin API client for contract round 1 · HUB-278 · F-19
   - The console's generated types and contract mocks now match hub-admin 1.1.0 (X-Hub-Request-Id on every response, active-version filters, per-account dead-letter count and age); no behaviour change yet
 - 2026-10-31 · `docs(contracts)` · add the round-1 contract notice for backend and frontend · HUB-278 · F-19

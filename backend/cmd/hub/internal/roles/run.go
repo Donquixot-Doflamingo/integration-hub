@@ -29,6 +29,9 @@ type Options struct {
 	Metrics *telemetry.Metrics
 	// ExtraChecks are added to the readiness checks (later milestones: snapshot loaded).
 	ExtraChecks []Check
+	// Secrets is the process's redaction set (the logger's); decrypted credentials are added to
+	// it. nil means a fresh set.
+	Secrets *telemetry.SecretSet
 }
 
 type endpoint struct {
@@ -73,13 +76,26 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 		_ = tp.Shutdown(ctx)
 		return err
 	}
+	var gw *gateway
+	if cfg.Role == Gateway {
+		secrets := opts.Secrets
+		if secrets == nil {
+			secrets = telemetry.NewSecretSet()
+		}
+		if gw, err = newGateway(ctx, cfg, metrics, log, secrets, tp, st.pg, reg); err != nil {
+			_ = tp.Shutdown(ctx)
+			return err
+		}
+		gw.start(ctx)
+		defer gw.shutdown() // after the listeners closed (deferred calls run before st.close)
+	}
 	reg.load(ctx)
 	checks := append(append(st.checks(), reg.check()), opts.ExtraChecks...)
 
 	// ops is last so it is closed last: /readyz answers 503 while the public listener drains.
 	endpoints := []endpoint{{"ops", cfg.OpsAddr, opsHandler(cfg.Role, &ready, checks, metrics, log)}}
 	if cfg.Role.servesPublicHTTP() {
-		pub := telemetry.HTTPHandler(publicHandler(cfg.Role), tp, string(cfg.Role))
+		pub := telemetry.HTTPHandler(publicHandler(cfg.Role, gw), tp, string(cfg.Role))
 		endpoints = append([]endpoint{{"http", cfg.HTTPAddr, pub}}, endpoints...)
 	}
 
@@ -153,6 +169,11 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	return runErr
 }
 
-// publicHandler is the role's public surface. Edge (gateway) and control (admin) handlers are
-// mounted here by later tickets; until then every path is 404.
-func publicHandler(Role) http.Handler { return http.NotFoundHandler() }
+// publicHandler is the role's public surface: the edge for the gateway. The control plane
+// (admin) is mounted by EP-08; until then its paths are 404.
+func publicHandler(role Role, gw *gateway) http.Handler {
+	if role == Gateway && gw != nil {
+		return gw.edge.Handler()
+	}
+	return http.NotFoundHandler()
+}

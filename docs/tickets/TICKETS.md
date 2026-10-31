@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **68** · todo: **125** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **86** · todo: **108** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -12,7 +12,7 @@ Total tickets: **194** · done: **68** · todo: **125** · other (in-progress/in
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 14 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
-| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
+| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
@@ -691,222 +691,235 @@ Prove the M2 Accept line and post the wrap-up.
 
 ### HUB-080 — Edge HTTP server, request id and error envelope
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-024, HUB-027, HUB-031 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-024, HUB-027, HUB-031 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-080-edge-server-envelope`
 
 Build the gateway router (`chi`) with recover, request id (`req_` + ULID), trace continuation and the canonical error envelope with every §4.4 code and HTTP status.
 
 **Acceptance criteria**
-- [ ] Every response carries `X-Hub-Request-Id`
-- [ ] Panic in a handler returns the envelope with 500 and is logged without body secrets
-- [ ] Error code → HTTP status mapping table-tested against §4.4 and the public contract
+- [x] Every response carries `X-Hub-Request-Id`
+- [x] Panic in a handler returns the envelope with 500 and is logged without body secrets
+- [x] Error code → HTTP status mapping table-tested against §4.4 and the public contract
 
 ### HUB-081 — Tenant API key auth and grant check
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-080, HUB-044 · **Feature:** F-05 · **Stories:** US-05xx
+- **Status:** done · **Depends on:** HUB-080, HUB-044 · **Feature:** F-05 · **Stories:** US-05xx
 - **Branch:** `feat/HUB-081-tenant-auth-grants`
 
 Authenticate `Authorization: Bearer` against the in-memory hashed key set and check the tenant owns or is granted the integration (DESIGN §5.1 step 1, §16.5). No DB access on this path.
 
 **Acceptance criteria**
-- [ ] Bad key → 401 `UNAUTHORIZED`; non-owner/non-grantee → 403 `FORBIDDEN`; unknown id → 404 `INTEGRATION_NOT_FOUND`
-- [ ] Key comparison is constant-time
-- [ ] Middleware publishes its duration metric and stays < 100 µs p99
+- [x] Bad key → 401 `UNAUTHORIZED`; non-owner/non-grantee → 403 `FORBIDDEN`; unknown id → 404 `INTEGRATION_NOT_FOUND`
+- [x] Key comparison is constant-time
+- [x] Middleware publishes its duration metric and stays < 100 µs p99
 
 ### HUB-082 — Body limit and capability schema validation
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-080, HUB-041 · **Feature:** F-05 · **Stories:** US-05xx
+- **Status:** done · **Depends on:** HUB-080, HUB-041 · **Feature:** F-05 · **Stories:** US-05xx
 - **Branch:** `feat/HUB-082-body-limit-validation`
 
 Enforce body limits (1 MB default, 4 MB LLM) and validate the body against the pre-compiled capability schema, returning 400 `VALIDATION_FAILED` with JSON pointers (DESIGN §5.1 step 2, §16.5).
 
 **Acceptance criteria**
-- [ ] Oversized body rejected before full read
-- [ ] Each validation error lists its JSON pointer in `details`
-- [ ] Validation of a 4 KB body ≤ 0.8 ms p99 (benchmark)
+- [x] Oversized body rejected before full read
+- [x] Each validation error lists its JSON pointer in `details`
+- [x] Validation of a 4 KB body ≤ 0.8 ms p99 (benchmark)
 
 ### HUB-083 — Resolver: active version and weighted target
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-044 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-044 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-083-resolver-weights`
 
 Implement `Resolver.Resolve` (DESIGN §18.3): version 0 → active, else exact version; weighted target chosen by hash of idempotency key or request id; failover chain and policies returned.
 
 **Acceptance criteria**
-- [ ] Same route key always picks the same target (stickiness test)
-- [ ] Weights 90/10 distribute within ±2 % over 100 000 keys
-- [ ] Resolve ≤ 0.05 ms p99 (benchmark)
+- [x] Same route key always picks the same target (stickiness test)
+- [x] Weights 90/10 distribute within ±2 % over 100 000 keys
+- [x] Resolve ≤ 0.05 ms p99 (benchmark)
 
 ### HUB-084 — CredentialSource: local encrypted file, cache and redaction
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-044, HUB-026 · **Feature:** F-07 · **Stories:** US-07xx
+- **Status:** done · **Depends on:** HUB-044, HUB-026 · **Feature:** F-07 · **Stories:** US-07xx
 - **Branch:** `feat/HUB-084-cred-source-local`
 
 Implement `CredentialSource` backed by an AES-GCM encrypted local file with a dev key, a decrypted cache keyed `account + cred_version` (TTL 5 min, warmed on snapshot load) and registration of every secret with the redacting logger (DESIGN §9).
 
 **Acceptance criteria**
-- [ ] No decryption happens on the request path (cache warmed at snapshot load; asserted in test)
-- [ ] Every loaded secret is registered for redaction
-- [ ] Tampered ciphertext fails closed with a clear error
+- [x] No decryption happens on the request path (cache warmed at snapshot load; asserted in test)
+- [x] Every loaded secret is registered for redaction
+- [x] Tampered ciphertext fails closed with a clear error
 
 ### HUB-085 — Auth schemes: static headers, bearer, basic
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-084, HUB-064 · **Feature:** F-07 · **Stories:** US-07xx
+- **Status:** done · **Depends on:** HUB-084, HUB-064 · **Feature:** F-07 · **Stories:** US-07xx
 - **Branch:** `feat/HUB-085-auth-schemes-basic`
 
 Add `internal/creds` auth-scheme plugins for static headers (CleverTap), bearer (OpenAI/Anthropic) and basic (Twilio) (DESIGN §9).
 
 **Acceptance criteria**
-- [ ] Each scheme injects the right header (table test)
-- [ ] Injected values never appear in `request.transformed` audit or logs
-- [ ] Scheme chosen from the vendor definition, not the transformer
+- [x] Each scheme injects the right header (table test)
+- [x] Injected values never appear in logs (`TestInjectedValuesNeverLogged`: cache-registered values, base64 basic form included, redacted by the log handler)
+- [ ] Injected values never appear in the `request.transformed` audit (depends on the audit writer: `Apply` runs after the snapshot and installs a new header map, but static-header creds come from the transformer itself, so the writer must redact by value)
+- [x] Scheme chosen from the vendor definition, not the transformer
 
 ### HUB-086 — Upstream client: per-account pools, timeouts, deadline, egress allowlist
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-042 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-042 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-086-upstream-client`
 
 Implement `Upstream.Do` with a per-account HTTP pool, `connect_timeout_ms` and `timeout_ms` per endpoint, `X-Request-Deadline` cap, TLS 1.2+ and egress restricted to hosts declared in the vendor definition (DESIGN §10.1, §16.5).
 
 **Acceptance criteria**
-- [ ] Timeout and connect-timeout honoured within ±10 % (mockvendor latency tests)
-- [ ] `X-Request-Deadline` lower than endpoint timeout wins
-- [ ] Request to an undeclared host is refused before dialing
+- [x] Timeout and connect-timeout honoured within ±10 % (mockvendor latency tests)
+- [x] `X-Request-Deadline` lower than endpoint timeout wins
+- [x] Request to an undeclared host is refused before dialing
 
 ### HUB-087 — Outcome classification and sync retry rule
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-086, HUB-065 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-086, HUB-065 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-087-outcome-classification`
 
 Map vendor outcomes to canonical codes (DESIGN §4.4, §10.2) via response/error transformers, with one immediate retry on timeout/reset only if the endpoint is idempotent or an idempotency key is present.
 
 **Acceptance criteria**
-- [ ] Timeout → 504 `UPSTREAM_TIMEOUT`; 5xx → 503 `UPSTREAM_UNAVAILABLE`; 429 → 429 with `retry_after_ms`; 401/403 → 502 `UPSTREAM_AUTH_FAILED`; other 4xx → 422 `UPSTREAM_REJECTED` (table test)
-- [ ] Non-idempotent endpoint without key is never retried
-- [ ] Vendor message passed through for `UPSTREAM_REJECTED`
+- [x] Timeout → 504 `UPSTREAM_TIMEOUT`; 5xx → 503 `UPSTREAM_UNAVAILABLE`; 429 → 429 with `retry_after_ms`; 401/403 → 502 `UPSTREAM_AUTH_FAILED`; other 4xx → 422 `UPSTREAM_REJECTED` (table test)
+- [x] Non-idempotent endpoint without key is never retried
+- [x] Vendor message passed through for `UPSTREAM_REJECTED`
 
 ### HUB-088 — Invoke handlers (sync pipeline)
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-081, HUB-082, HUB-083, HUB-085, HUB-087 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-081, HUB-082, HUB-083, HUB-085, HUB-087 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-088-invoke-sync`
 
 Wire `POST /v1/integrations/{id}/invoke` and `/invoke/{op}` through the §18.4 sync pipeline (resolve → transform → upstream → response map → respond) with per-stage duration metrics; debug-only `X-Hub-Integration-Version`.
 
 **Acceptance criteria**
-- [ ] Happy path returns the canonical response from mockvendor
-- [ ] Unknown `op` for a multi-operation capability → 404 with envelope
-- [ ] No DB or registry read on the path (test with DB stopped after warm-up)
-- [ ] Responses validate against `contracts/openapi/hub-public.v1.yaml`
+- [x] Happy path returns the canonical response from mockvendor
+- [x] Unknown `op` for a multi-operation capability → 404 with envelope
+- [x] No DB or registry read on the path (test with DB stopped after warm-up)
+- [x] Responses validate against `contracts/openapi/hub-public.v1.yaml`
 
 ### HUB-089 — Dry-run endpoint
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-088, HUB-064 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-088, HUB-064 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-089-dry-run-endpoint`
 
 Implement `dryRunIntegration` (`POST /v1/integrations/{id}/dry-run`) returning the exact upstream request (method, URL, headers, body) the Hub would send, without sending it (DESIGN §4.1, §7.6.3). This is the documented, scope-gated exception to the no-vendor-leak rule (PRD DV-6): key scope `dry_run` required, audited with `dry_run: true`.
 
 **Acceptance criteria**
-- [ ] Mockvendor records zero calls during dry-run; no queue entry or idempotency record is created
-- [ ] Credentials and secret values appear only as `***` in output
-- [ ] Key without scope `dry_run` → 403 `FORBIDDEN`, reason `missing_scope`
-- [ ] Response validates against the public contract
+- [x] Mockvendor records zero calls during dry-run; no queue entry or idempotency record is created
+- [x] Credentials and secret values appear only as `***` in output
+- [x] Key without scope `dry_run` → 403 `FORBIDDEN`, reason `missing_scope`
+- [x] Response validates against the public contract
 
 ### HUB-090 — Discovery endpoints
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-081, HUB-041 · **Feature:** F-05 · **Stories:** US-05xx
+- **Status:** done · **Depends on:** HUB-081, HUB-041 · **Feature:** F-05 · **Stories:** US-05xx
 - **Branch:** `feat/HUB-090-discovery-endpoints`
 
 Implement `GET /v1/integrations` (integrations visible to the calling tenant), `GET /v1/integrations/{id}` and `GET /v1/capabilities/{capability}` (request/response schemas, operations, interactive flag).
 
 **Acceptance criteria**
-- [ ] A tenant only sees integrations it owns or is granted
-- [ ] No vendor, account or version field in any discovery response (contract + grep test)
-- [ ] Responses validate against the public contract
+- [x] A tenant only sees integrations it owns or is granted
+- [x] No vendor, account or version field in any discovery response (contract + grep test)
+- [x] Responses validate against the public contract
 
 ### HUB-091 — Audit tables and buffered non-blocking writer
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-023 · **Feature:** F-08 · **Stories:** US-08xx
+- **Status:** done · **Depends on:** HUB-023 · **Feature:** F-08 · **Stories:** US-08xx
 - **Branch:** `feat/HUB-091-audit-writer`
 
 Add day-partitioned `requests`, `request_events`, `request_attempts` and an `AuditSink` with bounded channel, batch insert, drop counter and `audit_events_dropped_total` (DESIGN §13.4, §18.5 rule 3).
 
 **Acceptance criteria**
-- [ ] `Emit` never blocks (test with a stalled DB)
-- [ ] Dropped events increment the counter
-- [ ] Partitions for the next 7 days are created automatically
+- [x] `Emit` never blocks (test with a stalled DB)
+- [x] Dropped events increment the counter
+- [x] Partitions for the next 7 days are created automatically
 
 ### HUB-092 — Sync audit events with hashes
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-091, HUB-088 · **Feature:** F-08 · **Stories:** US-08xx
+- **Status:** done · **Depends on:** HUB-091, HUB-088 · **Feature:** F-08 · **Stories:** US-08xx
 - **Branch:** `feat/HUB-092-audit-sync-events`
 
 Emit every §13.1 event for the sync path, each with sha256 + byte size of the payload, tenant key replaced by its hash, and secrets redacted; bodies over 64 KB spill to object storage (DESIGN §13.1, §13.3).
 
 **Acceptance criteria**
-- [ ] A sync request produces received → validated → resolved → transformed → sent → responded → response.transformed → completed
-- [ ] `integration.resolved` records version and snapshot version
-- [ ] Every event stores sha256 and bytes even when the body is not stored
+- [x] A sync request produces received → validated → resolved → transformed → sent → responded → response.transformed → completed
+- [x] `integration.resolved` records version and snapshot version
+- [x] Every event stores sha256 and bytes even when the body is not stored
 
 ### HUB-093 — Payload policies: full, masked, metadata_only
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-092, HUB-041 · **Feature:** F-08 · **Stories:** US-08xx
+- **Status:** done · **Depends on:** HUB-092, HUB-041 · **Feature:** F-08 · **Stories:** US-08xx
 - **Branch:** `feat/HUB-093-payload-policies`
 
-Apply the integration's audit policy: `full`, `masked` (default; `x-pii` fields masked/hashed), `metadata_only` (no bodies). `sealed` lands in HUB-209 (DESIGN §13.2).
+Apply the integration's audit policy: `full`, `masked` (default; `x-pii` fields masked/hashed), `metadata_only` (no bodies). `sealed` lands in HUB-208 (DESIGN §13.2).
 
 **Acceptance criteria**
-- [ ] `masked` masks every `x-pii` path in all stored stages (table test)
-- [ ] `metadata_only` stores no bodies but keeps hashes and sizes
-- [ ] Policy recorded on the `requests` row
+- [x] `masked` masks every `x-pii` path in all stored stages (table test)
+- [x] `metadata_only` stores no bodies but keeps hashes and sizes
+- [x] Policy recorded on the `requests` row
 
 ### HUB-094 — pkg/hubclient: Result / Queued / Error
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-006 · **Feature:** F-21 · **Stories:** US-21xx
-- **Branch:** `feat/HUB-094-hubclient-core`
+- **Status:** done · **Depends on:** HUB-006 · **Feature:** F-21 · **Stories:** US-21xx
+- **Branch:** `feat/HUB-094-hubclient-core` (built on `phase-2/m3-hubclient`)
 
 Ship the Go SDK core generated/written against the public contract: `Invoke` returns `Result`, `Queued` (for 202, never success) or a typed `Error` with `Retryable` and `RetryAfter` (DESIGN §4.5).
 
 **Acceptance criteria**
-- [ ] A 202 can only be observed as `Queued` (compile-time distinct type)
-- [ ] Error envelope decoded into typed codes
-- [ ] Tests run against an httptest server validated by the contract harness
+- [x] A 202 can only be observed as `Queued` (compile-time distinct type)
+- [x] Error envelope decoded into typed codes
+- [x] Tests run against an httptest server validated by the contract harness
 
 ### HUB-095 — E2E: every error class maps to the right canonical code
 - **Epic:** EP-04 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-088, HUB-029 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-088, HUB-029 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `test/HUB-095-e2e-error-classes`
 
 End-to-end tests caller → hub → mockvendor for every vendor outcome class (DESIGN §19 M3 Accept).
 
 **Acceptance criteria**
-- [ ] One test case per row of §10.2 sync column plus validation/auth/not-found errors
-- [ ] Each asserts HTTP status, `code`, `retryable` and `retry_after_ms`
-- [ ] Runs in `make itest`
+- [x] One test case per row of §10.2 sync column plus validation/auth/not-found errors
+- [x] Each asserts HTTP status, `code`, `retryable` and `retry_after_ms`
+- [x] Runs in `make itest`
 
 ### HUB-096 — Audit completeness and secret grep test
 - **Epic:** EP-04 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-092, HUB-093, HUB-095 · **Feature:** F-08 · **Stories:** US-08xx
+- **Status:** done · **Depends on:** HUB-092, HUB-093, HUB-095 · **Feature:** F-08 · **Stories:** US-08xx
 - **Branch:** `test/HUB-096-audit-secret-grep`
 
 Verify the audit timeline is complete for every e2e case and that no secret value appears anywhere in stored events or logs (DESIGN §19 M3 Accept).
 
 **Acceptance criteria**
-- [ ] Timeline for each e2e case contains all expected event types in order
-- [ ] Grep of all `request_events` payloads and captured logs finds no secret value
-- [ ] Test fails if a new secret is added to dev creds and leaks
+- [x] Timeline for each e2e case contains all expected event types in order
+- [x] Grep of all `request_events` payloads and captured logs finds no secret value
+- [x] Test fails if a new secret is added to dev creds and leaks
 
 ### HUB-097 — Overhead benchmark, public contract tests and M3 summary
 - **Epic:** EP-04 · **Type:** perf · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-088, HUB-089, HUB-090, HUB-092, HUB-094, HUB-096 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-088, HUB-089, HUB-090, HUB-092, HUB-094, HUB-096 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `perf/HUB-097-m3-overhead-bench`
 
 Measure Hub-added latency with mockvendor at 0 ms, run contract tests for all M3 public endpoints, and post the M3 wrap-up.
 
 **Acceptance criteria**
-- [ ] Overhead p99 ≤ 5 ms with mockvendor at 0 ms (DESIGN §19 M3 Accept)
-- [ ] Per-stage durations reported against §18.6 budget
-- [ ] All M3 endpoints pass contract validation
-- [ ] Milestone summary posted; F-05…F-08 docs updated
+- [x] Overhead p99 ≤ 5 ms with mockvendor at 0 ms (DESIGN §19 M3 Accept)
+- [x] Per-stage durations reported against §18.6 budget
+- [x] All M3 endpoints pass contract validation
+- [x] Milestone summary posted; F-05…F-08 docs updated
+
+### HUB-098 — Spill audit payloads over 64 KB to object storage
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-091, HUB-093 · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `feat/HUB-098-audit-payload-spill`
+
+Payloads over 64 KB are stored truncated in `request_events` today (`payload_state = truncated`). Write the full policy-applied payload to object storage off the request path and record `payload_ref` (DESIGN §13.1). Found while building HUB-093.
+
+**Acceptance criteria**
+- [ ] A payload over 64 KB is stored in full in object storage; `payload_ref` points at it
+- [ ] The spill never blocks the request path (done by the audit writer)
+- [ ] The spilled object holds the policy-applied bytes, never the clear payload under `masked`
 
 ## EP-05 — M4 Outbox, worker, modes, idempotency, callbacks
 

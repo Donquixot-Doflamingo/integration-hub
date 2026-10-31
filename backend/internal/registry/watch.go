@@ -14,6 +14,9 @@ type WatchOptions struct {
 	// Interval between fingerprint checks; a change is built once it has been stable for one
 	// more interval (debounce), so a swap lands within about 2 × Interval of the last write.
 	Interval time.Duration
+	// BeforeSwap is called with a built snapshot just before it is published (warm caches the
+	// new snapshot needs, such as credentials of new accounts).
+	BeforeSwap func(*Snapshot)
 	// OnSwap is called after a new snapshot is published.
 	OnSwap func(*Snapshot)
 	// OnError is called when a changed config fails to build. The previous snapshot keeps serving.
@@ -70,6 +73,9 @@ func Watch(ctx context.Context, src Sources, store *Store, opts WatchOptions) er
 		}
 		if cur := store.Snapshot(); cur != nil && cur.Checksum == snap.Checksum {
 			continue // touched but identical content
+		}
+		if opts.BeforeSwap != nil {
+			opts.BeforeSwap(snap)
 		}
 		pub := store.Swap(snap)
 		if opts.OnSwap != nil {

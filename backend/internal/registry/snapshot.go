@@ -50,6 +50,18 @@ func (s *Snapshot) KeyByHash(hash string) (KeyEntry, bool) {
 	return k, ok
 }
 
+// ReindexKeys rebuilds the API-key index of s from s.Tenants (tests and admin-side copies). It
+// returns s for chaining.
+func ReindexKeys(s *Snapshot) *Snapshot {
+	s.keys = map[string]KeyEntry{}
+	for _, t := range s.Tenants {
+		for _, k := range t.APIKeys {
+			s.keys[k.Hash] = KeyEntry{Tenant: t, Key: k}
+		}
+	}
+	return s
+}
+
 // Active returns the active version of the integration.
 func (in *Integration) Active() *IntegrationVersion { return in.Versions[in.ActiveVersion] }
 

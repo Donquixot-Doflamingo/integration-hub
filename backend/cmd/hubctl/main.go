@@ -26,6 +26,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) >= 1 && args[0] == "creds" {
+		return credsCmd(args[1:], stdout, stderr)
+	}
 	if len(args) >= 2 && args[0] == "transform" && args[1] == "test" {
 		return transformTest(args[2:], stdout, stderr)
 	}

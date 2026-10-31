@@ -70,7 +70,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | --- | --- | --- | --- | --- | --- |
 | `hub_requests_total` | counter | requests | `tenant, integration, vendor, account, version, mode, code` | ~500 × 1.5 versions × 1 mode × 6 codes seen ≈ 4,500 | `edge` (sync/wait final), `delivery` (async final) |
 | `hub_overhead_ms` | histogram | ms | `integration, mode` | 500 × 2 × buckets ≈ 17,000 (classic) | `edge` |
-| `vendor_latency_ms` | histogram | ms | `vendor, account, endpoint, code` | 200 × 2 × 4 × 17 ≈ 27,000 (classic; native ≈ 1,600) | `upstream` |
+| `vendor_latency_ms` | histogram | ms | `vendor, account, endpoint, outcome` (HUB-086: `upstream` only knows transport facts, so `outcome` is the status class `1xx`–`5xx` or the transport kind `timeout`, `connect`, `reset`, `canceled`, `protocol`; canonical codes live on `vendor_attempts_total`) | 200 × 2 × 4 × 17 ≈ 27,000 (classic; native ≈ 1,600) | `upstream` |
 | `breaker_state` | gauge (0 closed, 1 half_open, 2 open) | enum | `vendor, account, endpoint` | ≤ 1,000 | `upstream` (every node reports its local view) |
 | `breaker_transitions_total` | counter | transitions | `vendor, account, endpoint, from, to` | ≤ 4,000 | `upstream` |
 | `queue_depth` | gauge | envelopes | `pool, status` (`accepted`, `retry_scheduled`, `in_flight`) | ≤ 6 | `delivery` (scheduler samples every 10 s) |
@@ -84,7 +84,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `credential_expiry_days` | gauge | days | `account, slot` | 400 | `creds` |
 | `llm_tokens_total` | counter | tokens | `tenant, integration, account, model, kind` (`input`/`output`) | ≤ 2,000 | `delivery` / `edge` via response mapping |
 | `llm_cost_usd_total` | counter | USD | `tenant, integration, account, model` | ≤ 1,000 | same |
-| `audit_events_dropped_total` | counter | events | `reason` (`buffer_full`, `encode_error`) | 2 | `audit` |
+| `audit_events_dropped_total` | counter | rows | `reason` (`buffer_full`, `write_error`, `encode_error`) | 3 | `audit` |
 
 ### 3.3 Additional Hub metrics (not in §16.2; needed for SLIs, alerts and the runbook)
 | Metric | Type | Unit | Labels | Package | Why |
@@ -104,6 +104,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `outbox_reclaimed_total` | counter | envelopes | `pool` | `delivery` | visibility-timeout reclaims (crashed workers / gateways) |
 | `worker_inflight` | gauge | attempts | `pool` | `delivery` | saturation |
 | `bulkhead_inflight` | gauge | calls | `account` | `upstream` | DESIGN §10.8 |
+| `upstream_egress_denied_total` | counter | calls | `vendor` | `upstream` | calls refused before dialing: host not declared in the vendor's regions (HUB-086); any increase is a config or security problem |
 | `callback_deliveries_total` | counter | deliveries | `tenant, outcome` | `callbacks` | outbound webhook health |
 | `callback_latency_seconds` | histogram | s | `tenant` | `callbacks` | |
 | `webhook_inbound_total` | counter | webhooks | `vendor, account, outcome` (`accepted`, `bad_signature`, `replay`, `uncorrelated`) | `webhooks` | |
@@ -111,6 +112,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `transform_budget_exceeded_total` | counter | events | `transformer, limit` (`nodes`,`output_size`,`time`) | `transform` | |
 | `idempotency_hits_total` | counter | hits | `result` (`replay`,`miss`,`in_progress`,`error`) | `edge` | |
 | `creds_cache_miss_total` | counter | misses | `account` | `creds` | must stay 0 on the hot path |
+| `creds_decrypts_total` | counter | loader calls | — | `creds` | decrypting loads happen only at warm-up and background refresh (HUB-084); a rise with traffic is a bug |
 | `redis_op_duration_seconds` | histogram | s | `op` | `upstream`, `edge` | |
 | `pg_pool_acquire_duration_seconds`, `pg_pool_in_use` | histogram, gauge | s, conns | `pool` | cmd wiring (pgxpool stats) | |
 | `http_server_inflight` | gauge | requests | `server` (`public`,`admin`) | `edge`, `control` | |
@@ -118,6 +120,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `admin_mutations_total` | counter | mutations | `action, outcome` | `control` | |
 | `publish_validation_failures_total` | counter | failures | `check` | `control` | |
 | `audit_buffer_fill_ratio` | gauge | ratio | — | `audit` | early warning before drops |
+| `audit_write_failures_total` | counter | writes | — | `audit` | failed batch writes; their rows also count in `audit_events_dropped_total{reason="write_error"}` (HUB-091) |
 
 ### 3.4 Go runtime metrics
 Registered via `collectors.NewGoCollector(collectors.WithGoCollectorRuntimeMetrics(...))` and `collectors.NewProcessCollector`:

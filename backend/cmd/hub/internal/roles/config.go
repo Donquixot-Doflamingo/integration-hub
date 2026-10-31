@@ -75,6 +75,10 @@ type Config struct {
 	ConfigWatch      bool   // dev only: rebuild and swap the snapshot when ConfigDir changes
 	DataDir          string // local cache of the last good snapshot (boot fallback)
 	BlobURL          string // snapshot blob store (file:// in phase 1)
+	CredSource       string // credential source: localfile://<path> in phase 1 (TECH_SPEC §8.1)
+	DevKeyFile       string // key of the localfile credential source
+	AuditMaskKey     Secret // master key for x-pii masking (environment only; random per process when unset)
+	DebugHeaders     bool   // gateway: add the debug-only X-Hub-Integration-Version header
 }
 
 // Load builds the config for role from flags (highest precedence), then HUB_* environment
@@ -93,9 +97,9 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	}
 
 	var (
-		c                                      = Config{Role: role, PGDSN: Secret(getenv("HUB_PG_DSN"))}
+		c                                      = Config{Role: role, PGDSN: Secret(getenv("HUB_PG_DSN")), AuditMaskKey: Secret(getenv("HUB_AUDIT_MASK_KEY"))}
 		shutdownGrace, readyDrain, level, rate string
-		watch                                  bool
+		watch, debugHeaders                    bool
 	)
 	fs := flag.NewFlagSet("hub "+string(role), flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -114,10 +118,13 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	fs.StringVar(&c.DataDir, "data-dir", env("HUB_DATA_DIR", ".data"), "local data directory (snapshot cache)")
 	fs.StringVar(&c.BlobURL, "blob-url", env("HUB_BLOB_URL", "file://.data/blobs"), "snapshot blob store URL (file:// in phase 1)")
 	fs.BoolVar(&watch, "config-watch", env("HUB_CONFIG_WATCH", "false") == "true", "dev only: watch config-dir and swap snapshots")
+	fs.StringVar(&c.CredSource, "cred-source", env("HUB_CRED_SOURCE", "localfile://.data/dev-secrets.enc"), "credential source (localfile://<path> in phase 1)")
+	fs.StringVar(&c.DevKeyFile, "dev-key-file", env("HUB_DEV_KEY_FILE", ".data/dev.key"), "key file of the localfile credential source")
+	fs.BoolVar(&debugHeaders, "debug-headers", env("HUB_DEBUG_HEADERS", "false") == "true", "gateway: send the debug-only X-Hub-Integration-Version header")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
-	c.ConfigWatch = watch
+	c.ConfigWatch, c.DebugHeaders = watch, debugHeaders
 	if fs.NArg() > 0 {
 		return Config{}, fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}
@@ -141,6 +148,12 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	}
 	if c.PGDSN == "" {
 		errs = append(errs, errors.New("HUB_PG_DSN is required (environment only)"))
+	}
+	if !strings.HasPrefix(c.CredSource, "localfile://") || c.CredSource == "localfile://" {
+		errs = append(errs, fmt.Errorf("cred-source: want localfile://<path> (phase 1), got %q", c.CredSource))
+	}
+	if k := len(c.AuditMaskKey); k > 0 && k < 32 {
+		errs = append(errs, fmt.Errorf("HUB_AUDIT_MASK_KEY: want at least 32 bytes, got %d", k))
 	}
 	if role == Worker && c.WorkerPool != "messaging" && c.WorkerPool != "llm" {
 		errs = append(errs, fmt.Errorf("pool: want messaging or llm, got %q", c.WorkerPool))
