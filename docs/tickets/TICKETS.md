@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **49** · todo: **145**
+Total tickets: **194** · done: **50** · todo: **144**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **194** · done: **49** · todo: **145**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 14 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 15 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1871,14 +1871,16 @@ Shipped (frontend-engineer): a "Force" column on the health board for admins (`R
 
 ### HUB-263 — Request explorer search
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1901
 - **Branch:** `feat/HUB-263-fe-request-search`
 
 Search requests by tenant, integration, status, code, time range and idempotency key with cursor pagination.
 
+Shipped (frontend-engineer): `/requests` search form for tenant (a select of own tenants for tenant viewers), integration, status (checkboxes, any of), error codes, vendor and account (not for tenant viewers), idempotency key, From/To in UTC with quick ranges (last hour, 24 hours, 7 days as absolute times) and page size; `status` and `code` sent comma-separated as the contract's form/explode=false; a range over 31 days or reversed is refused before calling the API; cursor paging with Previous/Next.
+
 **Acceptance criteria**
-- [ ] Search params in URL, shareable
-- [ ] Empty and error states covered
+- [x] Search params in URL, shareable (names match `searchRequests`; removable chips and Clear all; reload restores the form; paging keeps the filters; `filters.test.ts`, `requests/page.test.ts`, `e2e/requests.test.ts`)
+- [x] Empty and error states covered ("No requests yet" vs "No requests match this search" with Clear all filters; API errors with code, pointer details and request id; loading skeleton; the 31-day range problem shown on the time fields)
 
 ### HUB-264 — Request timeline
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

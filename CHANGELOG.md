@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add request explorer search with URL filters · HUB-263 · F-19
+  - Search requests by tenant, integration, status (any of several), error codes, idempotency key and a UTC time range; vendor and account filters for everyone except tenant viewers, who pick among their own tenants
+  - Quick ranges (last hour, 24 hours, 7 days) fill in absolute times, so the URL stays shareable; a range longer than 31 days or reversed is flagged on the time fields and not searched
+  - Every filter and the page size live in the URL, shown as removable chips with "Clear all"; Previous / Next paging keeps them
+  - Results show status with its error code, integration (linked), version, vendor and account, mode, attempts, duration and creation time; empty results say whether filters hide everything
+
 - 2026-10-31 · `feat(frontend)` · add admin breaker force-open, force-close and clear · HUB-262 · F-19
   - Admins get Force open, Force closed and (on forced breakers) Clear force on each health board row; editors, viewers and tenant viewers do not
   - The dialog names the integrations that use the breaker before you confirm, and force closed says how many parked requests will drain
