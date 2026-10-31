@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add DLQ list with URL filters and entry detail · HUB-266 · F-19
+  - Filter dead letters by tenant, integration, vendor, account, reason (error code or poison), replayed or not, and a UTC time range; every filter lives in the URL as a removable chip, with cursor paging
+  - Each dead letter opens a page with the reason and message, the attempt history, the canonical request and the last vendor request and response as stored (credentials stay `***`)
+  - Tenant viewers pick among their own tenants and see no vendor, account or vendor request
 - 2026-10-31 · `feat(frontend)` · add a dead letters column per account to the health board · HUB-284 · F-19
   - Each account endpoint row shows the account's dead-letter count and how old the oldest is; the count links to the DLQ filtered by that account
   - The board summary adds the number of dead-lettered requests across the accounts shown; "Unknown" when the API sends no figure

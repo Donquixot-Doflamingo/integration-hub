@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **68** · todo: **125** · other (in-progress/in-review/blocked): **1**
+Total tickets: **194** · done: **69** · todo: **124** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **194** · done: **68** · todo: **125** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 19 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 20 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1915,14 +1915,16 @@ Unseal a sealed payload with mandatory reason (`admin` only); unsealed content s
 
 ### HUB-266 — DLQ list
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1904
 - **Branch:** `feat/HUB-266-fe-dlq-list`
 
 DLQ list with filters (tenant, integration, account, reason, time range) and entry detail (last vendor request/response, attempt history).
 
+Shipped (frontend-engineer, `feat(frontend): add DLQ list with URL filters and entry detail (HUB-266)`): `/dlq` on `listDeadLetters` with tenant (own tenants for tenant viewers), integration, vendor and account (not for tenant viewers), reason (code or `poison`, with suggestions), replayed, From/To in UTC (quick ranges up to 14 days; a reversed range is refused before calling) and page size; cursor paging. `/dlq/{request_id}` on `getDeadLetter`: reason and message first, replay state, link to the request timeline, attempt history (shared `AttemptsTable`, attempt order), canonical request and last vendor request/response as returned (`***` stays, secret-looking unmasked fields hidden); tenant viewers see no vendor, account or vendor exchange.
+
 **Acceptance criteria**
-- [ ] Filters in URL
-- [ ] Entry detail shows the reason and attempt history
+- [x] Filters in URL (names match `listDeadLetters`; chips and Clear all; reload restores the form; the health board's "Dead letters" link opens `/dlq?account_id=`; `dlq/filters.test.ts`, `dlq/page.test.ts`, `e2e/dlq.test.ts`)
+- [x] Entry detail shows the reason and attempt history (reason code and message in a highlighted block; attempts sorted by `attempt_no` with version, account, endpoint, vendor status, error, breaker; `dlq/[request_id]/page.test.ts`, e2e)
 
 ### HUB-267 — DLQ replay by filter and purge
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

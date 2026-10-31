@@ -2,13 +2,14 @@
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import AsyncView from '$lib/components/AsyncView.svelte';
+	import AttemptsTable from '$lib/components/AttemptsTable.svelte';
 	import CopyButton from '$lib/components/CopyButton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import Payload from '$lib/components/Payload.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { breakerStatus, requestStatus } from '$lib/status';
+	import { requestStatus } from '$lib/status';
 	import { formatBytes, formatDurationMs, formatNumber, formatUtc } from '$lib/utils/format';
 	import type { PageData } from './$types';
-	import Payload from './Payload.svelte';
 	import { clock, eventLabels, gap, payloadView, timed } from './timeline';
 
 	let { data }: { data: PageData } = $props();
@@ -203,53 +204,7 @@
 			{#if a.items.length === 0}
 				<p class="meta">No upstream attempt was made.</p>
 			{:else}
-				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-				<div class="table-scroll" role="region" aria-label="Attempts" tabindex="0">
-					<table>
-						<caption class="visually-hidden"
-							>Upstream attempts with the integration version each used</caption
-						>
-						<thead>
-							<tr>
-								<th scope="col" class="numeric">Attempt</th>
-								<th scope="col">Integration version</th>
-								{#if !scoped}<th scope="col">Account</th>{/if}
-								<th scope="col">Endpoint</th>
-								<th scope="col">Served by</th>
-								<th scope="col">Started</th>
-								<th scope="col" class="numeric">Duration</th>
-								<th scope="col" class="numeric">Vendor status</th>
-								<th scope="col">Error</th>
-								<th scope="col">Breaker</th>
-								{#if !scoped}<th scope="col" class="numeric">Credential</th>{/if}
-							</tr>
-						</thead>
-						<tbody>
-							{#each [...a.items].sort((x, y) => x.attempt_no - y.attempt_no) as at (at.attempt_no)}
-								<tr>
-									<th scope="row" class="numeric">{at.attempt_no}</th>
-									<td>v{at.integration_version}</td>
-									{#if !scoped}<td><code>{at.vendor_id}/{at.account_id}</code></td>{/if}
-									<td><code>{at.endpoint_ref}</code></td>
-									<td>{at.served_by ?? '-'}</td>
-									<td><time datetime={at.started_at}>{clock(at.started_at)}</time></td>
-									<td class="numeric">{formatDurationMs(at.duration_ms)}</td>
-									<td class="numeric">{at.vendor_status ?? '-'}</td>
-									<td
-										>{#if at.error_code}<code>{at.error_code}</code>{:else}-{/if}</td
-									>
-									<td>
-										{#if at.breaker_state}
-											{@const b = breakerStatus[at.breaker_state]}
-											<StatusBadge tone={b.tone} icon={b.icon} label={b.label} />
-										{:else}-{/if}
-									</td>
-									{#if !scoped}<td class="numeric">{at.cred_version ?? '-'}</td>{/if}
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
+				<AttemptsTable attempts={a.items} {scoped} formatTime={clock} />
 			{/if}
 		{/snippet}
 	</AsyncView>
@@ -362,35 +317,6 @@
 		border: 1px solid var(--rule-strong);
 		border-radius: var(--radius-sm);
 		font-size: var(--text-xs);
-	}
-	.table-scroll {
-		overflow-x: auto;
-		border: 1px solid var(--rule);
-		border-radius: var(--radius-md);
-		background: var(--surface);
-	}
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: var(--text-sm);
-		font-variant-numeric: tabular-nums;
-	}
-	th,
-	td {
-		height: var(--row-height);
-		padding: 0 var(--space-3);
-		text-align: left;
-		white-space: nowrap;
-		border-bottom: 1px solid var(--rule);
-	}
-	thead th {
-		background: var(--surface-sunken);
-		color: var(--ink-muted);
-		font-size: var(--text-xs);
-		font-weight: 600;
-	}
-	.numeric {
-		text-align: right;
 	}
 	@media (max-width: 900px) {
 		.timeline li {

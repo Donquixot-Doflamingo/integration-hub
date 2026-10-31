@@ -64,3 +64,13 @@ export type TimelineEventType = Schemas['TimelineEventType'];
 export type Attempt = Schemas['Attempt'];
 /** Query parameters of `searchRequests`. */
 export type SearchRequestsQuery = NonNullable<Operations['searchRequests']['parameters']['query']>;
+
+// DLQ console (HUB-266, HUB-267).
+export type DeadLetter = Schemas['DeadLetter'];
+export type DeadLetterDetail = Schemas['DeadLetterDetail'];
+export type DlqFilter = Schemas['DlqFilter'];
+export type DlqBulkResult = Schemas['DlqBulkResult'];
+/** Query parameters of `listDeadLetters`. */
+export type ListDeadLettersQuery = NonNullable<
+	Operations['listDeadLetters']['parameters']['query']
+>;
