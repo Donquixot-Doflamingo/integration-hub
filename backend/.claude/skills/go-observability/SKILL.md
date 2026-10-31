@@ -8,23 +8,19 @@ description: "OpenTelemetry metrics and traces for the Integration Hub Go backen
 Package `internal/telemetry` builds the MeterProvider/TracerProvider and exposes `/metrics` on the **internal** port. Every new metric, span and alert is listed in the feature doc and `docs/tech/OBSERVABILITY.md` (AGENTS.md §8.6). Catalog of DESIGN metrics with types and buckets: [references/catalog.md](references/catalog.md).
 
 ## Setup (once, in main)
+**Library decision (TECH_SPEC §13): metrics use `prometheus/client_golang`; OpenTelemetry is used for traces only.** Both are wired in `internal/telemetry` (HUB-027):
 ```go
-exp, err := prometheus.New(prometheus.WithoutUnits()) // go.opentelemetry.io/otel/exporters/prometheus
-if err != nil { return err }
-mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(exp), sdkmetric.WithResource(res))
-otel.SetMeterProvider(mp)
-
-tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(otlpExporter), sdktrace.WithResource(res),
-	sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(cfg.TraceRatio))))
-otel.SetTracerProvider(tp)
-otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
-// shutdown: mp.Shutdown(ctx), tp.Shutdown(ctx) — see go-architecture shutdown order
+m := telemetry.NewMetrics(role, version)          // registry + Go runtime/process collectors + hub_* histograms
+mux.Handle("GET /metrics", m.Handler())            // ops port only; OpenMetrics on, so exemplars are exposed
+tp, err := telemetry.NewTracerProvider(ctx, telemetry.TraceConfig{Role: role, Endpoint: cfg.OTLPEndpoint, SampleRatio: cfg.TraceSampleRatio})
+pub := telemetry.HTTPHandler(publicMux, tp, role) // server span per request, continues the caller's traceparent
+// shutdown: tp.Shutdown(ctx) after the servers stop (go-architecture shutdown order)
 ```
-Pass the `metric.Meter` / `trace.Tracer` into constructors (`otel.Meter("github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream")`); don't call `otel.Meter` on the hot path.
+Register new instruments on `m.Registry` in the owning package's constructor (pass `*telemetry.Metrics` in). Never use the global `prometheus.DefaultRegisterer`, and never create instruments on the hot path: resolve `WithLabelValues(...)` once, or per snapshot for per-integration label sets.
 
 ## Naming and units
 - Use the DESIGN §16.2 names exactly (`hub_requests_total`, `hub_overhead_ms`, `vendor_latency_ms`, `queue_oldest_age_s` …). Units are in the name; DESIGN uses **ms** for latency histograms because budgets are in ms.
-- The OTel Prometheus exporter rewrites names (unit suffixes, `_total` on counters) depending on version and options. We use `WithoutUnits()` and name instruments with their unit already in the name. For counters, name the instrument without `_total` if the exporter appends it. **Pin this with a test** that scrapes `/metrics` and asserts the exact exported names in the catalog; a library upgrade that changes naming must fail CI, not silently break dashboards.
+- client_golang exports names exactly as declared; counters must end in `_total` yourself. **Pin names with a test** that scrapes `/metrics` and asserts the exact exported names (see `TestExportedNamesArePinned` in `internal/telemetry`), so a rename fails CI instead of silently breaking dashboards.
 - New metrics: `hub_` prefix for Hub-wide, subsystem prefix otherwise (`breaker_`, `queue_`, `audit_`), snake_case, base noun + unit: `callback_delivery_ms`, `snapshot_compile_ms`.
 - Counter for events, histogram for durations/sizes, gauge (observable) for current state (`queue_depth`, `breaker_state`, `parked_count`).
 
@@ -93,7 +89,7 @@ Span names are low-cardinality; ids go in attributes.
 - Record errors with `span.RecordError(err)` + `span.SetStatus(codes.Error, string(code))`; never put bodies or secrets in attributes or events.
 
 ## Exemplars
-Recording histograms with the request `ctx` lets the OTel SDK attach the sampled trace id as an exemplar (trace-based exemplar filter). Prometheus only exposes exemplars in the OpenMetrics format; verify with `curl -H 'Accept: application/openmetrics-text' localhost:9090/metrics | grep '# {'` and enable exemplar storage in Prometheus. Confirm the exporter/SDK version supports this before relying on it in dashboards.
+With client_golang, attach the sampled trace id explicitly: `obs.(prometheus.ExemplarObserver).ObserveWithExemplar(v, prometheus.Labels{"trace_id": sc.TraceID().String()})` when the span is sampled. Prometheus only exposes exemplars in the OpenMetrics format; verify with `curl -H 'Accept: application/openmetrics-text' localhost:9090/metrics | grep '# {'` and enable exemplar storage in Prometheus. `/metrics` already serves OpenMetrics when the scraper asks for it.
 
 ## Alerts as code (`deploy/alerts/`)
 Prometheus rule files, one per area (`breaker.yaml`, `queue.yaml`, `audit.yaml`, `overhead.yaml`), every DESIGN §16.3 alert present with `severity: page|warn`, a `summary`, and a `runbook_url` into `docs/`.

@@ -89,6 +89,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 ### 3.3 Additional Hub metrics (not in §16.2; needed for SLIs, alerts and the runbook)
 | Metric | Type | Unit | Labels | Package | Why |
 | --- | --- | --- | --- | --- | --- |
+| `hub_build_info` | gauge (always 1) | — | `role, version` | `telemetry` | build and role identification on every scrape (HUB-027) |
 | `hub_stage_duration_ms` | histogram | ms | `stage` | `edge`, `delivery` | per-stage breakdown required by DESIGN §18.4/§18.5; low-cardinality on purpose |
 | `hub_accept_ms` | histogram | ms | `mode` | `edge` | S2 |
 | `hub_wait_ms` | histogram | ms | `kind` (`account_limiter`, `bulkhead`) | `upstream` | waits excluded from overhead |

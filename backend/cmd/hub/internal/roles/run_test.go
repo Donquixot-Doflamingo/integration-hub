@@ -2,11 +2,16 @@ package roles
 
 import (
 	"context"
+	"io"
 	"log/slog"
+	"maps"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func testConfig(role Role) Config {
@@ -97,5 +102,80 @@ func TestRunFailsWhenPortTaken(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("first Run: %v", err)
+	}
+}
+
+// startRole runs role until the test ends and returns its bound addresses.
+func startRole(t *testing.T, role Role, opts Options) map[string]string {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	addrs := map[string]string{}
+	var mu sync.Mutex
+	started := make(chan struct{})
+	opts.OnListen = func(name, addr string) {
+		mu.Lock()
+		defer mu.Unlock()
+		addrs[name] = addr
+		if name == "ops" {
+			close(started)
+		}
+	}
+	done := make(chan error, 1)
+	go func() { done <- Run(ctx, testConfig(role), slog.New(slog.DiscardHandler), opts) }()
+	select {
+	case <-started:
+	case err := <-done:
+		t.Fatalf("Run: %v", err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Errorf("Run: %v", err)
+		}
+	})
+	mu.Lock()
+	defer mu.Unlock()
+	return maps.Clone(addrs)
+}
+
+func get(t *testing.T, url string, hdr map[string]string) (int, string) {
+	t.Helper()
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
+}
+
+func TestOpsServesMetrics(t *testing.T) {
+	addrs := startRole(t, Worker, Options{Version: "v-test"})
+	code, body := get(t, "http://"+addrs["ops"]+"/metrics", nil)
+	if code != http.StatusOK {
+		t.Fatalf("/metrics status %d", code)
+	}
+	for _, want := range []string{"go_goroutines", `hub_build_info{role="worker",version="v-test"} 1`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("/metrics missing %s", want)
+		}
+	}
+}
+
+func TestGatewayContinuesCallerTrace(t *testing.T) {
+	rec := tracetest.NewSpanRecorder()
+	addrs := startRole(t, Gateway, Options{SpanProcessor: rec})
+	const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
+	get(t, "http://"+addrs["http"]+"/v1/anything", map[string]string{"traceparent": "00-" + traceID + "-00f067aa0ba902b7-01"})
+	spans := rec.Ended()
+	if len(spans) == 0 {
+		t.Fatal("no server span recorded")
+	}
+	if got := spans[0].SpanContext().TraceID().String(); got != traceID {
+		t.Fatalf("trace id = %s, want %s", got, traceID)
 	}
 }

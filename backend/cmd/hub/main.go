@@ -22,6 +22,9 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/migrations"
 )
 
+// version is set at build time: -ldflags "-X main.version=<git sha or tag>".
+var version = "dev"
+
 const usage = `usage: hub <role> [flags]
 
 roles:
@@ -73,7 +76,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		}
 	}
 	log := telemetry.NewLogger(stderr, cfg.LogLevel, secrets, string(role))
-	if err := roles.Run(ctx, cfg, log, roles.Options{}); err != nil {
+	if err := roles.Run(ctx, cfg, log, roles.Options{Version: version}); err != nil {
 		log.ErrorContext(ctx, "role exited with error", slog.String("error", err.Error()))
 		return 1
 	}

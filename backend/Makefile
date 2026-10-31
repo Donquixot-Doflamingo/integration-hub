@@ -3,6 +3,7 @@ SHELL := /bin/bash
 GO ?= go
 BIN := bin
 CMDS := hub hubctl mockvendor hubmcp
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GOLANGCI_LINT_VERSION := 2.15.0
 COMPOSE := docker compose -f ../deploy/docker-compose.yml
 export HUB_PG_DSN ?= postgres://hub:hub@localhost:5432/hub?sslmode=disable
@@ -14,7 +15,7 @@ all: lint test build
 
 build: ## Build every binary into bin/
 	@mkdir -p $(BIN)
-	@for c in $(CMDS); do $(GO) build -trimpath -o $(BIN)/$$c ./cmd/$$c || exit 1; done
+	@for c in $(CMDS); do $(GO) build -trimpath -ldflags "-X main.version=$(VERSION)" -o $(BIN)/$$c ./cmd/$$c || exit 1; done
 	@echo "built: $(addprefix $(BIN)/,$(CMDS))"
 
 test: ## Unit tests with the race detector

@@ -310,15 +310,15 @@ Add an `internal/telemetry` `slog.Handler` that holds current secret values and 
 
 ### HUB-027 — OpenTelemetry and metrics skeleton
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-024 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-024 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `feat/HUB-027-otel-metrics-skeleton`
 
 Wire the OTel SDK (tracer provider, OTLP exporter optional), a Prometheus `/metrics` endpoint, and a middleware helper that publishes per-stage duration metrics (DESIGN §16.2, §18.5 rule 5).
 
 **Acceptance criteria**
-- [ ] `/metrics` exposes Go runtime metrics and a sample `hub_overhead_ms` histogram
-- [ ] Incoming `traceparent` is continued in a span
-- [ ] Tracing can be disabled by config with no exporter running
+- [x] `/metrics` exposes Go runtime metrics and a sample `hub_overhead_ms` histogram
+- [x] Incoming `traceparent` is continued in a span
+- [x] Tracing can be disabled by config with no exporter running
 
 ### HUB-028 — mockvendor server, control API and request recording
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend

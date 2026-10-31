@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(telemetry)` · add Prometheus metrics, OTel tracing and per-stage timing · HUB-027 · F-01, F-18
+  - Ops port serves /metrics: Go runtime, process, hub_build_info, hub_overhead_ms{integration,mode}, hub_stage_duration_ms{stage}
+  - Gateway and admin requests run in a server span that continues the caller's traceparent; no exporter runs unless HUB_OTLP_ENDPOINT is set
+  - Timings and TimedMiddleware helpers record each stage's own time; vendor time is excluded from overhead; trace and span ids added to logs
 - 2026-10-31 · `feat(telemetry)` · add redacting slog handler and request-field logger · HUB-026 · F-01
   - Registered secret values never appear in logs: message, attrs, nested groups, errors, bytes, With-attached values
   - Secret set supports Add/Remove/Replace at runtime, lock-free reads; denied keys (authorization, token, ...) always ***

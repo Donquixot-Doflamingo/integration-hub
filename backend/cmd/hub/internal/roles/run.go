@@ -10,6 +10,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 )
 
 // Options are test and wiring hooks for Run.
@@ -17,6 +21,12 @@ type Options struct {
 	// OnListen is called once per listener after it is bound, with "http" or "ops" and the
 	// bound address. Tests pass ":0" addresses and use it to learn the ports.
 	OnListen func(name, addr string)
+	// Version is the build version reported in hub_build_info and trace resources.
+	Version string
+	// SpanProcessor replaces the OTLP exporter (tests record spans in memory).
+	SpanProcessor sdktrace.SpanProcessor
+	// Metrics, when set, is used instead of a fresh registry (tests scrape it).
+	Metrics *telemetry.Metrics
 }
 
 type endpoint struct {
@@ -36,13 +46,24 @@ type listener struct {
 // routing, then the public listener and finally the ops listener are closed within
 // ShutdownGrace.
 func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error {
-	log = log.With(slog.String("role", string(cfg.Role)))
 	var ready atomic.Bool
+	metrics := opts.Metrics
+	if metrics == nil {
+		metrics = telemetry.NewMetrics(string(cfg.Role), opts.Version)
+	}
+	tp, err := telemetry.NewTracerProvider(ctx, telemetry.TraceConfig{
+		Role: string(cfg.Role), Version: opts.Version, Endpoint: cfg.OTLPEndpoint,
+		SampleRatio: cfg.TraceSampleRatio, Insecure: true, SpanProcessor: opts.SpanProcessor,
+	})
+	if err != nil {
+		return err
+	}
 
 	// ops is last so it is closed last: /readyz answers 503 while the public listener drains.
-	endpoints := []endpoint{{"ops", cfg.OpsAddr, opsHandler(&ready)}}
+	endpoints := []endpoint{{"ops", cfg.OpsAddr, opsHandler(&ready, metrics)}}
 	if cfg.Role.servesPublicHTTP() {
-		endpoints = append([]endpoint{{"http", cfg.HTTPAddr, publicHandler(cfg.Role)}}, endpoints...)
+		pub := telemetry.HTTPHandler(publicHandler(cfg.Role), tp, string(cfg.Role))
+		endpoints = append([]endpoint{{"http", cfg.HTTPAddr, pub}}, endpoints...)
 	}
 
 	var lns []listener
@@ -102,6 +123,9 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 		}
 	}
 	wg.Wait()
+	if err := tp.Shutdown(sctx); err != nil { // flush spans after the last request finished
+		runErr = errors.Join(runErr, fmt.Errorf("shutdown tracer provider: %w", err))
+	}
 	log.InfoContext(ctx, "role stopped", slog.Duration("shutdown", time.Since(start)))
 	return runErr
 }
@@ -110,5 +134,9 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 // mounted here by later tickets; until then every path is 404.
 func publicHandler(Role) http.Handler { return http.NotFoundHandler() }
 
-// opsHandler serves the ops port. /healthz and /readyz arrive in HUB-025, /metrics in HUB-027.
-func opsHandler(*atomic.Bool) http.Handler { return http.NotFoundHandler() }
+// opsHandler serves the ops port: /metrics now, /healthz and /readyz in HUB-025.
+func opsHandler(_ *atomic.Bool, m *telemetry.Metrics) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", m.Handler())
+	return mux
+}

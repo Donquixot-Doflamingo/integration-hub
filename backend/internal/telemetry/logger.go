@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 // NewLogger builds the process logger: JSON lines, request fields from the context, and
@@ -38,7 +40,7 @@ func RequestFieldsFrom(ctx context.Context) (RequestFields, bool) {
 	return f, ok
 }
 
-// EnrichHandler adds RequestFields from the context to each record. Use the *Context slog
+// EnrichHandler adds RequestFields and the active trace and span ids from the context to each record. Use the *Context slog
 // methods (enforced by sloglint) so the fields attach.
 type EnrichHandler struct{ next slog.Handler }
 
@@ -72,6 +74,12 @@ func (h EnrichHandler) Handle(ctx context.Context, r slog.Record) error {
 		if f.Attempt > 0 {
 			r.AddAttrs(slog.Int("attempt", f.Attempt))
 		}
+	}
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		if _, cloned := RequestFieldsFrom(ctx); !cloned {
+			r = r.Clone()
+		}
+		r.AddAttrs(slog.String("trace_id", sc.TraceID().String()), slog.String("span_id", sc.SpanID().String()))
 	}
 	return h.next.Handle(ctx, r)
 }
