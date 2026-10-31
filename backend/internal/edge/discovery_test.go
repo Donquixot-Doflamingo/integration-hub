@@ -63,8 +63,9 @@ func TestDiscoveryVisibility(t *testing.T) {
 	if rec, body := get(t, spec, h, growthKey, "/v1/integrations/int_evt_brandB"); rec.Code != 200 || body["owned"] != false {
 		t.Fatalf("grantee detail %d %v", rec.Code, body)
 	}
-	if rec, _ := get(t, spec, h, growthKey, "/v1/integrations/int_evt_brandA"); rec.Code != 403 {
-		t.Fatalf("not granted: %d", rec.Code)
+	if rec, body := get(t, spec, h, growthKey, "/v1/integrations/int_evt_brandA"); rec.Code != 404 ||
+		body["error"].(map[string]any)["code"] != "INTEGRATION_NOT_FOUND" {
+		t.Fatalf("not granted must look unknown (no enumeration): %d %v", rec.Code, body)
 	}
 	if rec, _ := get(t, spec, h, devKey, "/v1/integrations/int_nope"); rec.Code != 404 {
 		t.Fatalf("unknown: %d", rec.Code)

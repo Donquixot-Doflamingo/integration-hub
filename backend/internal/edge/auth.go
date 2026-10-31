@@ -108,14 +108,3 @@ func authorizeIntegration(c Caller, integrationID, scope string) (*registry.Inte
 	}
 	return in, nil
 }
-
-// authorize is authorizeIntegration that writes the error; it returns false when the request
-// must stop.
-func authorize(w http.ResponseWriter, r *http.Request, c Caller, integrationID, scope string) (*registry.Integration, bool) {
-	in, ce := authorizeIntegration(c, integrationID, scope)
-	if ce != nil {
-		WriteError(w, r, ce)
-		return nil, false
-	}
-	return in, true
-}

@@ -18,9 +18,11 @@ func authServer(t testing.TB, snap *registry.Snapshot, scope string) http.Handle
 	mux := http.NewServeMux()
 	mux.Handle("POST /v1/integrations/{integration_id}/invoke", s.authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, _ := CallerFrom(r.Context())
-		if _, ok := authorize(w, r, c, r.PathValue("integration_id"), scope); ok {
-			w.WriteHeader(http.StatusNoContent)
+		if _, ce := authorizeIntegration(c, r.PathValue("integration_id"), scope); ce != nil {
+			WriteError(w, r, ce)
+			return
 		}
+		w.WriteHeader(http.StatusNoContent)
 	})))
 	return withRequestID(mux)
 }

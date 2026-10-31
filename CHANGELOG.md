@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `fix(edge)` · answer 404 for integrations outside the tenant's set in discovery · HUB-090 · F-05
+  - GET /v1/integrations/{id} for an integration the tenant neither owns nor is granted now returns 404 INTEGRATION_NOT_FOUND instead of 403, so integration ids cannot be enumerated
 - 2026-10-31 · `feat(edge)` · audit every authorized request through the shared pipeline · HUB-092 · F-08
   - Every request past authorization records request.received (tenant key as id and hash), request.validated, integration.resolved (version, vendor, account, transformers, policy, snapshot version) and a final request.completed or request.failed with its requests record
   - Dry-run calls are audited with dry_run on the record and the masked upstream request as request.transformed

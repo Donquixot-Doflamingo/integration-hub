@@ -145,8 +145,10 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) {
 	c, _ := CallerFrom(r.Context())
-	in, ok := authorize(w, r, c, r.PathValue("integration_id"), "")
-	if !ok {
+	// Outside the tenant's set is 404, not 403, so ids cannot be enumerated (F-05 rule 3).
+	in, ok := c.Snap.Integrations[r.PathValue("integration_id")]
+	if !ok || !resolve.Granted(in, c.Tenant.Tenant) {
+		WriteError(w, r, &core.CanonicalError{Code: core.CodeIntegrationNotFound, Message: "Unknown integration"})
 		return
 	}
 	d := in.Active().Delivery
