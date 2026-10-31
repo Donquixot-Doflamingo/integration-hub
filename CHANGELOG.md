@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add DLQ replay and purge by filter with exact counts · HUB-267 · F-19
+  - Editors can replay every dead letter matching the current filters (all pages); the console counts them with a dry run first and the dialog names that exact number before anything is sent
+  - Admins can purge the same way, with the count typed to confirm; the purge is refused if the matching entries changed since they were counted
+  - Both need a reason; the notice shows how many were replayed or purged, the change log id and request id, and links to the replayed entries
 - 2026-10-31 · `feat(frontend)` · add DLQ list with URL filters and entry detail · HUB-266 · F-19
   - Filter dead letters by tenant, integration, vendor, account, reason (error code or poison), replayed or not, and a UTC time range; every filter lives in the URL as a removable chip, with cursor paging
   - Each dead letter opens a page with the reason and message, the attempt history, the canonical request and the last vendor request and response as stored (credentials stay `***`)

@@ -12,6 +12,7 @@
 		message,
 		changeId,
 		requestId = null,
+		link,
 		ondismiss
 	}: {
 		/** "Published v8. It is now the active version." */
@@ -19,6 +20,8 @@
 		changeId: string | null;
 		/** `X-Hub-Request-Id` of the call that made the change (hub-admin 1.1.0, HUB-278). */
 		requestId?: string | null;
+		/** A follow-up view of what changed, e.g. the replayed dead letters. */
+		link?: { href: string; label: string };
 		ondismiss?: () => void;
 	} = $props();
 </script>
@@ -27,6 +30,10 @@
 	<Icon name="check" />
 	<div class="body">
 		<p class="message">{message}</p>
+		{#if link}
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- callers pass resolved hrefs -->
+			<p class="change"><a href={link.href}>{link.label}</a></p>
+		{/if}
 		{#if changeId}
 			<p class="change">
 				Change log id <code class="id">{changeId}</code>

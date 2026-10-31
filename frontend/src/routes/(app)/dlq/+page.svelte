@@ -1,7 +1,15 @@
 <script lang="ts">
+	import type { SubmitFunction } from '@sveltejs/kit';
+	import { enhance } from '$app/forms';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { fromPlainError, type ActionFailureData, type ActionSuccessData } from '$lib/api/actions';
+	import { HubApiError } from '$lib/api/errors';
+	import type { DlqBulkResult } from '$lib/api/types';
+	import ChangeNotice from '$lib/components/ChangeNotice.svelte';
+	import ErrorPanel from '$lib/components/ErrorPanel.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import RoleGate from '$lib/components/RoleGate.svelte';
 	import ListView from '$lib/components/ListView.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Pager from '$lib/components/Pager.svelte';
@@ -11,10 +19,13 @@
 	import { DEFAULT_PAGE_SIZE, PAGE_SIZES, type Paging } from '$lib/utils/paging';
 	import { lastRange, toLocalInput } from '$lib/utils/time';
 	import type { PageData } from './$types';
+	import BulkDialog from './BulkDialog.svelte';
+	import { bulkDone, type BulkKind } from './bulk';
 	import {
 		chipValue,
 		COMMON_REASONS,
 		FILTER_KEYS,
+		filterFields,
 		filterLabels,
 		filtersFromForm,
 		isFiltered,
@@ -41,6 +52,85 @@
 		{ label: 'Last 24 hours', ms: 86_400_000 },
 		{ label: 'Last 14 days', ms: 14 * 86_400_000 }
 	];
+
+	// HUB-267: replay / purge by the current filters. Step 1 counts (dry run), step 2 confirms.
+	let counting = $state<BulkKind | null>(null);
+	let countError = $state.raw<{ kind: BulkKind; error: HubApiError } | null>(null);
+	let nothing = $state<BulkKind | null>(null);
+	let dialogOpen = $state(false);
+	let dialog = $state.raw<{ kind: BulkKind; count: DlqBulkResult; filters: Filters } | null>(null);
+	let notice = $state.raw<{
+		message: string;
+		changeId: string | null;
+		requestId: string | null;
+		link?: { href: string; label: string };
+	} | null>(null);
+	const verbs: Record<BulkKind, string> = { replay: 'replay', purge: 'purge' };
+
+	function countWith(kind: BulkKind): SubmitFunction {
+		return ({ cancel }) => {
+			// The buttons stay focusable while counting (aria-disabled), so guard double submits here.
+			if (counting) return cancel();
+			counting = kind;
+			countError = null;
+			nothing = null;
+			// The filters the count was made for (the dialog must not pick up later URL changes).
+			const counted = { ...filters };
+			return async ({ result }) => {
+				try {
+					if (result.type === 'success') {
+						const count = (result.data as ActionSuccessData<DlqBulkResult>).result;
+						if (count.matched === 0) {
+							nothing = kind;
+						} else {
+							dialog = { kind, count, filters: counted };
+							dialogOpen = true;
+						}
+					} else if (result.type === 'failure') {
+						const d = result.data as ActionFailureData | undefined;
+						countError = d?.error
+							? { kind, error: fromPlainError(d.error) }
+							: {
+									kind,
+									error: new HubApiError({
+										status: result.status,
+										code: 'VALIDATION_FAILED',
+										message: 'The filters could not be counted.'
+									})
+								};
+					} else {
+						countError = {
+							kind,
+							error: new HubApiError({
+								status: result.type === 'error' ? (result.status ?? 500) : 500,
+								code: 'UNEXPECTED_RESPONSE',
+								message: 'The console could not count the matching dead letters. Try again.'
+							})
+						};
+					}
+				} finally {
+					counting = null;
+				}
+			};
+		};
+	}
+
+	function onBulkDone(d: ActionSuccessData) {
+		if (!dialog) return;
+		const r = d.result as DlqBulkResult;
+		notice = {
+			message: bulkDone(dialog.kind, r),
+			changeId: d.changeId,
+			requestId: d.requestId,
+			link:
+				dialog.kind === 'replay'
+					? {
+							href: hrefFor({ ...dialog.filters, replayed: 'true' }),
+							label: 'Show the replayed entries'
+						}
+					: undefined
+		};
+	}
 
 	function onsubmit(e: SubmitEvent) {
 		// Without JS the browser submits the GET form as is; with JS, build a clean URL.
@@ -200,6 +290,74 @@
 		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- hrefFor builds on resolve() -->
 		<a class="clear" href={hrefFor({})}>Clear all</a>
 	</div>
+{/if}
+
+{#if notice}
+	<ChangeNotice {...notice} ondismiss={() => (notice = null)} />
+{/if}
+
+{#if !data.state.problem}
+	<RoleGate access={data.access}>
+		<section class="bulk" aria-labelledby="bulk-heading">
+			<h2 id="bulk-heading">Act on every match</h2>
+			<p class="hint">
+				Counts the dead letters these filters match on all pages (not only this one), then asks you
+				to confirm with a reason.
+			</p>
+			<div class="bulk-actions">
+				<form method="POST" action="?/countReplay" use:enhance={countWith('replay')}>
+					{#each filterFields(filters) as [name, value] (name)}
+						<input type="hidden" {name} {value} />
+					{/each}
+					<button type="submit" aria-disabled={counting ? 'true' : undefined}>
+						<Icon name="retry" size={16} />{counting === 'replay'
+							? 'Counting...'
+							: 'Replay matching...'}
+					</button>
+				</form>
+				<RoleGate access={data.access} min="admin">
+					<form
+						method="POST"
+						action="?/countPurge"
+						use:enhance={countWith('purge')}
+						class="danger-zone"
+					>
+						{#each filterFields(filters) as [name, value] (name)}
+							<input type="hidden" {name} {value} />
+						{/each}
+						<button type="submit" class="danger" aria-disabled={counting ? 'true' : undefined}>
+							<Icon name="close" size={16} />{counting === 'purge'
+								? 'Counting...'
+								: 'Purge matching...'}
+						</button>
+					</form>
+				</RoleGate>
+			</div>
+			{#if counting}<p class="visually-hidden" role="status">Counting matching dead letters</p>{/if}
+			{#if nothing}
+				<p class="nothing" role="status">
+					No dead letters match these filters, so there is nothing to {verbs[nothing]}.
+				</p>
+			{/if}
+			{#if countError}
+				<ErrorPanel
+					error={countError.error}
+					context="Could not count the dead letters to {verbs[countError.kind]}"
+					headingLevel={3}
+				/>
+			{/if}
+		</section>
+	</RoleGate>
+{/if}
+
+{#if dialog}
+	<BulkDialog
+		bind:open={dialogOpen}
+		kind={dialog.kind}
+		count={dialog.count}
+		filters={dialog.filters}
+		onsuccess={onBulkDone}
+	/>
 {/if}
 
 {#if data.state.problem}
@@ -391,6 +549,61 @@
 	}
 	.reason code {
 		display: block;
+	}
+	.bulk {
+		display: grid;
+		gap: var(--space-2);
+		margin-bottom: var(--space-3);
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-md);
+		background: var(--surface);
+		max-width: 72rem;
+	}
+	.bulk h2 {
+		font-size: var(--text-md);
+	}
+	.bulk .hint {
+		margin: 0;
+		font-size: var(--text-sm);
+	}
+	.bulk-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+	/* Purge sits apart from replay (admin-console-ux §8: destructive actions separated). */
+	.danger-zone {
+		margin-left: auto;
+		padding-left: var(--space-3);
+		border-left: 1px solid var(--rule);
+	}
+	.bulk button {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+		height: 2.125rem;
+		padding: 0 0.9rem;
+		border: 1px solid var(--signal);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		color: var(--signal);
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.bulk button.danger {
+		border-color: var(--status-danger);
+		color: var(--status-danger);
+	}
+	/* Not `disabled` while counting: a disabled button drops focus, and the dialog returns focus to it. */
+	.bulk button[aria-disabled='true'] {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+	.nothing {
+		margin: 0;
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
 	}
 	.message {
 		display: block;

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **69** · todo: **124** · other (in-progress/in-review/blocked): **1**
+Total tickets: **194** · done: **70** · todo: **123** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **194** · done: **69** · todo: **124** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 20 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 21 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1928,14 +1928,16 @@ Shipped (frontend-engineer, `feat(frontend): add DLQ list with URL filters and e
 
 ### HUB-267 — DLQ replay by filter and purge
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-266 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-266 · **Feature:** F-19 · **Stories:** US-1904
 - **Branch:** `feat/HUB-267-fe-dlq-replay-purge`
 
 Replay all entries matching the current filter, and purge, each showing the affected count and requiring a reason.
 
+Shipped (frontend-engineer, `feat(frontend): add DLQ replay and purge by filter with exact counts (HUB-267)`): an "Act on every match" box on `/dlq` with "Replay matching..." (editor, `replayDeadLetters`) and, set apart, "Purge matching..." (admin, `purgeDeadLetters`). Each first runs the operation with `dry_run: true` and the list's URL filters (as `DlqFilter`, all pages), then opens `ConfirmDialog` with that count in the title and body, the filters used, and warnings (filters that include already-replayed entries; more than 10,000 matches per call). Confirm sends the filter, the operator's reason and the counted number; success shows the result, change log id and request id, and for replay a link to the replayed entries (`replayed=true`). 0 matches says there is nothing to do without a dialog. The contract requires `reason` on dry runs too, so the count step sends a fixed console text (no change log entry: dry runs have no `change_id`). US-1904's "reports replayed ids" is met by that link: `DlqBulkResult` returns counts, not ids.
+
 **Acceptance criteria**
-- [ ] Confirmation shows exact count from the API before submit
-- [ ] Purge requires typing the count to confirm
+- [x] Confirmation shows exact count from the API before submit (the dry run's `matched`, capped at the per-call 10,000 with a note; `dlq/replay-purge.test.ts`, `dlq/bulk.test.ts`, `e2e/dlq.test.ts`)
+- [x] Purge requires typing the count to confirm (checked again in the action, which also re-counts with a dry run and refuses the purge when the selection changed since it was counted)
 
 ### HUB-268 — Transformers viewer and goldens
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
