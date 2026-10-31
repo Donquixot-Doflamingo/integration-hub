@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **68** · todo: **126**
+Total tickets: **194** · done: **68** · todo: **125** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -794,16 +794,16 @@ Wire `POST /v1/integrations/{id}/invoke` and `/invoke/{op}` through the §18.4 s
 
 ### HUB-089 — Dry-run endpoint
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-088, HUB-064 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** in-progress · **Depends on:** HUB-088, HUB-064 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-089-dry-run-endpoint`
 
 Implement `dryRunIntegration` (`POST /v1/integrations/{id}/dry-run`) returning the exact upstream request (method, URL, headers, body) the Hub would send, without sending it (DESIGN §4.1, §7.6.3). This is the documented, scope-gated exception to the no-vendor-leak rule (PRD DV-6): key scope `dry_run` required, audited with `dry_run: true`.
 
 **Acceptance criteria**
 - [ ] Mockvendor records zero calls during dry-run; no queue entry or idempotency record is created
-- [ ] Credentials and secret values appear only as `***` in output
-- [ ] Key without scope `dry_run` → 403 `FORBIDDEN`, reason `missing_scope`
-- [ ] Response validates against the public contract
+- [x] Credentials and secret values appear only as `***` in output
+- [x] Key without scope `dry_run` → 403 `FORBIDDEN`, reason `missing_scope`
+- [x] Response validates against the public contract
 
 ### HUB-090 — Discovery endpoints
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend

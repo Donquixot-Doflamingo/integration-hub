@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(edge)` · add the dry-run endpoint and the shared request pipeline · HUB-089 · F-06
+  - POST /v1/integrations/{id}/dry-run (key scope dry_run) returns the exact upstream method, URL, headers and body, with credentials shown as *** and listed in redacted
+  - Dry-run sends nothing upstream and creates no queue entry or idempotency record
+  - Unknown operation → 404 OPERATION_NOT_FOUND; X-Hub-Session before multi-step support → 404 SESSION_NOT_FOUND
 - 2026-10-31 · `feat(edge)` · add the discovery endpoints · HUB-090 · F-05
   - GET /v1/integrations lists only integrations the tenant owns or is granted, filterable by capability, with opaque cursor paging
   - GET /v1/integrations/{id} describes delivery mode, wait window, TTL, circuit-open behaviour and callback events; GET /v1/capabilities/{capability} returns the canonical schemas per operation

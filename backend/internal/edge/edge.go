@@ -18,6 +18,7 @@ type Snapshots interface {
 // Deps are the gateway's collaborators, wired by cmd/hub.
 type Deps struct {
 	Snapshots Snapshots
+	Creds     CredsFunc
 	Metrics   *telemetry.Metrics
 	Log       *slog.Logger
 	Now       func() time.Time
@@ -56,4 +57,5 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /v1/integrations", s.authenticate(http.HandlerFunc(s.listIntegrations)))
 	s.mux.Handle("GET /v1/integrations/{integration_id}", s.authenticate(http.HandlerFunc(s.getIntegration)))
 	s.mux.Handle("GET /v1/capabilities/{capability}", s.authenticate(http.HandlerFunc(s.getCapability)))
+	s.mux.Handle("POST /v1/integrations/{integration_id}/dry-run", s.authenticate(http.HandlerFunc(s.dryRun)))
 }
