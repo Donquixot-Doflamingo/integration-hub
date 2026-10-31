@@ -14,7 +14,7 @@ import { accessFromRoles } from '$lib/auth/roles';
 const invalidateAll = vi.fn();
 vi.mock('$app/navigation', () => ({ invalidateAll: () => invalidateAll(), goto: vi.fn() }));
 
-type LoadFn = (event: { fetch: typeof fetch; url: URL }) => unknown;
+type LoadFn = (event: { fetch: typeof fetch; url: URL; parent: () => Promise<unknown> }) => unknown;
 interface SectionCase {
 	path: string;
 	heading: string;
@@ -86,9 +86,13 @@ const cases: SectionCase[] = [
 
 async function renderSection(c: SectionCase) {
 	const [{ default: Page }, { load }] = await Promise.all([c.page(), c.load()]);
-	const data = await load({ fetch, url: new URL(`http://console.test${c.path}`) });
 	// Layout data every (app) page receives (HUB-253).
 	const layout = { access: accessFromRoles(['editor']) };
+	const data = await load({
+		fetch,
+		url: new URL(`http://console.test${c.path}`),
+		parent: async () => layout
+	});
 	return render(Page, { props: { data: { ...layout, ...(data as object) } as never } });
 }
 

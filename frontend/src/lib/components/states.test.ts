@@ -11,7 +11,13 @@ import Skeleton from './Skeleton.svelte';
 // HUB-255: shared loading, empty and error states.
 
 type Item = { id: string };
-const ok = (data: Item): ApiResult<Item> => ({ ok: true, data, status: 200, requestId: null });
+const ok = (data: Item): ApiResult<Item> => ({
+	ok: true,
+	data,
+	status: 200,
+	requestId: null,
+	etag: null
+});
 const fail = (error: HubApiError): ApiResult<Item> => ({
 	ok: false,
 	error,

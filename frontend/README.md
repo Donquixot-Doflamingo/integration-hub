@@ -80,6 +80,12 @@ when a page under `src/routes/(app)/` renders its own `{#await}` instead):
   (`VersionView`, `GoldensRunner`, `GoldensResult`, `DryRun`, `DryRunResult`), `CodeView` (text-only YAML highlighting,
   `$lib/utils/yaml-highlight.ts`); form actions shared from `transformers/actions.server.ts`.
 
+## Tenant screens (HUB-270 to HUB-272)
+- `/tenants` (search and paging in the URL; tenant viewers get `getTenant` per own tenant because `listTenants`
+  needs viewer) and `/tenants/{id}`. Create and edit go through `ConfirmDialog` with `TenantFields`; the checks
+  live in `tenants/tenant-form.ts` and run in the browser and in the form actions. Edits send the loaded ETag
+  (`ApiResult.etag`) as `If-Match`.
+
 ## Auth (HUB-253)
 Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.
 - Provider per deployment (`src/lib/server/auth/`): **dev** (role picker: admin, editor, viewer, tenant viewer

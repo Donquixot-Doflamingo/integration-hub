@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **90** · todo: **104** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **91** · todo: **103** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **195** · done: **90** · todo: **104** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 23 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 24 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1980,14 +1980,16 @@ Shipped (frontend-engineer, `feat(frontend): add transformer dry-run with client
 
 ### HUB-270 — Tenants pages
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1906
 - **Branch:** `feat/HUB-270-fe-tenants`
 
 List, create and edit tenants (rate limits, grants), with mandatory reason on mutations.
 
+Shipped (frontend-engineer, `feat(frontend): add tenant pages with create, edit and disable (HUB-270)`): `/tenants` (`listTenants`, search `q` and paging in the URL; "Create tenant" for admins, `createTenant`) and `/tenants/{id}` (`getTenant`: display name, description, contact, rate limit, disabled, integrations owned (linked to the integrations list), active keys; admins edit with `updateTenant` and disable / enable it, disable with the id typed). Edits are merge-patches with only the changed fields and send the loaded ETag as `If-Match`, so a concurrent change answers 412 with a Reload prompt (`client.ts` now returns `etag` on successes). Grants are not a tenant field in hub-admin: they live on each integration (`Integration.grants`, `updateIntegration`), so the tenant page links its integrations and says so instead of editing grants.
+
 **Acceptance criteria**
-- [ ] Create/edit forms validated per contract
-- [ ] `tenant_viewer` sees only its tenant
+- [x] Create/edit forms validated per contract (`tenants/tenant-form.ts` against `TenantCreate` / `TenantUpdate`: `Slug` id, display name required and at most 128, `rps` number >= 0, `burst` integer >= 0, empty description / contact sent as null; checked in the dialog (Confirm disabled, problem on the field) and again in the form actions; API `VALIDATION_FAILED` pointers land on their field; `tenant-form.test.ts`, `page.test.ts`, `[tenant_id]/page.test.ts`, `e2e/tenants.test.ts`)
+- [x] `tenant_viewer` sees only its tenant (`listTenants` needs viewer, so the list reads each of the viewer's own tenants with `getTenant`; another tenant's page answers 404 without a call; no create, edit or disable controls; unit and e2e tested)
 
 ### HUB-271 — API keys with show-once
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

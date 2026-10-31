@@ -15,6 +15,13 @@ import type { paths } from './schema';
  */
 export const REQUEST_ID_HEADER = 'X-Hub-Request-Id';
 
+/**
+ * Concurrency token of live objects (tenants, registrar endpoints, ...; contract
+ * `components.headers.ETag`). Sent back as `If-Match` on PATCH, which answers 412
+ * `PRECONDITION_FAILED` when someone else changed the object first (HUB-270).
+ */
+export const ETAG_HEADER = 'ETag';
+
 /** Default base when `PUBLIC_ADMIN_API_BASE` is not set: the admin API on the console's origin. */
 export const DEFAULT_ADMIN_API_BASE = '/admin/v1';
 
@@ -22,7 +29,7 @@ export type AdminPaths = paths;
 export type RawAdminClient = Client<paths>;
 
 export type ApiResult<T> =
-	| { ok: true; data: T; status: number; requestId: string | null }
+	| { ok: true; data: T; status: number; requestId: string | null; etag: string | null }
 	| { ok: false; error: HubApiError; status: number; requestId: string | null };
 
 /** Shape every openapi-fetch method resolves to. */
@@ -90,7 +97,8 @@ export function adminClient(opts: AdminClientOptions = {}): AdminClient {
 				ok: true,
 				data: r.data as SuccessData<R>,
 				status: response.status,
-				requestId: headerRequestId
+				requestId: headerRequestId,
+				etag: response.headers.get(ETAG_HEADER) || null
 			};
 		}
 		const error = HubApiError.fromResponse(r.error, response, headerRequestId);

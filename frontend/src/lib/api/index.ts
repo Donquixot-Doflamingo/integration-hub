@@ -3,6 +3,7 @@ export {
 	unwrap,
 	resolveBaseUrl,
 	REQUEST_ID_HEADER,
+	ETAG_HEADER,
 	DEFAULT_ADMIN_API_BASE,
 	type AdminClient,
 	type AdminClientOptions,

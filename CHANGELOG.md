@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add tenant pages with create, edit and disable · HUB-270 · F-19
+  - Tenants can be searched by id or name, with paging; each opens a page with its contact, rate limit, owned integrations (linked) and active key count
+  - Admins create tenants and edit their name, description, contact and rate limit in a form checked against the contract before anything is sent; only changed fields are saved, with a reason
+  - Admins disable a tenant (its keys get 401) with the tenant id typed to confirm, or enable it again; if someone else changed the tenant first, the console says so and offers Reload
+  - Tenant viewers see only their own tenants
+
 - 2026-10-31 · `feat(frontend)` · add transformer dry-run with client-side JSON checks · HUB-269 · F-19
   - Editors can dry-run any transformer version with a pasted canonical body (or a vendor response for response transformers), starting from one of its fixtures, optionally for a given account
   - Invalid JSON is caught in the browser with its line and column, before anything is sent

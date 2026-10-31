@@ -91,3 +91,13 @@ export type VendorRequestPreview = Schemas['VendorRequestPreview'];
 export type ListTransformersQuery = NonNullable<
 	Operations['listTransformers']['parameters']['query']
 >;
+
+// Tenants (HUB-270), API keys (HUB-271), registrar endpoints (HUB-272).
+export type TenantSummary = Schemas['TenantSummary'];
+export type Tenant = Schemas['Tenant'];
+export type TenantCreate = Schemas['TenantCreate'];
+export type TenantUpdate = Schemas['TenantUpdate'];
+export type TenantChange = Schemas['TenantChange'];
+export type RateLimit = Schemas['RateLimit'];
+/** Query parameters of `listTenants`. */
+export type ListTenantsQuery = NonNullable<Operations['listTenants']['parameters']['query']>;
