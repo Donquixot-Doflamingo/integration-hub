@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `ci` · add PR template, hygiene CI and per-commit changelog check · HUB-011 · F-01
+  - PR template with contract and changelog checklist
+  - CI validates contract YAML/JSON and fails a PR commit that does not touch CHANGELOG.md
 - 2026-10-31 · `docs(tickets)` · add ticket backlog HUB-001 to HUB-399 · HUB-010 · F-01..F-22
   - 186 tickets across EP-00..EP-12 with acceptance criteria, dependencies, parallel tracks and critical path
 - 2026-10-31 · `chore(agents)` · add contract-steward, backend, frontend and docs-keeper agents · HUB-009 · F-01

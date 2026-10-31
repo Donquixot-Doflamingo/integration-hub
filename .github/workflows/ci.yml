@@ -1,0 +1,49 @@
+# Phase 1 placeholder CI. Checks repo hygiene only.
+# Phase 2 adds backend (lint, test -race, itest, contract tests), frontend (check, test, e2e)
+# and contract lint jobs (tickets HUB-020+, HUB-014).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate YAML and JSON in contracts/
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+          try:
+              import yaml
+          except ImportError:
+              import subprocess
+              subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "pyyaml"])
+              import yaml
+          bad = 0
+          for p in pathlib.Path("contracts").rglob("*"):
+              try:
+                  if p.suffix in (".yaml", ".yml"):
+                      yaml.safe_load(p.read_text())
+                  elif p.suffix == ".json":
+                      json.loads(p.read_text())
+              except Exception as e:
+                  print(f"::error file={p}::{e}"); bad += 1
+          sys.exit(1 if bad else 0)
+          PY
+      - name: Every commit in the PR touches CHANGELOG.md
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          missing=0
+          for c in $(git rev-list "origin/${{ github.base_ref }}..HEAD" --no-merges); do
+            if ! git show --name-only --format= "$c" | grep -qx 'CHANGELOG.md'; then
+              echo "::error::commit $c does not update CHANGELOG.md"; missing=1
+            fi
+          done
+          exit $missing
