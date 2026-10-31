@@ -298,15 +298,15 @@ Every role serves `/healthz` (process alive) and `/readyz` (Postgres, Redis reac
 
 ### HUB-026 — Redacting slog handler
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `feat/HUB-026-redacting-slog`
 
 Add an `internal/telemetry` `slog.Handler` that holds current secret values and replaces any occurrence in messages and attributes with `***` (DESIGN §9, AGENTS §3.5).
 
 **Acceptance criteria**
-- [ ] Registered secret values never appear in output, in message, attrs or nested groups (table test)
-- [ ] Secrets can be added/removed at runtime safely under `-race`
-- [ ] Handler overhead benchmarked and recorded
+- [x] Registered secret values never appear in output, in message, attrs or nested groups (table test)
+- [x] Secrets can be added/removed at runtime safely under `-race`
+- [x] Handler overhead benchmarked and recorded
 
 ### HUB-027 — OpenTelemetry and metrics skeleton
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend

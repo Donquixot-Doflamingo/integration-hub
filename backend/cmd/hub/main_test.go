@@ -46,7 +46,7 @@ func TestMain(m *testing.M) {
 
 func TestSIGTERMStopsRoleWithinBudget(t *testing.T) {
 	cmd := exec.CommandContext(t.Context(), os.Args[0], "worker", "-ops-addr=127.0.0.1:0", "-ready-drain=100ms")
-	cmd.Env = append(os.Environ(), "HUB_TEST_EXEC_MAIN=1", "HUB_PG_DSN=postgres://unused")
+	cmd.Env = append(os.Environ(), "HUB_TEST_EXEC_MAIN=1", "HUB_PG_DSN=postgres://hub:dsn-password-canary@localhost/hub")
 	var stderr syncBuffer
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
@@ -78,6 +78,9 @@ func TestSIGTERMStopsRoleWithinBudget(t *testing.T) {
 	}
 	if d := time.Since(sent); d > 10*time.Second {
 		t.Fatalf("stopped after %s", d)
+	}
+	if strings.Contains(stderr.String(), "dsn-password-canary") {
+		t.Fatalf("DSN password leaked into logs: %s", stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "role stopped") {
 		t.Fatalf("missing 'role stopped' log: %s", stderr.String())

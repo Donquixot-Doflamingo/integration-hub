@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(telemetry)` · add redacting slog handler and request-field logger · HUB-026 · F-01
+  - Registered secret values never appear in logs: message, attrs, nested groups, errors, bytes, With-attached values
+  - Secret set supports Add/Remove/Replace at runtime, lock-free reads; denied keys (authorization, token, ...) always ***
+  - hub logs JSON via telemetry.NewLogger; the HUB_PG_DSN password is registered at start
 - 2026-10-31 · `feat(hub)` · add role entrypoints, config loading and graceful shutdown · HUB-024 · F-01
   - `hub gateway|worker|scheduler|admin` with config from flags > HUB_* env > defaults; secrets (HUB_PG_DSN) from env only and never logged
   - Graceful shutdown: readiness off, drain delay, public then ops listener closed within HUB_SHUTDOWN_GRACE

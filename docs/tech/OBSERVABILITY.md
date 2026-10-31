@@ -154,8 +154,10 @@ Request-scoped fields are attached once via a `slog.Logger` stored in the contex
 - `DEBUG`: off in prod; enabled per process via ops endpoint `PUT /debug/loglevel` (internal port) with automatic revert after 15 min.
 
 ### 4.3 Redaction-by-value handler
-- `telemetry.RedactingHandler` wraps the JSON handler. Before encoding, every string attribute (and `error` text) is scanned for registered secret values (TECH_SPEC §9) and each occurrence becomes `***`. Matching uses an Aho-Corasick automaton rebuilt on credential-cache swap (atomic pointer), so the hot cost is O(len(text)).
-- Keys named `authorization`, `cookie`, `x-api-key`, `password`, `secret`, `token`, `passcode` are dropped regardless of value.
+- `telemetry.RedactHandler` (HUB-026) wraps the JSON handler, under `telemetry.EnrichHandler` (request fields). Every message, string attribute, group member, `error` text, `[]byte` and stringified `any` value is scanned for registered secret values (TECH_SPEC §9). Each occurrence becomes `***`. Values attached with `Logger.With` are redacted per record, against the current set, so a secret registered after a logger was built is still caught.
+- The set (`telemetry.SecretSet`) supports `Add`, `Remove` and `Replace` at runtime (credential warm-up and rotation). Readers are lock-free (an atomic pointer to a `strings.Replacer`, longest secret first). Values shorter than 6 bytes are ignored.
+- Keys named `authorization`, `proxy_authorization`, `cookie`, `set_cookie`, `api_key`, `password`, `secret`, `token` or `passcode` (any case) are always replaced with `***`, whatever their value.
+- Measured overhead (Apple M-series, Go 1.27, `BenchmarkRedactHandler`, 4 attrs, 50 registered secrets): ~1.0 µs and 21 allocs per line, vs ~0.57 µs and 4 allocs for the bare JSON handler. The cost is off the per-stage budget, since hot-path logging is debug-level and sampled (§4.2). Revisit with an Aho-Corasick matcher if the set grows into the thousands.
 - Tenant API keys never reach logs: edge logs only `key_id`.
 - Test: the M3 grep test asserts no registered secret appears in captured logs or stored audit events (TESTING_STRATEGY §3.4).
 

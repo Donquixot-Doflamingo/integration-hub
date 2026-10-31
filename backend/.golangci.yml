@@ -28,6 +28,8 @@ linters:
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
+    exhaustive:
+      default-signifies-exhaustive: true
     forbidigo:
       forbid:
         - pattern: ^fmt\.Print

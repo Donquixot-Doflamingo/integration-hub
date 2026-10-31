@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/cmd/hub/internal/roles"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/migrations"
 )
 
@@ -64,7 +66,13 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		fmt.Fprintf(stderr, "hub %s: invalid configuration:\n%v\n", role, err)
 		return 2
 	}
-	log := slog.New(slog.NewJSONHandler(stderr, &slog.HandlerOptions{Level: cfg.LogLevel}))
+	secrets := telemetry.NewSecretSet()
+	if u, err := url.Parse(string(cfg.PGDSN)); err == nil && u.User != nil {
+		if pw, ok := u.User.Password(); ok {
+			secrets.Add(pw)
+		}
+	}
+	log := telemetry.NewLogger(stderr, cfg.LogLevel, secrets, string(role))
 	if err := roles.Run(ctx, cfg, log, roles.Options{}); err != nil {
 		log.ErrorContext(ctx, "role exited with error", slog.String("error", err.Error()))
 		return 1
