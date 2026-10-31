@@ -232,7 +232,8 @@ func (c *compiler) expression(n *cnode, src string, noCreds bool) {
 	ast.Walk(&tree.Node, v)
 	failed := false
 	for _, b := range v.builtins {
-		if !slices.Contains(allowedBuiltins, b) {
+		_, isStdlib := stdlib[b]
+		if !slices.Contains(allowedBuiltins, b) && !slices.Contains(c.vars, b) && !isStdlib {
 			c.ce.add(n.path, "unknown name %s (builtin not in the transformer standard library, DESIGN §7.3)", b)
 			failed = true
 		}

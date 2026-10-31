@@ -4,7 +4,17 @@ import "github.com/expr-lang/expr"
 
 // stdlib is the DESIGN §7.3 standard library beyond the allowed expr builtins. It is extended only
 // by platform code releases, never per transformer. Every function is pure.
-var stdlib = map[string]func(params ...any) (any, error){}
+var stdlib = map[string]func(params ...any) (any, error){
+	// strings (plus the lower, upper, trim, split, join, replace builtins)
+	"format":   fnFormat,
+	"truncate": fnTruncate,
+	// time (now() comes from the evaluation input so goldens are deterministic)
+	"epochSeconds": fnEpochSeconds,
+	"epochMillis":  fnEpochMillis,
+	"parseTime":    fnParseTime,
+	"formatTime":   fnFormatTime,
+	"addDuration":  fnAddDuration,
+}
 
 func stdlibOptions() []expr.Option {
 	opts := make([]expr.Option, 0, len(stdlib))

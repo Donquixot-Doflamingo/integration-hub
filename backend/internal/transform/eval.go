@@ -43,6 +43,7 @@ func (e *EvalError) Error() string {
 
 func (e *EvalError) Unwrap() error { return e.Err }
 
+//nolint:unparam // response mapping (HUB-065) passes res
 func (p *Program) env(in Input, res map[string]any) map[string]any {
 	now := in.Now
 	clock := func() time.Time { return time.Now().UTC() }

@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(transform)` · add string and time standard library functions · HUB-062 · F-04
+  - format, truncate (rune-safe, optional suffix), epochSeconds, epochMillis, parseTime, formatTime, addDuration, alongside the lower/upper/trim/split/join/replace builtins
+  - now() comes from the evaluation input, so goldens are deterministic; zones are UTC or fixed offsets only (IANA names would read zoneinfo from disk)
 - 2026-10-31 · `feat(transform)` · compile expressions once against a typed environment · HUB-061 · F-04
   - Every transformer expression is compiled once (expr-lang 1.17.8); req.* paths are checked against the capability schema, so req.user.idd fails at compile with transformer and target path
   - Request mappings see req, hdr, account, creds, session, now; response mappings res, account, now; creds only in headers/query unless allow_creds_in_body; only the DESIGN §7.3 builtins (no reduce, sortBy, ...)
