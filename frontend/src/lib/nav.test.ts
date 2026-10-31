@@ -1,0 +1,42 @@
+import { describe, expect, it } from 'vitest';
+import { breadcrumbsFor, sectionFor, sections } from './nav';
+
+describe('sections', () => {
+	it('lists the eight console sections in order', () => {
+		expect(sections.map((s) => s.label)).toEqual([
+			'Integrations',
+			'Health',
+			'Requests',
+			'DLQ',
+			'Transformers',
+			'Tenants',
+			'Snapshots',
+			'Change log'
+		]);
+	});
+});
+
+describe('sectionFor', () => {
+	it.each([
+		['/integrations', 'Integrations'],
+		['/integrations/int_evt_brandA', 'Integrations'],
+		['/change-log', 'Change log'],
+		['/integrationsx', undefined],
+		['/', undefined]
+	])('%s -> %s', (path, label) => expect(sectionFor(path)?.label).toBe(label));
+});
+
+describe('breadcrumbsFor', () => {
+	it.each([
+		{ path: '/', want: ['Console'] },
+		{ path: '/dlq', want: ['Console', 'DLQ'] },
+		{
+			path: '/integrations/int_evt_brandA/versions',
+			want: ['Console', 'Integrations', 'int_evt_brandA', 'versions']
+		}
+	])('$path', ({ path, want }) => {
+		const crumbs = breadcrumbsFor(path);
+		expect(crumbs.map((c) => c.label)).toEqual(want);
+		expect(crumbs.at(-1)?.href).toBe(path === '/' ? '/' : path);
+	});
+});

@@ -2,14 +2,14 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **186** · done: **11** · todo: **175**
+Total tickets: **190** · done: **29** · todo: **161**
 
 ## Epics
 
 | Epic | Name | Milestone | Features | ID range | Tickets | Done |
 | --- | --- | --- | --- | --- | --- | --- |
-| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 11 |
-| EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 13 | 0 |
+| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
+| EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 0 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 0 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
@@ -18,7 +18,7 @@ Total tickets: **186** · done: **11** · todo: **175**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 28 | 0 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 31 | 4 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1709,39 +1709,39 @@ Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`
 
 ### HUB-250 — Scaffold SvelteKit admin console
 - **Epic:** EP-10 · **Type:** chore · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-012 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-012 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `chore/HUB-250-fe-scaffold`
 
 Create `frontend/` with SvelteKit, Svelte 5 runes, TypeScript strict, ESLint/Prettier, Vitest, Playwright, and npm scripts `dev build check test test:e2e`; CI job for the frontend.
 
 **Acceptance criteria**
-- [ ] `npm run check && npm test` green on the scaffold
-- [ ] CI runs check, unit and build for `frontend/**` changes
-- [ ] Svelte 5 runes mode enforced
+- [x] `npm run check && npm test` green on the scaffold
+- [x] CI runs check, unit and build for `frontend/**` changes
+- [x] Svelte 5 runes mode enforced
 
 ### HUB-251 — Generated API client (gen:api)
 - **Epic:** EP-10 · **Type:** chore · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-250, HUB-006 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-250, HUB-006 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `chore/HUB-251-fe-gen-api`
 
 `npm run gen:api` generates types from `contracts/openapi/hub-admin.v1.yaml` with openapi-typescript and wraps openapi-fetch in a typed client with auth and error-envelope handling (AGENTS §4.5).
 
 **Acceptance criteria**
-- [ ] Generated types committed; CI fails if regeneration produces a diff
-- [ ] No hand-written API types in `src/` (lint rule or grep check)
-- [ ] Client surfaces the error envelope as a typed error
+- [x] Generated types committed; CI fails if regeneration produces a diff
+- [x] No hand-written API types in `src/` (lint rule or grep check)
+- [x] Client surfaces the error envelope as a typed error
 
 ### HUB-252 — MSW mocks from the contract
 - **Epic:** EP-10 · **Type:** test · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-251 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-251 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `test/HUB-252-fe-msw-mocks`
 
 MSW handlers and typed fixtures for every admin operation so the console is built in parallel with the backend; dev server can run fully on mocks.
 
 **Acceptance criteria**
-- [ ] Every admin operation has a handler typed by the generated client
-- [ ] `npm run dev:mock` runs the console without a backend
-- [ ] Fixtures validated against the contract in a unit test
+- [x] Every admin operation has a handler typed by the generated client
+- [x] `npm run dev:mock` runs the console without a backend
+- [x] Fixtures validated against the contract in a unit test
 
 ### HUB-253 — Auth: OIDC stub login and /me
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
@@ -1757,14 +1757,14 @@ Login via the dev OIDC stub, session handling, `/me` fetch and role-aware guards
 
 ### HUB-254 — Layout and navigation
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-250 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-250 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `feat/HUB-254-fe-layout-nav`
 
 App shell with sidebar navigation (Integrations, Health, Requests, DLQ, Transformers, Tenants, Snapshots, Change log), breadcrumbs, user menu and light/dark theme.
 
 **Acceptance criteria**
-- [ ] Every section reachable by keyboard
-- [ ] Active route highlighted; layout works at 1280 px and 768 px
+- [x] Every section reachable by keyboard
+- [x] Active route highlighted; layout works at 1280 px and 768 px
 
 ### HUB-255 — Error, empty and loading states
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
@@ -2025,6 +2025,43 @@ Run the e2e suite against a compose stack (hub admin + Postgres + Redis + mockve
 **Acceptance criteria**
 - [ ] All e2e tests pass against the real backend
 - [ ] Any contract mismatch filed as a contract change request, not patched locally
+
+### HUB-278 — CCR-001: declare X-Hub-Request-Id on every admin response
+- **Epic:** EP-10 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-006, HUB-251 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `contract/HUB-278-admin-request-id-header`
+
+Filed by frontend-engineer during HUB-251. Full CCR text (before/after YAML): `frontend/CCR-NOTES.md` § CCR-001. `hub-public` declares `X-Hub-Request-Id` on every response but `hub-admin` does not, so the console cannot rely on it for successful calls or non-envelope failures, and backend contract tests do not require it. Additive, `hub-admin` 1.0.0 → 1.1.0.
+
+**Acceptance criteria**
+- [ ] `components.headers.X-Hub-Request-Id` added and referenced by every `hub-admin` response; examples updated
+- [ ] `hub-admin` `info.version` 1.1.0 and `contracts/CHANGELOG.md` entry
+- [ ] Console removes the `TODO(CCR-001)` fallback after `npm run gen:api`
+- [ ] Backend admin contract tests (EP-08) require the header
+
+### HUB-279 — Evaluate SvelteKit 3 before form actions land
+- **Epic:** EP-10 · **Type:** chore · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-250 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `chore/HUB-279-sveltekit-3-evaluation`
+
+`npm audit` (2026-10-31) reports two advisories against SvelteKit 2.x: a redirect issue with enhanced form submission, and an XSS that only affects prerendered pages (the console prerenders nothing). npm's only fix is SvelteKit 3. Decide before the first form-action ticket (HUB-259+): upgrade, or document why 2.x is safe for this console. Re-check the ESLint/minimatch advisory chain at the same time.
+
+**Acceptance criteria**
+- [ ] Advisories assessed against the console's actual use (form actions, prerendering), written up in F-19
+- [ ] Either upgraded to SvelteKit 3 with all checks green, or an ADR records why 2.x stays and until when
+- [ ] `npm audit --omit=dev` has no unassessed high or critical findings
+
+### HUB-280 — Run Playwright e2e in frontend CI
+- **Epic:** EP-10 · **Type:** test · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-250, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `test/HUB-280-fe-e2e-ci`
+
+The e2e suite (axe a11y, keyboard, 768 px drawer, theme) runs only locally today. Add a CI job that builds with mocks (`build:mock`), installs the chromium headless shell with a cache, and runs `npm run test:e2e`, uploading the report on failure.
+
+**Acceptance criteria**
+- [ ] `frontend.yml` runs e2e on `frontend/**` PRs; a failing e2e test fails the PR
+- [ ] Browser binaries cached; job under 8 min
+- [ ] Playwright HTML report uploaded as an artifact on failure
 
 ## EP-11 — MCP server + consumer skill + SDK
 

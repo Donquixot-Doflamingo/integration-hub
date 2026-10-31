@@ -4,7 +4,7 @@
 A SvelteKit (Svelte 5 + TypeScript) control-plane UI in `frontend/`, pulled forward from Release 2 (PRD DV-2) and built in parallel with backend milestones against the frozen admin contract. It covers cutover, health, investigation and recovery workflows.
 
 ## Status
-`proposed` — 2026-10-31.
+`in-progress` — 2026-10-31 (scaffold, generated client, contract mocks and app shell shipped; screens follow HUB-253+).
 
 ## Owner
 `frontend-engineer`.
@@ -58,7 +58,8 @@ On-call and integration admins cannot run incidents or cutovers efficiently from
 None.
 
 ## Config impact
-`PUBLIC_ADMIN_API_BASE`, OIDC client id/issuer.
+`PUBLIC_ADMIN_API_BASE` (runtime, default `/admin/v1` on the console origin), OIDC client id/issuer (HUB-253).
+Build-time `HUB_API_MOCKING=true` (`npm run dev:mock` / `build:mock`) runs the console on MSW contract mocks with client-side rendering; normal builds contain no mock code.
 
 ## Observability
 | Kind | Name | Notes |
@@ -92,7 +93,18 @@ Screens ship as their admin endpoints freeze; behind OIDC from the first deploy.
 ## Tickets
 HUB-250 – HUB-299.
 
+## Shipped so far
+| Ticket | What shipped |
+| --- | --- |
+| HUB-250 | `frontend/` scaffold: SvelteKit 2 + Svelte 5 (runes enforced) + TypeScript strict, adapter-node (SSR), ESLint/Prettier, Vitest + Testing Library, Playwright; `.github/workflows/frontend.yml` |
+| HUB-251 | `npm run gen:api` -> `src/lib/api/schema.d.ts`; `adminClient()` (openapi-fetch, bearer token, `X-Hub-Request-Id`, typed `HubApiError` from the envelope); lint guard against hand-written API types; CI freshness check |
+| HUB-252 | MSW handlers for all 79 admin operations from contract examples (`contract.gen.ts`, generated); fixtures validated with Ajv 2020-12; `npm run dev:mock` with no backend |
+| HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
+
+Contract gaps found while building: CCR-001 (`X-Hub-Request-Id` not declared on admin responses), see `frontend/CCR-NOTES.md`.
+
 ## Changelog of this doc
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-10-31 | Status in-progress; shipped HUB-250, 251, 252, 254; config and CCR-001 noted | frontend-engineer |

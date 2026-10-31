@@ -1,0 +1,168 @@
+/*
+ * Integration Hub console: design tokens and base styles.
+ *
+ * Direction: a signalling desk for on-call operators. Cool "chart paper" workspace, a deep
+ * slate-navy rail for navigation, one "signal teal" accent for focus and the active route, and
+ * status colours that only ever back up text + icon (never carry meaning alone).
+ * Type: Atkinson Hyperlegible Next for UI and Atkinson Hyperlegible Mono for ids. Both were
+ * designed for character disambiguation (0/O, 1/l/I), which matters for ULIDs like req_01J9Z...
+ */
+
+:root {
+	color-scheme: light;
+
+	/* palette (light) */
+	--paper: #f2f5f8; /* workspace */
+	--surface: #ffffff; /* tables, panels */
+	--surface-sunken: #e8edf2; /* table header, skeleton */
+	--ink: #16212e; /* primary text, 15.6:1 on paper */
+	--ink-muted: #4a5868; /* secondary text, 7.0:1 on paper */
+	--rule: #cfd8e1; /* borders */
+	--rule-strong: #9eacbb;
+	--rail: #14263b; /* navigation rail */
+	--rail-ink: #d5e0eb;
+	--rail-ink-muted: #93a6ba;
+	--rail-active: #1f3a57;
+	--signal: #0d6e66; /* accent: focus, active route, links. 5.9:1 on white */
+	--signal-on-rail: #6fd3c6;
+	--signal-wash: #e0f2ef;
+
+	--status-ok: #1d6b3a;
+	--status-ok-wash: #e3f2e8;
+	--status-warn: #8a5300;
+	--status-warn-wash: #fbf0dc;
+	--status-danger: #a4262c;
+	--status-danger-wash: #fbe7e8;
+	--status-neutral: #4a5868;
+	--status-neutral-wash: #e8edf2;
+
+	--focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--signal);
+
+	/* type */
+	--font-ui: 'Atkinson Hyperlegible Next Variable', system-ui, sans-serif;
+	--font-id: 'Atkinson Hyperlegible Mono Variable', ui-monospace, monospace;
+	--text-xs: 0.75rem; /* 12px: secondary metadata only */
+	--text-sm: 0.875rem; /* 14px: table data */
+	--text-md: 1rem;
+	--text-lg: 1.25rem;
+	--text-xl: 1.625rem;
+
+	/* layout */
+	--rail-width: 15rem;
+	--band-height: 1.75rem;
+	--header-height: 3.25rem;
+	--row-height: 2.125rem; /* 34px dense rows */
+	--radius-sm: 3px;
+	--radius-md: 6px;
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.5rem;
+	--space-6: 2rem;
+}
+
+/* Dark: deep navy, not neutral black, so the rail and workspace stay one family. */
+:root[data-theme='dark'] {
+	color-scheme: dark;
+	--paper: #0f1924;
+	--surface: #15212e;
+	--surface-sunken: #1b2a3a;
+	--ink: #e2e9f0;
+	--ink-muted: #a5b4c3;
+	--rule: #2a3b4d;
+	--rule-strong: #46596d;
+	--rail: #0a131d;
+	--rail-ink: #d5e0eb;
+	--rail-ink-muted: #8ea1b5;
+	--rail-active: #172a3d;
+	--signal: #5fcabd;
+	--signal-on-rail: #6fd3c6;
+	--signal-wash: #12332f;
+
+	--status-ok: #7fd19b;
+	--status-ok-wash: #14301f;
+	--status-warn: #f2bd62;
+	--status-warn-wash: #3a2a0e;
+	--status-danger: #ff9a9e;
+	--status-danger-wash: #3d1719;
+	--status-neutral: #a5b4c3;
+	--status-neutral-wash: #1f2e3e;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	font-family: var(--font-ui);
+	font-size: 100%;
+	line-height: 1.45;
+	color: var(--ink);
+	background: var(--paper);
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	font-size: var(--text-md);
+}
+
+h1,
+h2,
+h3 {
+	margin: 0;
+	line-height: 1.2;
+	font-weight: 700;
+}
+
+a {
+	color: var(--signal);
+	text-underline-offset: 0.15em;
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+
+:focus-visible {
+	outline: none;
+	box-shadow: var(--focus-ring);
+	border-radius: var(--radius-sm);
+}
+
+code,
+.id {
+	font-family: var(--font-id);
+	font-size: 0.92em;
+	letter-spacing: 0;
+}
+
+.visually-hidden {
+	position: absolute !important;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}

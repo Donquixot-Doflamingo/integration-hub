@@ -6,6 +6,31 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tickets)` · close EP-10 CI acceptance and add a ticket counter script · HUB-250, HUB-251 · F-19
+  - HUB-250 and HUB-251 done: the frontend workflow ran green on PR #3
+  - docs/tickets/recount.py recomputes the ticket totals and epic/feature tables (--check for CI); counters fixed after the M0 merge (190 tickets, 29 done)
+- 2026-10-31 · `docs(tickets)` · file console follow-ups from the EP-10 scaffold · HUB-278, HUB-279, HUB-280 · F-19
+  - HUB-278: CCR-001, X-Hub-Request-Id on admin responses (contract-steward)
+  - HUB-279: SvelteKit 3 evaluation for two npm audit advisories before form actions; HUB-280: Playwright e2e in CI
+- 2026-10-31 · `feat(frontend)` · add console app shell with navigation and section pages · HUB-254 · F-19
+  - Sidebar with Integrations, Health, Requests, DLQ, Transformers, Tenants, Snapshots and Change log; active route marked
+  - Breadcrumbs, user menu from `/me`, light/dark/system theme, band naming the admin API (mock mode is striped)
+  - Each section lists its contract operation with loading, empty and error (code + request id + Retry) states
+  - Keyboard reachable, axe-clean in light and dark, works at 1280 px and 768 px (sidebar becomes a drawer)
+- 2026-10-31 · `test(frontend)` · add MSW mocks generated from the admin contract examples · HUB-252 · F-19
+  - All 79 admin operations answer with their contract example (status, ETag, `X-Hub-Request-Id`) via MSW
+  - `npm run dev:mock` runs the console in the browser with no backend; e2e runs against the same mocks
+  - Unit tests validate every success and error fixture against the contract schemas (Ajv, JSON Schema 2020-12)
+  - Typed test overrides: `mockOperation`, `mockError`, `mockPending`, `mockNetworkError`
+- 2026-10-31 · `chore(frontend)` · generate typed admin API client from the contract · HUB-251 · F-19
+  - `npm run gen:api` writes `src/lib/api/schema.d.ts` from hub-admin.v1.yaml (79 operations); CI fails when it is stale
+  - `adminClient()` wraps openapi-fetch with bearer auth, `X-Hub-Request-Id` capture and a typed `HubApiError` from the error envelope
+  - `npm run lint` rejects hand-written API types and raw `fetch` to `/admin/v1` outside `src/lib/api/`
+  - CCR-001 filed in `frontend/CCR-NOTES.md`: admin spec does not declare `X-Hub-Request-Id`
+- 2026-10-31 · `chore(frontend)` · scaffold SvelteKit admin console · HUB-250 · F-19
+  - `frontend/` is a SvelteKit 2 + Svelte 5 (runes enforced) + TypeScript strict app on adapter-node
+  - ESLint flat config + Prettier, Vitest + Testing Library (jsdom), Playwright with a smoke e2e
+  - New `frontend` CI workflow runs check, lint, unit tests and build on `frontend/**` changes
 - 2026-10-31 · `docs(tickets)` · close M0 CI acceptance after the first green PR run · HUB-022, HUB-032 · F-01
   - backend workflow green on PR #2: lint, test, itest, build, smoke-m0 in about 4 min; its first run caught the migration bug, proving failures fail the check
 - 2026-10-31 · `fix(migrations)` · pin the goose version table to the public schema · HUB-023 · F-01

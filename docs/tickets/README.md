@@ -37,14 +37,18 @@ A ticket may start only when every ticket in **Depends on** is `done` (or `in-re
 - After merge, flip the ticket to `done` and record the merge commit subject in the next PR you open (or a small `docs(tickets): mark HUB-### done (HUB-###)` PR if nothing else is pending).
 - Each such commit adds its `CHANGELOG.md` entry like any other commit (`AGENTS.md` §7).
 
+## Counters
+
+The totals in `TICKETS.md` and the tables below are derived. After adding tickets, changing a status, or merging a branch that touched `TICKETS.md`, run `python3 docs/tickets/recount.py` (`--check` exits 1 when they are stale).
+
 ## ID ranges
 
 IDs are never reused. New tickets take the next free number **inside their epic's range**. If a range fills up, open a new epic rather than borrowing another range.
 
 | Epic | Name | Features | ID range | Tickets | Done |
 | --- | --- | --- | --- | --- | --- |
-| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | F-01 | HUB-001–HUB-019 | 16 | 11 |
-| EP-01 | M0 Scaffold | F-01, F-02 | HUB-020–HUB-039 | 13 | 0 |
+| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | F-01 | HUB-001–HUB-019 | 16 | 12 |
+| EP-01 | M0 Scaffold | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
 | EP-02 | M1 Config registry | F-03 | HUB-040–HUB-059 | 10 | 0 |
 | EP-03 | M2 Transformer engine | F-04 | HUB-060–HUB-079 | 12 | 0 |
 | EP-04 | M3 Gateway sync path + audit | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
@@ -53,10 +57,10 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-07 | M6 Versioning & cutover | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | F-19 | HUB-250–HUB-299 | 28 | 0 |
+| EP-10 | Admin console (SvelteKit) | F-19 | HUB-250–HUB-299 | 31 | 4 |
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 11 | 0 |
-| **Total** | | | | **186** | **11** |
+| **Total** | | | | **190** | **29** |
 
 ## Sizing
 
@@ -80,7 +84,7 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 
 | Feature | Name | Epic(s) | Tickets |
 | --- | --- | --- | --- |
-| F-01 | Repo foundation, dev environment & CI | EP-00, EP-01 | 26 |
+| F-01 | Repo foundation, dev environment & CI | EP-00, EP-01 | 27 |
 | F-02 | Mock vendor (programmable fake vendor) | EP-01 | 3 |
 | F-03 | Config registry & snapshots | EP-02 | 10 |
 | F-04 | Transformation engine & golden fixtures | EP-03 | 12 |
@@ -98,7 +102,7 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | F-16 | Admin API, RBAC & change log | EP-08 | 11 |
 | F-17 | hubctl & config-as-code | EP-08 | 4 |
 | F-18 | Observability: metrics, traces, alerts, dashboards, load tests | EP-09 | 8 |
-| F-19 | Admin console (SvelteKit frontend) | EP-10 | 28 |
+| F-19 | Admin console (SvelteKit frontend) | EP-10 | 31 |
 | F-20 | Hub MCP server (`hubmcp`) | EP-11 | 8 |
 | F-21 | Consumer Claude skill & Go SDK (`hubclient`) | EP-04, EP-11 | 4 |
 | F-22 | Release-2 capabilities | EP-12 | 11 |

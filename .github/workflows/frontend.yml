@@ -1,0 +1,54 @@
+# Admin console (frontend/) CI: generated-client freshness, type check, lint, unit tests, build.
+# Runs when the console, the admin contract or this workflow changes. See frontend/AGENTS.md.
+name: frontend
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'contracts/openapi/hub-admin.v1.yaml'
+      - '.github/workflows/frontend.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'contracts/openapi/hub-admin.v1.yaml'
+      - '.github/workflows/frontend.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Generated API types and mocks are fresh (gen:api)
+        run: |
+          npm run gen:api
+          git diff --exit-code -- src/lib/api/schema.d.ts src/lib/api/mocks/contract.gen.ts || {
+            echo "::error::Generated API files are stale. Run 'npm run gen:api' in frontend/ and commit the result."
+            exit 1
+          }
+      - name: Type check (svelte-check)
+        run: npm run check
+      - name: Lint (prettier + eslint)
+        run: npm run lint
+      - name: Unit tests (vitest)
+        run: npm test
+      - name: Build
+        run: npm run build
