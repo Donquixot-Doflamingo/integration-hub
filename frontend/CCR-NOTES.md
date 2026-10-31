@@ -114,4 +114,5 @@ already were in the contract.
   (column "Dead letters" linking to `/dlq?account_id=`), hubmcp (optional)
 - **Error codes**: none new
 - **Rollout**: contract PR first
-- **Current workaround**: none in the UI; `TODO(CCR-003)` in `src/routes/(app)/health/board.ts`.
+- **Status**: shipped in hub-admin 1.1.0 (HUB-284). The health board has the "Dead letters" column (count, oldest age,
+  link to `/dlq?account_id=`, `src/routes/(app)/health/board.ts`); no `TODO(CCR-003)` left.

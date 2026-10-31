@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add a dead letters column per account to the health board · HUB-284 · F-19
+  - Each account endpoint row shows the account's dead-letter count and how old the oldest is; the count links to the DLQ filtered by that account
+  - The board summary adds the number of dead-lettered requests across the accounts shown; "Unknown" when the API sends no figure
 - 2026-10-31 · `feat(frontend)` · add active-version filters to the integrations list · HUB-283 · F-19
   - Filter integrations by "Active version" (published, or never published) and "Newer version or draft" (waiting to be published, or none waiting), across all pages
   - Both filters live in the URL and show as removable chips; combining "never published" with the second filter explains why nothing matches

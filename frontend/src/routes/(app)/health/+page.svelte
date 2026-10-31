@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { invalidate, invalidateAll } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import type { ApiResult } from '$lib/api/client';
 	import type { ActionSuccessData } from '$lib/api/actions';
 	import type { HubApiError } from '$lib/api/errors';
@@ -32,7 +33,8 @@
 		lifecycleStatus,
 		REFRESH_CHOICES,
 		retryLabel,
-		summarizeBoard
+		summarizeBoard,
+		totalDeadLetters
 	} from './board';
 
 	let { data }: { data: PageData } = $props();
@@ -116,6 +118,7 @@
 		{ label: 'Parked', numeric: true },
 		{ label: 'Oldest parked', numeric: true },
 		{ label: 'Account lifecycle' },
+		{ label: 'Dead letters', numeric: true },
 		{ label: 'Updated' },
 		...(data.access.isAdmin ? [{ label: 'Force' }] : [])
 	]);
@@ -137,11 +140,14 @@
 		{#snippet children(b)}
 			{@const groups = buildBoard(b.breakers, b.accounts)}
 			{@const sum = summarizeBoard(b.breakers)}
+			{@const dead = totalDeadLetters(b.breakers, b.accounts)}
 			<div class="toolbar">
 				<p class="summary" role="status">
 					<strong>{sum.open} open</strong>, {sum.halfOpen} half-open, {sum.closed} closed{sum.forced
 						? `, ${sum.forced} forced`
-						: ''}. {formatNumber(sum.parked)} requests parked.
+						: ''}. {formatNumber(sum.parked)} requests parked{dead === null
+						? ''
+						: `, ${formatNumber(dead)} dead-lettered`}.
 				</p>
 				<div class="refresh" role="group" aria-label="Auto-refresh">
 					<label for="refresh-every">Refresh every</label>
@@ -238,6 +244,28 @@
 												{@const l = lifecycleStatus[r.lifecycle]}
 												<StatusBadge tone={l.tone} icon={l.icon} label={l.label} />
 											{:else}<span class="muted">Unknown</span>{/if}
+										</td>
+										<td class="numeric">
+											{#if r.deadLetters === null}
+												<span class="muted">Unknown</span>
+											{:else if r.deadLetters.count === 0}
+												0
+											{:else}
+												{@const n = r.deadLetters.count}
+												<!-- eslint-disable svelte/no-navigation-without-resolve -- built on resolve() -->
+												<a
+													href={`${resolve('/dlq')}?account_id=${encodeURIComponent(x.account_id)}`}
+													aria-label="{formatNumber(n)} dead {n === 1
+														? 'letter'
+														: 'letters'} for {x.account_id}: open the DLQ">{formatNumber(n)}</a
+												>
+												<!-- eslint-enable svelte/no-navigation-without-resolve -->
+												{#if r.deadLetters.oldestAt}
+													<span class="sub" title={formatUtc(r.deadLetters.oldestAt)}
+														>oldest {formatAgo(now - Date.parse(r.deadLetters.oldestAt))}</span
+													>
+												{/if}
+											{/if}
 										</td>
 										<td title={formatUtc(x.updated_at)}
 											>{formatAgo(now - Date.parse(x.updated_at))}</td
