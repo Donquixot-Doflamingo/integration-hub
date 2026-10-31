@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tickets)` · close HUB-067 after the goldens CI step ran green · HUB-067 · F-04
+  - Backend CI on PR #6 ran make goldens green (17/17) with every other job
 - 2026-10-31 · `test(transform)` · record M2 acceptance and milestone summary · HUB-071 · F-04
   - docs/milestones/M2.md: accept-line evidence, what was built, nine deviations, deferred items
   - F-04 shipped; README and CLAUDE.md show M2 done
