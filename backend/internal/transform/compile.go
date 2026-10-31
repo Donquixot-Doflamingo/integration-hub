@@ -28,7 +28,7 @@ type Limits struct {
 
 // DefaultLimits are the production limits.
 func DefaultLimits() Limits {
-	return Limits{MaxNodes: 500, MaxDepth: 24, MemoryBudget: 200_000, MaxOutputBytes: 1 << 20, TimeBudget: 5 * time.Millisecond}
+	return Limits{MaxNodes: 500, MaxDepth: 24, MemoryBudget: 100_000, MaxOutputBytes: 1 << 20, TimeBudget: 5 * time.Millisecond}
 }
 
 // Options configure Compile.

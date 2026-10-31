@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 )
@@ -85,6 +86,7 @@ func (p *Program) build(in Input) (core.VendorRequest, map[string]bool, error) {
 	if p.kind != "request" {
 		return core.VendorRequest{}, nil, &EvalError{Transformer: p.ref, Path: "request", Err: errNotRequest}
 	}
+	start := time.Now()
 	env := p.env(in, nil)
 	req := core.VendorRequest{Method: p.method, Path: p.path}
 	credTargets := map[string]bool{}
@@ -99,6 +101,12 @@ func (p *Program) build(in Input) (core.VendorRequest, map[string]bool, error) {
 		if req.Body, err = p.eval(p.body, env); err != nil {
 			return core.VendorRequest{}, nil, err
 		}
+		if err := p.checkOutput("request.body", req.Body); err != nil {
+			return core.VendorRequest{}, nil, err
+		}
+	}
+	if err := p.checkTime("request", start); err != nil {
+		return core.VendorRequest{}, nil, err
 	}
 	return req, credTargets, nil
 }

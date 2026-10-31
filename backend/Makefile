@@ -18,8 +18,9 @@ build: ## Build every binary into bin/
 	@for c in $(CMDS); do $(GO) build -trimpath -ldflags "-X main.version=$(VERSION)" -o $(BIN)/$$c ./cmd/$$c || exit 1; done
 	@echo "built: $(addprefix $(BIN)/,$(CMDS))"
 
-test: ## Unit tests with the race detector
+test: ## Unit tests with the race detector, plus timing-sensitive budget tests without it
 	$(GO) test -race -count=1 ./...
+	$(GO) test -count=3 -run 'Pathological|TimeBudget' ./internal/transform/
 
 itest: up ## Integration tests (tag integration) against compose Postgres + Redis; -p 1: packages share tables
 	$(GO) test -race -count=1 -p 1 -tags integration ./...

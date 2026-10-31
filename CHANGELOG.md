@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(transform)` · enforce transformer depth, size, memory and time budgets · HUB-066 · F-04
+  - Expressions over 24 levels of nesting or 500 AST nodes fail at compile; built bodies and mapped responses over 1 MB fail with TRANSFORM_FAILED
+  - Pathological map/filter loops abort on the VM memory budget (100 k) within the 5 ms time budget + 1 ms; the time budget is also checked after every transform
 - 2026-10-31 · `feat(transform)` · map vendor responses and errors to canonical results · HUB-065 · F-04
   - Program.MapResponse: ordered error rules (first match wins) with retry_after_ms and message; unmatched 4xx/5xx are classified by status, never mapped as success
   - Mapped responses are validated against the capability response schema; header(res, name) reads headers case-insensitively

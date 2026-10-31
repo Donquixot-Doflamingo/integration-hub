@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 )
@@ -28,6 +29,7 @@ func (p *Program) MapResponse(resp core.VendorResponse, in Input) (any, *core.Ca
 	if p.kind != "response" {
 		return nil, nil, &EvalError{Transformer: p.ref, Path: "response", Err: errNotResponse}
 	}
+	start := time.Now()
 	env := p.env(in, resEnv(resp))
 	status := resp.Status
 	for _, r := range p.errors {
@@ -73,6 +75,12 @@ func (p *Program) MapResponse(resp core.VendorResponse, in Input) (any, *core.Ca
 	}
 	out, err := p.eval(p.response, env)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := p.checkOutput("response", out); err != nil {
+		return nil, nil, err
+	}
+	if err := p.checkTime("response", start); err != nil {
 		return nil, nil, err
 	}
 	if p.validateResponse != nil {
