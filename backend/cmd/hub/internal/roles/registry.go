@@ -39,6 +39,10 @@ type roleRegistry struct {
 	version  prometheus.Gauge
 	failures *prometheus.CounterVec
 	origin   *prometheus.GaugeVec
+	// beforeSwap and afterSwap let the role prepare for a snapshot (the gateway warms its
+	// credential cache) and react to one (prune upstream pools). Both may be nil.
+	beforeSwap func(context.Context, *registry.Snapshot)
+	afterSwap  func(*registry.Snapshot)
 }
 
 func newRegistry(cfg Config, m *telemetry.Metrics, log *slog.Logger, pool *pgxpool.Pool) (*roleRegistry, error) {
@@ -105,7 +109,14 @@ func (r *roleRegistry) load(ctx context.Context) {
 
 // adopt publishes snap locally, refreshes the local cache and, on the admin role, archives it.
 func (r *roleRegistry) adopt(ctx context.Context, src registry.Sources, snap *registry.Snapshot, origin string) {
-	r.published(ctx, r.store.Swap(snap))
+	if r.beforeSwap != nil {
+		r.beforeSwap(ctx, snap)
+	}
+	pub := r.store.Swap(snap)
+	r.published(ctx, pub)
+	if r.afterSwap != nil {
+		r.afterSwap(pub)
+	}
 	for _, o := range []string{"config", "archive", "cache"} {
 		v := 0.0
 		if o == origin {
@@ -160,8 +171,16 @@ func writeFileAtomic(path string, data []byte) error {
 func (r *roleRegistry) watch(ctx context.Context) {
 	r.log.InfoContext(ctx, "watching config for changes", slog.String("config_dir", r.cfg.ConfigDir))
 	err := registry.Watch(ctx, r.src, &r.store, registry.WatchOptions{
+		BeforeSwap: func(s *registry.Snapshot) {
+			if r.beforeSwap != nil {
+				r.beforeSwap(ctx, s)
+			}
+		},
 		OnSwap: func(s *registry.Snapshot) {
 			r.published(ctx, s)
+			if r.afterSwap != nil {
+				r.afterSwap(s)
+			}
 			r.writeCache(ctx, r.src, s)
 			if r.cfg.Role == Admin {
 				actx, cancel := context.WithTimeout(ctx, archiveTimeout)

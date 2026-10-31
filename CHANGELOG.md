@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(hub)` · wire the gateway role to the edge, credentials, upstream and audit · HUB-088 · F-06
+  - hub gateway now serves the caller API: discovery, dry-run and invoke over the warm credential cache, the per-account upstream client and the audit writer
+  - Credentials of every account in a snapshot are loaded before that snapshot serves traffic (at boot and on every config change); upstream pools of removed accounts are pruned after the swap
+  - New settings: HUB_AUDIT_MASK_KEY, HUB_DEBUG_HEADERS, and HUB_CRED_SOURCE now defaults to localfile://.data/dev-secrets.enc
 - 2026-10-31 · `feat(edge)` · add the sync invoke pipeline · HUB-088 · F-06
   - POST /v1/integrations/{id}/invoke and /invoke/{operation} validate, resolve, transform, call the upstream, map the response and return the canonical body (200) or a canonical error
   - Paused integrations answer 503 INTEGRATION_PAUSED; integrations that move money or quota need an Idempotency-Key (400 IDEMPOTENCY_KEY_REQUIRED); X-Request-Deadline caps the upstream time
