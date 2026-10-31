@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **190** · done: **36** · todo: **154**
+Total tickets: **190** · done: **36** · todo: **153** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -502,14 +502,14 @@ Add `config/` with `events.track@v1`, vendor `clevertap` pointing at mockvendor,
 
 ### HUB-047 — Postgres registry tables and sqlc queries
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-023, HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** in-review · **Depends on:** HUB-023, HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-047-registry-tables`
 
 Add migrations for registry tables of DESIGN §18.2 (tenants, api_keys, vendors, vendor_endpoints, accounts, account_credentials, capabilities, transformers, integrations, integration_versions, integration_grants, registrar_endpoints, config_snapshots) with sqlc queries.
 
 **Acceptance criteria**
-- [ ] `make migrate` creates all tables; down migration reverses cleanly
-- [ ] `integration_versions` and `transformers` reject UPDATE (trigger or permissions) to enforce immutability
+- [x] `make migrate` creates all tables; down migration reverses cleanly
+- [x] `integration_versions` and `transformers` reject UPDATE (trigger or permissions) to enforce immutability
 - [ ] sqlc code generated and compiled in CI
 
 ### HUB-048 — Snapshot persistence and boot from last good

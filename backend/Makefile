@@ -9,7 +9,7 @@ COMPOSE := docker compose -f ../deploy/docker-compose.yml
 export HUB_PG_DSN ?= postgres://hub:hub@localhost:5432/hub?sslmode=disable
 export HUB_REDIS_ADDR ?= localhost:6379
 
-.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean
+.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check
 
 all: lint test build
 
@@ -51,9 +51,17 @@ down: ## Stop Postgres + Redis
 migrate: ## Apply embedded goose migrations to HUB_PG_DSN
 	$(GO) run ./cmd/hub migrate
 
+SQLC_VERSION := 1.31.1
+sqlc: ## Regenerate internal/control/db from migrations/ and queries
+	sqlc generate
+
+sqlc-check: ## Fail if generated sqlc code is stale (CI)
+	$(GO) run github.com/sqlc-dev/sqlc/cmd/sqlc@v$(SQLC_VERSION) diff
+
 doctor: ## Check toolchain versions (TECH_SPEC §3)
 	@$(GO) version
 	@golangci-lint --version | head -1
+	@sqlc version 2>/dev/null || echo "sqlc not installed (brew install sqlc)"
 	@docker compose version
 	@docker info --format 'docker server {{.ServerVersion}}' 2>/dev/null || echo "docker daemon not running (colima start)"
 

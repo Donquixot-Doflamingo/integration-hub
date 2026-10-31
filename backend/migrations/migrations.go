@@ -58,3 +58,16 @@ func Status(ctx context.Context, db *sql.DB) (map[int64]bool, error) {
 	}
 	return out, nil
 }
+
+// DownTo rolls back migrations until version is the newest applied (0 = everything).
+// For tests and local recovery only; production never runs down migrations.
+func DownTo(ctx context.Context, db *sql.DB, version int64) error {
+	p, err := provider(db)
+	if err != nil {
+		return err
+	}
+	if _, err := p.DownTo(ctx, version); err != nil {
+		return fmt.Errorf("roll back to %d: %w", version, err)
+	}
+	return nil
+}

@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(control)` · add registry tables with immutable versions and sqlc queries · HUB-047 · F-03
+  - Migration 00002 creates the 13 DESIGN §18.2 registry tables in schema hub; down migration removes them cleanly
+  - integration_versions and transformers reject UPDATE (trigger, SQLSTATE 23001); the active-version pointer still moves
+  - sqlc 1.31.1 generates internal/control/db; make sqlc / make sqlc-check, and a CI job fails on stale generated code
 - 2026-10-31 · `feat(registry)` · watch the dev config and load snapshots in every role · HUB-045 · F-03
   - Every role builds its snapshot from HUB_CONFIG_DIR / HUB_CONTRACTS_DIR at start; /readyz reports snapshot ok or "snapshot not loaded" with the problems logged
   - -config-watch (HUB_CONFIG_WATCH, off by default): edits swap within about 1 s; invalid edits are rejected and the last good snapshot keeps serving

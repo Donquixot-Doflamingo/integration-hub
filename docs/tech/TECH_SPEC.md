@@ -93,7 +93,7 @@ flowchart LR
 
 ADR-0001. Toolchain targets: **Go ≥ 1.26 (`go.mod` minimum; goose v3.29 requires 1.26), Node 22 LTS, Postgres 16, Redis 7**.
 
-Installed on the dev machine (HUB-012, 2026-10-31, Homebrew on macOS 15 arm64): Go 1.27.3, Node 22.23.4 (keg-only `node@22`: put `/opt/homebrew/opt/node@22/bin` first on `PATH`; a Node 26 from Homebrew is also present and must not be used), Docker CLI 29.9.2 + Compose 5.6.1 on Colima 0.10.3 (`colima start --cpu 4 --memory 6`), golangci-lint 2.15.0. The compose plugin is found through `cliPluginsExtraDirs` in `~/.docker/config.json`.
+Installed on the dev machine (HUB-012, 2026-10-31, Homebrew on macOS 15 arm64): Go 1.27.3, Node 22.23.4 (keg-only `node@22`: put `/opt/homebrew/opt/node@22/bin` first on `PATH`; a Node 26 from Homebrew is also present and must not be used), Docker CLI 29.9.2 + Compose 5.6.1 on Colima 0.10.3 (`colima start --cpu 4 --memory 6`), golangci-lint 2.15.0, sqlc 1.31.1 (HUB-047; CI runs the same version through `make sqlc-check`). The compose plugin is found through `cliPluginsExtraDirs` in `~/.docker/config.json`.
 
 ```text
 integration-hub/
