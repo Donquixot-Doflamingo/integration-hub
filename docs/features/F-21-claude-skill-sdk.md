@@ -4,7 +4,7 @@
 Two caller-side deliverables: (1) a distributable Claude skill, `clients/claude-skill/integration-hub/SKILL.md`, that developers copy to `~/.claude/skills/integration-hub/` so Claude uses the Hub correctly (PRD DV-5); (2) the Go SDK `backend/pkg/hubclient` with distinct `Result` / `Queued` types, typed errors, idempotency helper and callback signature verifier (DESIGN §4.5, §18.1).
 
 ## Status
-`proposed` — 2026-10-31. `hubclient` core types ship in M3 (F-06); polish and skill in EP-11.
+`in-progress` — 2026-10-31. SDK core shipped (HUB-094, M3): `Invoke` with sealed `Result` / `Queued`, typed `*Error`, request status, dry-run, discovery, `NewIdempotencyKey`. Still to do in EP-11: `VerifySignature`, `Poll`, a derived `IdempotencyKey(namespace, businessID)` (US-2104), opt-in retries, automatic `traceparent` from the context span, and the consumer skill.
 
 ## Owner
 `contract-steward` + docs (skill); `backend-engineer` (SDK).
@@ -44,12 +44,14 @@ Callers misuse async APIs (treating 202 as done), skip idempotency keys, and ver
 ## UX / API surface
 | Surface | Item | Contract ref |
 | --- | --- | --- |
-| SDK | `hubclient.Invoke`, `InvokeOp`, `GetRequest`, `DryRun`, `ListIntegrations`, `GetCapability` | `contracts/openapi/hub-public.v1.yaml#invokeIntegration`, `#invokeIntegrationOperation`, `#getRequestStatus`, `#dryRunIntegration`, `#listIntegrations`, `#getCapability` |
+| SDK | `Client.Invoke` (with `WithOperation` for `/invoke/{op}`), `GetRequest`, `DryRun`, `ListIntegrations` / `AllIntegrations`, `GetIntegration`, `GetCapability` (shipped, HUB-094) | `contracts/openapi/hub-public.v1.yaml#invokeIntegration`, `#invokeIntegrationOperation`, `#getRequestStatus`, `#dryRunIntegration`, `#listIntegrations`, `#getIntegration`, `#getCapability` |
 | SDK | `VerifySignature` | `contracts/openapi/hub-public.v1.yaml#/components/parameters/CallbackSignature`; shared signature test vectors are not in `contracts/` yet (to be added via CCR) |
 | Skill | `clients/claude-skill/integration-hub/SKILL.md` (+ `references/` examples) | — |
 
 ## Behaviour & rules
-1. The SDK decodes 202 into `Queued{RequestID, Status, Reason, Poll}`; callers must type-switch.
+1. The SDK decodes 202 into `Queued{RequestID, Status, Reason, Poll, IdempotentReplay}`; callers must type-switch. `Outcome` is sealed (an unexported method), so `*Result` and `*Queued` are its only implementations and a 202 cannot be observed as success. A 202 or 200 with a malformed body is an error, never an outcome.
+1a. Every 4xx/5xx becomes `*hubclient.Error{Status, Code, Message, Retryable, RetryAfter, RequestID, Reason, Circuit, Upstream, Details}`. `RetryAfter` comes from `retry_after_ms`, else the `Retry-After` header (seconds or HTTP-date, capped at 24 h). A failure without a Hub envelope (proxy HTML 502, empty 503) still yields an `*Error` with code `INTERNAL_ERROR`, retryable only for 429/502/503/504. `IsRetryable(err)` is false for transport and context errors.
+1b. The API key is private to the client: never in errors, `String`/`GoString` or slog output. `X-Hub-Integration-Version` is ignored.
 2. SDK retries only when `Retryable` is true and an idempotency key is set, honouring `RetryAfter`; off by default.
 3. Skill instructs Claude to prefer MCP tools when available, else HTTP discovery; to dry-run before generating code; never to invent integration IDs.
 4. Skill instructs that `hub_invoke` with real side effects requires the user's explicit go-ahead before passing `confirm: true`.
@@ -63,7 +65,7 @@ None.
 SDK options: base URL, API key, timeout, `X-Request-Deadline`, user agent.
 
 ## Observability
-SDK sends `traceparent` when a span is in context and `User-Agent: hubclient-go/<version>`.
+SDK sends `User-Agent: hubclient-go/<version>` (plus an optional product via `WithUserAgent`) and `traceparent` when the caller passes `WithTraceparent`. Deriving `traceparent` from the span in the context is not built yet (EP-11). The SDK emits no metrics or logs of its own.
 
 ## Security & PII
 Signature verification uses constant-time comparison; API key from env, never logged.
@@ -76,7 +78,7 @@ Signature verification uses constant-time comparison; API key from env, never lo
 
 ## Testing
 - **Unit**: decode table for 200/202/each error code; signature vectors (valid, tampered, stale).
-- **Contract**: SDK types generated or checked against `hub-public.v1.yaml`.
+- **Contract**: every SDK exchange in `pkg/hubclient` tests runs through `internal/testkit/contract` (`Check`), with responses taken from the contract's own examples; a test fails if the SDK's code constants differ from the `canonical-error.json` enum.
 - **Skill eval**: skill-creator evals — prompts like "send an order event" must produce code with idempotency and `Queued` handling and no vendor names.
 
 ## Rollout & migration
@@ -93,3 +95,4 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-21`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-10-31 | SDK core shipped (HUB-094); status `in-progress`; behaviour rules 1a/1b; remaining SDK items listed in Status | backend-engineer |
