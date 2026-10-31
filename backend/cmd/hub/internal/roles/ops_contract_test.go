@@ -24,8 +24,8 @@ func TestOpsEndpointsMatchContract(t *testing.T) {
 		want   int
 	}{
 		{"healthz", true, nil, "/healthz", 200},
-		{"readyz ok", true, []Check{{"postgres", okCheck}, {"redis", okCheck}}, "/readyz", 200},
-		{"readyz failing", true, []Check{{"postgres", okCheck}, {"redis", downCheck}}, "/readyz", 503},
+		{"readyz ok", true, []Check{{Name: "postgres", Fn: okCheck}, {Name: "redis", Fn: okCheck}}, "/readyz", 200},
+		{"readyz failing", true, []Check{{Name: "postgres", Fn: okCheck}, {Name: "redis", Fn: downCheck}}, "/readyz", 503},
 		{"readyz shutting down", false, nil, "/readyz", 503},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

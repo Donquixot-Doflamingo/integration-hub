@@ -67,7 +67,10 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 		return err
 	}
 	defer st.close() // last: everything above may still use them while shutting down
-	checks := append(st.checks(), opts.ExtraChecks...)
+
+	reg := newRegistry(cfg, metrics, log)
+	reg.load(ctx)
+	checks := append(append(st.checks(), reg.check()), opts.ExtraChecks...)
 
 	// ops is last so it is closed last: /readyz answers 503 while the public listener drains.
 	endpoints := []endpoint{{"ops", cfg.OpsAddr, opsHandler(cfg.Role, &ready, checks, metrics, log)}}
@@ -102,6 +105,9 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 
 	serveErr := make(chan error, len(lns))
 	var wg sync.WaitGroup
+	if cfg.ConfigWatch {
+		wg.Go(func() { reg.watch(ctx) })
+	}
 	for _, l := range lns {
 		wg.Go(func() {
 			if err := l.srv.Serve(l.ln); err != nil && !errors.Is(err, http.ErrServerClosed) {

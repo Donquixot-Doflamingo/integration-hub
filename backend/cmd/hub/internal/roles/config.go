@@ -70,6 +70,9 @@ type Config struct {
 	LogLevel         slog.Level
 	OTLPEndpoint     string // empty disables trace export
 	TraceSampleRatio float64
+	ConfigDir        string // dev registry (backend/config); production nodes fetch snapshots instead (M7)
+	ContractsDir     string // repo-root contracts/, for capability schemas
+	ConfigWatch      bool   // dev only: rebuild and swap the snapshot when ConfigDir changes
 }
 
 // Load builds the config for role from flags (highest precedence), then HUB_* environment
@@ -90,6 +93,7 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	var (
 		c                                      = Config{Role: role, PGDSN: Secret(getenv("HUB_PG_DSN"))}
 		shutdownGrace, readyDrain, level, rate string
+		watch                                  bool
 	)
 	fs := flag.NewFlagSet("hub "+string(role), flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -103,9 +107,13 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	fs.StringVar(&level, "log-level", env("HUB_LOG_LEVEL", "info"), "debug, info, warn or error")
 	fs.StringVar(&c.OTLPEndpoint, "otlp-endpoint", env("HUB_OTLP_ENDPOINT", ""), "OTLP/gRPC endpoint; empty disables trace export")
 	fs.StringVar(&rate, "trace-sample-ratio", env("HUB_TRACE_SAMPLE_RATIO", "0.05"), "head sampling ratio 0..1")
+	fs.StringVar(&c.ConfigDir, "config-dir", env("HUB_CONFIG_DIR", "config"), "registry config directory (dev)")
+	fs.StringVar(&c.ContractsDir, "contracts-dir", env("HUB_CONTRACTS_DIR", "../contracts"), "contracts directory (capability schemas)")
+	fs.BoolVar(&watch, "config-watch", env("HUB_CONFIG_WATCH", "false") == "true", "dev only: watch config-dir and swap snapshots")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
+	c.ConfigWatch = watch
 	if fs.NArg() > 0 {
 		return Config{}, fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}

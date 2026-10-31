@@ -31,7 +31,7 @@ func TestReadyzAgainstComposeServices(t *testing.T) {
 		if err := json.Unmarshal([]byte(body), &h); err != nil {
 			t.Fatal(err)
 		}
-		if h.Checks["postgres"] != "ok" || h.Checks["redis"] != "ok" {
+		if h.Checks["postgres"] != "ok" || h.Checks["redis"] != "ok" || h.Checks["snapshot"] != "ok" {
 			t.Fatalf("checks %v", h.Checks)
 		}
 	})

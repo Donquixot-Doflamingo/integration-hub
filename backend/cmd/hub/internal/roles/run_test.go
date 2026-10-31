@@ -18,6 +18,7 @@ func testConfig(role Role) Config {
 	return Config{
 		Role: role, HTTPAddr: "127.0.0.1:0", OpsAddr: "127.0.0.1:0", PGDSN: "postgres://unused",
 		RedisAddr: "127.0.0.1:1", ShutdownGrace: 5 * time.Second, ReadyDrain: 50 * time.Millisecond,
+		ConfigDir: "../../../../config", ContractsDir: "../../../../../contracts",
 	}
 }
 

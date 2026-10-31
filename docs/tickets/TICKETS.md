@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **190** · done: **35** · todo: **155**
+Total tickets: **190** · done: **36** · todo: **154**
 
 ## Epics
 
@@ -10,7 +10,7 @@ Total tickets: **190** · done: **35** · todo: **155**
 | --- | --- | --- | --- | --- | --- | --- |
 | EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
-| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 6 |
+| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 7 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 0 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
@@ -478,15 +478,15 @@ Build an immutable `Snapshot` with in-memory indexes (DESIGN §18.3) and expose 
 
 ### HUB-045 — Dev file watcher
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-044 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-044 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-045-dev-file-watcher`
 
 Watch `config/` in dev, debounce changes, rebuild and swap the snapshot; an invalid change keeps the last good snapshot and logs the errors (DESIGN §19 M1, §6.4).
 
 **Acceptance criteria**
-- [ ] Editing a valid file swaps the snapshot within 2 s
-- [ ] An invalid edit is rejected and the previous snapshot keeps serving
-- [ ] Watcher is off unless explicitly enabled
+- [x] Editing a valid file swaps the snapshot within 2 s
+- [x] An invalid edit is rejected and the previous snapshot keeps serving
+- [x] Watcher is off unless explicitly enabled
 
 ### HUB-046 — Dev config set
 - **Epic:** EP-02 · **Type:** chore · **Area:** backend

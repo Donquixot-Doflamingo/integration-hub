@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(registry)` · watch the dev config and load snapshots in every role · HUB-045 · F-03
+  - Every role builds its snapshot from HUB_CONFIG_DIR / HUB_CONTRACTS_DIR at start; /readyz reports snapshot ok or "snapshot not loaded" with the problems logged
+  - -config-watch (HUB_CONFIG_WATCH, off by default): edits swap within about 1 s; invalid edits are rejected and the last good snapshot keeps serving
+  - Metrics snapshot_version and snapshot_apply_failures_total{reason}; smoke test checks the snapshot
 - 2026-10-31 · `chore(config)` · add the M1 dev registry config · HUB-046 · F-03
   - backend/config: events.track@v1 (schema from contracts/), vendor clevertap on mockvendor, accounts ct-brandA-in / ct-brandB-us (localfile credentials), transformers T1@7, T2@3, R1@2, R2@1, integrations int_evt_brandA (v1–v2), int_evt_brandB, int_evt_brandB_min, tenant orders-service, registrar reg_orders_cb
   - Dev config builds with zero problems; a documented test-only dev API key resolves to orders-service
