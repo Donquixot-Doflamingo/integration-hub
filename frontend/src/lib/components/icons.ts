@@ -30,7 +30,9 @@ export const icons = {
 	open: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM7 7l6 6M13 7l-6 6',
 	halfOpen: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM10 3v14',
 	closed: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM6.5 10l2.5 2.5 4.5-5',
-	pause: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM8 7v6M12 7v6'
+	pause: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM8 7v6M12 7v6',
+	// padlock: sealed payloads
+	lock: 'M5 9h10v8H5zM7 9V6.5a3 3 0 0 1 6 0V9M10 12.5v2'
 } as const;
 
 export type IconName = keyof typeof icons;

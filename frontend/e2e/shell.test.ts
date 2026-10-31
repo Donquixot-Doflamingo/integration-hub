@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => signIn(page));
 
 const SECTIONS = [
 	{ label: 'Integrations', path: '/integrations', row: 'int_evt_brandA' },
-	{ label: 'Health', path: '/health', row: 'ct-brandA-in' },
+	{ label: 'Health', path: '/health', row: 'clevertap' },
 	{ label: 'Requests', path: '/requests', row: 'req_01J9Z3K8X2V7Q4M6N8P0R2S4T6' },
 	{ label: 'DLQ', path: '/dlq', row: 'req_01J9Z3M1A5B7C9D1E3F5G7H9JK' },
 	{ label: 'Transformers', path: '/transformers', row: 'T1' },

@@ -40,3 +40,12 @@ export function formatBytes(n: number | null | undefined): string {
 export function formatRatio(r: number | null | undefined): string {
 	return typeof r === 'number' && Number.isFinite(r) ? `${Math.round(r * 100)}%` : '-';
 }
+
+/** Elapsed time for live labels: 4000 -> `4 s ago`, 125000 -> `2 min ago`. Future -> `just now`. */
+export function formatAgo(ms: number): string {
+	if (!Number.isFinite(ms) || ms < 1000) return 'just now';
+	if (ms < 60_000) return `${Math.floor(ms / 1000)} s ago`;
+	if (ms < 3_600_000) return `${Math.floor(ms / 60_000)} min ago`;
+	if (ms < 172_800_000) return `${Math.floor(ms / 3_600_000)} h ago`;
+	return `${Math.floor(ms / 86_400_000)} d ago`;
+}

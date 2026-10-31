@@ -32,3 +32,10 @@ export async function expectNoSeriousA11yViolations(page: Page) {
 		[]
 	);
 }
+
+/** Selects a mock scenario (see src/lib/api/mocks/scenarios.ts) for browser and server mocks. */
+export async function useScenario(page: Page, scenario: string) {
+	await page
+		.context()
+		.addCookies([{ name: 'hub_mock_scenario', value: scenario, domain: 'localhost', path: '/' }]);
+}

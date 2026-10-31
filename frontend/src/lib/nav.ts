@@ -20,7 +20,8 @@ export const sections: readonly NavSection[] = [
 	{
 		href: '/health',
 		label: 'Health',
-		summary: 'Circuit breakers per account endpoint, open ones first.',
+		summary:
+			'Circuit breakers per vendor and account endpoint with parked requests and account lifecycle, open ones first.',
 		icon: 'health'
 	},
 	{
@@ -77,7 +78,7 @@ export interface Crumb {
  */
 const PREFIXED: Record<string, (next: string) => string> = { versions: (v) => `v${v}` };
 /** Readable labels for fixed sub-page segments. */
-const LABELS: Record<string, string> = { diff: 'Compare' };
+const LABELS: Record<string, string> = { diff: 'Compare', publish: 'Publish' };
 
 /** Breadcrumb trail for a pathname: Console > Section > deeper segments (decoded). */
 export function breadcrumbsFor(pathname: string): Crumb[] {

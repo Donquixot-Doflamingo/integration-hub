@@ -6,6 +6,44 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add request timeline with policy-aware payload views · HUB-264 · F-19
+  - Request ids in the explorer open `/requests/{id}`: status and error code, tenant, integration and version, capability, mode, vendor and account, timings (total, hub overhead, vendor, queue wait), idempotency key, audit policy, snapshot and trace id
+  - The timeline lists every audit event in sequence order with its time, the gap since the previous event and since the first, size and SHA-256, and the attempt it belongs to
+  - Payloads follow the audit policy: masked values stay masked, sealed payloads show a locked placeholder with size and hash, metadata-only says no body was stored, truncated payloads name where the rest is; secret-looking fields that arrive unmasked are hidden
+  - The attempts table shows each attempt's integration version, account and endpoint, duration, vendor status, error and breaker state; tenant viewers see versions but no vendor or account
+  - The explorer's error-code field carries its hint in the label, so the search form lines up
+
+- 2026-10-31 · `feat(frontend)` · add request explorer search with URL filters · HUB-263 · F-19
+  - Search requests by tenant, integration, status (any of several), error codes, idempotency key and a UTC time range; vendor and account filters for everyone except tenant viewers, who pick among their own tenants
+  - Quick ranges (last hour, 24 hours, 7 days) fill in absolute times, so the URL stays shareable; a range longer than 31 days or reversed is flagged on the time fields and not searched
+  - Every filter and the page size live in the URL, shown as removable chips with "Clear all"; Previous / Next paging keeps them
+  - Results show status with its error code, integration (linked), version, vendor and account, mode, attempts, duration and creation time; empty results say whether filters hide everything
+
+- 2026-10-31 · `feat(frontend)` · add admin breaker force-open, force-close and clear · HUB-262 · F-19
+  - Admins get Force open, Force closed and (on forced breakers) Clear force on each health board row; editors, viewers and tenant viewers do not
+  - The dialog names the integrations that use the breaker before you confirm, and force closed says how many parked requests will drain
+  - Force open and force closed need a reason, the account id typed to confirm and a hold time (15 minutes to 24 hours, or until someone clears it); clear needs a reason
+  - Success shows the new hold ("Forced open until 10:30 UTC") and the change log id; the board stops auto-refreshing while a dialog is open
+
+- 2026-10-31 · `feat(frontend)` · add vendor and account health board with auto-refresh · HUB-261 · F-19
+  - The Health page groups every breaker by vendor, worst first: open, then half-open, then closed, then most parked; open rows carry an "Open" badge, a thick left rule and a bold id, not just colour
+  - Each row shows state with "retry in N s", "probe due" or the forced hold, failure rate and calls in the window, parked count and oldest age, the account's lifecycle state (Active, Draining, Retired) and when it was last updated
+  - Auto-refresh every 5 s by default, configurable (5, 10, 30, 60 s), pausable, with "Refresh now" and "Updated N s ago"; a failed refresh keeps the last board on screen marked stale with the error code and request id
+  - Tenant viewers see a note instead of vendor internals; a dead-letter count per account waits for CCR-003 (HUB-284)
+
+- 2026-10-31 · `feat(frontend)` · add weights and pause/resume flows with mandatory reason · HUB-260 · F-19
+  - "Set weights" on an integration with two or more targets: the current weights, a live total that must reach 100 (confirm stays disabled otherwise), and "Publish vN now" (on by default; off saves the new version as a draft)
+  - "Pause integration" sits in a separate kill-switch group; its dialog spells out the impact (503 INTEGRATION_PAUSED within about 10 s, nothing new parked, queued requests held, other integrations unaffected) and needs a reason
+  - "Resume integration" appears on paused integrations and names the pause reason
+  - Each success shows what changed and the change log id; errors keep the dialog open with code and request id, and a 409 on weights asks for a reload
+
+- 2026-10-31 · `feat(frontend)` · add publish and rollback flows with mandatory reason · HUB-259 · F-19
+  - Editors get "Review draft vN and publish" on the integration page: a YAML/JSON spec editor with line numbers, "Save draft" (creates or replaces the draft and runs the publish checks), the checks in text and icon, and the diff against the active version
+  - Publish and "Roll back to vN" (history rows) open one confirm dialog: exact title, the consequence in numbers, a required reason (10+ characters), Cancel focused first, Escape and Tab stay inside, no double submit
+  - Success shows the new active version and the change log id with a copy button; a 409 says someone else published first and offers Reload; other errors show code, message and request id with the reason kept
+  - API validation errors land on their field: the reason, or the spec line of each JSON pointer with "Go to line"; YAML syntax errors show their line
+  - Viewers and tenant viewers see no publish or rollback controls; mutations run as server-side form actions, so the admin token never reaches the browser
+
 - 2026-10-31 · `docs(tickets)` · close HUB-067 after the goldens CI step ran green · HUB-067 · F-04
   - Backend CI on PR #6 ran make goldens green (17/17) with every other job
 - 2026-10-31 · `test(transform)` · record M2 acceptance and milestone summary · HUB-071 · F-04

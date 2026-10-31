@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **193** · done: **57** · todo: **136**
+Total tickets: **194** · done: **63** · todo: **131**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **193** · done: **57** · todo: **136**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 34 | 10 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 16 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1817,72 +1817,84 @@ Compare any two versions using the admin diff endpoint, with side-by-side and pa
 
 ### HUB-259 — Publish and rollback flows with mandatory reason
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-1902
 - **Branch:** `feat/HUB-259-fe-publish-rollback`
 
 Publish a new version (spec editor with validation) and rollback-as-new-version, both requiring a reason and confirming in a dialog; path-qualified validation errors shown inline.
 
+Shipped (frontend-engineer): publish page `/integrations/{id}/publish` (YAML/JSON spec editor; save creates or replaces the draft and runs `validateIntegrationVersion`; diff against the active version; publish in `ConfirmDialog` with `expected_active_version`) and "Roll back to vN" on published history rows (`expected_active_version`, 409 shows a reload prompt). Mutations are SvelteKit form actions with `use:enhance`; mock builds answer them server side (`hooks.server.ts` `handleFetch`, `hub_mock_scenario` cookie).
+
 **Acceptance criteria**
-- [ ] Submit disabled until a reason is entered
-- [ ] Validation errors mapped to fields
-- [ ] Success shows the new version number
+- [x] Submit disabled until a reason is entered (`ConfirmDialog`: at least 10 characters, typed confirmation optional; the action re-checks it before calling the API; `ConfirmDialog.test.ts`, `e2e/publish-rollback.test.ts`)
+- [x] Validation errors mapped to fields (400 `/reason` to the reason field, `/spec/...` and 422 `PUBLISH_VALIDATION_FAILED` pointers to spec editor lines with "Go to line", YAML syntax errors with their line; `publish/page.test.ts`)
+- [x] Success shows the new version number ("Published v8 ... (was v7)", "Rolled back: v9 is now active, a copy of v7", with the change log id; unit + e2e)
 
 ### HUB-260 — Weights and pause flows with mandatory reason
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-1902
 - **Branch:** `feat/HUB-260-fe-weights-pause`
 
 Edit target weights (must total 100) and pause/resume an integration, each with mandatory reason and confirmation.
 
+Shipped (frontend-engineer): "Set weights" on the integration page (shown when the active version has two or more targets) opens a weights dialog with the current weights, a live total and "Publish vN now" (default on; off creates a draft); `updateIntegrationWeights` with `expected_active_version`. A separate "Kill switch" group holds Pause / Resume (`pauseIntegration` / `resumeIntegration`); the contract gives neither a precondition nor an ETag, so no 412 path exists for them.
+
 **Acceptance criteria**
-- [ ] Weights not summing to 100 cannot be submitted
-- [ ] Pause shows impact text and requires reason
-- [ ] Component tests against MSW
+- [x] Weights not summing to 100 cannot be submitted (live total, confirm disabled; the action re-checks and answers 400 without calling the API; `weights.test.ts`, `weights-pause.test.ts`, `e2e/weights-pause.test.ts`)
+- [x] Pause shows impact text and requires reason (503 `INTEGRATION_PAUSED` within about 10 s, nothing new parked, workers hold queued requests, other integrations unaffected; resume names the pause reason)
+- [x] Component tests against MSW (success, 400 with pointers, 403, 404, 409, 422 for weights; 400, 403, 404 for pause; 403 for resume; viewer and tenant_viewer see no controls)
 
 ### HUB-261 — Vendor and account health board
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1903
 - **Branch:** `feat/HUB-261-fe-health-board`
 
 Board of vendors/accounts with breaker state, error rate, parked count/age, DLQ count and lifecycle state, auto-refreshing.
 
+Shipped (frontend-engineer): `/health` is a board of every breaker (`listBreakers`, all pages) joined with the account lifecycle state (`listAccounts`, all pages), grouped by vendor, worst first; state with "retry in N s" / "probe due" / forced hold / open since, failure rate, calls in window, parked count and oldest age, lifecycle, last update. Summary line announced politely; a failed refresh keeps the last board marked stale; tenant viewers get a note instead. **DLQ count is not shown**: no admin operation returns one (CCR-003, HUB-284).
+
 **Acceptance criteria**
-- [ ] Open breakers sorted first and visually distinct (not color only)
-- [ ] Auto-refresh interval configurable and pausable
+- [x] Open breakers sorted first and visually distinct (not color only): "Open" text badge with icon, a thick left rule and bold id on open rows, dashed rule on half-open; groups and rows ordered open, half-open, closed, then parked count and age (`board.test.ts`, `health/page.test.ts`, `e2e/health.test.ts`)
+- [x] Auto-refresh interval configurable and pausable (5/10/30/60 s, default 5 s per F-19; Pause / Resume, Refresh now, "Updated N s ago"; skips ticks while the tab is hidden; fake-timer unit test and `page.clock` e2e)
 
 ### HUB-262 — Breaker force controls
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-261 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-261 · **Feature:** F-19 · **Stories:** US-1903
 - **Branch:** `feat/HUB-262-fe-breaker-force`
 
 Force-open / force-close per `(account, endpoint)` from the health board with mandatory reason, `admin` only.
 
+Shipped (frontend-engineer): a "Force" column on the health board for admins (`RoleGate min="admin"`, contract `x-required-role: admin`): Force open, Force closed, and Clear force on forced breakers. Force open/closed need a reason, the account id typed to confirm (checked again server side) and a hold (15 min to 24 h, or until cleared; default 30 min). Auto-refresh holds while a dialog is open. The contract gives these operations no precondition (last write wins); clear-force 409 shows the reload prompt.
+
 **Acceptance criteria**
-- [ ] Controls absent for non-admin roles
-- [ ] Confirmation dialog states the affected integrations
+- [x] Controls absent for non-admin roles (editor, viewer: no Force column or buttons; tenant viewers see no board; unit per role and e2e)
+- [x] Confirmation dialog states the affected integrations (`getBreaker` `integrations` loaded when the dialog opens: "Affects 1 integration: int_evt_brandA"; a warning with code and request id if that call fails; force closed also states how many parked requests will drain)
 
 ### HUB-263 — Request explorer search
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1901
 - **Branch:** `feat/HUB-263-fe-request-search`
 
 Search requests by tenant, integration, status, code, time range and idempotency key with cursor pagination.
 
+Shipped (frontend-engineer): `/requests` search form for tenant (a select of own tenants for tenant viewers), integration, status (checkboxes, any of), error codes, vendor and account (not for tenant viewers), idempotency key, From/To in UTC with quick ranges (last hour, 24 hours, 7 days as absolute times) and page size; `status` and `code` sent comma-separated as the contract's form/explode=false; a range over 31 days or reversed is refused before calling the API; cursor paging with Previous/Next.
+
 **Acceptance criteria**
-- [ ] Search params in URL, shareable
-- [ ] Empty and error states covered
+- [x] Search params in URL, shareable (names match `searchRequests`; removable chips and Clear all; reload restores the form; paging keeps the filters; `filters.test.ts`, `requests/page.test.ts`, `e2e/requests.test.ts`)
+- [x] Empty and error states covered ("No requests yet" vs "No requests match this search" with Clear all filters; API errors with code, pointer details and request id; loading skeleton; the 31-day range problem shown on the time fields)
 
 ### HUB-264 — Request timeline
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-263 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-263 · **Feature:** F-19 · **Stories:** US-1901
 - **Branch:** `feat/HUB-264-fe-request-timeline`
 
 Timeline view of events and attempts with timings, versions, hashes/sizes and payload viewer that respects payload policy.
 
+Shipped (frontend-engineer): `/requests/{request_id}` (linked from the explorer) loads `getRequest`, `getRequestTimeline` and `listRequestAttempts` in parallel: summary (status + code, tenant, integration + final version, capability, mode, vendor/account, timings, idempotency key, audit policy, snapshot, trace id, result/error per policy), the DESIGN §13.1 events and the attempts table. Payloads render as the API returns them (masked stays masked) behind a disclosure, with secret-looking fields that are not already masked hidden as a second line of defence; sealed shows a locked placeholder with size and SHA-256; metadata-only says no body was stored; truncated events name their object-storage reference. Unsealing stays with HUB-265.
+
 **Acceptance criteria**
-- [ ] Events shown in seq order with durations
-- [ ] Sealed payloads show a locked placeholder
-- [ ] Attempt rows show integration version and account
+- [x] Events shown in seq order with durations (sorted by `seq` whatever the API order; "+212 ms" since the previous event and "at 1,999 ms" since the first; `timeline.test.ts`, `requests/[request_id]/page.test.ts`, `e2e/request-timeline.test.ts`)
+- [x] Sealed payloads show a locked placeholder (lock icon, "Sealed payload. Encrypted at rest, 214 B", SHA-256 prefix; no payload in the DOM; also for the sealed result)
+- [x] Attempt rows show integration version and account (plus endpoint, served by, start, duration, vendor status, error, breaker state, credential version; tenant viewers see the version but not vendor/account, per F-19 rule 5)
 
 ### HUB-265 — Unseal flow
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
@@ -2103,6 +2115,18 @@ Filed by frontend-engineer during HUB-256. Full CCR text (before/after YAML): `f
 - [ ] Both query parameters added to `listIntegrations` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
 - [ ] Backend list handler implements them, covered by contract tests (EP-08)
 - [ ] Console adds the filter (URL params, chips) after `npm run gen:api` and removes `TODO(CCR-002)`
+
+### HUB-284 — CCR-003: dead-letter count per account on listAccounts
+- **Epic:** EP-10 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-006, HUB-261 · **Feature:** F-19 · **Stories:** US-1903
+- **Branch:** `contract/HUB-284-account-dead-letter-count`
+
+Filed by frontend-engineer during HUB-261. Full CCR text (before/after YAML): `frontend/CCR-NOTES.md` § CCR-003. The health board must show a DLQ count per account, but no admin operation returns one (`listDeadLetters` has no totals; counting pages client-side is wrong and too slow for a 5 s refresh). Proposed additive `dead_letter_count` and `dead_letter_oldest_at` on `AccountSummary` and `Account`. `hub-admin` minor bump.
+
+**Acceptance criteria**
+- [ ] Both properties on `AccountSummary` and `Account` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
+- [ ] Backend accounts handlers fill them from the DLQ store, covered by contract tests (EP-08)
+- [ ] Console health board adds a "Dead letters" column (count, oldest age, link to the filtered DLQ) after `npm run gen:api` and removes `TODO(CCR-003)`
 
 ## EP-11 — MCP server + consumer skill + SDK
 

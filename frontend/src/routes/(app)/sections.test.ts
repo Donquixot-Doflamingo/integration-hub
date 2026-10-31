@@ -35,14 +35,6 @@ const cases: SectionCase[] = [
 		load: () => import('./integrations/+page') as never
 	},
 	{
-		path: '/health',
-		heading: 'Health',
-		op: 'listBreakers',
-		firstRow: 'ct-brandA-in',
-		page: () => import('./health/+page.svelte') as never,
-		load: () => import('./health/+page') as never
-	},
-	{
 		path: '/requests',
 		heading: 'Requests',
 		op: 'searchRequests',
@@ -138,30 +130,5 @@ describe.each(cases)('$path', (c) => {
 		expect(alert).toHaveTextContent(example.request_id);
 		await userEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
 		expect(invalidateAll).toHaveBeenCalledOnce();
-	});
-});
-
-describe('/health', () => {
-	it('sorts open breakers first and labels state with text', async () => {
-		const base = (contractMocks.listBreakers.example.items[0] ?? {}) as Record<string, unknown>;
-		server.use(
-			mockOperation('listBreakers', {
-				items: [
-					{ ...base, account_id: 'acct-closed', state: 'closed' },
-					{ ...base, account_id: 'acct-half', state: 'half_open' },
-					{ ...base, account_id: 'acct-open', state: 'open' }
-				],
-				next_cursor: null
-			} as never)
-		);
-		await renderSection(cases[1]!);
-		const table = await screen.findByRole('table', { busy: false });
-		const heads = within(table)
-			.getAllByRole('rowheader')
-			.map((h) => h.textContent);
-		expect(heads.map((h) => h?.split(' ')[0])).toEqual(['acct-open', 'acct-half', 'acct-closed']);
-		expect(within(table).getByText('Open')).toBeInTheDocument();
-		expect(within(table).getByText('Half-open')).toBeInTheDocument();
-		expect(within(table).getByText('Closed')).toBeInTheDocument();
 	});
 });

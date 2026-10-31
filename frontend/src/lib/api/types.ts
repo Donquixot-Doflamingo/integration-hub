@@ -40,3 +40,27 @@ export type DiffOp = Schemas['DiffOp'];
 export type ListIntegrationsQuery = NonNullable<
 	Operations['listIntegrations']['parameters']['query']
 >;
+
+// Mutations (HUB-259+).
+export type PublishResult = Schemas['PublishResult'];
+export type ValidationReport = Schemas['ValidationReport'];
+export type ValidationCheck = Schemas['ValidationCheck'];
+export type IntegrationVersionChange = Schemas['IntegrationVersionChange'];
+export type IntegrationChange = Schemas['IntegrationChange'];
+
+// Health board (HUB-261, HUB-262).
+export type Breaker = Schemas['Breaker'];
+export type BreakerDetail = Schemas['BreakerDetail'];
+export type BreakerChange = Schemas['BreakerChange'];
+export type AccountSummary = Schemas['AccountSummary'];
+export type AccountState = Schemas['AccountState'];
+
+// Request explorer (HUB-263, HUB-264).
+export type RequestSummary = Schemas['RequestSummary'];
+export type RequestDetail = Schemas['RequestDetail'];
+export type RequestTimeline = Schemas['RequestTimeline'];
+export type TimelineEvent = Schemas['TimelineEvent'];
+export type TimelineEventType = Schemas['TimelineEventType'];
+export type Attempt = Schemas['Attempt'];
+/** Query parameters of `searchRequests`. */
+export type SearchRequestsQuery = NonNullable<Operations['searchRequests']['parameters']['query']>;
