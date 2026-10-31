@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(creds)` · add local encrypted credential source with warmed cache · HUB-084 · F-07
+  - Dev credentials live in one AES-256-GCM file (`.data/dev-secrets.enc`, key from `HUB_DEV_KEY_FILE`); a tampered, truncated or wrongly keyed file is refused with a clear error and yields nothing
+  - The request path reads credentials only from a cache warmed at snapshot load (TTL 5 min, background refresh); a miss is a typed error counted in `creds_cache_miss_total`, never an inline decrypt
+  - Every loaded secret, including the base64 basic-auth form, is registered with the log redactor before it can be used
+  - `hubctl creds init-key | set | list` creates the dev key and file for `ct-brandA-in` and `ct-brandB-us`; `list` prints key names only
+
 - 2026-10-31 · `feat(frontend)` · add request timeline with policy-aware payload views · HUB-264 · F-19
   - Request ids in the explorer open `/requests/{id}`: status and error code, tenant, integration and version, capability, mode, vendor and account, timings (total, hub overhead, vendor, queue wait), idempotency key, audit policy, snapshot and trace id
   - The timeline lists every audit event in sequence order with its time, the gap since the previous event and since the first, size and SHA-256, and the attempt it belongs to

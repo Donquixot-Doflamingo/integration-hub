@@ -111,6 +111,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `transform_budget_exceeded_total` | counter | events | `transformer, limit` (`nodes`,`output_size`,`time`) | `transform` | |
 | `idempotency_hits_total` | counter | hits | `result` (`replay`,`miss`,`in_progress`,`error`) | `edge` | |
 | `creds_cache_miss_total` | counter | misses | `account` | `creds` | must stay 0 on the hot path |
+| `creds_decrypts_total` | counter | loader calls | — | `creds` | decrypting loads happen only at warm-up and background refresh (HUB-084); a rise with traffic is a bug |
 | `redis_op_duration_seconds` | histogram | s | `op` | `upstream`, `edge` | |
 | `pg_pool_acquire_duration_seconds`, `pg_pool_in_use` | histogram, gauge | s, conns | `pool` | cmd wiring (pgxpool stats) | |
 | `http_server_inflight` | gauge | requests | `server` (`public`,`admin`) | `edge`, `control` | |
