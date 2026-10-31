@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(registry)` · build immutable snapshots and swap them atomically · HUB-044 · F-03
+  - registry.Build = load + validate + index; snapshots carry a sha256 checksum over every config file and capability schema
+  - registry.Store publishes snapshots through an atomic pointer with strictly increasing versions; readers are lock-free and keep a consistent view
+  - API keys indexed by hash for M3 edge auth; duplicate key hashes rejected
 - 2026-10-31 · `feat(registry)` · validate cross-references and delivery rules with path-qualified errors · HUB-043 · F-03
   - Validate checks every reference (vendors, accounts, regions, transformers and their kind/capability/endpoint, tenants, grants, registrar endpoints) and every rule: weights total 100, interactive capabilities sync-only, non-sync modes declare polling or a webhook, failover needs a chain, wait_ms 1..30000, retired accounts never in the active version
   - All problems in one pass as file: yaml.path: message

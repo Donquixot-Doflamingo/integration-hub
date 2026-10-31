@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **190** · done: **33** · todo: **157**
+Total tickets: **190** · done: **34** · todo: **156**
 
 ## Epics
 
@@ -10,7 +10,7 @@ Total tickets: **190** · done: **33** · todo: **157**
 | --- | --- | --- | --- | --- | --- | --- |
 | EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
-| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 4 |
+| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 5 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 0 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
@@ -466,15 +466,15 @@ Validate the whole config set: referenced vendors/accounts/transformers/endpoint
 
 ### HUB-044 — Snapshot build and atomic swap
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-043 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-043 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-044-snapshot-atomic-swap`
 
 Build an immutable `Snapshot` with in-memory indexes (DESIGN §18.3) and expose `Registry.Snapshot()` backed by an atomic pointer swap.
 
 **Acceptance criteria**
-- [ ] Concurrent readers during repeated swaps pass under `-race`
-- [ ] Readers holding an old snapshot keep a consistent view
-- [ ] Snapshot carries a monotonically increasing version and checksum
+- [x] Concurrent readers during repeated swaps pass under `-race`
+- [x] Readers holding an old snapshot keep a consistent view
+- [x] Snapshot carries a monotonically increasing version and checksum
 
 ### HUB-045 — Dev file watcher
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
