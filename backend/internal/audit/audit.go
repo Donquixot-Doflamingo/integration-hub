@@ -25,7 +25,7 @@ const (
 	PayloadNone      PayloadState = "none"      // the event has no payload
 	PayloadFull      PayloadState = "full"      // raw bytes as seen
 	PayloadMasked    PayloadState = "masked"    // x-pii values masked
-	PayloadSealed    PayloadState = "sealed"    // field-level encrypted (HUB-209)
+	PayloadSealed    PayloadState = "sealed"    // field-level encrypted (HUB-208)
 	PayloadOmitted   PayloadState = "omitted"   // metadata_only: hash and size only
 	PayloadTruncated PayloadState = "truncated" // first MaxInlinePayload bytes; the rest at PayloadRef
 )

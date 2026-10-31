@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(audit)` · apply the audit payload policies per request · HUB-093 · F-08
+  - audit.Trail records each §13.1 event with sequence number, sha256 and byte size of the exact bytes seen, under every policy
+  - full stores raw bytes; masked (default) masks x-pii fields by pointer in canonical stages and by value in vendor stages (identifiers HMAC'd per tenant, free_text replaced by hash and size); metadata_only and, until HUB-208, sealed store no bodies
+  - Credential values are replaced by *** in every stored payload; payloads over 64 KB are stored truncated (spill to object storage: HUB-098)
 - 2026-10-31 · `feat(audit)` · add the audit ledger tables and the buffered writer · HUB-091 · F-08
   - Migration 00003 adds day-partitioned hub.requests, hub.request_events and hub.request_attempts; partitions are created from yesterday to 7 days ahead at start and every 6 h
   - audit.Writer.Emit never blocks: a full buffer drops the batch and counts it in audit_events_dropped_total{reason=buffer_full}; failed writes count as write_error

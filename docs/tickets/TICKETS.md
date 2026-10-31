@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **70** · todo: **123** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **71** · todo: **123** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -12,7 +12,7 @@ Total tickets: **194** · done: **70** · todo: **123** · other (in-progress/in
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
-| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 7 |
+| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 8 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
@@ -843,15 +843,15 @@ Emit every §13.1 event for the sync path, each with sha256 + byte size of the p
 
 ### HUB-093 — Payload policies: full, masked, metadata_only
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-092, HUB-041 · **Feature:** F-08 · **Stories:** US-08xx
+- **Status:** done · **Depends on:** HUB-092, HUB-041 · **Feature:** F-08 · **Stories:** US-08xx
 - **Branch:** `feat/HUB-093-payload-policies`
 
-Apply the integration's audit policy: `full`, `masked` (default; `x-pii` fields masked/hashed), `metadata_only` (no bodies). `sealed` lands in HUB-209 (DESIGN §13.2).
+Apply the integration's audit policy: `full`, `masked` (default; `x-pii` fields masked/hashed), `metadata_only` (no bodies). `sealed` lands in HUB-208 (DESIGN §13.2).
 
 **Acceptance criteria**
-- [ ] `masked` masks every `x-pii` path in all stored stages (table test)
-- [ ] `metadata_only` stores no bodies but keeps hashes and sizes
-- [ ] Policy recorded on the `requests` row
+- [x] `masked` masks every `x-pii` path in all stored stages (table test)
+- [x] `metadata_only` stores no bodies but keeps hashes and sizes
+- [x] Policy recorded on the `requests` row
 
 ### HUB-094 — pkg/hubclient: Result / Queued / Error
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
@@ -901,6 +901,18 @@ Measure Hub-added latency with mockvendor at 0 ms, run contract tests for all M3
 - [ ] Per-stage durations reported against §18.6 budget
 - [ ] All M3 endpoints pass contract validation
 - [ ] Milestone summary posted; F-05…F-08 docs updated
+
+### HUB-098 — Spill audit payloads over 64 KB to object storage
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-091, HUB-093 · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `feat/HUB-098-audit-payload-spill`
+
+Payloads over 64 KB are stored truncated in `request_events` today (`payload_state = truncated`). Write the full policy-applied payload to object storage off the request path and record `payload_ref` (DESIGN §13.1). Found while building HUB-093.
+
+**Acceptance criteria**
+- [ ] A payload over 64 KB is stored in full in object storage; `payload_ref` points at it
+- [ ] The spill never blocks the request path (done by the audit writer)
+- [ ] The spilled object holds the policy-applied bytes, never the clear payload under `masked`
 
 ## EP-05 — M4 Outbox, worker, modes, idempotency, callbacks
 
