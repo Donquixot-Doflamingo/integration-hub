@@ -71,7 +71,7 @@ describe('request explorer', () => {
 		renderAt('?cursor=abc&prev=');
 		await user.type(screen.getByLabelText('Idempotency key'), 'order-8821-created');
 		await user.click(screen.getByRole('checkbox', { name: 'Dead-lettered' }));
-		await user.type(screen.getByLabelText('Error codes'), 'upstream_timeout');
+		await user.type(screen.getByLabelText(/^Error codes/), 'upstream_timeout');
 		await user.click(screen.getByRole('button', { name: 'Search' }));
 		expect(goto).toHaveBeenCalledWith(
 			'/requests?idempotency_key=order-8821-created&status=dead_lettered&code=UPSTREAM_TIMEOUT',

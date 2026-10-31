@@ -4,7 +4,7 @@
 A SvelteKit (Svelte 5 + TypeScript) control-plane UI in `frontend/`, pulled forward from Release 2 (PRD DV-2) and built in parallel with backend milestones against the frozen admin contract. It covers cutover, health, investigation and recovery workflows.
 
 ## Status
-`in-progress` — 2026-10-31 (scaffold, client, mocks, shell, sign-in and role gating, shared states, integrations list, detail, history and diff shipped; publish, rollback, weights, pause, the health board, breaker force and request search shipped (HUB-259 to HUB-263); the request timeline follows).
+`in-progress` — 2026-10-31 (scaffold, client, mocks, shell, sign-in and role gating, shared states, integrations list, detail, history and diff shipped; publish, rollback, weights, pause, the health board, breaker force, request search and the request timeline shipped (HUB-259 to HUB-264); unseal, DLQ, transformers, tenants and change log follow).
 
 ## Owner
 `frontend-engineer`.
@@ -127,6 +127,7 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-261 | Health board `/health`: `listBreakers` + `listAccounts` (all pages) grouped by vendor, worst first; state (text + icon, retry/probe/forced/open since), failure rate, window calls, parked count and age, account lifecycle, updated; auto-refresh 5/10/30/60 s with pause and refresh now (`invalidate('hub:health')`, skipped while hidden); stale notice on a failed refresh; note for tenant viewers. No DLQ count (CCR-003, HUB-284) |
 | HUB-262 | Breaker force on the health board, admin only (`RoleGate min="admin"`): `forceOpenBreaker`, `forceCloseBreaker`, `clearBreakerForce` as form actions; dialog lists affected integrations from `getBreaker`, typed account id for open/close (re-checked server side), hold 15 min to 24 h or until cleared; auto-refresh holds while a dialog is open |
 | HUB-263 | Request explorer `/requests` on `searchRequests`: tenant (own tenants for tenant viewers), integration, status (any of), error codes, vendor, account, idempotency key, UTC From/To with quick ranges, page size; all in the URL with chips and Clear all; `status`/`code` comma-separated per the contract; ranges over 31 days refused client side; cursor paging |
+| HUB-264 | Request timeline `/requests/{id}`: `getRequest` + `getRequestTimeline` + `listRequestAttempts` in parallel; summary with timings and audit policy; events in `seq` order with gaps and offsets, size, SHA-256, attempt; payloads per policy (masked as returned, sealed locked placeholder, metadata-only note, truncated reference) plus a client-side guard that hides unmasked secret-looking fields; attempts with integration version and account (not for tenant viewers) |
 | HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
@@ -148,3 +149,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-10-31 | HUB-261: health board; CCR-003 | frontend-engineer |
 | 2026-10-31 | HUB-262: breaker force controls | frontend-engineer |
 | 2026-10-31 | HUB-263: request explorer search | frontend-engineer |
+| 2026-10-31 | HUB-264: request timeline | frontend-engineer |

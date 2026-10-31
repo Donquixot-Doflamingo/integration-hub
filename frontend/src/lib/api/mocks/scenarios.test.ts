@@ -60,7 +60,25 @@ describe('presets', () => {
 							})
 						).data
 				],
-				['BreakerList', async () => (await api().raw.GET('/breakers')).data]
+				['BreakerList', async () => (await api().raw.GET('/breakers')).data],
+				[
+					'RequestDetail',
+					async () =>
+						(
+							await api().raw.GET('/requests/{request_id}', {
+								params: { path: { request_id: 'req_01J9Z3K8X2V7Q4M6N8P0R2S4T6' } }
+							})
+						).data
+				],
+				[
+					'RequestTimeline',
+					async () =>
+						(
+							await api().raw.GET('/requests/{request_id}/timeline', {
+								params: { path: { request_id: 'req_01J9Z3K8X2V7Q4M6N8P0R2S4T6' } }
+							})
+						).data
+				]
 			];
 			for (const [schemaName, get] of checks) {
 				const v = schema(schemaName);

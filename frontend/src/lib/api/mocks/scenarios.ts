@@ -64,6 +64,27 @@ export const presets: Record<string, () => HttpHandler[]> = {
 			paused_reason: contractMocks.pauseIntegration.example.integration.paused_reason
 		})
 	],
+	/** The request example under the `sealed` audit policy: bodies null, `sealed` true. */
+	'sealed-request': () => {
+		const timeline = contractMocks.getRequestTimeline.example;
+		return [
+			mockOperation('getRequest', {
+				...contractMocks.getRequest.example,
+				payload_policy: 'sealed',
+				sealed: true,
+				result: null
+			}),
+			mockOperation('getRequestTimeline', {
+				...timeline,
+				payload_policy: 'sealed',
+				events: timeline.events.map((e) =>
+					e.type === 'request.received' || e.type === 'vendor.responded'
+						? { ...e, payload: null, sealed: true }
+						: e
+				)
+			})
+		];
+	},
 	/** After the force-open example: the board's breaker is held open by an operator. */
 	'breaker-forced': () => [
 		mockOperation('listBreakers', {

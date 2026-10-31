@@ -6,6 +6,13 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add request timeline with policy-aware payload views · HUB-264 · F-19
+  - Request ids in the explorer open `/requests/{id}`: status and error code, tenant, integration and version, capability, mode, vendor and account, timings (total, hub overhead, vendor, queue wait), idempotency key, audit policy, snapshot and trace id
+  - The timeline lists every audit event in sequence order with its time, the gap since the previous event and since the first, size and SHA-256, and the attempt it belongs to
+  - Payloads follow the audit policy: masked values stay masked, sealed payloads show a locked placeholder with size and hash, metadata-only says no body was stored, truncated payloads name where the rest is; secret-looking fields that arrive unmasked are hidden
+  - The attempts table shows each attempt's integration version, account and endpoint, duration, vendor status, error and breaker state; tenant viewers see versions but no vendor or account
+  - The explorer's error-code field carries its hint in the label, so the search form lines up
+
 - 2026-10-31 · `feat(frontend)` · add request explorer search with URL filters · HUB-263 · F-19
   - Search requests by tenant, integration, status (any of several), error codes, idempotency key and a UTC time range; vendor and account filters for everyone except tenant viewers, who pick among their own tenants
   - Quick ranges (last hour, 24 hours, 7 days) fill in absolute times, so the URL stays shareable; a range longer than 31 days or reversed is flagged on the time fields and not searched

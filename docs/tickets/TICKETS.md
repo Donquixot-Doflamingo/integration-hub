@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **50** · todo: **144**
+Total tickets: **194** · done: **51** · todo: **143**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **194** · done: **50** · todo: **144**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 15 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 16 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1884,15 +1884,17 @@ Shipped (frontend-engineer): `/requests` search form for tenant (a select of own
 
 ### HUB-264 — Request timeline
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-263 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-263 · **Feature:** F-19 · **Stories:** US-1901
 - **Branch:** `feat/HUB-264-fe-request-timeline`
 
 Timeline view of events and attempts with timings, versions, hashes/sizes and payload viewer that respects payload policy.
 
+Shipped (frontend-engineer): `/requests/{request_id}` (linked from the explorer) loads `getRequest`, `getRequestTimeline` and `listRequestAttempts` in parallel: summary (status + code, tenant, integration + final version, capability, mode, vendor/account, timings, idempotency key, audit policy, snapshot, trace id, result/error per policy), the DESIGN §13.1 events and the attempts table. Payloads render as the API returns them (masked stays masked) behind a disclosure, with secret-looking fields that are not already masked hidden as a second line of defence; sealed shows a locked placeholder with size and SHA-256; metadata-only says no body was stored; truncated events name their object-storage reference. Unsealing stays with HUB-265.
+
 **Acceptance criteria**
-- [ ] Events shown in seq order with durations
-- [ ] Sealed payloads show a locked placeholder
-- [ ] Attempt rows show integration version and account
+- [x] Events shown in seq order with durations (sorted by `seq` whatever the API order; "+212 ms" since the previous event and "at 1,999 ms" since the first; `timeline.test.ts`, `requests/[request_id]/page.test.ts`, `e2e/request-timeline.test.ts`)
+- [x] Sealed payloads show a locked placeholder (lock icon, "Sealed payload. Encrypted at rest, 214 B", SHA-256 prefix; no payload in the DOM; also for the sealed result)
+- [x] Attempt rows show integration version and account (plus endpoint, served by, start, duration, vendor status, error, breaker state, credential version; tenant viewers see the version but not vendor/account, per F-19 rule 5)
 
 ### HUB-265 — Unseal flow
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

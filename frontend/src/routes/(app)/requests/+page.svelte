@@ -96,7 +96,7 @@
 			/>
 		</div>
 		<div class="field">
-			<label for="q-code">Error codes</label>
+			<label for="q-code">Error codes <span class="hint">(comma-separated, any of)</span></label>
 			<input
 				id="q-code"
 				name="code"
@@ -104,9 +104,7 @@
 				maxlength="256"
 				placeholder="UPSTREAM_TIMEOUT"
 				autocomplete="off"
-				aria-describedby="q-code-hint"
 			/>
-			<span id="q-code-hint" class="hint">Comma-separated; any of them matches.</span>
 		</div>
 		<div class="field grow">
 			<label for="q-idem">Idempotency key</label>
@@ -255,7 +253,11 @@
 	>
 		{#snippet row(r)}
 			{@const s = requestStatus[r.status]}
-			<th scope="row"><code class="id">{r.request_id}</code></th>
+			<th scope="row">
+				<a href={resolve('/(app)/requests/[request_id]', { request_id: r.request_id })}
+					><code class="id">{r.request_id}</code></a
+				>
+			</th>
 			<td>
 				<StatusBadge tone={s.tone} icon={s.icon} label={s.label} />
 				{#if r.code}<code class="code">{r.code}</code>{/if}

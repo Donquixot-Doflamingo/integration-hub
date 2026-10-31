@@ -10,10 +10,10 @@ test('search by filters: URL is shareable and survives reload', async ({ page })
 	await page.getByLabel('Integration').fill('int_evt_brandA');
 	await page.getByRole('checkbox', { name: 'Dead-lettered' }).check();
 	await page.getByRole('checkbox', { name: 'Parked' }).check();
-	await page.getByLabel('Error codes').fill('upstream_timeout');
+	await page.getByLabel(/^Error codes/).fill('upstream_timeout');
 	await page.getByLabel('From (UTC)').fill('2026-10-31T00:00');
 	await page.getByLabel('To (UTC)').fill('2026-11-01T00:00');
-	await page.getByLabel('Error codes').press('Enter');
+	await page.getByLabel(/^Error codes/).press('Enter');
 	await expect(page).toHaveURL(
 		'/requests?integration_id=int_evt_brandA&status=parked%2Cdead_lettered&code=UPSTREAM_TIMEOUT&from=2026-10-31T00%3A00%3A00Z&to=2026-11-01T00%3A00%3A00Z'
 	);
