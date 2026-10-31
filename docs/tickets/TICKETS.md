@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **193** · done: **35** · todo: **158**
+Total tickets: **193** · done: **45** · todo: **148**
 
 ## Epics
 
@@ -10,7 +10,7 @@ Total tickets: **193** · done: **35** · todo: **158**
 | --- | --- | --- | --- | --- | --- | --- |
 | EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
-| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 0 |
+| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 0 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
@@ -419,122 +419,122 @@ Prove the M0 Accept line and post the milestone wrap-up (AGENTS §10).
 
 ### HUB-040 — Config domain types
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-020 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-040-config-domain-types`
 
 Define Go types in `internal/registry` for capability, vendor (+ endpoints `name@n`), account, transformer reference, integration with versions and active pointer, tenant, API key, registrar endpoint (DESIGN §3.1, §3.4, §8.1).
 
 **Acceptance criteria**
-- [ ] Types round-trip YAML ↔ struct for the §3.4 and §8.3 examples
-- [ ] Integration versions are immutable values (no exported setters)
+- [x] Types round-trip YAML ↔ struct for the §3.4 and §8.3 examples
+- [x] Integration versions are immutable values (no exported setters)
 
 ### HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-041-loaders-cap-vendor-account`
 
 Load capability schemas (JSON Schema 2020-12 + `x-pii`, `interactive`, `operations`) and compile them with `santhosh-tekuri/jsonschema`; load vendor and account YAML (DESIGN §8.1, §8.3).
 
 **Acceptance criteria**
-- [ ] Capability schemas from `contracts/schemas/capabilities/` compile once at load
-- [ ] `x-pii` paths and `interactive` flag are exposed on the compiled capability
-- [ ] Vendor endpoints parse timeouts, idempotent, batch_max and breaker defaults
+- [x] Capability schemas from `contracts/schemas/capabilities/` compile once at load
+- [x] `x-pii` paths and `interactive` flag are exposed on the compiled capability
+- [x] Vendor endpoints parse timeouts, idempotent, batch_max and breaker defaults
 
 ### HUB-042 — Loaders: integration versions, tenant, API keys, registrar endpoints
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-042-loaders-integration-tenant`
 
 Load integration YAML with all versions (targets, weights, failover, delivery, breaker, webhooks, audit, publish meta), tenants with hashed API keys and grants, and registrar endpoints (DESIGN §3.4, §8.1).
 
 **Acceptance criteria**
-- [ ] Loader accepts the §3.4 example verbatim
-- [ ] API keys are only ever stored as hashes
-- [ ] Delivery defaults applied: mode `wait`, `wait_ms` 3000, `on_circuit_open` `fail_fast`, `pending` `re_resolve` (§2 D3/D4/D10)
+- [x] Loader accepts the §3.4 example verbatim
+- [x] API keys are only ever stored as hashes
+- [x] Delivery defaults applied: mode `wait`, `wait_ms` 3000, `on_circuit_open` `fail_fast`, `pending` `re_resolve` (§2 D3/D4/D10)
 
 ### HUB-043 — Cross-reference validation with path-qualified errors
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-041, HUB-042 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-041, HUB-042 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-043-config-validation`
 
 Validate the whole config set: referenced vendors/accounts/transformers/endpoints/registrar endpoints exist, weights sum to 100, interactive capabilities only use `sync` (§5.4), `wait|async|async_callback` declare a polling path or subscription (§5.2). Errors carry a file + YAML path.
 
 **Acceptance criteria**
-- [ ] Table test with ≥ 15 invalid configs, each asserting the exact error path and message
-- [ ] All errors are reported in one pass, not just the first
-- [ ] Valid dev config produces zero errors
+- [x] Table test with ≥ 15 invalid configs, each asserting the exact error path and message
+- [x] All errors are reported in one pass, not just the first
+- [x] Valid dev config produces zero errors
 
 ### HUB-044 — Snapshot build and atomic swap
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-043 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-043 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-044-snapshot-atomic-swap`
 
 Build an immutable `Snapshot` with in-memory indexes (DESIGN §18.3) and expose `Registry.Snapshot()` backed by an atomic pointer swap.
 
 **Acceptance criteria**
-- [ ] Concurrent readers during repeated swaps pass under `-race`
-- [ ] Readers holding an old snapshot keep a consistent view
-- [ ] Snapshot carries a monotonically increasing version and checksum
+- [x] Concurrent readers during repeated swaps pass under `-race`
+- [x] Readers holding an old snapshot keep a consistent view
+- [x] Snapshot carries a monotonically increasing version and checksum
 
 ### HUB-045 — Dev file watcher
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-044 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-044 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-045-dev-file-watcher`
 
 Watch `config/` in dev, debounce changes, rebuild and swap the snapshot; an invalid change keeps the last good snapshot and logs the errors (DESIGN §19 M1, §6.4).
 
 **Acceptance criteria**
-- [ ] Editing a valid file swaps the snapshot within 2 s
-- [ ] An invalid edit is rejected and the previous snapshot keeps serving
-- [ ] Watcher is off unless explicitly enabled
+- [x] Editing a valid file swaps the snapshot within 2 s
+- [x] An invalid edit is rejected and the previous snapshot keeps serving
+- [x] Watcher is off unless explicitly enabled
 
 ### HUB-046 — Dev config set
 - **Epic:** EP-02 · **Type:** chore · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-043 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-043 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `chore/HUB-046-dev-config`
 
 Add `config/` with `events.track@v1`, vendor `clevertap` pointing at mockvendor, accounts `ct-brandA-in`, `ct-brandB-us`, tenant `orders-service`, integrations `int_evt_brandA`, `int_evt_brandB`, `int_evt_brandB_min` (DESIGN §19 M1).
 
 **Acceptance criteria**
-- [ ] Dev config loads and validates with zero errors
-- [ ] Account credentials reference the local encrypted file, never plaintext
-- [ ] Capability schema matches `contracts/schemas/capabilities/`
+- [x] Dev config loads and validates with zero errors
+- [x] Account credentials reference the local encrypted file, never plaintext
+- [x] Capability schema matches `contracts/schemas/capabilities/`
 
 ### HUB-047 — Postgres registry tables and sqlc queries
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-023, HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-023, HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-047-registry-tables`
 
 Add migrations for registry tables of DESIGN §18.2 (tenants, api_keys, vendors, vendor_endpoints, accounts, account_credentials, capabilities, transformers, integrations, integration_versions, integration_grants, registrar_endpoints, config_snapshots) with sqlc queries.
 
 **Acceptance criteria**
-- [ ] `make migrate` creates all tables; down migration reverses cleanly
-- [ ] `integration_versions` and `transformers` reject UPDATE (trigger or permissions) to enforce immutability
-- [ ] sqlc code generated and compiled in CI
+- [x] `make migrate` creates all tables; down migration reverses cleanly
+- [x] `integration_versions` and `transformers` reject UPDATE (trigger or permissions) to enforce immutability
+- [x] sqlc code generated and compiled in CI
 
 ### HUB-048 — Snapshot persistence and boot from last good
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-044, HUB-047 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-044, HUB-047 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-048-snapshot-persistence`
 
 Persist each snapshot (checksum, author, diff, blob in object storage; local directory in dev) to `config_snapshots`, and let nodes boot from the last stored snapshot when the control plane is down (DESIGN §8.2, §17).
 
 **Acceptance criteria**
-- [ ] Snapshot blob checksum verified on load; corrupted blob is refused
-- [ ] Gateway boots with the control plane unavailable using the last blob
-- [ ] Snapshots older than 90 days are pruned by a job
+- [x] Snapshot blob checksum verified on load; corrupted blob is refused
+- [x] Gateway boots with the control plane unavailable using the last blob
+- [x] Snapshots older than 90 days are pruned by a job
 
 ### HUB-049 — M1 acceptance and milestone summary
 - **Epic:** EP-02 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-045, HUB-046, HUB-048 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-045, HUB-046, HUB-048 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `test/HUB-049-m1-acceptance`
 
 Prove the M1 Accept line and post the wrap-up.
 
 **Acceptance criteria**
-- [ ] Invalid configs rejected with precise errors (table tests green)
-- [ ] Snapshot swap under concurrent reads is race-free (`-race`)
-- [ ] Milestone summary with Deviations posted; F-03 doc updated
+- [x] Invalid configs rejected with precise errors (table tests green)
+- [x] Snapshot swap under concurrent reads is race-free (`-race`)
+- [x] Milestone summary with Deviations posted; F-03 doc updated
 
 ## EP-03 — M2 Transformer engine
 

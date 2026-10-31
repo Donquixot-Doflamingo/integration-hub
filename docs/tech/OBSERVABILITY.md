@@ -97,7 +97,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `dlq_entries_total` | counter | entries | `account, reason` | `queue` | rate alert "> 50 / 10 min / account" (a gauge cannot express a rate after replays/purges) |
 | `hub_accepted_unaccounted` | gauge | requests | — | `delivery` (scheduler reconciler, every 5 min) | S4 |
 | `snapshot_apply_delay_seconds` | histogram | s | — | `registry` | S5 |
-| `snapshot_apply_failures_total` | counter | failures | `reason` | `registry` | keep-last-good visibility |
+| `snapshot_apply_failures_total` | counter | failures | `reason` (`invalid_config`, `build_error`; later `fetch_error`) | `registry` (roles) | keep-last-good visibility (HUB-045) |
 | `drain_start_delay_seconds` | histogram | s | — | `delivery` (scheduler) | S6 |
 | `drain_release_rate` | gauge | envelopes/s | `account, endpoint` | `delivery` | observe 20 % → 100 % ramp (M5 #2) |
 | `outbox_claim_duration_seconds` | histogram | s | `pool` | `queue` | Postgres contention |

@@ -44,6 +44,42 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - ADR-0009: why the console stays on SvelteKit 2.70.3 (Kit 3 needs TypeScript 6, which the API type generator does not support yet) and the upgrade deadline (2027-01-31, HUB-281)
   - F-19 lists both Kit advisories against what the console actually uses; `npm audit --omit=dev` has 0 findings
 
+- 2026-10-31 · `docs(tickets)` · close HUB-047 after the sqlc CI job ran green · HUB-047 · F-03
+  - All backend jobs green on PR #4, including the new sqlc freshness job
+- 2026-10-31 · `test(registry)` · record M1 acceptance and milestone summary · HUB-049 · F-03
+  - docs/milestones/M1.md: acceptance evidence, what was built, nine deviations, deferred items
+  - F-03 shipped; README and CLAUDE.md show M1 done
+- 2026-10-31 · `feat(registry)` · persist snapshots and boot from the last good one · HUB-048 · F-03
+  - The admin role archives every new snapshot (hub.config_snapshots + gzip blob of its sources), deduplicated by checksum
+  - Data-plane roles that cannot build their config boot from the archive, then from the local cache (HUB_DATA_DIR/snapshot.json.gz); corrupted or tampered blobs are refused
+  - The scheduler prunes archived snapshots older than 90 days hourly (newest always kept); gauge snapshot_origin{origin}
+- 2026-10-31 · `feat(control)` · add registry tables with immutable versions and sqlc queries · HUB-047 · F-03
+  - Migration 00002 creates the 13 DESIGN §18.2 registry tables in schema hub; down migration removes them cleanly
+  - integration_versions and transformers reject UPDATE (trigger, SQLSTATE 23001); the active-version pointer still moves
+  - sqlc 1.31.1 generates internal/control/db; make sqlc / make sqlc-check, and a CI job fails on stale generated code
+- 2026-10-31 · `feat(registry)` · watch the dev config and load snapshots in every role · HUB-045 · F-03
+  - Every role builds its snapshot from HUB_CONFIG_DIR / HUB_CONTRACTS_DIR at start; /readyz reports snapshot ok or "snapshot not loaded" with the problems logged
+  - -config-watch (HUB_CONFIG_WATCH, off by default): edits swap within about 1 s; invalid edits are rejected and the last good snapshot keeps serving
+  - Metrics snapshot_version and snapshot_apply_failures_total{reason}; smoke test checks the snapshot
+- 2026-10-31 · `chore(config)` · add the M1 dev registry config · HUB-046 · F-03
+  - backend/config: events.track@v1 (schema from contracts/), vendor clevertap on mockvendor, accounts ct-brandA-in / ct-brandB-us (localfile credentials), transformers T1@7, T2@3, R1@2, R2@1, integrations int_evt_brandA (v1–v2), int_evt_brandB, int_evt_brandB_min, tenant orders-service, registrar reg_orders_cb
+  - Dev config builds with zero problems; a documented test-only dev API key resolves to orders-service
+  - Expressions with ': ' must be quoted in transformer YAML (the DESIGN §7.4 examples are not valid YAML as printed)
+- 2026-10-31 · `feat(registry)` · build immutable snapshots and swap them atomically · HUB-044 · F-03
+  - registry.Build = load + validate + index; snapshots carry a sha256 checksum over every config file and capability schema
+  - registry.Store publishes snapshots through an atomic pointer with strictly increasing versions; readers are lock-free and keep a consistent view
+  - API keys indexed by hash for M3 edge auth; duplicate key hashes rejected
+- 2026-10-31 · `feat(registry)` · validate cross-references and delivery rules with path-qualified errors · HUB-043 · F-03
+  - Validate checks every reference (vendors, accounts, regions, transformers and their kind/capability/endpoint, tenants, grants, registrar endpoints) and every rule: weights total 100, interactive capabilities sync-only, non-sync modes declare polling or a webhook, failover needs a chain, wait_ms 1..30000, retired accounts never in the active version
+  - All problems in one pass as file: yaml.path: message
+- 2026-10-31 · `feat(registry)` · load capabilities, vendors, accounts, transformers, integrations, tenants · HUB-041, HUB-042 · F-03
+  - Capability schemas compile once from contracts/schemas/capabilities (JSON Schema 2020-12) with operations, interactive flag and x-pii paths
+  - Strict YAML loading (unknown fields fail) of every registry object; ids must equal file names; API keys only as sha256 hashes
+  - Delivery defaults applied: wait / 3000 ms / fail_fast / re_resolve; audit masked, 30 d; every problem reported as file: path: message in one pass
+- 2026-10-31 · `feat(registry)` · add config domain types · HUB-040 · F-03
+  - Typed registry objects for capabilities, vendors (+ endpoints name@n), accounts, transformers, integrations and versions, tenants with hashed API keys, registrar endpoints
+  - Durations accept Go units and days (30d); transformer refs parse T2@3
+  - The DESIGN §3.4 version record and §8.3 vendor/account examples round-trip YAML ↔ struct
 - 2026-10-31 · `docs(tickets)` · close EP-10 CI acceptance and add a ticket counter script · HUB-250, HUB-251 · F-19
   - HUB-250 and HUB-251 done: the frontend workflow ran green on PR #3
   - docs/tickets/recount.py recomputes the ticket totals and epic/feature tables (--check for CI); counters fixed after the M0 merge (190 tickets, 29 done)

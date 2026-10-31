@@ -45,7 +45,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestSIGTERMStopsRoleWithinBudget(t *testing.T) {
-	cmd := exec.CommandContext(t.Context(), os.Args[0], "worker", "-ops-addr=127.0.0.1:0", "-ready-drain=100ms")
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "worker", "-ops-addr=127.0.0.1:0", "-ready-drain=100ms",
+		"-data-dir="+t.TempDir(), "-blob-url=file://"+t.TempDir())
 	cmd.Env = append(os.Environ(), "HUB_TEST_EXEC_MAIN=1", "HUB_PG_DSN=postgres://hub:dsn-password-canary@localhost/hub")
 	var stderr syncBuffer
 	cmd.Stderr = &stderr

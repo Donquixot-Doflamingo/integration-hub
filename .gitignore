@@ -36,3 +36,7 @@ backend/config/dev/credentials*.enc
 
 # Claude Code local-only settings
 .claude/settings.local.json
+
+# hub local data (snapshot cache, dev blobs), wherever a role was started
+backend/**/.data/
+backend/.data/

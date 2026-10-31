@@ -52,6 +52,16 @@ func TestLoadPrecedence(t *testing.T) {
 			eq(t, c.ReadyDrain, time.Duration(0))
 		}},
 		{"dsn only from env", Gateway, base, nil, func(t *testing.T, c Config) { eq(t, string(c.PGDSN), "postgres://x") }},
+		{"registry defaults", Gateway, base, nil, func(t *testing.T, c Config) {
+			eq(t, c.ConfigDir, "config")
+			eq(t, c.ContractsDir, "../contracts")
+			eq(t, c.ConfigWatch, false)
+		}},
+		{"config watch from env and flag", Admin, with("HUB_CONFIG_WATCH", "true", "HUB_CONFIG_DIR", "/etc/hub"), []string{"-contracts-dir", "/srv/contracts"}, func(t *testing.T, c Config) {
+			eq(t, c.ConfigWatch, true)
+			eq(t, c.ConfigDir, "/etc/hub")
+			eq(t, c.ContractsDir, "/srv/contracts")
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

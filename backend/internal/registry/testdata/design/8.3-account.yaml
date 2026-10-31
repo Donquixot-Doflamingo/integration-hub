@@ -1,0 +1,7 @@
+account: ct-brandA-in
+vendor: clevertap
+region: in
+state: active
+credentials_ref: kms://hub/ct-brandA-in     # versions: active=v3, next=null
+config: { project_id: "4RW-...", brand_code: "A" }
+quota: { rps: 50, daily: 5000000 }

@@ -1,0 +1,23 @@
+# Dev transformer for mockvendor, from DESIGN §7.4. The CleverTap payload shape is illustrative:
+# before production, verify field names, endpoint and auth headers against the current CleverTap
+# upload API docs and set docs_url (AGENTS §3.3). Compiled by internal/transform from M2.
+transformer: T1
+version: 7
+kind: request
+capability: events.track@v1
+vendor_endpoint: clevertap.upload@1
+request:
+  method: POST
+  path: /1/upload
+  headers:
+    X-CleverTap-Account-Id: creds.account_id
+    X-CleverTap-Passcode:   creds.passcode
+    Content-Type:           '"application/json"'
+  body:
+    d:
+      - identity: req.user.id
+        type:     '"event"'
+        evtName:  req.event.name
+        ts:       epochSeconds(req.event.timestamp ?? now())
+        evtData:  req.event.properties
+batch: { path: d, max: 1000 }

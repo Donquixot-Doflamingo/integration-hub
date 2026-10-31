@@ -1,0 +1,8 @@
+# Dev account. Secrets are never here: credentials_ref points at the local encrypted file (M3).
+account: ct-brandA-in
+vendor: clevertap
+region: in
+state: active
+credentials_ref: localfile://ct-brandA-in
+config: { project_id: "DEV-PROJECT-A", brand_code: "A" }
+quota: { rps: 50, daily: 5000000 }

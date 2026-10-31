@@ -4,7 +4,7 @@
 Loaders, validation and compilation of all registry objects into an immutable in-memory `Snapshot`, distributed to every node and swapped atomically. The snapshot is the only thing the hot path reads (DESIGN §8, §18.3, §18.5).
 
 ## Status
-`proposed` — 2026-10-31.
+`shipped` — 2026-10-31 (M1, HUB-040–049 on `phase-2/m1-registry`; [M1 summary](../milestones/M1.md)). Additions: `delivery.polling` field; snapshot blobs carry sources; boot fallback archive → local cache.
 
 ## Owner
 `backend-engineer`.

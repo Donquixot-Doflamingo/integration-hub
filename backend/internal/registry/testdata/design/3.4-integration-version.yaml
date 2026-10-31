@@ -1,0 +1,31 @@
+integration: int_evt_brandB_min
+owner_tenant: orders-service
+grants: []                       # other tenants allowed to invoke
+capability: events.track@v1
+version: 3                       # immutable once published
+targets:
+  - vendor: clevertap
+    account: ct-brandB-us        # credentials live on the account
+    transformer: { request: T2@3, response: R2@1 }
+    weight: 100
+failover:
+  - vendor: moengage
+    account: mo-brandB
+    transformer: { request: T4@1, response: R2@1 }
+delivery:
+  mode: wait                     # sync | wait | async | async_callback
+  wait_ms: 3000
+  ttl: 6h
+  on_circuit_open: queue_if_allowed   # fail_fast | failover | queue_if_allowed
+  pending: re_resolve            # re_resolve | pinned
+breaker:
+  override: { open_after_consecutive_timeouts: 3 }
+webhooks:
+  - event: delivery.status
+    endpoint: reg_orders_cb
+audit:
+  payloads: masked               # full | masked | sealed | metadata_only
+  retention: 30d
+publish:
+  author: platform-team
+  reason: "brand B needs campaign field"
