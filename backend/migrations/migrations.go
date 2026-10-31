@@ -14,8 +14,15 @@ import (
 //go:embed *.sql
 var files embed.FS
 
+// versionTable is schema-qualified on purpose. Postgres resolves unqualified names through
+// search_path ("$user", public); the dev and CI database user is named "hub", so once the
+// baseline creates schema hub an unqualified goose_db_version would resolve to a new, empty
+// hub.goose_db_version and every migration would run again. Application tables are always
+// schema-qualified (hub.<table>) for the same reason.
+const versionTable = "public.goose_db_version"
+
 func provider(db *sql.DB) (*goose.Provider, error) {
-	p, err := goose.NewProvider(goose.DialectPostgres, db, files)
+	p, err := goose.NewProvider(goose.DialectPostgres, db, files, goose.WithTableName(versionTable))
 	if err != nil {
 		return nil, fmt.Errorf("goose provider: %w", err)
 	}

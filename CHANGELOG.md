@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `fix(migrations)` · pin the goose version table to the public schema · HUB-023 · F-01
+  - Migrations no longer re-run on a fresh database (caught by the itest CI job)
+  - Rule recorded: always schema-qualify objects (hub.<name>); the hub role makes "$user" resolve to schema hub
 - 2026-10-31 · `test(backend)` · record M0 acceptance and milestone summary · HUB-032 · F-01, F-02
   - docs/milestones/M0.md: acceptance evidence, what was built, eight deviations, deferred items
   - F-02 shipped, F-01 updated; README and CLAUDE.md show the current phase and quick-start commands
