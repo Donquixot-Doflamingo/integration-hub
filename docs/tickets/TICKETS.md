@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **193** · done: **46** · todo: **147**
+Total tickets: **193** · done: **47** · todo: **146**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **193** · done: **46** · todo: **147**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 34 | 11 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 34 | 12 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1831,15 +1831,17 @@ Shipped (frontend-engineer): publish page `/integrations/{id}/publish` (YAML/JSO
 
 ### HUB-260 — Weights and pause flows with mandatory reason
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-1902
 - **Branch:** `feat/HUB-260-fe-weights-pause`
 
 Edit target weights (must total 100) and pause/resume an integration, each with mandatory reason and confirmation.
 
+Shipped (frontend-engineer): "Set weights" on the integration page (shown when the active version has two or more targets) opens a weights dialog with the current weights, a live total and "Publish vN now" (default on; off creates a draft); `updateIntegrationWeights` with `expected_active_version`. A separate "Kill switch" group holds Pause / Resume (`pauseIntegration` / `resumeIntegration`); the contract gives neither a precondition nor an ETag, so no 412 path exists for them.
+
 **Acceptance criteria**
-- [ ] Weights not summing to 100 cannot be submitted
-- [ ] Pause shows impact text and requires reason
-- [ ] Component tests against MSW
+- [x] Weights not summing to 100 cannot be submitted (live total, confirm disabled; the action re-checks and answers 400 without calling the API; `weights.test.ts`, `weights-pause.test.ts`, `e2e/weights-pause.test.ts`)
+- [x] Pause shows impact text and requires reason (503 `INTEGRATION_PAUSED` within about 10 s, nothing new parked, workers hold queued requests, other integrations unaffected; resume names the pause reason)
+- [x] Component tests against MSW (success, 400 with pointers, 403, 404, 409, 422 for weights; 400, 403, 404 for pause; 403 for resume; viewer and tenant_viewer see no controls)
 
 ### HUB-261 — Vendor and account health board
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

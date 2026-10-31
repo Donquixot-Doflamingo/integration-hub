@@ -2,18 +2,20 @@
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { ActionSuccessData } from '$lib/api/actions';
-	import type { Integration, PublishResult } from '$lib/api/types';
+	import type { Integration, IntegrationChange, PublishResult } from '$lib/api/types';
 	import AsyncView from '$lib/components/AsyncView.svelte';
 	import ChangeNotice from '$lib/components/ChangeNotice.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ListView from '$lib/components/ListView.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import RoleGate from '$lib/components/RoleGate.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import SpecView from '$lib/components/integration/SpecView.svelte';
 	import { integrationStatus } from '$lib/status';
 	import { formatUtc } from '$lib/utils/format';
 	import type { PageData } from './$types';
+	import WeightsDialog from './WeightsDialog.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -55,6 +57,30 @@
 		const r = d.result as PublishResult;
 		notice = {
 			message: `Rolled back: v${r.active_version} is now active, a copy of v${r.copied_from_version ?? rollbackTo}. v${r.previous_active_version ?? '?'} stays in the history.`,
+			changeId: d.changeId
+		};
+	}
+
+	// HUB-260: weights (a new version) and the pause kill switch.
+	let weightsOpen = $state(false);
+	let pauseOpen = $state(false);
+	function onWeights(d: ActionSuccessData) {
+		const r = d.result as PublishResult;
+		const created = r.created_version ?? r.active_version;
+		notice = {
+			message:
+				r.active_version !== r.previous_active_version
+					? `Weights set: v${r.active_version} is now active (copy of v${r.copied_from_version ?? r.previous_active_version} with the new weights).`
+					: `Weights saved as draft v${created}. v${r.active_version} stays active until you publish it.`,
+			changeId: d.changeId
+		};
+	}
+	function onPauseSwitched(d: ActionSuccessData) {
+		const i = (d.result as IntegrationChange).integration;
+		notice = {
+			message: i.paused
+				? `Paused ${i.integration_id}. Within about 10 s, sync and wait calls get 503 INTEGRATION_PAUSED and workers hold queued requests.`
+				: `Resumed ${i.integration_id}. Calls are served again and held requests resume on their normal schedule.`,
 			changeId: d.changeId
 		};
 	}
@@ -116,10 +142,26 @@
 				</div>
 			</dl>
 			<RoleGate access={data.access}>
-				<div class="actions" role="group" aria-label="Change this integration">
-					<a class="primary" href={publishHref}>
-						{i.has_draft ? `Review draft v${i.latest_version} and publish` : 'Edit a new draft'}
-					</a>
+				<div class="actions">
+					<div class="group" role="group" aria-label="Change this integration">
+						<a class="primary" href={publishHref}>
+							{i.has_draft ? `Review draft v${i.latest_version} and publish` : 'Edit a new draft'}
+						</a>
+						{#if i.active && i.active.spec.targets.length > 1}
+							<button type="button" onclick={() => (weightsOpen = true)}>Set weights</button>
+						{/if}
+					</div>
+					<div class="group danger" role="group" aria-label="Kill switch">
+						{#if i.paused}
+							<button type="button" onclick={() => (pauseOpen = true)}>
+								<Icon name="closed" size={16} />Resume integration
+							</button>
+						{:else}
+							<button type="button" class="stop" onclick={() => (pauseOpen = true)}>
+								<Icon name="pause" size={16} />Pause integration
+							</button>
+						{/if}
+					</div>
 				</div>
 				{#snippet denied(role)}
 					<p class="readonly" role="note">
@@ -276,14 +318,71 @@
 	</ConfirmDialog>
 {/if}
 
+{#if current?.active}
+	<WeightsDialog bind:open={weightsOpen} integration={current} onsuccess={onWeights} />
+{/if}
+
+{#if current}
+	{#if current.paused}
+		<ConfirmDialog
+			bind:open={pauseOpen}
+			title="Resume {id}"
+			verb="Resume"
+			busyVerb="Resuming..."
+			action="?/resume"
+			tone="primary"
+			subject={id}
+			onsuccess={onPauseSwitched}
+		>
+			<p>
+				Clears the kill switch{current.paused_reason ? ` set for: "${current.paused_reason}"` : ''}.
+				Within about 10 s, sync and wait calls are served again; queued requests that workers held
+				resume on their normal schedule.
+			</p>
+		</ConfirmDialog>
+	{:else}
+		<ConfirmDialog
+			bind:open={pauseOpen}
+			title="Pause {id}"
+			verb="Pause"
+			busyVerb="Pausing..."
+			action="?/pause"
+			subject={id}
+			onsuccess={onPauseSwitched}
+		>
+			<p>
+				A kill switch for this integration only. Within about 10 s, every sync and wait call to {id}
+				gets 503 <code>INTEGRATION_PAUSED</code>, nothing new is parked, and workers hold queued
+				requests until you resume.
+			</p>
+			<p>
+				Other integrations on the same accounts are not affected. Pausing is not a version: the
+				active v{current.active_version ?? '-'} stays as it is.
+			</p>
+		</ConfirmDialog>
+	{/if}
+{/if}
+
 <style>
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+	}
+	.group {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
 		gap: var(--space-2);
 	}
-	.actions a {
+	.group.danger {
+		padding-left: var(--space-3);
+		border-left: 1px solid var(--rule);
+	}
+	.actions a,
+	.actions button {
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-2);
@@ -301,6 +400,10 @@
 		border-color: var(--signal);
 		background: var(--signal);
 		color: var(--surface);
+	}
+	.actions .stop {
+		border-color: var(--status-danger);
+		color: var(--status-danger);
 	}
 	.row-action {
 		padding: 0.15rem 0.6rem;

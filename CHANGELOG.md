@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add weights and pause/resume flows with mandatory reason · HUB-260 · F-19
+  - "Set weights" on an integration with two or more targets: the current weights, a live total that must reach 100 (confirm stays disabled otherwise), and "Publish vN now" (on by default; off saves the new version as a draft)
+  - "Pause integration" sits in a separate kill-switch group; its dialog spells out the impact (503 INTEGRATION_PAUSED within about 10 s, nothing new parked, queued requests held, other integrations unaffected) and needs a reason
+  - "Resume integration" appears on paused integrations and names the pause reason
+  - Each success shows what changed and the change log id; errors keep the dialog open with code and request id, and a 409 on weights asks for a reload
+
 - 2026-10-31 · `feat(frontend)` · add publish and rollback flows with mandatory reason · HUB-259 · F-19
   - Editors get "Review draft vN and publish" on the integration page: a YAML/JSON spec editor with line numbers, "Save draft" (creates or replaces the draft and runs the publish checks), the checks in text and icon, and the diff against the active version
   - Publish and "Roll back to vN" (history rows) open one confirm dialog: exact title, the consequence in numbers, a required reason (10+ characters), Cancel focused first, Escape and Tab stay inside, no double submit
