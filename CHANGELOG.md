@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(process)` · add git workflow, contract change and release process · HUB-005 · F-01
+  - Branching, Conventional Commits, merge-commit PRs
+  - Contract change request (CCR) flow between backend, frontend and contract-steward
+  - Release and tagging
 - 2026-10-31 · `docs(tech)` · add tech spec, observability plan, testing, security and ADRs · HUB-004 · F-01, F-18
   - TECH_SPEC with architecture, package rules, sequences, data model
   - OBSERVABILITY plan: SLOs, metric catalogue, log schema, tracing, profiling and leak detection, runbooks, alerts
