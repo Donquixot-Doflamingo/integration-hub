@@ -110,10 +110,11 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `webhook_inbound_total` | counter | webhooks | `vendor, account, outcome` (`accepted`, `bad_signature`, `replay`, `uncorrelated`) | `webhooks` | |
 | `transform_duration_ms` | histogram | ms | `kind` (`request`,`response`,`error`,`stream`) | `transform` | M2 budget in prod |
 | `transform_budget_exceeded_total` | counter | events | `transformer, limit` (`nodes`,`output_size`,`time`) | `transform` | |
-| `idempotency_hits_total` | counter | hits | `result` (`replay`,`miss`,`in_progress`,`error`) | `edge` | |
+| `idempotency_hits_total` | counter | hits | `result` (`miss` = key claimed, `in_progress`, `replay`, `conflict` = same key with another body, `error` = Redis unavailable) | `idempotency` (HUB-118) | dedupe effectiveness; `error` feeds the Redis-down fail-closed/pass-through decision of the edge |
+| `idempotency_writes_total` | counter | writes | `op` (`complete`, `release`), `result` (complete: `stored`, `not_owner`, `too_large`, `not_replayable`, `error`; release: `released`, `missing`, `not_owner`, `error`) | `idempotency` (HUB-118) | `not_owner` = a request outlived its 5 min lease; `too_large` = response over 1 MiB, not replayable |
 | `creds_cache_miss_total` | counter | misses | `account` | `creds` | must stay 0 on the hot path |
 | `creds_decrypts_total` | counter | loader calls | — | `creds` | decrypting loads happen only at warm-up and background refresh (HUB-084); a rise with traffic is a bug |
-| `redis_op_duration_seconds` | histogram | s | `op` | `upstream`, `edge` | |
+| `redis_op_duration_seconds` | histogram | s | `op` (`idempotency_begin`, `idempotency_complete`, `idempotency_release`; upstream ops later) | `telemetry` registers it once per process; `idempotency` (HUB-118) observes, `upstream` later | one observation per Redis round trip; buckets 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 100, 500 ms so the 1 ms idempotency budget (DESIGN §18.6) is a boundary |
 | `pg_pool_acquire_duration_seconds`, `pg_pool_in_use` | histogram, gauge | s, conns | `pool` | cmd wiring (pgxpool stats) | |
 | `http_server_inflight` | gauge | requests | `server` (`public`,`admin`) | `edge`, `control` | |
 | `scheduler_leader` | gauge (0/1) | — | — | `delivery` | exactly one leader |

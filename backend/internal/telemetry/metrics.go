@@ -33,6 +33,9 @@ const (
 var (
 	stageBucketsMS    = []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}
 	overheadBucketsMS = []float64{0.25, 0.5, 1, 2, 3, 4, 5, 7.5, 10, 25, 50}
+	// redisBucketsS covers the 1 ms idempotency budget (DESIGN §18.6) with boundaries on both
+	// sides of it, plus the tail up to a client timeout.
+	redisBucketsS = []float64{0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.1, 0.5}
 )
 
 // Metrics owns the Prometheus registry of one process. Constructors receive it and register
@@ -44,6 +47,10 @@ type Metrics struct {
 	Overhead *prometheus.HistogramVec
 	// StageDuration is hub_stage_duration_ms{stage}: own time of each pipeline stage.
 	StageDuration *prometheus.HistogramVec
+	// RedisOpDuration is redis_op_duration_seconds{op}: one observation per Redis round trip,
+	// shared by every package that talks to Redis (idempotency now; breakers and limiters later).
+	// op values are constants of the owning package, never built at runtime.
+	RedisOpDuration *prometheus.HistogramVec
 }
 
 // NewMetrics creates the registry with Go runtime and process collectors and the Hub-wide
@@ -70,6 +77,13 @@ func NewMetrics(role, version string) *Metrics {
 			NativeHistogramBucketFactor:    1.1,
 			NativeHistogramMaxBucketNumber: 160,
 		}, []string{"stage"}),
+		RedisOpDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:                           "redis_op_duration_seconds",
+			Help:                           "Duration of one Redis round trip in seconds, by operation.",
+			Buckets:                        redisBucketsS,
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 160,
+		}, []string{"op"}),
 	}
 	build := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name:        "hub_build_info",
@@ -77,7 +91,7 @@ func NewMetrics(role, version string) *Metrics {
 		ConstLabels: prometheus.Labels{"version": version, "role": role},
 	})
 	build.Set(1)
-	reg.MustRegister(m.Overhead, m.StageDuration, build)
+	reg.MustRegister(m.Overhead, m.StageDuration, m.RedisOpDuration, build)
 	return m
 }
 

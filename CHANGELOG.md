@@ -17,6 +17,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Migration 00004 adds hub.outbox (claim, parked, reclaim, TTL and ordering indexes; fillfactor 70) and hub.dead_letters (14-day DLQ with the last vendor exchange)
   - queue.Outbox: Enqueue (durable on commit; in_flight for wait-mode immediate attempts), Claim with SKIP LOCKED and a 30 s visibility (expired claims are reclaimed and counted as crashes), Ack, Nack, Park, Release in arrival order, DeadLetter, Expire, Replay; every method runs on the caller's transaction
   - Request states and their allowed transitions (DESIGN §10.9) live in core; every worker transition is a compare-and-set on status and claim, so a late or duplicate outcome is refused (ErrLost)
+- 2026-10-31 · `feat(idempotency)` · add the Redis idempotency store · HUB-118 · F-10
+  - New backend/internal/idempotency store, scoped to tenant + integration + Idempotency-Key and hashed in Redis: Begin claims a key or reports in progress, completed (status, replay headers, body, original request id) or conflict (same key, other body or operation); Complete stores 200/202 results for 24 h from the first claim; Release frees a key after a failure so the retry runs fresh
+  - In-progress claims expire after 5 minutes, so a crashed gateway never pins a key; late Complete or Release by a request that lost its claim changes nothing
+  - Redis unavailable returns a typed ErrUnavailable within the 50 ms op timeout, for the edge's fail-closed or pass-through decision; responses over 1 MiB and credential headers are never stored
+  - New metrics idempotency_hits_total{result}, idempotency_writes_total{op,result} and redis_op_duration_seconds{op}; Begin p99 0.23–0.30 ms against compose Redis (budget 1 ms)
 - 2026-10-31 · `perf(edge)` · add the overhead benchmark and the M3 summary · HUB-097 · F-06
   - BenchmarkInvokeOverhead measures Hub overhead (handler time minus vendor time) through the real credential cache, upstream client, audit writer and metrics: p99 0.42–0.51 ms with mockvendor at 0 ms (budget 5 ms), each stage reported against DESIGN §18.6
   - docs/milestones/M3.md: acceptance evidence, what was built, deferred work and deviations; F-05 and F-07 shipped, F-06, F-08 and F-21 in progress

@@ -22,6 +22,7 @@ Option 3:
 - `frontend/` = SvelteKit admin console; `contracts/` = OpenAPI 3.1 + JSON Schema; `clients/claude-skill/` = consumer skill; `docs/`.
 - Binary-private code goes under `cmd/<bin>/internal/` rather than new top-level `internal/` packages.
 - **Accepted addition (lead, 2026-10-31, HUB-020)**: `internal/core`, a leaf package of shared value types and canonical error codes, to keep the dependency graph acyclic (TECH_SPEC §4.1). Also added: `internal/testkit` for test-only helpers (in-process mockvendor); production code never imports it, enforced by `internal/archtest`.
+- **Accepted addition (lead, 2026-10-31, HUB-118)**: `internal/idempotency` (layer L3, imports `core` and `telemetry` only), the Redis Idempotency-Key store. DESIGN §18.1 lists idempotency under `edge`; it is a separate package so its Lua scripts and Redis contract are tested on their own and `edge` stays HTTP-only. The edge still owns the decision (status codes, fail-closed policy).
 
 ## Consequences
 - One PR can carry a contract commit, backend commits and frontend commits in order (ADR-0004, ADR-0008).
@@ -30,4 +31,4 @@ Option 3:
 - CI uses path filters per folder.
 
 ## Deviation from DESIGN.md
-§18.1 places `deploy/` and `docs/` inside the module tree and has no `cmd/hubmcp`; both changes are structural only. `internal/core` and `internal/testkit` are additions.
+§18.1 places `deploy/` and `docs/` inside the module tree and has no `cmd/hubmcp`; both changes are structural only. `internal/core`, `internal/testkit` and `internal/idempotency` are additions.
