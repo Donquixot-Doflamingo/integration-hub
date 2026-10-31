@@ -59,6 +59,16 @@ func NewTrail(o TrailOptions) *Trail {
 	return t
 }
 
+// AddSecrets adds values that must never be stored (credentials learned mid-request). Payloads
+// recorded before the call are unaffected: add secrets before the stage that may carry them.
+func (t *Trail) AddSecrets(values ...string) {
+	for _, s := range values {
+		if s != "" {
+			t.secrets = append(t.secrets, []byte(s))
+		}
+	}
+}
+
 // Policy is the payload policy the trail applies (recorded on the requests row).
 func (t *Trail) Policy() registry.PayloadPolicy { return t.o.Policy }
 

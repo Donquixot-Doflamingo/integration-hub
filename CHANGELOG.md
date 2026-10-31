@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(edge)` · add the sync invoke pipeline · HUB-088 · F-06
+  - POST /v1/integrations/{id}/invoke and /invoke/{operation} validate, resolve, transform, call the upstream, map the response and return the canonical body (200) or a canonical error
+  - Paused integrations answer 503 INTEGRATION_PAUSED; integrations that move money or quota need an Idempotency-Key (400 IDEMPOTENCY_KEY_REQUIRED); X-Request-Deadline caps the upstream time
+  - Each request records the full audit timeline (received → validated → resolved → transformed → vendor.sent → vendor.responded → response.transformed → completed or failed), one attempt row per vendor call, and per-stage plus hub_overhead_ms metrics
+  - Dry-run now also shows headers added by the vendor's auth scheme (bearer, basic), masked
 - 2026-10-31 · `feat(edge)` · classify upstream outcomes and apply the sync retry rule · HUB-087 · F-06
   - Timeouts (endpoint or X-Request-Deadline) map to 504 UPSTREAM_TIMEOUT; refused, DNS, TLS, reset, protocol and egress failures to 503 UPSTREAM_UNAVAILABLE; vendor 5xx/429/401-403/other 4xx keep the response transformer's classification
   - A sync attempt is retried once, immediately, only after a timeout or reset and only if the endpoint is idempotent or an Idempotency-Key was sent; a caller deadline is never retried

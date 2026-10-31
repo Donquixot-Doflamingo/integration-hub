@@ -1,6 +1,7 @@
 package edge
 
 import (
+	"log/slog"
 	"maps"
 	"net/http"
 	"net/url"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/transform"
 )
 
 type upstreamRequest struct {
@@ -56,6 +59,21 @@ func (s *Server) dryRun(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.fail(w, r, p, s.transformError(r, p, err))
 		return
+	}
+	// The vendor's auth scheme (bearer, basic) adds headers after the transformer: show them,
+	// masked, so the output is what would really be sent.
+	if err := creds.ApplyVendor(p.caller.Snap.Vendors[p.res.Target.Vendor], p.creds, &plain); err != nil {
+		s.log.ErrorContext(r.Context(), "auth scheme failed", slog.String("integration", p.integration.Integration), slog.String("error", err.Error()))
+		s.fail(w, r, p, internalError())
+		return
+	}
+	for k := range plain.Headers {
+		if _, ok := masked.Headers[k]; !ok {
+			if masked.Headers == nil {
+				masked.Headers = map[string]string{}
+			}
+			masked.Headers[k] = transform.Redacted
+		}
 	}
 
 	out := dryRunResult{

@@ -10,18 +10,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/contract"
 )
 
 // fakeCreds are obviously fake test values, unique enough to grep for.
 var fakeCreds = map[string]string{"account_id": "fake-acct-7Q2X", "passcode": "fake-pass-9KZW"}
 
-func credsFunc(ctx context.Context, account string) (map[string]string, error) {
-	if account == "" {
-		return nil, errors.New("no account")
+// fakeSource serves fakeCreds for every account, or err.
+type fakeSource struct{ err error }
+
+func (f fakeSource) Get(_ context.Context, account string) (creds.Credentials, error) {
+	if f.err != nil {
+		return creds.Credentials{}, f.err
 	}
-	return fakeCreds, nil
+	return creds.Credentials{AccountID: account, Version: 1, Values: fakeCreds}, nil
 }
+
+var credsFunc = fakeSource{}
 
 func post(t *testing.T, h http.Handler, key, target, body string, hdr ...string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -96,9 +102,21 @@ func TestDryRunErrors(t *testing.T) {
 }
 
 func TestDryRunCredentialMissIsInternal(t *testing.T) {
-	failing := func(context.Context, string) (map[string]string, error) { return nil, errors.New("cache miss") }
-	h := New(Deps{Snapshots: staticSnapshots{devSnapshot(t)}, Creds: failing}).Handler()
-	if rec := post(t, h, devKey, "/v1/integrations/int_evt_brandA/dry-run", trackBody); rec.Code != 500 {
+	broken := New(Deps{Snapshots: staticSnapshots{devSnapshot(t)}, Creds: fakeSource{err: errors.New("decrypt failed")}}).Handler()
+	if rec := post(t, broken, devKey, "/v1/integrations/int_evt_brandA/dry-run", trackBody); rec.Code != 500 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
+	miss := New(Deps{Snapshots: staticSnapshots{devSnapshot(t)}, Creds: fakeSource{err: &creds.MissError{AccountID: "ct-brandA-in"}}}).Handler()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/integrations/int_evt_brandA/invoke", strings.NewReader(trackBody))
+	req.Header.Set("Authorization", "Bearer "+devKey)
+	req.Header.Set("Content-Type", "application/json")
+	if rec := contract.Load(t, "hub-public.v1.yaml").Serve(t, miss, req); rec.Code != 503 || !strings.Contains(rec.Body.String(), "credentials_unavailable") {
+		t.Fatalf("cache miss: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func specInvalid(t *testing.T, h http.Handler, req *http.Request) *httptest.ResponseRecorder {
+	t.Helper()
+	req.Header.Set("Content-Type", "application/json")
+	return contract.Load(t, "hub-public.v1.yaml").ServeInvalid(t, h, req)
 }

@@ -1,24 +1,22 @@
 package edge
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/resolve"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/transform"
 )
-
-// CredsFunc returns the active credential values of an account from the warm cache. It never
-// decrypts on the request path: a miss is an error (DESIGN §18.5 rule 4).
-type CredsFunc func(ctx context.Context, accountID string) (map[string]string, error)
 
 // hdrAllowlist maps the caller headers a transformer may read (hdr.*, DESIGN §7.2).
 var hdrAllowlist = map[string]string{
@@ -44,7 +42,9 @@ type prepared struct {
 	input       transform.Input
 	timings     telemetry.Timings
 	trail       *audit.Trail
+	creds       creds.Credentials
 	attempts    int
+	attemptRows []audit.Attempt
 }
 
 // prepare runs DESIGN §5.1 steps 1–4 for one call: scope, operation, body limit, schema
@@ -119,13 +119,17 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 		"target_index": res.TargetIndex, "policy": string(p.trail.Policy()), "snapshot_version": res.SnapshotVersion,
 	})
 
-	var creds map[string]string
-	if s.deps.Creds != nil {
-		if creds, err = s.deps.Creds(r.Context(), p.account.Account); err != nil {
-			s.log.ErrorContext(r.Context(), "credentials unavailable", slog.String("integration", id), slog.String("error", err.Error()))
-			return p, internalError()
+	// Credentials come from the warm cache only; a miss is the account being unusable right
+	// now (rotation gone wrong, store down past the TTL), not a slow path (DESIGN §18.5 rule 4).
+	if p.creds, err = s.deps.Creds.Get(r.Context(), p.account.Account); err != nil {
+		s.log.ErrorContext(r.Context(), "credentials unavailable", slog.String("integration", id), slog.String("error", err.Error()))
+		if errors.Is(err, creds.ErrCacheMiss) {
+			return p, &core.CanonicalError{Code: core.CodeUpstreamUnavailable, Message: "The upstream is unavailable", Retryable: true,
+				RetryAfterMS: core.Ptr[int64](5000), Reason: core.Ptr("credentials_unavailable"), Upstream: &core.Upstream{}}
 		}
+		return p, internalError()
 	}
+	p.trail.AddSecrets(slices.Collect(maps.Values(p.creds.Values))...)
 	hdr := map[string]any{}
 	for name, key := range hdrAllowlist {
 		if v := r.Header.Get(name); v != "" {
@@ -137,7 +141,7 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 		cfg[k] = v
 	}
 	p.input = transform.Input{
-		Req: p.body, Hdr: hdr, Creds: creds, Now: s.deps.Now(),
+		Req: p.body, Hdr: hdr, Creds: p.creds.Values, Now: s.deps.Now(),
 		Account: map[string]any{"id": p.account.Account, "region": p.account.Region, "config": cfg},
 	}
 	return p, nil
@@ -190,7 +194,7 @@ func (s *Server) record(r *http.Request, p *prepared, status string, httpStatus 
 		CompletedAt: now,
 	}
 	start := time.Now()
-	s.deps.Audit.Emit(p.trail.Batch(rec))
+	s.deps.Audit.Emit(p.trail.Batch(rec, p.attemptRows...))
 	p.timings.Observe(telemetry.StageAudit, start)
 }
 

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **75** · todo: **118** · other (in-progress/in-review/blocked): **2**
+Total tickets: **195** · done: **75** · todo: **117** · other (in-progress/in-review/blocked): **3**
 
 ## Epics
 
@@ -782,16 +782,16 @@ Map vendor outcomes to canonical codes (DESIGN §4.4, §10.2) via response/error
 
 ### HUB-088 — Invoke handlers (sync pipeline)
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-081, HUB-082, HUB-083, HUB-085, HUB-087 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** in-progress · **Depends on:** HUB-081, HUB-082, HUB-083, HUB-085, HUB-087 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-088-invoke-sync`
 
 Wire `POST /v1/integrations/{id}/invoke` and `/invoke/{op}` through the §18.4 sync pipeline (resolve → transform → upstream → response map → respond) with per-stage duration metrics; debug-only `X-Hub-Integration-Version`.
 
 **Acceptance criteria**
 - [ ] Happy path returns the canonical response from mockvendor
-- [ ] Unknown `op` for a multi-operation capability → 404 with envelope
+- [x] Unknown `op` for a multi-operation capability → 404 with envelope
 - [ ] No DB or registry read on the path (test with DB stopped after warm-up)
-- [ ] Responses validate against `contracts/openapi/hub-public.v1.yaml`
+- [x] Responses validate against `contracts/openapi/hub-public.v1.yaml`
 
 ### HUB-089 — Dry-run endpoint
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
