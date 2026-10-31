@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `chore(agents)` · add contract-steward, backend, frontend and docs-keeper agents · HUB-009 · F-01
+  - Sub-agent definitions; only contract-steward may edit contracts/
 - 2026-10-31 · `chore(skills)` · add frontend, repo-wide and consumer skills · HUB-008 · F-19, F-21
   - Svelte 5/SvelteKit, generated API client, console UX and testing skills; vendored frontend-design and webapp-testing
   - Repo skills for PRD, stories, feature docs, tickets, commits/changelog, ADRs, contract changes; vendored skill-creator
