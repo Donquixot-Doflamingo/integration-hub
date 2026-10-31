@@ -36,8 +36,8 @@ already were in the contract.
 - **Consumers affected**: backend admin handlers (middleware sets it), frontend `src/lib/api/client.ts`, hubmcp (optional)
 - **Error codes**: none new
 - **Rollout**: contract PR first
-- **Current workaround**: `client.ts` reads the header as a best-effort fallback (`TODO(CCR-001)`); error
-  bodies' `request_id` always wins.
+- **Status**: shipped in hub-admin 1.1.0 (HUB-278). The console reads the documented header on every response
+  (`client.ts`, no `TODO(CCR-001)` left); error bodies' `request_id` still wins; success notices show the id.
 
 ### CCR-002: active-version filter on `listIntegrations`
 - **Requested by**: frontend-engineer (ticket HUB-256)
@@ -74,8 +74,8 @@ already were in the contract.
   (optional, list tool)
 - **Error codes**: none new (`VALIDATION_FAILED` for a non-boolean value, as for `paused`)
 - **Rollout**: contract PR first
-- **Current workaround**: none in the UI; `TODO(CCR-002)` in `src/routes/(app)/integrations/filters.ts`. The list
-  shows the active and latest version per row and marks "No active version" and "Draft" so operators can scan for them.
+- **Status**: shipped in hub-admin 1.1.0 (HUB-283). The integrations list offers both filters (URL params and chips,
+  `src/routes/(app)/integrations/filters.ts`); no `TODO(CCR-002)` left.
 
 ### CCR-003: dead-letter count per account on `listAccounts`
 - **Requested by**: frontend-engineer (ticket HUB-261)
@@ -114,4 +114,5 @@ already were in the contract.
   (column "Dead letters" linking to `/dlq?account_id=`), hubmcp (optional)
 - **Error codes**: none new
 - **Rollout**: contract PR first
-- **Current workaround**: none in the UI; `TODO(CCR-003)` in `src/routes/(app)/health/board.ts`.
+- **Status**: shipped in hub-admin 1.1.0 (HUB-284). The health board has the "Dead letters" column (count, oldest age,
+  link to `/dlq?account_id=`, `src/routes/(app)/health/board.ts`); no `TODO(CCR-003)` left.

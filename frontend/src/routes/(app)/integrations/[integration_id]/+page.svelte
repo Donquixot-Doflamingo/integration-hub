@@ -44,7 +44,11 @@
 		};
 	});
 
-	let notice = $state.raw<{ message: string; changeId: string | null } | null>(null);
+	let notice = $state.raw<{
+		message: string;
+		changeId: string | null;
+		requestId: string | null;
+	} | null>(null);
 
 	// HUB-259: rollback = publish a copy of an older version as a new version.
 	let rollbackOpen = $state(false);
@@ -57,7 +61,8 @@
 		const r = d.result as PublishResult;
 		notice = {
 			message: `Rolled back: v${r.active_version} is now active, a copy of v${r.copied_from_version ?? rollbackTo}. v${r.previous_active_version ?? '?'} stays in the history.`,
-			changeId: d.changeId
+			changeId: d.changeId,
+			requestId: d.requestId
 		};
 	}
 
@@ -72,7 +77,8 @@
 				r.active_version !== r.previous_active_version
 					? `Weights set: v${r.active_version} is now active (copy of v${r.copied_from_version ?? r.previous_active_version} with the new weights).`
 					: `Weights saved as draft v${created}. v${r.active_version} stays active until you publish it.`,
-			changeId: d.changeId
+			changeId: d.changeId,
+			requestId: d.requestId
 		};
 	}
 	function onPauseSwitched(d: ActionSuccessData) {
@@ -81,7 +87,8 @@
 			message: i.paused
 				? `Paused ${i.integration_id}. Within about 10 s, sync and wait calls get 503 INTEGRATION_PAUSED and workers hold queued requests.`
 				: `Resumed ${i.integration_id}. Calls are served again and held requests resume on their normal schedule.`,
-			changeId: d.changeId
+			changeId: d.changeId,
+			requestId: d.requestId
 		};
 	}
 </script>

@@ -1,5 +1,9 @@
 import type { RequestState, SearchRequestsQuery } from '$lib/api/types';
 import { pagingParams, parsePaging, type Paging } from '$lib/utils/paging';
+import { lastRange, normalizeTime, timeChip, toLocalInput } from '$lib/utils/time';
+
+// Shared with the DLQ filters since HUB-266; re-exported for the explorer page and its tests.
+export { lastRange, normalizeTime, toLocalInput };
 
 /**
  * Request explorer search <-> URL query (HUB-263). Names match `searchRequests` so the URL reads
@@ -55,23 +59,6 @@ export interface Filters {
 export const MAX_RANGE_MS = 31 * 24 * 3_600_000;
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/;
 const CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
-
-/** `2026-10-31T09:00` / `...:00Z` / `...:00.000Z` -> `2026-10-31T09:00:00Z`; null if not a time. */
-export function normalizeTime(raw: string | null | undefined): string | null {
-	if (!raw) return null;
-	const v = raw.trim();
-	const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(:\d{2})?(\.\d+)?(Z)?$/.exec(v);
-	if (!m) return null;
-	const iso = `${m[1]}T${m[2]}${m[3] ?? ':00'}Z`;
-	// Reject impossible dates (2026-02-31 would roll over to March).
-	const t = Date.parse(iso);
-	return Number.isNaN(t) || `${new Date(t).toISOString().slice(0, 19)}Z` !== iso ? null : iso;
-}
-
-/** Value for `<input type="datetime-local">` (shown as UTC): `2026-10-31T09:00`. */
-export function toLocalInput(iso: string | undefined): string {
-	return iso ? iso.slice(0, 16) : '';
-}
 
 export interface SearchState {
 	filters: Filters;
@@ -159,7 +146,7 @@ export function chipValue(
 ): string {
 	if (key === 'status') return (filters.status ?? []).map(stateLabel).join(', ');
 	if (key === 'code') return (filters.code ?? []).join(', ');
-	if (key === 'from' || key === 'to') return `${filters[key]!.slice(0, 16).replace('T', ' ')} UTC`;
+	if (key === 'from' || key === 'to') return timeChip(filters[key]!);
 	return filters[key] ?? '';
 }
 
@@ -184,12 +171,4 @@ export function filtersFromForm(form: FormData): { filters: Filters; limit: numb
 		filters: parseSearch(params).filters,
 		limit: Number.isFinite(limit) && limit > 0 ? limit : null
 	};
-}
-
-/** Quick ranges ending now, as absolute times so the URL stays shareable. */
-export function lastRange(ms: number, now = Date.now()): Pick<Filters, 'from' | 'to'> {
-	const to = new Date(Math.ceil(now / 60_000) * 60_000);
-	const from = new Date(to.getTime() - ms);
-	const iso = (d: Date) => `${d.toISOString().slice(0, 19)}Z`;
-	return { from: iso(from), to: iso(to) };
 }

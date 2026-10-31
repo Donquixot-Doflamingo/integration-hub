@@ -168,6 +168,25 @@ describe('force closed and clear', () => {
 		expect(seen[0]).toEqual({ reason: 'Maintenance finished early' });
 	});
 
+	it('the success notice carries the change log id and the X-Hub-Request-Id', async () => {
+		// Default handlers answer with the contract example and its declared response header.
+		server.use(...presets['breaker-forced']!());
+		const user = await renderBoard();
+		const dialog = await openDialog(user, 'Clear force');
+		await user.type(within(dialog).getByLabelText(/Reason/), 'Maintenance finished early');
+		await user.click(within(dialog).getByRole('button', { name: 'Clear force' }));
+		const notice = (await screen.findByText(/^Force cleared/)).closest('[role="status"]')!;
+		expect(notice).toHaveTextContent(
+			`Change log id ${contractMocks.clearBreakerForce.example.change_id}`
+		);
+		expect(notice).toHaveTextContent(
+			`Request id ${contractMocks.clearBreakerForce.headers['X-Hub-Request-Id']}`
+		);
+		expect(
+			within(notice as HTMLElement).getByRole('button', { name: 'Copy request id' })
+		).toBeInTheDocument();
+	});
+
 	it('clear force 409 (not forced any more) asks for a reload', async () => {
 		server.use(...presets['breaker-forced']!(), mockError('clearBreakerForce', 409));
 		const user = await renderBoard();

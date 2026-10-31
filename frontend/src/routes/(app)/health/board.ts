@@ -6,13 +6,22 @@ import type { StatusView } from '$lib/status';
  * Health board model (HUB-261): `listBreakers` rows joined with the account lifecycle state from
  * `listAccounts`, grouped vendor -> account -> endpoint and sorted worst first
  * (admin-console-ux §4): open, half-open, closed; then most parked, oldest parked.
- * TODO(CCR-003): a dead-letter count per account (or per breaker) needs a contract field; the
- * DLQ list has no totals and counting pages client-side would be wrong.
+ * Dead letters are per account (`dead_letter_count` / `dead_letter_oldest_at` on `listAccounts`,
+ * hub-admin 1.1.0, CCR-003 / HUB-284), so every endpoint row of an account shows the same figure.
  */
+export interface DlqFigure {
+	/** Not replayed, within the 14-day retention; may lag by up to a minute (contract). */
+	count: number;
+	/** When the oldest of them was dead-lettered; null when there are none. */
+	oldestAt: string | null;
+}
+
 export interface BoardRow {
 	breaker: Breaker;
 	/** Lifecycle state of the account; null when `listAccounts` did not return it. */
 	lifecycle: AccountState | null;
+	/** The account's dead letters; null when unknown (account missing, or no figure sent). */
+	deadLetters: DlqFigure | null;
 }
 
 export interface BoardGroup {
@@ -26,6 +35,23 @@ export interface BoardSummary {
 	closed: number;
 	forced: number;
 	parked: number;
+}
+
+/** The account's dead-letter figure, or null when the API did not send one. */
+export function deadLettersOf(a: AccountSummary | undefined): DlqFigure | null {
+	if (!a || typeof a.dead_letter_count !== 'number') return null;
+	return { count: a.dead_letter_count, oldestAt: a.dead_letter_oldest_at ?? null };
+}
+
+/** Dead letters across the accounts on the board (each account once); null if none is known. */
+export function totalDeadLetters(breakers: Breaker[], accounts: AccountSummary[]): number | null {
+	const byId = new Map(accounts.map((a) => [a.account_id, a]));
+	let total: number | null = null;
+	for (const id of new Set(breakers.map((b) => b.account_id))) {
+		const d = deadLettersOf(byId.get(id));
+		if (d) total = (total ?? 0) + d.count;
+	}
+	return total;
 }
 
 function compareRows(a: BoardRow, b: BoardRow): number {
@@ -42,9 +68,12 @@ function compareRows(a: BoardRow, b: BoardRow): number {
 
 /** Groups by vendor; groups ordered by their worst row, rows worst first. */
 export function buildBoard(breakers: Breaker[], accounts: AccountSummary[]): BoardGroup[] {
-	const lifecycle = new Map(accounts.map((a) => [a.account_id, a.state]));
+	const byId = new Map(accounts.map((a) => [a.account_id, a]));
 	const rows = breakers
-		.map((b) => ({ breaker: b, lifecycle: lifecycle.get(b.account_id) ?? null }))
+		.map((b) => {
+			const a = byId.get(b.account_id);
+			return { breaker: b, lifecycle: a?.state ?? null, deadLetters: deadLettersOf(a) };
+		})
 		.sort(compareRows);
 	const groups = new Map<string, BoardRow[]>();
 	for (const r of rows) {

@@ -98,8 +98,8 @@ export function foldUnchanged(rows: SplitRow[], keep = 3, min = 4): SplitRow[] {
 }
 
 /** JSON pointer -> readable path: `/targets/0/weight` -> `targets[0].weight`. */
-export function pointerToPath(pointer: string): string {
-	if (pointer === '' || pointer === '/') return '(whole spec)';
+export function pointerToPath(pointer: string, root = '(whole spec)'): string {
+	if (pointer === '' || pointer === '/') return root;
 	return pointer
 		.split('/')
 		.slice(1)

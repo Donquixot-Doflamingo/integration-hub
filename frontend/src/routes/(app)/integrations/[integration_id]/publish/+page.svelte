@@ -14,7 +14,11 @@
 	const detailHref = $derived(
 		resolve('/(app)/integrations/[integration_id]', { integration_id: id })
 	);
-	let notice = $state.raw<{ message: string; changeId: string | null } | null>(null);
+	let notice = $state.raw<{
+		message: string;
+		changeId: string | null;
+		requestId: string | null;
+	} | null>(null);
 </script>
 
 <PageHeader
@@ -33,7 +37,7 @@
 				integration={b.integration}
 				draft={b.draft}
 				diff={data.diff}
-				onnotice={(message, changeId) => (notice = { message, changeId })}
+				onnotice={(message, changeId, requestId) => (notice = { message, changeId, requestId })}
 			/>
 		{/snippet}
 	</AsyncView>

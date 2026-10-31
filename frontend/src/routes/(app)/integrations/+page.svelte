@@ -12,7 +12,9 @@
 	import { DEFAULT_PAGE_SIZE, PAGE_SIZES, type Paging } from '$lib/utils/paging';
 	import type { PageData } from './$types';
 	import {
+		booleanChoices,
 		chipValue,
+		conflictingFilters,
 		FILTER_KEYS,
 		filterLabels,
 		filtersFromForm,
@@ -33,6 +35,7 @@
 	const firstPage = (limit: number): Paging => ({ cursor: undefined, prev: [], limit });
 	const hrefFor = (f: Filters, p: Paging = firstPage(paging.limit)) => base + searchFor(f, p);
 	const chips = $derived(FILTER_KEYS.filter((k) => !!filters[k]));
+	const conflict = $derived(conflictingFilters(filters));
 
 	function onsubmit(e: SubmitEvent) {
 		// Without JS the browser submits the GET form as is; with JS, drop empty fields from the URL.
@@ -96,6 +99,24 @@
 			<option value="false">Live only</option>
 		</select>
 	</div>
+	<div class="field">
+		<label for="f-active">Active version</label>
+		<select id="f-active" name="has_active_version" value={filters.has_active_version ?? ''}>
+			<option value="">Any</option>
+			<option value="true">{booleanChoices.has_active_version.true}</option>
+			<option value="false">{booleanChoices.has_active_version.false}</option>
+		</select>
+	</div>
+	<div class="field">
+		<label for="f-behind"
+			>Newer version or draft <span class="hint">(over the active one)</span></label
+		>
+		<select id="f-behind" name="active_version_behind" value={filters.active_version_behind ?? ''}>
+			<option value="">Any</option>
+			<option value="true">{booleanChoices.active_version_behind.true}</option>
+			<option value="false">{booleanChoices.active_version_behind.false}</option>
+		</select>
+	</div>
 	{#if !access.tenantScoped}
 		<div class="field">
 			<label for="f-vendor">Vendor</label>
@@ -152,6 +173,10 @@
 		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- hrefFor builds on resolve() -->
 		<a class="clear" href={hrefFor({})}>Clear all</a>
 	</div>
+{/if}
+
+{#if conflict}
+	<p class="conflict" role="note"><Icon name="alert" size={16} />{conflict}</p>
 {/if}
 
 <ListView
@@ -251,6 +276,20 @@
 		border-radius: var(--radius-sm);
 		background: var(--surface);
 		font-size: var(--text-sm);
+	}
+	.hint {
+		font-weight: 400;
+	}
+	.conflict {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		margin: 0 0 var(--space-3);
+		padding: var(--space-2) var(--space-3);
+		border-left: 4px solid var(--status-warn);
+		background: var(--status-warn-wash);
+		font-size: var(--text-sm);
+		max-width: 72rem;
 	}
 	.apply {
 		height: 2rem;

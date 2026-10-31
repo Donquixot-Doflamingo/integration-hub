@@ -61,8 +61,51 @@ describe('health board', () => {
 		expect(open).toHaveTextContent('Active');
 		expect(open).toHaveTextContent(/probe due|retry in/);
 		expect(screen.getByText(/1 open/).closest('[role="status"]')).toHaveTextContent(
-			'1 open, 1 half-open, 1 closed. 1,293 requests parked.'
+			'1 open, 1 half-open, 1 closed. 1,293 requests parked, 1 dead-lettered.'
 		);
+	});
+
+	it('shows dead letters per account with the oldest age and a DLQ link (HUB-284)', async () => {
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date('2026-10-31T11:32:40Z'));
+		const accounts = contractMocks.listAccounts.example.items;
+		server.use(
+			mockOperation('listBreakers', {
+				items: [
+					b({ account_id: 'ct-brandA-in', endpoint_ref: 'upload@1' }),
+					b({ account_id: 'ct-brandA-in', endpoint_ref: 'profile@1', state: 'closed' }),
+					b({ account_id: 'ct-brandA-in-v2', state: 'closed' }),
+					b({ account_id: 'ct-unknown', state: 'closed' })
+				],
+				next_cursor: null
+			}),
+			mockOperation('listAccounts', {
+				items: [
+					accounts.find((a) => a.account_id === 'ct-brandA-in')!,
+					accounts.find((a) => a.account_id === 'ct-brandA-in-v2')!
+				],
+				next_cursor: null
+			})
+		);
+		renderBoard();
+		const table = await screen.findByRole('table');
+		expect(within(table).getByRole('columnheader', { name: 'Dead letters' })).toBeInTheDocument();
+		const links = within(table).getAllByRole('link', {
+			name: '1 dead letter for ct-brandA-in: open the DLQ'
+		});
+		// Account-level figure: both endpoints of ct-brandA-in show it.
+		expect(links).toHaveLength(2);
+		expect(links[0]).toHaveAttribute('href', '/dlq?account_id=ct-brandA-in');
+		expect(links[0]!.closest('td')).toHaveTextContent('1 oldest 30 min ago');
+		const rows = within(table).getAllByRole('row');
+		const v2 = rows.find((r) => r.textContent?.includes('ct-brandA-in-v2'))!;
+		expect(within(v2).queryByRole('link')).toBeNull();
+		const cells = within(v2).getAllByRole('cell');
+		expect(cells.some((c) => c.textContent?.trim() === '0')).toBe(true);
+		const unknown = rows.find((r) => r.textContent?.includes('ct-unknown'))!;
+		expect(unknown).toHaveTextContent('Unknown');
+		// Counted once per account in the summary.
+		expect(screen.getByText(/requests parked/)).toHaveTextContent(', 1 dead-lettered.');
 	});
 
 	it('shows forced breakers with their hold', async () => {

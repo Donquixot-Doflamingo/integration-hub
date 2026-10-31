@@ -8,9 +8,10 @@ import type { paths } from './schema';
  */
 
 /**
- * Response header carrying the Hub request id.
- * TODO(CCR-001): hub-admin.v1.yaml does not declare this header yet (hub-public does). We read it
- * only as a fallback when an error body has no `request_id`, and to surface ids on successes.
+ * Response header carrying the Hub request id (`req_` + ULID). hub-admin declares it on every
+ * response, success or error, since 1.1.0 (`components.headers.X-Hub-Request-Id`, CCR-001,
+ * HUB-278). Successes carry it as `requestId`; on errors it equals `error.request_id`, and the
+ * body's `request_id` still wins when both are present (see `HubApiError.fromResponse`).
  */
 export const REQUEST_ID_HEADER = 'X-Hub-Request-Id';
 
@@ -82,7 +83,8 @@ export function adminClient(opts: AdminClientOptions = {}): AdminClient {
 			return { ok: false, error, status: 0, requestId: null };
 		}
 		const { response } = r;
-		const headerRequestId = response.headers.get(REQUEST_ID_HEADER);
+		// Declared on every admin response (hub-admin 1.1.0); null only if a proxy dropped it.
+		const headerRequestId = response.headers.get(REQUEST_ID_HEADER) || null;
 		if (response.ok) {
 			return {
 				ok: true,

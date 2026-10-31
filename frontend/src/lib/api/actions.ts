@@ -50,6 +50,8 @@ export interface ActionFailureData {
 export interface ActionSuccessData<T = unknown> {
 	op: string;
 	changeId: string | null;
+	/** `X-Hub-Request-Id` of the call that made the change, to look it up in the request explorer. */
+	requestId: string | null;
 	result: T;
 }
 

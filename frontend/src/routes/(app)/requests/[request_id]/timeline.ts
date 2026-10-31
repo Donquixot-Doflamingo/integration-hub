@@ -1,4 +1,5 @@
 import type { TimelineEvent, TimelineEventType } from '$lib/api/types';
+import type { PayloadView } from '$lib/utils/payload';
 
 /** DESIGN §13.1 event types in the operator's words. */
 export const eventLabels: Record<TimelineEventType, string> = {
@@ -56,11 +57,7 @@ export function gap(ms: number | null): string {
 	return `+${(ms / 1000).toFixed(1)} s`;
 }
 
-export type PayloadView =
-	| { kind: 'sealed' }
-	| { kind: 'metadata_only' }
-	| { kind: 'none' }
-	| { kind: 'shown'; value: Record<string, unknown> };
+export type { PayloadView };
 
 /** How to show an event's payload under the audit policy. */
 export function payloadView(e: TimelineEvent, policy: string): PayloadView {
