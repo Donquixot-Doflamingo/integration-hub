@@ -322,15 +322,15 @@ Wire the OTel SDK (tracer provider, OTLP exporter optional), a Prometheus `/metr
 
 ### HUB-028 — mockvendor server, control API and request recording
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-020, HUB-006 · **Feature:** F-02 · **Stories:** US-02xx
+- **Status:** in-review · **Depends on:** HUB-020, HUB-006 · **Feature:** F-02 · **Stories:** US-02xx
 - **Branch:** `feat/HUB-028-mockvendor-core`
 
 Implement `cmd/mockvendor` per the mockvendor contract: arbitrary routes, a control API to set per-route behaviour and reset, and recording of received requests for test assertions (DESIGN §19 M0).
 
 **Acceptance criteria**
 - [ ] Control API matches the frozen mockvendor OpenAPI document
-- [ ] Recorded requests (method, path, headers, body) can be listed and cleared
-- [ ] A Go test helper starts mockvendor in-process on a random port
+- [x] Recorded requests (method, path, headers, body) can be listed and cleared
+- [x] A Go test helper starts mockvendor in-process on a random port
 
 ### HUB-029 — mockvendor fault behaviours
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend

@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(mockvendor)` · add mock vendor server, control API and request recording · HUB-028 · F-02
+  - `mockvendor` serves the vendor surface on :8099 and the control API on :8098 (also on the vendor port), per contracts/openapi/mockvendor.v1.yaml
+  - Routes with method/path-glob/header matching, priority and recency tie-break, `times`, configurable default behaviour, reset, health
+  - Every vendor request recorded (filters, cursor pagination, clear); Go tests start it in-process with mockvendor.Start(t)
 - 2026-10-31 · `feat(hub)` · add healthz and readyz with Postgres and Redis checks · HUB-025 · F-01
   - Every role serves /healthz (always 200 while up) and /readyz on the ops port, shaped per getHealthz/getReadyz
   - /readyz returns 503 NOT_READY with a request id and one detail per failing check (postgres, redis, or shutting down); dependency addresses never leak into the body
