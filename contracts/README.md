@@ -108,18 +108,34 @@ Each document has its own semver (`info.version`, or `version` in `hubmcp-tools.
 
 ## Validate locally
 
-No tool is vendored yet (follow-up ticket: a `make contracts-check` target). Until then:
-
 ```bash
-# Lint OpenAPI 3.1 + resolve external $refs
-npx @redocly/cli@1 lint contracts/openapi/hub-public.v1.yaml contracts/openapi/hub-admin.v1.yaml contracts/openapi/mockvendor.v1.yaml
-# Bundle the public spec (inlines ../schemas/** refs) to check that refs resolve
-npx @redocly/cli@1 bundle contracts/openapi/hub-public.v1.yaml -o /tmp/hub-public.bundled.yaml
-# JSON Schema 2020-12 compile check for capability and event schemas
-npx ajv-cli@5 compile --spec=draft2020 --strict=false -s "contracts/schemas/**/*.json"
+make contracts-check   # from the repo root; Node 22 (/opt/homebrew/opt/node@22/bin)
 ```
 
-The 1.0.0 freeze was checked with a throwaway script. It parsed every file, resolved all 1202 `$ref`s, validated 967 examples against their schemas, checked ULID formats, unique camelCase operationIds, tags, summaries and descriptions, examples on every body, the canonical envelope on every 4xx/5xx, `x-required-role` plus `reason` plus `change_id` on admin mutations, public vendor-leak names, and that MCP `maps_to` operationIds exist.
+The first run installs the pinned toolchain in `contracts/tools/` (`npm ci` from `package-lock.json`: `@redocly/cli` 2.64.1, `ajv` 8.20.0, `ajv-formats` 3.0.1, `yaml` 2.9.1); later runs reinstall only when the lockfile changes. Both steps of `contracts-check` always run, so one pass shows every problem, and the target exits non-zero if either fails.
+
+**1. Redocly lint** of `hub-public.v1.yaml`, `hub-admin.v1.yaml` and `mockvendor.v1.yaml` with `contracts/tools/redocly.yaml`: `recommended-strict` (every recommended rule is an error) plus example, `$ref`, path, operationId, summary/description and license rules. Changes from `recommended-strict`:
+
+| Rule | Setting | Why |
+| --- | --- | --- |
+| `no-server-example.com` | off | The `servers` lists name localhost on purpose (local ports of `hub`, `hub admin`, `mockvendor`) |
+| `tag-description` | warn | The 14 hub-admin tags have no description yet; adding them is a docs-only patch. Reported, not failing |
+| `operation-4xx-response` | ignored for 6 operations | `getHealthz`, `getReadyz` and the mockvendor `listRoutes`, `resetMock`, `clearRecordedRequests`, `getMockHealth` take no input, so there is no 4xx to declare |
+| `operation-2xx-response` | ignored for `handoffReturn` | A browser redirect target: it answers 302, never 2xx |
+
+The ignores live in `contracts/tools/.redocly.lint-ignore.yaml`, keyed by operation, so both rules still fail for any new operation.
+
+**2. `contracts/tools/check.mjs`** (Redocly does not cover these):
+
+- **Parse**: every YAML/JSON file under `contracts/` (except `tools/`). Duplicate keys, anchors and aliases fail, and so does any value a YAML 1.1 parser reads differently (unquoted timestamps, `yes`/`no`/`on`/`off`, octals).
+- **`$ref`**: every `$ref` in every file resolves (file and JSON pointer).
+- **Schemas**: every JSON Schema under `schemas/`, every OpenAPI schema (components and inline) and every MCP tool schema is meta-validated and compiled with ajv in draft 2020-12 strict mode, so unknown keywords and unknown formats fail. Allowed extras: `x-*` extensions, the OpenAPI annotations `example`, `discriminator`, `xml`, `externalDocs`, and the capability keywords `interactive` and `operations`.
+- **Examples**: every example is validated against its schema with real 2020-12 semantics (`type: [x, 'null']` with `null`, `const`, `$ref` with siblings, `format: date-time`/`uri`). That covers media-type `example`/`examples` (requests and responses), parameter and header examples, schema `example`/`examples`, JSON Schema `examples` and MCP tool examples. Response examples must not carry `writeOnly` values, request examples must not carry `readOnly` values, and every `req_`/`chg_`/`evt_`/`dlv_`/`ses_`/`key_`/`rec_` id must be a well-formed ULID. Unlike kin-openapi (README "Backend: contract tests"), it does not apply 3.0 nullability rules.
+- **Rules** from `contracts/AGENTS.md`: OpenAPI 3.1.0 with the 2020-12 dialect, semver `info.version`, unique camelCase `operationId`s, declared tags, summary and description, required path parameters, an example on every request and response body, the canonical envelope on every 4xx/5xx, `x-required-role` on admin operations, a required `reason` and a `change_id` on admin mutations, and, from hub-admin 1.1.0, `X-Hub-Request-Id` on every hub-admin response.
+- **D12 vendor-leak check** (hub-public): no parameter, response header or body field (recursively, through `$ref`s into `schemas/`) is named after a vendor, account, version or transformer, and no example value contains a vendor or account id used in hub-admin examples. The same name check covers `schemas/capabilities/`, `schemas/events/` and the tenant MCP tools. Allow-listed operations: `dryRunIntegration` and `receiveVendorWebhook`. Allow-listed names: `vendor_ref`, `vendor_ms`, `spec_version` (callback envelope format) and the debug-only `X-Hub-Integration-Version`.
+- **MCP**: every `maps_to` operationId exists in its spec, tenant tools map only to hub-public and admin tools (`hub_admin_*`) only to hub-admin, and tool names are unique.
+
+To prove a check fails, run it on a copy: `cp -R contracts /tmp/c && <break /tmp/c/...> && make contracts-check CONTRACTS_DIR=/tmp/c` (use a path without spaces). Never commit broken files.
 
 ## Backend: contract tests (kin-openapi)
 

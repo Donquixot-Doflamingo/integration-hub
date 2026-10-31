@@ -2,13 +2,13 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **67** · todo: **127**
+Total tickets: **194** · done: **68** · todo: **126**
 
 ## Epics
 
 | Epic | Name | Milestone | Features | ID range | Tickets | Done |
 | --- | --- | --- | --- | --- | --- | --- |
-| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
+| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 13 |
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 14 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
@@ -196,17 +196,19 @@ Add a CI job that lints every OpenAPI document in `contracts/openapi/` and valid
 
 ### HUB-015 — make contracts-check: repeatable contract validation (Redocly lint, ajv for JSON Schemas, $ref + example + vendor-leak checks)
 - **Epic:** EP-00 · **Type:** chore · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-012 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-012 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-015-contracts-check`
 
 Replace the throwaway script used for the 1.0.0 freeze with a repeatable `make contracts-check` target (`contracts/README.md` "Validate locally"). It lints the three OpenAPI documents with Redocly, compiles every JSON Schema under `contracts/schemas/` with ajv (draft 2020-12), resolves every `$ref`, validates every example against its schema, and runs the caller vendor-leak check (D12) and the MCP `maps_to` operationId check. HUB-014's CI job calls this target.
 
 **Acceptance criteria**
-- [ ] `make contracts-check` exits 0 on the frozen 1.0.0 contracts and non-zero on an intentionally broken `$ref`, example or schema
-- [ ] Redocly lint covers `hub-public.v1.yaml`, `hub-admin.v1.yaml` and `mockvendor.v1.yaml`; ajv compiles `contracts/schemas/**/*.json`
-- [ ] Vendor-leak check fails if a `hub-public` parameter, header or body field names a vendor, account or version (documented exceptions `dryRunIntegration` and `receiveVendorWebhook` allow-listed)
-- [ ] Every `maps_to` operationId in `contracts/mcp/hubmcp-tools.json` exists in its spec
-- [ ] Tool versions pinned; usage documented in `contracts/README.md` via a CCR to the contract-steward
+- [x] `make contracts-check` exits 0 on the frozen 1.0.0 contracts and non-zero on an intentionally broken `$ref`, example or schema
+- [x] Redocly lint covers `hub-public.v1.yaml`, `hub-admin.v1.yaml` and `mockvendor.v1.yaml`; ajv compiles `contracts/schemas/**/*.json`
+- [x] Vendor-leak check fails if a `hub-public` parameter, header or body field names a vendor, account or version (documented exceptions `dryRunIntegration` and `receiveVendorWebhook` allow-listed)
+- [x] Every `maps_to` operationId in `contracts/mcp/hubmcp-tools.json` exists in its spec
+- [x] Tool versions pinned; usage documented in `contracts/README.md` via a CCR to the contract-steward
+
+Steward note (2026-10-31): exit 0 checked on the frozen 1.0.0 tree (`git archive main contracts`) and on the round-1 state; non-zero proven on copies with a broken internal and external `$ref`, invalid examples (wrong type, wrong type for a nullable field, bad ULID), a bad schema type, a misspelled schema keyword, a vendor-named hub-public parameter, a vendor account id in a caller example, an unknown MCP `maps_to`, an unquoted timestamp and a missing hub-admin `X-Hub-Request-Id`. Redocly changes from `recommended-strict` and why: contracts/README.md "Validate locally".
 
 ### HUB-016 — Resolve Phase-1 design open questions with the user and record ADRs
 - **Epic:** EP-00 · **Type:** docs · **Area:** docs

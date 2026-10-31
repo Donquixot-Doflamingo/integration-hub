@@ -1,0 +1,19 @@
+# Redocly lint ignore list (HUB-015). Each entry is one frozen 1.x operation that intentionally
+# breaks a rule; the rule stays an error for everything else, so a new operation cannot do the same.
+# Keep this list short and justify every entry here and in contracts/README.md "Validate locally".
+#
+# hub-public handoffReturn: a browser redirect target; it answers 302 (or a 4xx/5xx), never 2xx.
+# hub-public getHealthz / getReadyz: probes take no input, so there is no 4xx to declare.
+# mockvendor listRoutes, resetMock, clearRecordedRequests, getMockHealth: no input to reject.
+../openapi/hub-public.v1.yaml:
+  operation-2xx-response:
+    - '#/paths/~1handoff~1return~1{session_id}/get/responses'
+  operation-4xx-response:
+    - '#/paths/~1healthz/get/responses'
+    - '#/paths/~1readyz/get/responses'
+../openapi/mockvendor.v1.yaml:
+  operation-4xx-response:
+    - '#/paths/~1__control~1routes/get/responses'
+    - '#/paths/~1__control~1reset/post/responses'
+    - '#/paths/~1__control~1requests/delete/responses'
+    - '#/paths/~1__control~1healthz/get/responses'

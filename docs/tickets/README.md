@@ -47,7 +47,7 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 
 | Epic | Name | Features | ID range | Tickets | Done |
 | --- | --- | --- | --- | --- | --- |
-| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | F-01 | HUB-001–HUB-019 | 16 | 12 |
+| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | F-01 | HUB-001–HUB-019 | 16 | 13 |
 | EP-01 | M0 Scaffold | F-01, F-02 | HUB-020–HUB-039 | 14 | 14 |
 | EP-02 | M1 Config registry | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | F-04 | HUB-060–HUB-079 | 12 | 12 |
@@ -60,7 +60,7 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-10 | Admin console (SvelteKit) | F-19 | HUB-250–HUB-299 | 35 | 19 |
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 11 | 0 |
-| **Total** | | | | **194** | **67** |
+| **Total** | | | | **194** | **68** |
 
 ## Sizing
 

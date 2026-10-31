@@ -1,0 +1,42 @@
+# Redocly CLI lint config for `make contracts-check` (HUB-015). Pinned in package.json.
+# recommended-strict = every recommended rule as an error. Changes from it are listed below and
+# in contracts/README.md "Validate locally"; .redocly.lint-ignore.yaml (next to this file) lists
+# the few frozen 1.x operations that legitimately break a rule, so the rule still applies to
+# everything else.
+extends:
+  - recommended-strict
+
+rules:
+  # ---- turned on beyond recommended (all pass on the frozen 1.x contracts)
+  no-invalid-schema-examples: error
+  no-invalid-parameter-examples: error
+  no-invalid-media-type-examples: error
+  no-required-schema-properties-undefined: error
+  no-unused-components: error
+  no-duplicated-tag-names: error
+  no-enum-type-mismatch: error
+  no-schema-type-mismatch: error
+  no-example-value-and-externalValue: error
+  no-identical-paths: error
+  no-ambiguous-paths: error
+  no-path-trailing-slash: error
+  path-declaration-must-exist: error
+  path-not-include-query: error
+  path-parameters-defined: error
+  operation-parameters-unique: error
+  operation-operationId: error
+  operation-operationId-unique: error
+  operation-summary: error
+  operation-description: error
+  operation-tag-defined: error
+  info-license: error
+  info-license-strict: error
+  spec-strict-refs: error
+
+  # ---- relaxed
+  # The `servers` lists name localhost on purpose: they document the local dev ports of
+  # `hub`, `hub admin` and `mockvendor` (TECH_SPEC). Deployed URLs are templated next to them.
+  no-server-example.com: off
+  # The 14 hub-admin tags have no description. Adding them is a docs-only patch for a later
+  # round; until then the gap is reported as a warning, not an error.
+  tag-description: warn

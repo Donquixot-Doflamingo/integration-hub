@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `chore(contracts)` · add make contracts-check with pinned Redocly and ajv · HUB-015 · F-01
+  - `make contracts-check` lints the three OpenAPI documents with Redocly CLI (`recommended-strict` plus example and structure rules) and runs `contracts/tools/check.mjs`
+  - check.mjs parses every contract file (duplicate keys, anchors, YAML 1.1 surprises such as unquoted timestamps), resolves every `$ref`, compiles every schema with ajv in 2020-12 strict mode and validates every example with real 3.1 nullability (`type: [x, 'null']`)
+  - It also enforces the contracts/AGENTS.md rules (operationIds, tags, examples, error envelope, admin role, `reason` and `change_id`, `X-Hub-Request-Id` from hub-admin 1.1.0), the D12 caller vendor-leak check and the MCP `maps_to` check
+  - Toolchain pinned in `contracts/tools/package-lock.json` (Node 22); usage, relaxed lint rules and the reasons are in contracts/README.md "Validate locally"
+
 - 2026-10-31 · `contract(admin)` · add per-account dead-letter count and age to accounts · HUB-284 · F-19
   - hub-admin 1.1.0 (pending, minor): `listAccounts` rows and `getAccount` carry `dead_letter_count` and `dead_letter_oldest_at`
   - The health board can show a "Dead letters" column per account without paging through the DLQ
