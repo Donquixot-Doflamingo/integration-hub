@@ -4,7 +4,7 @@
 A lossless, per-request audit: every pipeline stage emits an event with the exact bytes it saw (subject to the integration's payload policy), plus attempts and one final record. Writes are buffered and never block the hot path (DESIGN §13).
 
 ## Status
-`proposed` — 2026-10-31.
+`in-progress` — 2026-10-31. Sync events, writer and full/masked/metadata_only shipped in M3 (`docs/milestones/M3.md`); sealed (HUB-208), spill over 64 KB (HUB-098) and async events (HUB-117) remain.
 
 ## Owner
 `backend-engineer`.
@@ -49,6 +49,12 @@ Nobody can answer "what exactly did we send to the bureau for this loan, and wha
 8. Every attempt writes `request_attempts` with `integration_version` and `account_id` (DESIGN §6.3).
 9. Retention: hot 30 days, partitions by day (sealed 90 days in Release 2); metadata 1 year.
 
+## Implementation notes (M3)
+- `internal/audit`: `Trail` per request (seq, sha256 + bytes of the bytes seen, policy applied at write), `Writer` (bounded channel, `MaxRows`/`FlushEvery` batches, drain on stop, partitions yesterday..+7 days at start and every 6 h), `PGStore` (COPY events and attempts, upsert records).
+- `masked`: canonical stages masked by x-pii pointer (`*` = each array item); vendor stages masked by the tagged values found in the canonical body. Identifiers, IPs and device ids: HMAC-SHA256 with a per-tenant key derived from `HUB_AUDIT_MASK_KEY`; email: HMAC of the local part, domain kept; phone, government id, financial: last 4; name, address: `***`; free_text: `{masked, sha256, bytes}`.
+- Credential values are added to the trail when the cache returns them and replaced by `***` in every later payload; `request.transformed` is recorded before the auth scheme injects headers.
+- Grep test: `TestE2EErrorClasses` → `checkStoredAudit` (HUB-096).
+
 ## Data model impact
 `requests`, `request_events(request_id, seq, type, at, payload|payload_ref, sha256, bytes)`, `request_attempts` — partitioned by day (DESIGN §18.2).
 
@@ -59,7 +65,7 @@ Integration version `audit: { payloads, retention }`; capability schema `x-pii` 
 | Kind | Name | Notes |
 | --- | --- | --- |
 | Metric | `audit_events_dropped_total` | warn on any |
-| Metric | `audit_buffer_depth`, `audit_write_latency_ms` | |
+| Metric | `audit_buffer_fill_ratio`, `audit_write_failures_total` | buffer level; failed batch writes (their rows also count as `write_error` drops) |
 | Metric | `hub_overhead_ms{stage="audit"}` | budget 0.1 ms with metrics |
 | Alert | any audit events dropped | warn (DESIGN §16.3) |
 

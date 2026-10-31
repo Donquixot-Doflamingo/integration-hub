@@ -4,7 +4,7 @@
 The `CredentialSource` abstraction, a decrypted credential cache warmed on snapshot load, the local AES-GCM file source for dev, value-based log redaction, and the v1 auth-scheme plugins: static headers, bearer, basic (and query param, discouraged) (DESIGN §9).
 
 ## Status
-`proposed` — 2026-10-31.
+`shipped` — 2026-10-31 (M3: local source + cache, auth schemes, upstream client; wired into the gateway, `docs/milestones/M3.md`). KMS/Vault sources and rotation are F-15.
 
 ## Owner
 `backend-engineer`.
@@ -36,7 +36,8 @@ Today keys are copied into every service. The Hub must hold them once, encrypted
 | --- | --- | --- |
 | Admin API | `POST /admin/v1/accounts/{account_id}/credentials/next` (write-only) | `contracts/openapi/hub-admin.v1.yaml#addNextCredential` |
 | Admin API | `POST /admin/v1/accounts/{account_id}/test-connection` | `#testAccountConnection` |
-| Files | `backend/config/accounts/*.yaml` with `credentials_ref`; `secrets.dev.enc` | — |
+| Files | `backend/config/accounts/*.yaml` with `credentials_ref`; `backend/.data/dev-secrets.enc` + `backend/.data/dev.key` (git-ignored) | — |
+| CLI | `hubctl creds init-key`, `hubctl creds set`, `hubctl creds list` (dev only) | — |
 
 ## Behaviour & rules
 1. Credentials never appear in the snapshot or registry YAML; accounts carry `credentials_ref` (DESIGN §8.3).
@@ -48,6 +49,35 @@ Today keys are copied into every service. The Hub must hold them once, encrypted
 7. Query-param credentials are supported but the URL is redacted before any log or audit write.
 8. Admin APIs never return credential values; read endpoints show slot, version, created_at only.
 
+## Implementation (HUB-084)
+Package `internal/creds`:
+- `Source{Get(ctx, accountID) (Credentials, error)}`; `Credentials{AccountID, Version, Values}` (values read-only, shared with the cache).
+- `LocalFile` (dev source): one AES-256-GCM file, JSON envelope `{format: "hub-dev-secrets/v1", alg, nonce, ciphertext}` with the format string as additional data, plaintext `{accountID: {active: {version, values}, next?: {...}}}`. Key: 32 random bytes, base64, from `HUB_DEV_KEY_FILE` (mode must be 0600). Any change to nonce, ciphertext, tag or format, a truncation or a wrong key fails with `ErrDecrypt` ("tampered, truncated or wrong key") and returns nothing.
+- `Cache` (the request-path `Source`): immutable generations behind an `atomic.Pointer`, keyed `account` (active) and `account + version` (active and next, `GetVersion`). `Warm(ctx, accountIDs)` loads at snapshot load, before the swap (`AccountIDs(snap)` lists every non-retired account). `Get` never decrypts: a missing or expired entry returns `*MissError` (`errors.Is ErrCacheMiss`), counts `creds_cache_miss_total` and nudges the background refresher. `Run(ctx)` reloads every TTL/2 (TTL 5 min) and soon after a miss (at most once a second). A failed reload keeps the last good entry until its TTL ends, then fails closed.
+- Redaction: every loaded value (active and next) plus the base64 `username:password` form is added to `telemetry.SecretSet` **before** the generation is published. Values are never removed from the set.
+- The encrypted file must stay **out of `backend/config/`**: the registry packs every file there into snapshot blobs and the checksum (and rejects JSON there). Dev default: `localfile://.data/dev-secrets.enc`.
+
+Dev setup (from `backend/`, fake values only):
+```sh
+export HUB_DEV_KEY_FILE=.data/dev.key
+go run ./cmd/hubctl creds init-key
+go run ./cmd/hubctl creds set ct-brandA-in account_id=TEST-ACCT-A-not-real passcode=test-passcode-A-not-real
+go run ./cmd/hubctl creds set ct-brandB-us account_id=TEST-ACCT-B-not-real passcode=test-passcode-B-not-real
+go run ./cmd/hubctl creds list   # keys only, never values
+```
+
+## Implementation (HUB-085)
+`creds.Apply(scheme, creds, *core.VendorRequest)` (and `ApplyVendor(vendor, ...)` = `Apply(vendor.Auth, ...)`); `ValidateScheme(name)` lets a snapshot build reject unknown schemes. The scheme always comes from the vendor definition's `auth:`, never from the transformer.
+
+| Scheme | Effect |
+| --- | --- |
+| `static_headers` | Injects nothing: the transformer maps `creds.*` into headers (T1). Apply checks every credential value is present as a header value and fails with `ErrMissingCredential` naming the key otherwise. |
+| `bearer` | `Authorization: Bearer <values.token>` |
+| `basic` | `Authorization: Basic base64(<values.username>:<values.password>)` |
+| anything else | `ErrUnknownScheme` |
+
+Order on the request path: `Cache.Get` → transformer (`Input.Creds = creds.Values`) → `BuildRequest` → **audit `request.transformed`** → `Apply` → `upstream.Do`. Apply never mutates the header map it receives (it installs a copy), so an audit snapshot that holds the transformer's map never sees injected bearer/basic values. Static-header credentials are in the transformer output by design, so the audit writer must still redact by value (`telemetry.SecretSet`). Errors name credential keys, never values. `BenchmarkInject`: bearer 0.14 µs / 3 allocs, static_headers 0.09 µs / 0 allocs (budget 20 µs).
+
 ## Data model impact
 `account_credentials(account_id, cred_version, slot, ciphertext, wrapped_key)` (DESIGN §18.2).
 
@@ -57,8 +87,9 @@ Vendor `auth:` scheme name and shape (header names); account `credentials_ref`.
 ## Observability
 | Kind | Name | Notes |
 | --- | --- | --- |
-| Metric | `credential_decrypts_total{account}` | must stay flat under steady traffic |
-| Metric | `credential_cache_misses_total` | |
+| Metric | `creds_decrypts_total` | calls to the decrypting loader (warm-up + background refresh); flat under steady traffic, never per request |
+| Metric | `creds_cache_miss_total{account}` | request-path lookups with no warmed entry; must stay 0 (alert `CredsCacheMiss`) |
+| Log | `credential cache refresh failed` (warn, `error`, `on_miss`) | background refresh only; the error never contains values |
 | Metric | `credential_expiry_days{account}` | where expiry known |
 | Alert | credential expiring < 7 days | warn (DESIGN §16.3) |
 
@@ -91,3 +122,5 @@ HUB-080 – HUB-109 (EP-04, filter `feature: F-07`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-10-31 | HUB-084: local encrypted source, cache, redaction, `hubctl creds` | backend-engineer |
+| 2026-10-31 | HUB-085: static_headers, bearer, basic schemes | backend-engineer |

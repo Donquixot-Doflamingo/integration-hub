@@ -76,7 +76,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		}
 	}
 	log := telemetry.NewLogger(stderr, cfg.LogLevel, secrets, string(role))
-	if err := roles.Run(ctx, cfg, log, roles.Options{Version: version}); err != nil {
+	if err := roles.Run(ctx, cfg, log, roles.Options{Version: version, Secrets: secrets}); err != nil {
 		log.ErrorContext(ctx, "role exited with error", slog.String("error", err.Error()))
 		return 1
 	}

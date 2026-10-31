@@ -4,7 +4,7 @@
 The first gateway stages: authenticate the tenant key, check owner/grant, apply body limits, validate the canonical body against the pre-compiled capability schema, and mint the request id. Also the additive caller discovery endpoints (PRD DV-3) so callers, `hubmcp` and the Claude skill can find what to call (DESIGN §4.2, §5.1).
 
 ## Status
-`proposed` — 2026-10-31.
+`shipped` — 2026-10-31 (M3, `docs/milestones/M3.md`). Tenant rate limiting moves to M5 (EP-06).
 
 ## Owner
 `backend-engineer`; `contract-steward` for the discovery endpoints.
@@ -56,6 +56,11 @@ Discovery item shape (no vendor/account/version):
 5. `GET /v1/capabilities/{capability}` returns request/response JSON Schemas per operation, with `x-pii` tags preserved and `interactive` flag, but no vendor schema.
 6. Validation happens before any outbox write in every mode. Errors list `pointer` + `reason`.
 7. Each stage publishes its own duration (`hub_overhead_ms{stage}`) and stays < 100 µs p99 except validation (0.8 ms budget; DESIGN §18.6).
+
+## Implementation notes (M3)
+- `internal/edge`: `authenticate` (StageAuth), `authorizeIntegration`, `readJSONBody` + `validate` (StageBodyLimit, StageValidate), discovery handlers. Errors carry `reason` (`schema`, `query`, `not_granted`, `missing_scope`, `tenant_suspended`).
+- Stage names in code: `auth`, `body_limit`, `validate` on `hub_stage_duration_ms{stage}`; grant checks are part of `auth` timing on the request path.
+- Discovery cursor: base64url of the last integration id (opaque to callers).
 
 ## Data model impact
 `tenants`, `api_keys(key_hash, scopes[], rate_limit)`, `integration_grants` (DESIGN §18.2). Optional `integrations.description` column (new, for discovery).

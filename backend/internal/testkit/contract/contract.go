@@ -165,6 +165,18 @@ func describe(err error) string {
 // the recorded response for further assertions.
 func (s *Spec) Serve(tb testing.TB, h http.Handler, req *http.Request) *httptest.ResponseRecorder {
 	tb.Helper()
+	return s.serve(tb, h, req, false)
+}
+
+// ServeInvalid is Serve for a request that breaks the contract on purpose: only the response is
+// validated.
+func (s *Spec) ServeInvalid(tb testing.TB, h http.Handler, req *http.Request) *httptest.ResponseRecorder {
+	tb.Helper()
+	return s.serve(tb, h, req, true)
+}
+
+func (s *Spec) serve(tb testing.TB, h http.Handler, req *http.Request, invalid bool) *httptest.ResponseRecorder {
+	tb.Helper()
 	var body []byte
 	if req.Body != nil {
 		body, _ = io.ReadAll(req.Body)
@@ -172,7 +184,7 @@ func (s *Spec) Serve(tb testing.TB, h http.Handler, req *http.Request) *httptest
 	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if err := s.Check(Exchange{Request: req, RequestBody: body, Status: rec.Code, Header: rec.Header(), Body: rec.Body.Bytes()}); err != nil {
+	if err := s.Check(Exchange{Request: req, RequestBody: body, Status: rec.Code, Header: rec.Header(), Body: rec.Body.Bytes(), InvalidRequest: invalid}); err != nil {
 		tb.Error(err)
 	}
 	return rec
