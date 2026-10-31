@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **193** · done: **48** · todo: **145**
+Total tickets: **193** · done: **49** · todo: **144**
 
 ## Epics
 
@@ -11,7 +11,7 @@ Total tickets: **193** · done: **48** · todo: **145**
 | EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
-| EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 3 |
+| EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 4 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
@@ -575,15 +575,15 @@ Implement `lower upper trim split join replace format truncate` and `now epochSe
 
 ### HUB-063 — Stdlib: data, encoding/identity and domain functions
 - **Epic:** EP-03 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-061 · **Feature:** F-04 · **Stories:** US-04xx
+- **Status:** done · **Depends on:** HUB-061 · **Feature:** F-04 · **Stories:** US-04xx
 - **Branch:** `feat/HUB-063-stdlib-data-domain`
 
 Implement `?? merge pick omit flatten map filter len toJSON fromJSON`, `uuid sha256 hmacSHA256 base64 urlEncode`, `phoneE164 emailNormalize currencyMinor maskPAN maskAadhaar` (DESIGN §7.3).
 
 **Acceptance criteria**
-- [ ] Table tests for every function
-- [ ] `maskPAN` / `maskAadhaar` never return the full identifier
-- [ ] `uuid` is deterministic under a seeded test source
+- [x] Table tests for every function
+- [x] `maskPAN` / `maskAadhaar` never return the full identifier
+- [x] `uuid` is deterministic under a seeded test source
 
 ### HUB-064 — Request mapping, credential target rule and dry-run
 - **Epic:** EP-03 · **Type:** feat · **Area:** backend

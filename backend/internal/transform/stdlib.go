@@ -14,6 +14,24 @@ var stdlib = map[string]func(params ...any) (any, error){
 	"parseTime":    fnParseTime,
 	"formatTime":   fnFormatTime,
 	"addDuration":  fnAddDuration,
+	// data (plus the ?? operator and the map, filter, len builtins)
+	"merge":    fnMerge,
+	"pick":     fnPick,
+	"omit":     fnOmit,
+	"flatten":  fnFlatten,
+	"toJSON":   fnToJSON,
+	"fromJSON": fnFromJSON,
+	// encoding / identity (uuid() comes from the evaluation input)
+	"sha256":     fnSHA256,
+	"hmacSHA256": fnHMACSHA256,
+	"base64":     fnBase64,
+	"urlEncode":  fnURLEncode,
+	// domain
+	"phoneE164":      fnPhoneE164,
+	"emailNormalize": fnEmailNormalize,
+	"currencyMinor":  fnCurrencyMinor,
+	"maskPAN":        fnMaskPAN,
+	"maskAadhaar":    fnMaskAadhaar,
 }
 
 func stdlibOptions() []expr.Option {
