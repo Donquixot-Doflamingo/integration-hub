@@ -250,15 +250,15 @@ Add `backend/Makefile` with `build test itest lint bench run` (DESIGN §19 M0) a
 
 ### HUB-022 — CI workflow for backend
 - **Epic:** EP-01 · **Type:** chore · **Area:** infra
-- **Status:** in-review · **Depends on:** HUB-021, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-021, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-022-ci-backend`
 
 Fill the CI placeholder with backend jobs: lint, `make test` (race), `make itest` with Postgres 16 and Redis 7 service containers, and build all binaries.
 
 **Acceptance criteria**
-- [ ] CI runs lint, unit (race), integration and build jobs on every PR
-- [ ] A failing unit test makes the PR check fail
-- [ ] Go module and build caches are used; full run < 10 min
+- [x] CI runs lint, unit (race), integration and build jobs on every PR
+- [x] A failing unit test makes the PR check fail
+- [x] Go module and build caches are used; full run < 10 min
 
 ### HUB-023 — docker-compose with Postgres 16 + Redis 7 and goose migrations
 - **Epic:** EP-01 · **Type:** chore · **Area:** infra
@@ -376,7 +376,7 @@ Add a test helper that loads the frozen OpenAPI documents with kin-openapi and v
 Prove the M0 Accept line and post the milestone wrap-up (AGENTS §10).
 
 **Acceptance criteria**
-- [ ] `docker compose up` + `hub gateway` serves `/healthz` (scripted smoke test in CI)
+- [x] `docker compose up` + `hub gateway` serves `/healthz` (scripted smoke test in CI)
 - [x] All mockvendor behaviours covered by tests
 - [x] `make test` and `make itest` green
 - [x] Milestone summary with Deviations posted; feature docs F-01, F-02 updated

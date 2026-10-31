@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tickets)` · close M0 CI acceptance after the first green PR run · HUB-022, HUB-032 · F-01
+  - backend workflow green on PR #2: lint, test, itest, build, smoke-m0 in about 4 min; its first run caught the migration bug, proving failures fail the check
 - 2026-10-31 · `fix(migrations)` · pin the goose version table to the public schema · HUB-023 · F-01
   - Migrations no longer re-run on a fresh database (caught by the itest CI job)
   - Rule recorded: always schema-qualify objects (hub.<name>); the hub role makes "$user" resolve to schema hub
