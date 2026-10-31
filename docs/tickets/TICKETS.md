@@ -370,16 +370,16 @@ Add a test helper that loads the frozen OpenAPI documents with kin-openapi and v
 
 ### HUB-032 — M0 acceptance and milestone summary
 - **Epic:** EP-01 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-022, HUB-025, HUB-029, HUB-030, HUB-031 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-022, HUB-025, HUB-029, HUB-030, HUB-031 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `test/HUB-032-m0-acceptance`
 
 Prove the M0 Accept line and post the milestone wrap-up (AGENTS §10).
 
 **Acceptance criteria**
 - [ ] `docker compose up` + `hub gateway` serves `/healthz` (scripted smoke test in CI)
-- [ ] All mockvendor behaviours covered by tests
-- [ ] `make test` and `make itest` green
-- [ ] Milestone summary with Deviations posted; feature docs F-01, F-02 updated
+- [x] All mockvendor behaviours covered by tests
+- [x] `make test` and `make itest` green
+- [x] Milestone summary with Deviations posted; feature docs F-01, F-02 updated
 
 ### HUB-033 — CCR: getReadyz 503 example lacks the required request_id
 - **Epic:** EP-01 · **Type:** contract · **Area:** contracts

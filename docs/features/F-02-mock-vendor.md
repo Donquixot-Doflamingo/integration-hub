@@ -4,7 +4,7 @@
 `backend/cmd/mockvendor`: an HTTP server that impersonates any vendor with per-route programmable behaviour and request recording. It is the only "vendor" any test or local run talks to (DESIGN §0, §19 M0).
 
 ## Status
-`in-progress` — 2026-10-31 (HUB-028 core shipped on `phase-2/m0-scaffold`).
+`shipped` — 2026-10-31 (HUB-028–030 on `phase-2/m0-scaffold`; [M0 summary](../milestones/M0.md)).
 
 ## Owner
 `backend-engineer`.

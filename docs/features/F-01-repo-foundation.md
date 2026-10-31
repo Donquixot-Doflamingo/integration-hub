@@ -4,7 +4,7 @@
 The monorepo skeleton, conventions, local dev stack and CI that every other feature builds on: Phase-1 docs and contracts, then the M0 Go scaffold (`hub` roles, health endpoints, redacting logger, telemetry skeleton).
 
 ## Status
-`in-progress` — 2026-10-31 (Phase-1 docs being written; M0 code not started).
+`in-progress` — 2026-10-31. Phase 1 merged; M0 scaffold complete on `phase-2/m0-scaffold` ([summary](../milestones/M0.md)). Remaining: HUB-013 (branch protection), HUB-014/015 (contract lint), HUB-033.
 
 ## Owner
 Lead (Phase 1 docs) · `backend-engineer` (M0 scaffold) · `frontend-engineer` (frontend scaffold).

@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `test(backend)` · record M0 acceptance and milestone summary · HUB-032 · F-01, F-02
+  - docs/milestones/M0.md: acceptance evidence, what was built, eight deviations, deferred items
+  - F-02 shipped, F-01 updated; README and CLAUDE.md show the current phase and quick-start commands
 - 2026-10-31 · `ci(backend)` · add backend CI workflow and M0 smoke test · HUB-022 · F-01
   - PRs touching backend/, contracts/ or deploy/ run lint (golangci-lint v2.15.0), unit tests with -race, integration tests on compose Postgres + Redis, build, and the M0 smoke test
   - deploy/smoke/m0.sh: compose up, migrate, hub gateway, asserts /healthz, /readyz (postgres+redis ok), /metrics, clean SIGTERM stop; runs locally and in CI
