@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `chore(skills)` · add frontend, repo-wide and consumer skills · HUB-008 · F-19, F-21
+  - Svelte 5/SvelteKit, generated API client, console UX and testing skills; vendored frontend-design and webapp-testing
+  - Repo skills for PRD, stories, feature docs, tickets, commits/changelog, ADRs, contract changes; vendored skill-creator
+  - Distributable integration-hub consumer skill with API, MCP setup and examples
 - 2026-10-31 · `chore(skills)` · add backend Go skills and vendor mcp-builder · HUB-007 · F-01
   - Go idioms, architecture, system design, testing, memory/performance, logging, debugging, observability, Postgres, transformers, contract skills
   - Vendored Anthropic mcp-builder (Apache-2.0)
