@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `chore(skills)` · add backend Go skills and vendor mcp-builder · HUB-007 · F-01
+  - Go idioms, architecture, system design, testing, memory/performance, logging, debugging, observability, Postgres, transformers, contract skills
+  - Vendored Anthropic mcp-builder (Apache-2.0)
 - 2026-10-31 · `contract` · freeze v1 public, admin, mockvendor and MCP contracts · HUB-006 · F-05, F-06, F-16, F-20
   - hub-public 1.0.0: invoke, dry-run, request status, discovery endpoints, outbound webhooks
   - hub-admin 1.0.0: 79 control-plane operations with RBAC and change_id
