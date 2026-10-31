@@ -2090,6 +2090,7 @@ Filed by frontend-engineer during HUB-253. Replace the placeholder `oidcProvider
 - [ ] Browser-side admin API calls are authorised without exposing the token to JavaScript (BFF proxy or server loads), documented in an ADR
 - [ ] Token expiry: silent refresh or redirect to login with `expired=1`; sign-out ends the IdP session when supported
 - [ ] Tested against the dev issuer in e2e (HUB-277)
+- [ ] The access (and refresh) token is never readable from the cookie value: today the session cookie is signed but **not encrypted** (base64 JSON). Encrypt the session payload (e.g. AES-256-GCM with a key derived from `HUB_SESSION_SECRET`) or keep tokens in a server-side session store keyed by an opaque id (lead review of HUB-253)
 
 ### HUB-283 — CCR-002: active-version filters on listIntegrations
 - **Epic:** EP-10 · **Type:** contract · **Area:** contracts

@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(frontend)` · accept ADR-0009 and require encrypted OIDC sessions · HUB-279, HUB-282 · F-19
+  - ADR-0009 (stay on SvelteKit 2.70.3 with the // path guard until HUB-281) accepted by the lead
+  - HUB-282 now requires the OIDC token to be unreadable from the session cookie (encrypt the payload or use a server-side store)
 - 2026-10-31 · `feat(frontend)` · add side-by-side and path-list version diff · HUB-258 · F-19
   - Compare any two versions of an integration: pick From and To in the version history, or follow a row's "vs vN" link to the version it was based on
   - Side by side: old on the left, new on the right, removed and added lines marked with - / + and a text label as well as colour; long unchanged stretches fold behind "Show N unchanged lines"

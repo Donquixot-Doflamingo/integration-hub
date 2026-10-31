@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Accepted |
 | Date | 2026-10-31 |
-| Deciders | frontend-engineer (lead to review) |
+| Deciders | frontend-engineer; reviewed and accepted by the lead (2026-10-31) |
 | Tickets | HUB-279 (evaluation), HUB-281 (upgrade) |
 | DESIGN refs | §16.1; ADR-0005 |
 
