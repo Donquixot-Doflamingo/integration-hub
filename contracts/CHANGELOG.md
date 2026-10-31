@@ -5,6 +5,9 @@ Entry format: `- YYYY-MM-DD · <document> <version> · <CCR / HUB-###> · <summa
 
 ## 2026-10-31
 
+- 2026-10-31 · `hub-admin` 1.1.0 · CCR-002 / HUB-283 · Active-version filters on `listIntegrations` (additive, minor; extends the pending 1.1.0)
+  - New optional boolean query parameters `has_active_version` (published or never published) and `active_version_behind` (a newer version or a draft waits behind the active one), with examples. `VALIDATION_FAILED` for a non-boolean value, as for `paused`.
+  - The operation description says filters combine with AND and apply before pagination.
 - 2026-10-31 · `hub-admin` 1.1.0 · CCR-001 / HUB-278 · Every admin response declares `X-Hub-Request-Id` (additive, minor)
   - New `components.headers.X-Hub-Request-Id` (`req_` + ULID, required, equals `error.request_id` on errors), referenced by all 80 inline responses of the 79 operations and by the 9 shared `components.responses`.
   - `info.description` documents the header. No body, parameter or schema change.

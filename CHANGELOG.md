@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `contract(admin)` · add active-version filters to listIntegrations · HUB-283 · F-19
+  - hub-admin 1.1.0 (pending, minor): `GET /admin/v1/integrations` accepts `has_active_version` and `active_version_behind`
+  - Operators can list integrations that were never published, and those with a newer version or a draft waiting, across all pages instead of scanning one page
+
 - 2026-10-31 · `contract(admin)` · declare X-Hub-Request-Id on every admin response · HUB-278 · F-19
   - hub-admin 1.1.0 (minor): every admin response, success or error, declares the `X-Hub-Request-Id` header (`req_` + ULID), equal to `error.request_id` on errors
   - The console can show a request id for successful calls and for failures without the error envelope (proxy 502, HTML) once it regenerates its client; backend admin contract tests can require the header

@@ -1560,7 +1560,11 @@ paths:
       tags: [integrations]
       x-required-role: tenant_viewer
       summary: List integrations
-      description: Summary rows for the integrations list view, including the current targets of the active version.
+      description: |
+        Summary rows for the integrations list view, including the current targets of the active
+        version. Filters combine with AND and apply before pagination, so every page holds only
+        matching rows. `has_active_version` and `active_version_behind` (since 1.1.0) find
+        integrations that were never published and those with a newer version or draft waiting.
       parameters:
         - $ref: '#/components/parameters/TenantFilter'
         - name: capability
@@ -1587,6 +1591,26 @@ paths:
           schema:
             type: boolean
           example: false
+        - name: has_active_version
+          in: query
+          description: |
+            `true`: only integrations with an active (published) version. `false`: only integrations
+            without one (created but never published; invocations answer 503 `INTEGRATION_PAUSED`
+            with reason `no_active_version`). Omitted: no filter. Since 1.1.0.
+          schema:
+            type: boolean
+          example: false
+        - name: active_version_behind
+          in: query
+          description: |
+            `true`: only integrations that have an active version and something newer waiting: a
+            newer version (`latest_version` > `active_version`) or a draft (`has_draft`). `false`:
+            only integrations whose active version is the latest, with no draft. Integrations
+            without an active version match neither value (use `has_active_version=false`).
+            Omitted: no filter. Since 1.1.0.
+          schema:
+            type: boolean
+          example: true
         - $ref: '#/components/parameters/Q'
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'

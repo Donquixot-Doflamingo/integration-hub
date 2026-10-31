@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **65** · todo: **129**
+Total tickets: **194** · done: **66** · todo: **128**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **194** · done: **65** · todo: **129**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 17 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 18 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -2110,15 +2110,17 @@ Filed by frontend-engineer during HUB-253. Replace the placeholder `oidcProvider
 
 ### HUB-283 — CCR-002: active-version filters on listIntegrations
 - **Epic:** EP-10 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-006, HUB-256 · **Feature:** F-19 · **Stories:** US-1902
+- **Status:** done · **Depends on:** HUB-006, HUB-256 · **Feature:** F-19 · **Stories:** US-1902
 - **Branch:** `contract/HUB-283-integrations-version-filters`
 
 Filed by frontend-engineer during HUB-256. Full CCR text (before/after YAML): `frontend/CCR-NOTES.md` § CCR-002. HUB-256 asks for an "active version" filter on the integrations list, but `listIntegrations` has no version parameter, and filtering one cursor page client-side would miss matches. Proposed additive booleans `has_active_version` and `active_version_behind`. `hub-admin` minor bump.
 
 **Acceptance criteria**
-- [ ] Both query parameters added to `listIntegrations` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
+- [x] Both query parameters added to `listIntegrations` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
 - [ ] Backend list handler implements them, covered by contract tests (EP-08)
 - [ ] Console adds the filter (URL params, chips) after `npm run gen:api` and removes `TODO(CCR-002)`
+
+Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1; notice `contracts/notices/2026-10-31-round-1.md`). `active_version_behind=true` means an active version exists and `latest_version > active_version` or `has_draft`; `false` means the active version is the latest with no draft; integrations without an active version match neither value. The backend and console criteria stay open for those sides.
 
 ### HUB-284 — CCR-003: dead-letter count per account on listAccounts
 - **Epic:** EP-10 · **Type:** contract · **Area:** contracts
