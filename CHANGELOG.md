@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(registry)` · validate cross-references and delivery rules with path-qualified errors · HUB-043 · F-03
+  - Validate checks every reference (vendors, accounts, regions, transformers and their kind/capability/endpoint, tenants, grants, registrar endpoints) and every rule: weights total 100, interactive capabilities sync-only, non-sync modes declare polling or a webhook, failover needs a chain, wait_ms 1..30000, retired accounts never in the active version
+  - All problems in one pass as file: yaml.path: message
 - 2026-10-31 · `feat(registry)` · load capabilities, vendors, accounts, transformers, integrations, tenants · HUB-041, HUB-042 · F-03
   - Capability schemas compile once from contracts/schemas/capabilities (JSON Schema 2020-12) with operations, interactive flag and x-pii paths
   - Strict YAML loading (unknown fields fail) of every registry object; ids must equal file names; API keys only as sha256 hashes
