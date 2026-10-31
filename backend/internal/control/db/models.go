@@ -93,6 +93,56 @@ type HubRegistrarEndpoint struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
+type HubRequest struct {
+	RequestID          string             `json:"request_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	TenantID           string             `json:"tenant_id"`
+	IntegrationID      string             `json:"integration_id"`
+	IntegrationVersion pgtype.Int4        `json:"integration_version"`
+	Capability         string             `json:"capability"`
+	Operation          string             `json:"operation"`
+	Mode               string             `json:"mode"`
+	DryRun             bool               `json:"dry_run"`
+	Status             string             `json:"status"`
+	PayloadPolicy      string             `json:"payload_policy"`
+	SnapshotVersion    pgtype.Int8        `json:"snapshot_version"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	TraceID            pgtype.Text        `json:"trace_id"`
+	HttpStatus         pgtype.Int4        `json:"http_status"`
+	ErrorCode          pgtype.Text        `json:"error_code"`
+	Attempts           int32              `json:"attempts"`
+	HubOverheadMs      pgtype.Float8      `json:"hub_overhead_ms"`
+	VendorMs           pgtype.Float8      `json:"vendor_ms"`
+	QueueWaitMs        pgtype.Float8      `json:"queue_wait_ms"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+}
+
+type HubRequestAttempt struct {
+	StartedAt  pgtype.Timestamptz `json:"started_at"`
+	RequestID  string             `json:"request_id"`
+	AttemptNo  int32              `json:"attempt_no"`
+	AccountID  string             `json:"account_id"`
+	EndpointID string             `json:"endpoint_id"`
+	Host       pgtype.Text        `json:"host"`
+	DurationMs float64            `json:"duration_ms"`
+	HttpStatus pgtype.Int4        `json:"http_status"`
+	ErrorClass pgtype.Text        `json:"error_class"`
+}
+
+type HubRequestEvent struct {
+	At            pgtype.Timestamptz `json:"at"`
+	RequestID     string             `json:"request_id"`
+	Seq           int32              `json:"seq"`
+	Type          string             `json:"type"`
+	AttemptNo     pgtype.Int4        `json:"attempt_no"`
+	PayloadSha256 pgtype.Text        `json:"payload_sha256"`
+	PayloadBytes  pgtype.Int4        `json:"payload_bytes"`
+	Payload       []byte             `json:"payload"`
+	PayloadState  string             `json:"payload_state"`
+	PayloadRef    pgtype.Text        `json:"payload_ref"`
+	Meta          []byte             `json:"meta"`
+}
+
 type HubTenant struct {
 	TenantID       string             `json:"tenant_id"`
 	Status         string             `json:"status"`

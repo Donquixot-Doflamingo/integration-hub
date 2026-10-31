@@ -84,7 +84,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `credential_expiry_days` | gauge | days | `account, slot` | 400 | `creds` |
 | `llm_tokens_total` | counter | tokens | `tenant, integration, account, model, kind` (`input`/`output`) | ≤ 2,000 | `delivery` / `edge` via response mapping |
 | `llm_cost_usd_total` | counter | USD | `tenant, integration, account, model` | ≤ 1,000 | same |
-| `audit_events_dropped_total` | counter | events | `reason` (`buffer_full`, `encode_error`) | 2 | `audit` |
+| `audit_events_dropped_total` | counter | rows | `reason` (`buffer_full`, `write_error`, `encode_error`) | 3 | `audit` |
 
 ### 3.3 Additional Hub metrics (not in §16.2; needed for SLIs, alerts and the runbook)
 | Metric | Type | Unit | Labels | Package | Why |
@@ -118,6 +118,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `admin_mutations_total` | counter | mutations | `action, outcome` | `control` | |
 | `publish_validation_failures_total` | counter | failures | `check` | `control` | |
 | `audit_buffer_fill_ratio` | gauge | ratio | — | `audit` | early warning before drops |
+| `audit_write_failures_total` | counter | writes | — | `audit` | failed batch writes; their rows also count in `audit_events_dropped_total{reason="write_error"}` (HUB-091) |
 
 ### 3.4 Go runtime metrics
 Registered via `collectors.NewGoCollector(collectors.WithGoCollectorRuntimeMetrics(...))` and `collectors.NewProcessCollector`:

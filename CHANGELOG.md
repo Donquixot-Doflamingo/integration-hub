@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(audit)` · add the audit ledger tables and the buffered writer · HUB-091 · F-08
+  - Migration 00003 adds day-partitioned hub.requests, hub.request_events and hub.request_attempts; partitions are created from yesterday to 7 days ahead at start and every 6 h
+  - audit.Writer.Emit never blocks: a full buffer drops the batch and counts it in audit_events_dropped_total{reason=buffer_full}; failed writes count as write_error
+  - Rows are written in bulk (COPY for events and attempts, upsert for the request record) and drained on shutdown; audit_buffer_fill_ratio shows the buffer level
 - 2026-10-31 · `feat(edge)` · add the dry-run endpoint and the shared request pipeline · HUB-089 · F-06
   - POST /v1/integrations/{id}/dry-run (key scope dry_run) returns the exact upstream method, URL, headers and body, with credentials shown as *** and listed in redacted
   - Dry-run sends nothing upstream and creates no queue entry or idempotency record
