@@ -1,0 +1,580 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+info:
+  title: Mock Vendor - Control API
+  version: 1.0.0
+  summary: Programmable fake vendor for tests and local dev (`cmd/mockvendor`, DESIGN §19 M0).
+  description: |
+    `mockvendor` serves two surfaces on one port:
+
+    * **Vendor surface**: any path *not* under `/__control/` (e.g. `POST /1/upload`). It answers
+      according to the matching route behaviour, or `200 {}` when no route matches (the default
+      behaviour is configurable through `PUT /__control/default`). Every request to the vendor
+      surface is recorded.
+    * **Control surface** (`/__control/*`, this document) configures behaviours, reads recordings
+      and triggers inbound webhooks to the Hub.
+
+    For local and test use only. There is no auth. Never deploy it next to production traffic.
+    Route matching: exact `method` (or `*`) and a `path` glob (`*` = one segment, `**` = any
+    number of segments). The route with the highest `priority` wins, and on a tie the most
+    recently set wins.
+
+    Behaviour evaluation order for a matched request: `down` -> `latency` -> `rate_limit` ->
+    `error_ratio` -> response (`status`, `headers`, `body`), shaped by `slow_drip` and `malformed`.
+    `times` limits how many requests a route applies to before it deactivates.
+    Durations are integer ms. `Retry-After` is emitted in seconds (rounded up).
+  license:
+    name: Proprietary - internal use only
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://localhost:9090
+    description: Local mockvendor
+security: []
+tags:
+  - name: routes
+    description: Per-route behaviour.
+  - name: recordings
+    description: Requests received on the vendor surface.
+  - name: webhooks
+    description: Trigger inbound webhooks to the Hub.
+  - name: control
+    description: Reset and health.
+
+paths:
+  /__control/routes:
+    get:
+      operationId: listRoutes
+      tags: [routes]
+      summary: List configured routes
+      description: All routes with their behaviours and hit counters.
+      responses:
+        '200':
+          description: Routes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteList'
+              example:
+                items:
+                  - route_id: ct-upload
+                    match: { method: POST, path: /1/upload }
+                    priority: 0
+                    behaviour:
+                      status: 200
+                      headers: { X-Request-Id: mock-123 }
+                      body: { status: success, processed: 1, unprocessed: [] }
+                      latency: { mode: fixed, fixed_ms: 20 }
+                    hits: 42
+                    remaining: null
+                    created_at: '2026-10-31T09:00:00Z'
+  /__control/routes/{route_id}:
+    parameters:
+      - $ref: '#/components/parameters/RouteId'
+    get:
+      operationId: getRoute
+      tags: [routes]
+      summary: Get one route
+      description: One route and its counters.
+      responses:
+        '200':
+          description: Route.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Route'
+              example:
+                route_id: ct-upload
+                match: { method: POST, path: /1/upload }
+                priority: 0
+                behaviour: { status: 200, body: { status: success, processed: 1, unprocessed: [] } }
+                hits: 42
+                remaining: null
+                created_at: '2026-10-31T09:00:00Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: setRouteBehaviour
+      tags: [routes]
+      summary: Create or replace a route's behaviour
+      description: Idempotent upsert. Resets the route's hit counter.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteSpec'
+            examples:
+              healthy:
+                summary: Healthy upload with 20 ms latency
+                value:
+                  match: { method: POST, path: /1/upload }
+                  behaviour:
+                    status: 200
+                    headers: { X-Request-Id: mock-123 }
+                    body: { status: success, processed: 1, unprocessed: [] }
+                    latency: { mode: fixed, fixed_ms: 20 }
+              flaky:
+                summary: 30% 503, random 50-400 ms latency
+                value:
+                  match: { method: POST, path: /1/upload }
+                  behaviour:
+                    status: 200
+                    body: { status: success, processed: 1, unprocessed: [] }
+                    latency: { mode: random, min_ms: 50, max_ms: 400 }
+                    error_ratio: { ratio: 0.3, status: 503, body: { error: unavailable } }
+              rate_limited:
+                summary: Every 2nd request gets 429 with Retry-After 2 s
+                value:
+                  match: { method: POST, path: /1/upload }
+                  behaviour:
+                    status: 200
+                    rate_limit: { every_nth: 2, retry_after_ms: 2000 }
+              hard_down:
+                summary: Connection reset (simulates host down)
+                value:
+                  match: { method: '*', path: /** }
+                  behaviour: { down: { mode: reset } }
+              slow_drip:
+                summary: Body dripped 16 bytes every 500 ms
+                value:
+                  match: { method: POST, path: /1/upload }
+                  behaviour:
+                    status: 200
+                    body: { status: success, processed: 1, unprocessed: [] }
+                    slow_drip: { chunk_bytes: 16, interval_ms: 500 }
+              malformed:
+                summary: Truncated JSON body for the next 3 requests
+                value:
+                  match: { method: POST, path: /1/upload }
+                  times: 3
+                  behaviour:
+                    status: 200
+                    body: { status: success, processed: 1 }
+                    malformed: { kind: truncated_json }
+      responses:
+        '200':
+          description: Route stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Route'
+              example:
+                route_id: ct-upload
+                match: { method: POST, path: /1/upload }
+                priority: 0
+                behaviour:
+                  status: 200
+                  body: { status: success, processed: 1, unprocessed: [] }
+                  latency: { mode: fixed, fixed_ms: 20 }
+                hits: 0
+                remaining: null
+                created_at: '2026-10-31T09:00:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    delete:
+      operationId: deleteRoute
+      tags: [routes]
+      summary: Delete a route
+      description: Requests that matched it fall back to other routes or the default behaviour.
+      responses:
+        '204':
+          description: Deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /__control/default:
+    put:
+      operationId: setDefaultBehaviour
+      tags: [routes]
+      summary: Set the behaviour for unmatched requests
+      description: Applies to vendor-surface requests that match no route. It starts as `200 {}`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Behaviour'
+            example: { status: 404, body: { error: no such route } }
+      responses:
+        '200':
+          description: Stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Behaviour'
+              example: { status: 404, body: { error: no such route } }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /__control/reset:
+    post:
+      operationId: resetMock
+      tags: [control]
+      summary: Reset routes, default behaviour and recordings
+      description: Returns the mock to its initial state. Call it in test setup.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetRequest'
+            example: { routes: true, recordings: true }
+      responses:
+        '200':
+          description: Reset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetResult'
+              example: { routes_removed: 3, recordings_removed: 120 }
+  /__control/requests:
+    get:
+      operationId: listRecordedRequests
+      tags: [recordings]
+      summary: List recorded vendor-surface requests
+      description: Oldest first, so tests can assert order. Bodies are kept verbatim up to 1 MB (`body_truncated` beyond that).
+      parameters:
+        - name: route_id
+          in: query
+          description: Only requests that matched this route.
+          schema:
+            type: string
+          example: ct-upload
+        - name: method
+          in: query
+          description: Filter by HTTP method.
+          schema:
+            type: string
+          example: POST
+        - name: path
+          in: query
+          description: Filter by path glob.
+          schema:
+            type: string
+          example: /1/upload
+        - name: since
+          in: query
+          description: Only requests received at or after this time.
+          schema:
+            type: string
+            format: date-time
+          example: '2026-10-31T09:00:00Z'
+        - name: cursor
+          in: query
+          description: Opaque cursor.
+          schema:
+            type: string
+          example: eyJpIjoxMDB9
+        - name: limit
+          in: query
+          description: Page size.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+          example: 50
+      responses:
+        '200':
+          description: A page of recorded requests.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordedRequestList'
+              example:
+                items:
+                  - id: rec_01J9Z8G7H8J9K0M1N2P3Q4R5ST
+                    received_at: '2026-10-31T09:15:00.004Z'
+                    route_id: ct-upload
+                    method: POST
+                    path: /1/upload
+                    query: {}
+                    headers: { Content-Type: [application/json], X-CleverTap-Account-Id: [TEST-ACCOUNT] }
+                    body: { d: [ { identity: u_48213, type: event, evtName: order_placed } ] }
+                    body_raw: null
+                    body_truncated: false
+                    response_status: 200
+                    outcome: responded
+                next_cursor: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    delete:
+      operationId: clearRecordedRequests
+      tags: [recordings]
+      summary: Clear recordings
+      description: Removes all recorded requests. Routes are unchanged.
+      responses:
+        '204':
+          description: Cleared.
+  /__control/webhooks:
+    post:
+      operationId: triggerInboundWebhook
+      tags: [webhooks]
+      summary: Send an inbound webhook to the Hub
+      description: |
+        Mockvendor POSTs `body` to `target_url` (normally the Hub's
+        `/webhooks/in/{vendor}/{account}`). It optionally signs the body (HMAC-SHA256 over
+        `<unix ts>.<raw body>` into `signature.header`), waits `delay_ms` first, and reports the
+        Hub's response. Use `signature.timestamp_offset_ms` to simulate replays and old timestamps.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookTrigger'
+            example:
+              target_url: http://localhost:8080/webhooks/in/clevertap/ct-brandA-in
+              headers: { Content-Type: application/json }
+              body: { event: delivered, msg_id: m_7781, ts: 1793438160 }
+              signature: { scheme: hmac_sha256, secret: test-webhook-secret, header: X-CleverTap-Signature, format: 't={ts},v1={hex}', timestamp_offset_ms: 0 }
+              delay_ms: 0
+      responses:
+        '200':
+          description: Webhook sent. The Hub's response is included.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookTriggerResult'
+              example:
+                sent_at: '2026-10-31T09:16:00Z'
+                target_status: 200
+                target_headers: { Content-Type: [application/json] }
+                target_body: '{"received":true,"request_id":"req_01J9Z3M1A5B7C9D1E3F5G7H9JN"}'
+                duration_ms: 4
+                error: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /__control/healthz:
+    get:
+      operationId: getMockHealth
+      tags: [control]
+      summary: Liveness
+      description: 200 while running.
+      responses:
+        '200':
+          description: Alive.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+                  routes: { type: integer }
+                  recordings: { type: integer }
+              example: { status: ok, routes: 1, recordings: 42 }
+
+components:
+  parameters:
+    RouteId:
+      name: route_id
+      in: path
+      required: true
+      description: Caller-chosen route id.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$'
+      example: ct-upload
+
+  responses:
+    BadRequest:
+      description: Invalid control request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MockErrorEnvelope'
+          example:
+            error:
+              code: VALIDATION_FAILED
+              message: latency.min_ms must be <= latency.max_ms
+              retryable: false
+              details: [ { pointer: /behaviour/latency/min_ms, message: must be <= max_ms } ]
+    NotFound:
+      description: Unknown route.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MockErrorEnvelope'
+          example:
+            error:
+              code: NOT_FOUND
+              message: route 'ct-upload' not found
+              retryable: false
+              details: []
+
+  schemas:
+    MockErrorEnvelope:
+      description: Same envelope shape as the Hub's (no request_id, because the mock does not mint Hub ids).
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          properties:
+            code: { type: string, enum: [VALIDATION_FAILED, NOT_FOUND, INTERNAL_ERROR] }
+            message: { type: string }
+            retryable: { type: boolean }
+            details:
+              type: array
+              items:
+                type: object
+                required: [message]
+                properties:
+                  pointer: { type: string }
+                  message: { type: string }
+    RouteMatch:
+      type: object
+      required: [method, path]
+      properties:
+        method: { type: string, enum: ['*', GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS] }
+        path: { description: 'Path glob (`*` one segment, `**` any).', type: string, pattern: '^/' }
+        headers: { description: 'Optional exact header matches.', type: object, additionalProperties: { type: string } }
+    Latency:
+      type: object
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [fixed, random] }
+        fixed_ms: { type: integer, minimum: 0 }
+        min_ms: { type: integer, minimum: 0 }
+        max_ms: { type: integer, minimum: 0 }
+    ErrorRatio:
+      description: With probability `ratio`, respond with this error instead of the normal response.
+      type: object
+      required: [ratio, status]
+      properties:
+        ratio: { type: number, minimum: 0, maximum: 1 }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        headers: { type: object, additionalProperties: { type: string } }
+        body: {}
+        seed: { description: 'Optional RNG seed for deterministic tests.', type: [integer, 'null'] }
+    RateLimit:
+      description: Respond 429 with Retry-After. Use either `every_nth` or `ratio`. `burst` lets the first N requests through.
+      type: object
+      required: [retry_after_ms]
+      properties:
+        every_nth: { type: integer, minimum: 1 }
+        ratio: { type: number, minimum: 0, maximum: 1 }
+        burst: { type: integer, minimum: 0 }
+        retry_after_ms: { type: integer, minimum: 0 }
+        body: {}
+    Down:
+      description: 'Simulates a dead host. `reset` closes the TCP connection without a response. `refuse` stops accepting on the listener for routes matching `/**` (global). `hang` accepts and never answers.'
+      type: object
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [reset, refuse, hang] }
+    SlowDrip:
+      description: Send headers immediately, then the body in chunks.
+      type: object
+      required: [chunk_bytes, interval_ms]
+      properties:
+        chunk_bytes: { type: integer, minimum: 1 }
+        interval_ms: { type: integer, minimum: 1 }
+    Malformed:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [truncated_json, invalid_json, wrong_content_type, empty_body, html_error_page] }
+    Behaviour:
+      type: object
+      properties:
+        status: { type: integer, minimum: 100, maximum: 599, default: 200 }
+        headers: { type: object, additionalProperties: { type: string } }
+        body: { description: JSON body. Use `body_raw` for non-JSON. }
+        body_raw: { type: [string, 'null'] }
+        latency: { $ref: '#/components/schemas/Latency' }
+        error_ratio: { $ref: '#/components/schemas/ErrorRatio' }
+        rate_limit: { $ref: '#/components/schemas/RateLimit' }
+        down: { $ref: '#/components/schemas/Down' }
+        slow_drip: { $ref: '#/components/schemas/SlowDrip' }
+        malformed: { $ref: '#/components/schemas/Malformed' }
+        echo: { description: 'Respond with the received request as JSON (debugging).', type: boolean, default: false }
+    RouteSpec:
+      type: object
+      required: [match, behaviour]
+      properties:
+        match: { $ref: '#/components/schemas/RouteMatch' }
+        priority: { type: integer, default: 0 }
+        times: { description: 'Apply to this many requests, then deactivate. Null means forever.', type: [integer, 'null'], minimum: 1 }
+        behaviour: { $ref: '#/components/schemas/Behaviour' }
+    Route:
+      type: object
+      required: [route_id, match, priority, behaviour, hits, created_at]
+      properties:
+        route_id: { type: string }
+        match: { $ref: '#/components/schemas/RouteMatch' }
+        priority: { type: integer }
+        behaviour: { $ref: '#/components/schemas/Behaviour' }
+        hits: { type: integer, minimum: 0 }
+        remaining: { type: [integer, 'null'] }
+        created_at: { type: string, format: date-time }
+    RouteList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Route' }
+    ResetRequest:
+      type: object
+      properties:
+        routes: { type: boolean, default: true }
+        recordings: { type: boolean, default: true }
+    ResetResult:
+      type: object
+      required: [routes_removed, recordings_removed]
+      properties:
+        routes_removed: { type: integer }
+        recordings_removed: { type: integer }
+    RecordedRequest:
+      type: object
+      required: [id, received_at, method, path, headers, outcome]
+      properties:
+        id: { type: string, pattern: '^rec_[0-9A-HJKMNP-TV-Z]{26}$' }
+        received_at: { type: string, format: date-time }
+        route_id: { type: [string, 'null'] }
+        method: { type: string }
+        path: { type: string }
+        query: { type: object, additionalProperties: { type: array, items: { type: string } } }
+        headers: { type: object, additionalProperties: { type: array, items: { type: string } } }
+        body: { description: 'Parsed JSON body, or null.' }
+        body_raw: { description: 'Raw body if not JSON.', type: [string, 'null'] }
+        body_truncated: { type: boolean }
+        response_status: { type: [integer, 'null'] }
+        outcome: { type: string, enum: [responded, reset, refused, hung, rate_limited, errored] }
+    RecordedRequestList:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/RecordedRequest' }
+        next_cursor: { type: [string, 'null'] }
+    WebhookTrigger:
+      type: object
+      required: [target_url, body]
+      properties:
+        target_url: { type: string, format: uri }
+        method: { type: string, enum: [POST, PUT], default: POST }
+        headers: { type: object, additionalProperties: { type: string } }
+        body: { description: JSON body (or use body_raw). }
+        body_raw: { type: [string, 'null'] }
+        signature:
+          type: [object, 'null']
+          required: [scheme, secret, header]
+          properties:
+            scheme: { type: string, enum: [hmac_sha256, basic] }
+            secret: { description: 'Test secret only.', type: string }
+            header: { type: string }
+            format: { description: 'Header value template; `{ts}` and `{hex}` are substituted.', type: string, default: 't={ts},v1={hex}' }
+            timestamp_offset_ms: { description: 'Shift the signed timestamp (negative = in the past).', type: integer, default: 0 }
+        delay_ms: { type: integer, minimum: 0, default: 0 }
+    WebhookTriggerResult:
+      type: object
+      required: [sent_at, duration_ms]
+      properties:
+        sent_at: { type: string, format: date-time }
+        target_status: { type: [integer, 'null'] }
+        target_headers: { type: object, additionalProperties: { type: array, items: { type: string } } }
+        target_body: { type: [string, 'null'] }
+        duration_ms: { type: integer, minimum: 0 }
+        error: { description: 'Transport error if the Hub could not be reached.', type: [string, 'null'] }

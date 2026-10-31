@@ -1,0 +1,1861 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+info:
+  title: Integration Hub - Caller API
+  version: 1.0.0
+  summary: The vendor-agnostic API internal services call to reach any third party.
+  description: |
+    Callers send a **stable integration ID** plus a **canonical request body** and get a canonical
+    response back (DESIGN §4). The Hub decides which vendor, account and transformer to use. That
+    choice is never visible to callers and can never be influenced by them (D12):
+
+    * No request header, query parameter or body field selects a vendor, account or version.
+    * No response field names a vendor, an account or an integration/transformer version.
+      `X-Hub-Integration-Version` is a **debug-only** response header. SDKs and callers MUST NOT act
+      on it, store it or branch on it.
+    * **Documented exception:** `POST /v1/integrations/{integration_id}/dry-run`
+      (`x-audience: integration-developers`, key scope `dry_run`) returns the exact upstream request
+      the Hub would send, with secrets redacted. Only integration developers use it while they
+      onboard an integration.
+
+    Operations tagged `vendor-webhooks` (`x-internal: true`) face vendors, not callers. Operations
+    marked `x-status: planned` are reserved for Release 2 and return 404 until then.
+
+    **Errors** all use one envelope, `{"error": CanonicalError}`
+    (`../schemas/events/canonical-error.json`), and always carry `request_id`. Clients must handle
+    unknown `code` values by falling back to the HTTP status and `retryable`.
+
+    **Delivery modes** (DESIGN §5) are a property of the integration, not of the call: `sync` returns
+    200 or an error; `wait` returns 200 if it finishes within the wait window, otherwise
+    202 `in_flight`; `async` and `async_callback` return 202. SDKs must surface a 202 as a distinct
+    "queued" result, never as success (§4.5).
+
+    Conventions: IDs `req_` + ULID; timestamps RFC 3339 (UTC); durations are integer milliseconds,
+    except the HTTP `Retry-After` header, which is in seconds. List endpoints use cursor pagination
+    (`cursor`, `limit` ≤ 200, response `next_cursor`).
+  contact:
+    name: Platform team (contract-steward)
+  license:
+    name: Proprietary - internal use only
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://localhost:8080
+    description: Local gateway (`hub gateway`)
+  - url: https://hub.{env}.internal
+    description: Deployed gateway
+    variables:
+      env:
+        default: staging
+        enum: [dev, staging, prod]
+security:
+  - bearerAuth: [invoke]
+tags:
+  - name: invoke
+    description: Invoke an integration with a canonical body.
+  - name: requests
+    description: Status and final result of a request (wait/async modes).
+  - name: discovery
+    description: Integrations and capabilities the calling tenant can use.
+  - name: dry-run
+    description: Integration-developer tooling. This is the one documented exception that reveals the upstream request shape.
+  - name: vendor-webhooks
+    description: Internal and vendor-facing. Vendors post inbound webhooks here. Callers never use it.
+  - name: handoff
+    description: Return URLs for redirect flows (Release 2).
+  - name: health
+    description: Liveness and readiness probes.
+  - name: callbacks
+    description: Outbound callbacks Hub -> tenant (see top-level `webhooks`).
+
+paths:
+  /v1/integrations/{integration_id}/invoke:
+    post:
+      operationId: invokeIntegration
+      tags: [invoke]
+      summary: Invoke a single-operation integration
+      description: |
+        Validates the body against the integration's capability request schema (`default` operation),
+        resolves the active integration version on the Hub side, and delivers according to the
+        integration's delivery mode.
+
+        * `200`: canonical response (capability response schema). Also returned for an idempotent
+          replay of a completed request, with `X-Hub-Idempotent-Replay: true`.
+        * `202`: accepted for later delivery. Poll `GET /v1/requests/{request_id}` or wait for a callback.
+        * Errors: canonical envelope. `Idempotency-Key` is mandatory for integrations with
+          `moves_money_or_quota: true` (otherwise 400 `IDEMPOTENCY_KEY_REQUIRED`).
+
+        The request body schema depends on the capability. Fetch it from
+        `GET /v1/capabilities/{capability}` (`operations[].request_schema`).
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Prefer'
+        - $ref: '#/components/parameters/RequestDeadline'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        $ref: '#/components/requestBodies/CanonicalInvoke'
+      responses:
+        '200':
+          $ref: '#/components/responses/InvokeOk'
+        '202':
+          $ref: '#/components/responses/Accepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/IntegrationNotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UpstreamRejected'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          $ref: '#/components/responses/UpstreamAuthFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '504':
+          $ref: '#/components/responses/UpstreamTimeout'
+
+  /v1/integrations/{integration_id}/invoke/{operation}:
+    post:
+      operationId: invokeIntegrationOperation
+      tags: [invoke]
+      summary: Invoke one operation of a multi-operation integration
+      description: |
+        Same as `invokeIntegration`, for capabilities with several operations (e.g.
+        `kyc.aadhaar_otp@v1` with `generate` then `verify`). Step 1 of a multi-step flow returns an
+        `X-Hub-Session` response header. Send it as the `X-Hub-Session` request header on later steps.
+        The Hub pins the session to the upstream it opened on, invisibly to the caller. An unknown or
+        expired session gives 404 `SESSION_NOT_FOUND`. An operation the capability does not define
+        gives 404 `OPERATION_NOT_FOUND`. `default` is accepted here and behaves like `invokeIntegration`.
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+        - $ref: '#/components/parameters/Operation'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Prefer'
+        - $ref: '#/components/parameters/RequestDeadline'
+        - $ref: '#/components/parameters/HubSession'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        $ref: '#/components/requestBodies/CanonicalInvoke'
+      responses:
+        '200':
+          $ref: '#/components/responses/InvokeOk'
+        '202':
+          $ref: '#/components/responses/Accepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/InvokeNotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UpstreamRejected'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          $ref: '#/components/responses/UpstreamAuthFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '504':
+          $ref: '#/components/responses/UpstreamTimeout'
+
+  /v1/integrations/{integration_id}/dry-run:
+    post:
+      operationId: dryRunIntegration
+      tags: [dry-run]
+      x-audience: integration-developers
+      summary: Show the upstream request the Hub would send (nothing is sent)
+      description: |
+        **Documented exception to the no-vendor-leak rule.** It validates the canonical body, resolves
+        the active version, runs the request transformer, and returns the exact upstream HTTP request
+        (method, URL, headers, body) without sending it. Credentials and any value marked secret are
+        replaced with `***`. The call creates no queue entry, no idempotency record and no upstream
+        traffic. It is audited like a normal request, with `dry_run: true`.
+
+        The API key needs scope `dry_run` (otherwise 403 `FORBIDDEN`, reason `missing_scope`). The
+        output is for onboarding and debugging only. Callers must never build logic on it, because
+        it changes whenever the Hub cuts over.
+      security:
+        - bearerAuth: [dry_run]
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+        - name: operation
+          in: query
+          required: false
+          description: Capability operation to dry-run. Defaults to `default`.
+          schema:
+            $ref: '#/components/schemas/OperationName'
+          example: default
+        - $ref: '#/components/parameters/HubSession'
+      requestBody:
+        $ref: '#/components/requestBodies/CanonicalInvoke'
+      responses:
+        '200':
+          description: The upstream request that would be sent, with secrets redacted.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DryRunResult'
+              example:
+                request_id: req_01J9Z3K8X2V7Q4M6N8P0R2S4T7
+                dry_run: true
+                operation: default
+                upstream_request:
+                  method: POST
+                  url: https://in1.api.clevertap.com/1/upload
+                  headers:
+                    Content-Type: application/json
+                    X-CleverTap-Account-Id: '***'
+                    X-CleverTap-Passcode: '***'
+                  body:
+                    d:
+                      - identity: u_48213
+                        type: event
+                        evtName: order_placed
+                        ts: 1793438100
+                        evtData:
+                          order_id: ord_8821
+                          amount_minor: 129900
+                          currency: INR
+                redacted:
+                  - headers.X-CleverTap-Account-Id
+                  - headers.X-CleverTap-Passcode
+                warnings: []
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/InvokeNotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/requests/{request_id}:
+    get:
+      operationId: getRequestStatus
+      tags: [requests]
+      summary: Get request status and final canonical result
+      description: |
+        Returns the state of a request made by the calling tenant (DESIGN §10.9): `result` when
+        `succeeded`, `error` when `failed`, `dead_lettered` or `expired`. Requests of other tenants
+        give 404 `REQUEST_NOT_FOUND`, never 403, so request IDs cannot be probed. Poll with backoff
+        (start at 500 ms, cap at 30 s) or use callbacks.
+      parameters:
+        - $ref: '#/components/parameters/RequestIdPath'
+      responses:
+        '200':
+          description: Current status of the request.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestStatus'
+              examples:
+                succeeded:
+                  summary: Delivered
+                  value:
+                    request_id: req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
+                    integration_id: int_evt_brandA
+                    capability: events.track@v1
+                    operation: default
+                    mode: wait
+                    status: succeeded
+                    idempotency_key: order-8821-created
+                    attempts: 1
+                    created_at: '2026-10-31T09:15:00Z'
+                    updated_at: '2026-10-31T09:15:02Z'
+                    completed_at: '2026-10-31T09:15:02Z'
+                    next_attempt_at: null
+                    expires_at: '2026-10-31T15:15:00Z'
+                    result:
+                      status: ok
+                      accepted: 1
+                      rejected: []
+                      vendor_ref: a1b2c3d4e5
+                    error: null
+                parked:
+                  summary: Waiting for upstream recovery
+                  value:
+                    request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JM
+                    integration_id: int_evt_brandB
+                    capability: events.track@v1
+                    operation: default
+                    mode: async
+                    status: parked
+                    idempotency_key: null
+                    attempts: 1
+                    created_at: '2026-10-31T09:15:00Z'
+                    updated_at: '2026-10-31T09:15:01Z'
+                    completed_at: null
+                    next_attempt_at: null
+                    expires_at: '2026-10-31T15:15:00Z'
+                    result: null
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/RequestNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/integrations:
+    get:
+      operationId: listIntegrations
+      tags: [discovery]
+      summary: List integrations the calling tenant can invoke
+      description: |
+        Integrations the tenant owns or is granted. Each entry shows only caller-facing facts:
+        capability, operations, delivery mode, interactive flag, paused flag, description. It never
+        shows the vendor, account or version behind an integration.
+      parameters:
+        - name: capability
+          in: query
+          required: false
+          description: Filter by capability key.
+          schema:
+            $ref: '#/components/schemas/CapabilityKey'
+          example: events.track@v1
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of integrations.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationList'
+              example:
+                items:
+                  - integration_id: int_evt_brandA
+                    capability: events.track@v1
+                    operations: [default]
+                    delivery_mode: wait
+                    interactive: false
+                    paused: false
+                    moves_money_or_quota: false
+                    idempotency_key_required: false
+                    description: Brand A product analytics events
+                  - integration_id: int_evt_brandB_min
+                    capability: events.track@v1
+                    operations: [default]
+                    delivery_mode: async
+                    interactive: false
+                    paused: false
+                    moves_money_or_quota: false
+                    idempotency_key_required: false
+                    description: Brand B events, minimal response
+                next_cursor: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/integrations/{integration_id}:
+    get:
+      operationId: getIntegration
+      tags: [discovery]
+      summary: Describe one integration
+      description: |
+        Caller-facing description of an integration: capability, operations, delivery policy
+        (mode, wait window, TTL, behaviour when the upstream is unavailable), subscribed callback
+        events, paused flag. It contains no vendor, account or version.
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+      responses:
+        '200':
+          description: Integration description.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationDetail'
+              example:
+                integration_id: int_evt_brandA
+                capability: events.track@v1
+                operations: [default]
+                delivery_mode: wait
+                interactive: false
+                paused: false
+                moves_money_or_quota: false
+                idempotency_key_required: false
+                description: Brand A product analytics events
+                owned: true
+                wait_ms: 3000
+                ttl_ms: 21600000
+                on_circuit_open: queue_if_allowed
+                callback_events: [delivery.status, request.failed]
+                capability_url: /v1/capabilities/events.track@v1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/IntegrationNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/capabilities/{capability}:
+    get:
+      operationId: getCapability
+      tags: [discovery]
+      summary: Get canonical request/response schemas of a capability
+      description: |
+        Returns the canonical JSON Schemas (2020-12) per operation, with the `interactive` and
+        `x-pii` annotations (see `contracts/schemas/capabilities/README.md`). Visible to a tenant
+        when at least one integration it can invoke is bound to this capability. Otherwise it
+        returns 404 `CAPABILITY_NOT_FOUND`.
+      parameters:
+        - name: capability
+          in: path
+          required: true
+          description: Capability key, `<name>@v<major>`.
+          schema:
+            $ref: '#/components/schemas/CapabilityKey'
+          example: events.track@v1
+      responses:
+        '200':
+          description: Capability descriptor with schemas.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilityDescriptor'
+              example:
+                capability: events.track@v1
+                name: events.track
+                major: 1
+                minor: 0
+                description: Track a user event with an engagement/analytics tool.
+                interactive: false
+                operations:
+                  - name: default
+                    description: Track a single event for a user.
+                    idempotent: true
+                    request_schema:
+                      $schema: https://json-schema.org/draft/2020-12/schema
+                      $id: 'urn:hub:capability:events.track@v1:default:request'
+                      type: object
+                      required: [user, event]
+                      properties:
+                        user:
+                          type: object
+                          required: [id]
+                          properties:
+                            id: { type: string, x-pii: identifier }
+                        event:
+                          type: object
+                          required: [name]
+                          properties:
+                            name: { type: string }
+                            timestamp: { type: string, format: date-time }
+                            properties: { type: object, x-pii: free_text }
+                        context:
+                          type: object
+                          properties:
+                            campaign: { type: string }
+                    response_schema:
+                      $schema: https://json-schema.org/draft/2020-12/schema
+                      $id: 'urn:hub:capability:events.track@v1:default:response'
+                      type: object
+                      required: [status]
+                      properties:
+                        status: { type: string, enum: [ok, partial] }
+                        accepted: { type: integer }
+                        rejected: { type: array }
+                        vendor_ref: { type: [string, 'null'] }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/CapabilityNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /webhooks/in/{vendor}/{account}:
+    post:
+      operationId: receiveVendorWebhook
+      tags: [vendor-webhooks]
+      x-internal: true
+      summary: Receive an inbound vendor webhook
+      description: |
+        **Vendor-facing, not part of the caller contract.** Vendor and account appear in the path
+        because the vendor must be configured with this URL. The request is verified with the
+        account's webhook scheme (HMAC signature header, basic auth or IP allowlist; set per vendor
+        definition), and replays older than 5 minutes are rejected. The Hub answers 200 immediately
+        after durable receipt. Correlation, the inbound transformer and tenant fan-out run
+        asynchronously (DESIGN §12.2). The body is opaque to this contract: any media type up to 1 MB.
+      security: []
+      parameters:
+        - name: vendor
+          in: path
+          required: true
+          description: Vendor id as configured in the registry.
+          schema:
+            $ref: '#/components/schemas/Slug'
+          example: clevertap
+        - name: account
+          in: path
+          required: true
+          description: Account id as configured in the registry.
+          schema:
+            $ref: '#/components/schemas/Slug'
+          example: ct-brandA-in
+      requestBody:
+        required: true
+        description: Vendor-specific payload, passed verbatim to the inbound transformer.
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              event: delivered
+              msg_id: m_7781
+              ts: 1793438160
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties:
+                type: string
+            example:
+              status: delivered
+              id: m_7781
+      responses:
+        '200':
+          description: Received and durably stored.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundWebhookAck'
+              example:
+                received: true
+                request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JN
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFoundGeneric'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /handoff/return/{session_id}:
+    get:
+      operationId: handoffReturn
+      tags: [handoff]
+      x-status: planned
+      summary: Return URL for redirect flows (Release 2)
+      description: |
+        **Planned for Release 2 (DigiLocker, eSign, eNACH).** The end user's browser lands here after
+        a hosted hand-off. The Hub records the vendor's query parameters against the vendor session,
+        resumes the request, and redirects (302) the browser to the tenant's return URL captured at
+        hand-off. The session id is unguessable and single-use, so no bearer token is needed. Until
+        Release 2 this endpoint returns 404 `SESSION_NOT_FOUND`.
+      security: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: Hub vendor session id (`ses_` + ULID).
+          schema:
+            $ref: '#/components/schemas/SessionId'
+          example: ses_01J9Z6E5F6G7H8J9K0M1N2P3QR
+        - name: params
+          in: query
+          required: false
+          description: Vendor-specific return parameters, passed through to the inbound transformer.
+          style: form
+          explode: true
+          schema:
+            type: object
+            additionalProperties:
+              type: string
+          example:
+            code: abc123
+            state: xyz
+      responses:
+        '302':
+          description: Redirect to the tenant's return URL.
+          headers:
+            Location:
+              description: Tenant return URL (allowlisted host), with `hub_request_id` and `hub_status` appended.
+              schema:
+                type: string
+                format: uri
+              example: https://orders.internal/kyc/done?hub_request_id=req_01J9Z3M1A5B7C9D1E3F5G7H9JP&hub_status=in_flight
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /healthz:
+    get:
+      operationId: getHealthz
+      tags: [health]
+      summary: Liveness probe
+      description: Returns 200 while the process is running. It checks no dependencies.
+      security: []
+      responses:
+        '200':
+          description: Alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: ok
+                role: gateway
+                checks: {}
+
+  /readyz:
+    get:
+      operationId: getReadyz
+      tags: [health]
+      summary: Readiness probe
+      description: |
+        200 when the node can serve traffic: a config snapshot is loaded and Postgres and Redis are
+        reachable (for the roles that need them). 503 `NOT_READY` otherwise, with one `details`
+        entry per failing check.
+      security: []
+      responses:
+        '200':
+          description: Ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: ok
+                role: gateway
+                checks:
+                  snapshot: ok
+                  postgres: ok
+                  redis: ok
+        '503':
+          description: Not ready.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: NOT_READY
+                  message: Node is not ready
+                  retryable: true
+                  retry_after_ms: 1000
+                  circuit: null
+                  reason: null
+                  upstream: null
+                  details:
+                    - pointer: /checks/snapshot
+                      message: no config snapshot loaded yet
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JQ
+
+webhooks:
+  request.completed:
+    post:
+      operationId: onRequestCompleted
+      tags: [callbacks]
+      summary: Callback sent when a request succeeds
+      description: |
+        POSTed to the registrar endpoint subscribed to `request.completed` on the integration.
+        Verify `X-Hub-Signature` over the raw body before parsing. Respond 2xx within 5 s. Any
+        other outcome is retried on the callback schedule (independent of upstream delivery).
+      parameters:
+        - $ref: '#/components/parameters/CallbackSignature'
+        - $ref: '#/components/parameters/CallbackEvent'
+        - $ref: '#/components/parameters/CallbackDeliveryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestCompletedEvent'
+            example:
+              event_id: evt_01J9Z5C3D4E5F6G7H8J9K0M1NP
+              type: request.completed
+              spec_version: '1'
+              occurred_at: '2026-10-31T09:15:02Z'
+              tenant_id: orders-service
+              integration_id: int_evt_brandA
+              operation: default
+              request_id: req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
+              idempotency_key: order-8821-created
+              data:
+                status: succeeded
+                result: { status: ok, accepted: 1, rejected: [], vendor_ref: a1b2c3d4e5 }
+                attempts: 1
+                completed_at: '2026-10-31T09:15:02Z'
+                timings: { total_ms: 1840, hub_overhead_ms: 3, vendor_ms: 212, queue_wait_ms: 1625 }
+      responses:
+        '2XX':
+          $ref: '#/components/responses/CallbackAck'
+  request.failed:
+    post:
+      operationId: onRequestFailed
+      tags: [callbacks]
+      summary: Callback sent when a request is dead-lettered
+      description: Sent once when the request reaches `dead_lettered`. The same delivery rules apply as for `request.completed`.
+      parameters:
+        - $ref: '#/components/parameters/CallbackSignature'
+        - $ref: '#/components/parameters/CallbackEvent'
+        - $ref: '#/components/parameters/CallbackDeliveryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestFailedEvent'
+            example:
+              event_id: evt_01J9Z5C3D4E5F6G7H8J9K0M1NQ
+              type: request.failed
+              spec_version: '1'
+              occurred_at: '2026-10-31T11:02:40Z'
+              tenant_id: orders-service
+              integration_id: int_evt_brandA
+              operation: default
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JK
+              idempotency_key: order-8822-created
+              data:
+                status: dead_lettered
+                error:
+                  code: UPSTREAM_REJECTED
+                  message: event name must not contain spaces
+                  retryable: false
+                  retry_after_ms: null
+                  circuit: null
+                  reason: null
+                  upstream: { status: 400, code: E_INVALID_EVENT }
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JK
+                attempts: 1
+                failed_at: '2026-10-31T11:02:40Z'
+      responses:
+        '2XX':
+          $ref: '#/components/responses/CallbackAck'
+  request.expired:
+    post:
+      operationId: onRequestExpired
+      tags: [callbacks]
+      summary: Callback sent when a request passes its TTL undelivered
+      description: Sent once when the request reaches `expired`. The same delivery rules apply as for `request.completed`.
+      parameters:
+        - $ref: '#/components/parameters/CallbackSignature'
+        - $ref: '#/components/parameters/CallbackEvent'
+        - $ref: '#/components/parameters/CallbackDeliveryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestExpiredEvent'
+            example:
+              event_id: evt_01J9Z5C3D4E5F6G7H8J9K0M1NR
+              type: request.expired
+              spec_version: '1'
+              occurred_at: '2026-10-31T15:15:00Z'
+              tenant_id: orders-service
+              integration_id: int_evt_brandB
+              operation: default
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JM
+              idempotency_key: null
+              data:
+                status: expired
+                error:
+                  code: EXPIRED
+                  message: Request passed its TTL before delivery
+                  retryable: false
+                  retry_after_ms: null
+                  circuit: null
+                  reason: ttl_elapsed
+                  upstream: null
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JM
+                attempts: 0
+                expires_at: '2026-10-31T15:15:00Z'
+                last_state: parked
+      responses:
+        '2XX':
+          $ref: '#/components/responses/CallbackAck'
+  delivery.status:
+    post:
+      operationId: onDeliveryStatus
+      tags: [callbacks]
+      summary: Callback sent on non-terminal delivery state changes
+      description: |
+        Sent for transitions such as `in_flight -> parked` or `parked -> retry_scheduled`. Ordering
+        is best effort. Use `data.sequence` to drop stale events.
+      parameters:
+        - $ref: '#/components/parameters/CallbackSignature'
+        - $ref: '#/components/parameters/CallbackEvent'
+        - $ref: '#/components/parameters/CallbackDeliveryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryStatusEvent'
+            example:
+              event_id: evt_01J9Z5C3D4E5F6G7H8J9K0M1NS
+              type: delivery.status
+              spec_version: '1'
+              occurred_at: '2026-10-31T09:15:01Z'
+              tenant_id: orders-service
+              integration_id: int_evt_brandA
+              operation: default
+              request_id: req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
+              idempotency_key: order-8821-created
+              data:
+                state: parked
+                previous_state: in_flight
+                sequence: 2
+                attempt: 1
+                next_attempt_at: null
+                reason: circuit_open
+                last_error: null
+      responses:
+        '2XX':
+          $ref: '#/components/responses/CallbackAck'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Hub tenant API key (hk_live_... / hk_test_...)
+      description: |
+        Tenant API key, issued via the admin API and shown once. Scopes used in this document:
+        `invoke` (invoke, request status, discovery) and `dry_run` (dry-run). A missing or invalid key
+        gives 401 `UNAUTHORIZED`. A missing scope gives 403 `FORBIDDEN` with reason `missing_scope`. mTLS client
+        identity may replace the bearer key where configured (DESIGN §4.2). That is deployment
+        configuration, not part of this contract.
+
+  parameters:
+    IntegrationId:
+      name: integration_id
+      in: path
+      required: true
+      description: Stable integration ID (never changes across Hub-side cutovers).
+      schema:
+        $ref: '#/components/schemas/IntegrationId'
+      example: int_evt_brandA
+    Operation:
+      name: operation
+      in: path
+      required: true
+      description: Capability operation name.
+      schema:
+        $ref: '#/components/schemas/OperationName'
+      example: generate
+    RequestIdPath:
+      name: request_id
+      in: path
+      required: true
+      description: Hub request id.
+      schema:
+        $ref: '#/components/schemas/RequestId'
+      example: req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Recommended always. **Mandatory** for integrations with `moves_money_or_quota: true`. The same
+        key within 24 h returns the stored result of a *completed* request (200/202 with
+        `X-Hub-Idempotent-Replay: true`). The same key with a different body, or while the first
+        request is still being processed synchronously, gives 409 `IDEMPOTENCY_CONFLICT`. Keys are
+        scoped per tenant + integration.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: '^[\x21-\x7E]+$'
+      example: order-8821-created
+    Prefer:
+      name: Prefer
+      in: header
+      required: false
+      description: |
+        `respond-async`: the caller accepts a 202 when the upstream is unavailable and the
+        integration's policy is `queue_if_allowed` (DESIGN §5.3). It never forces async on a
+        healthy sync call and is ignored for interactive capabilities.
+      schema:
+        type: string
+        enum: [respond-async]
+      example: respond-async
+    RequestDeadline:
+      name: X-Request-Deadline
+      in: header
+      required: false
+      description: Caps the synchronous time budget for this call, in milliseconds. It can only lower the integration's own timeout.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 600000
+      example: 2000
+    HubSession:
+      name: X-Hub-Session
+      in: header
+      required: false
+      description: Hub session id returned by step 1 of a multi-step operation. Required for step ≥ 2.
+      schema:
+        $ref: '#/components/schemas/SessionId'
+      example: ses_01J9Z6E5F6G7H8J9K0M1N2P3QR
+    Traceparent:
+      name: traceparent
+      in: header
+      required: false
+      description: W3C Trace Context. The Hub continues the caller's trace.
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+      example: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor from a previous page's `next_cursor`.
+      schema:
+        type: string
+        maxLength: 512
+      example: eyJrIjoiaW50X2V2dF9icmFuZEEifQ
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+      example: 50
+    CallbackSignature:
+      name: X-Hub-Signature
+      in: header
+      required: true
+      description: |
+        `t=<unix seconds>,v1=<hex HMAC-SHA256(secret, t + "." + raw_body)>`. During a signing-secret
+        rotation overlap, several `v1=` values may appear. Accept the request if any one matches.
+        Reject requests where `t` is more than 5 minutes from your clock.
+      schema:
+        type: string
+        pattern: '^t=[0-9]+(,v1=[0-9a-f]{64})+$'
+      example: t=1793438102,v1=5d41402abc4b2a76b9719d911017c5925d41402abc4b2a76b9719d911017c592
+    CallbackEvent:
+      name: X-Hub-Event
+      in: header
+      required: true
+      description: Event type (same as body `type`).
+      schema:
+        type: string
+        enum: [request.completed, request.failed, request.expired, delivery.status]
+      example: request.completed
+    CallbackDeliveryId:
+      name: X-Hub-Delivery-Id
+      in: header
+      required: true
+      description: Id of this delivery attempt series (`dlv_` + ULID). Stable across retries of the same event.
+      schema:
+        type: string
+        pattern: '^dlv_[0-9A-HJKMNP-TV-Z]{26}$'
+      example: dlv_01J9Z5D4E5F6G7H8J9K0M1N2PQ
+
+  headers:
+    X-Hub-Request-Id:
+      description: Hub request id for this call (`req_` + ULID). Present on every response, success or error.
+      required: true
+      schema:
+        $ref: '#/components/schemas/RequestId'
+      example: req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
+    X-Hub-Idempotent-Replay:
+      description: '`true` when the response is a stored result replayed for a repeated Idempotency-Key. Absent otherwise.'
+      schema:
+        type: string
+        enum: ['true']
+      example: 'true'
+    X-Hub-Served-By:
+      description: '`primary`, or `failover:<n>` when the failover chain served the request (n = 1-based position). It never names a vendor or account.'
+      schema:
+        type: string
+        pattern: '^(primary|failover:[1-9][0-9]*)$'
+      example: failover:1
+    X-Hub-Integration-Version:
+      description: '**Debug only. Do not act on.** Opaque Hub-side version marker for support tickets. SDKs MUST NOT expose, store or branch on it. It may be absent, and its format may change without notice.'
+      schema:
+        type: string
+      example: '7'
+    X-Hub-Session:
+      description: Returned by step 1 of a multi-step operation. Send it as the `X-Hub-Session` request header on later steps.
+      schema:
+        $ref: '#/components/schemas/SessionId'
+      example: ses_01J9Z6E5F6G7H8J9K0M1N2P3QR
+    Retry-After:
+      description: Seconds to wait before retrying (rounded up from `retry_after_ms`).
+      schema:
+        type: integer
+        minimum: 0
+      example: 30
+
+  requestBodies:
+    CanonicalInvoke:
+      required: true
+      description: |
+        Canonical request body. Its schema is the capability operation's request schema, from
+        `GET /v1/capabilities/{capability}` -> `operations[].request_schema`. The example is for
+        `events.track@v1`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CanonicalRequest'
+          examples:
+            events.track@v1:
+              summary: events.track@v1 - track one event
+              value:
+                user:
+                  id: u_48213
+                event:
+                  name: order_placed
+                  timestamp: '2026-10-31T09:15:00Z'
+                  properties:
+                    order_id: ord_8821
+                    amount_minor: 129900
+                    currency: INR
+                context:
+                  campaign: diwali_2026
+
+  responses:
+    InvokeOk:
+      description: Canonical response for the capability operation (synchronous completion or idempotent replay).
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+        X-Hub-Idempotent-Replay:
+          $ref: '#/components/headers/X-Hub-Idempotent-Replay'
+        X-Hub-Served-By:
+          $ref: '#/components/headers/X-Hub-Served-By'
+        X-Hub-Session:
+          $ref: '#/components/headers/X-Hub-Session'
+        X-Hub-Integration-Version:
+          $ref: '#/components/headers/X-Hub-Integration-Version'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CanonicalResponse'
+          examples:
+            events.track@v1:
+              summary: events.track@v1 response
+              value:
+                status: ok
+                accepted: 1
+                rejected: []
+                vendor_ref: a1b2c3d4e5
+    Accepted:
+      description: Accepted for later delivery (wait window elapsed, async mode, or queued because the upstream is unavailable). Not a success. Poll `poll` or await a callback.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+        X-Hub-Idempotent-Replay:
+          $ref: '#/components/headers/X-Hub-Idempotent-Replay'
+        Location:
+          description: Same as body `poll`.
+          schema:
+            type: string
+          example: /v1/requests/req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Accepted'
+          examples:
+            queued:
+              summary: Upstream circuit open, request parked
+              value:
+                request_id: req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
+                status: queued
+                reason: circuit_open
+                poll: /v1/requests/req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
+            in_flight:
+              summary: Wait window elapsed, worker finishing
+              value:
+                request_id: req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
+                status: in_flight
+                reason: wait_window_elapsed
+                poll: /v1/requests/req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
+    BadRequest:
+      description: Body fails the capability schema, a required header is missing, or a parameter is malformed.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            VALIDATION_FAILED:
+              value:
+                error:
+                  code: VALIDATION_FAILED
+                  message: Request body does not match events.track@v1
+                  retryable: false
+                  retry_after_ms: null
+                  circuit: null
+                  reason: schema
+                  upstream: null
+                  details:
+                    - pointer: /event/name
+                      keyword: required
+                      message: missing required property 'name'
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JR
+            IDEMPOTENCY_KEY_REQUIRED:
+              value:
+                error:
+                  code: IDEMPOTENCY_KEY_REQUIRED
+                  message: This integration requires an Idempotency-Key header
+                  retryable: false
+                  retry_after_ms: null
+                  circuit: null
+                  reason: null
+                  upstream: null
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JS
+    Unauthorized:
+      description: Missing or invalid API key (or, for inbound webhooks, an invalid vendor signature).
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Missing or invalid API key
+              retryable: false
+              retry_after_ms: null
+              circuit: null
+              reason: null
+              upstream: null
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JT
+    Forbidden:
+      description: Tenant is neither owner nor grantee of the integration, or the key lacks the required scope.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: FORBIDDEN
+              message: Tenant is not allowed to invoke this integration
+              retryable: false
+              retry_after_ms: null
+              circuit: null
+              reason: not_granted
+              upstream: null
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JV
+    IntegrationNotFound:
+      description: Unknown integration ID.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: INTEGRATION_NOT_FOUND
+              message: Unknown integration 'int_evt_brandZ'
+              retryable: false
+              retry_after_ms: null
+              circuit: null
+              reason: null
+              upstream: null
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JW
+    InvokeNotFound:
+      description: Unknown integration, unknown operation, or unknown/expired session.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            INTEGRATION_NOT_FOUND:
+              value:
+                error:
+                  code: INTEGRATION_NOT_FOUND
+                  message: Unknown integration 'int_evt_brandZ'
+                  retryable: false
+                  retry_after_ms: null
+                  circuit: null
+                  reason: null
+                  upstream: null
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JW
+            OPERATION_NOT_FOUND:
+              value:
+                error:
+                  code: OPERATION_NOT_FOUND
+                  message: Capability kyc.aadhaar_otp@v1 has no operation 'resend'
+                  retryable: false
+                  retry_after_ms: null
+                  circuit: null
+                  reason: null
+                  upstream: null
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JX
+            SESSION_NOT_FOUND:
+              value:
+                error:
+                  code: SESSION_NOT_FOUND
+                  message: Unknown or expired X-Hub-Session
+                  retryable: false
+                  retry_after_ms: null
+                  circuit: null
+                  reason: null
+                  upstream: null
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JY
+    RequestNotFound:
+      description: Unknown request id, or a request of another tenant.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: REQUEST_NOT_FOUND
+              message: Unknown request
+              retryable: false
+              retry_after_ms: null
+              circuit: null
+              reason: null
+              upstream: null
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JZ
+    CapabilityNotFound:
+      description: Unknown capability, or none of the tenant's integrations use it.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: CAPABILITY_NOT_FOUND
+              message: Unknown capability 'events.trak@v1'
+              retryable: false
+              retry_after_ms: null
+              circuit: null
+              reason: null
+              upstream: null
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9K0
+    SessionNotFound:
+      description: Unknown, expired or already-used hand-off session.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: SESSION_NOT_FOUND
+              message: Unknown or expired session
+              retryable: false
+              retry_after_ms: null
+              circuit: null
+              reason: null
+              upstream: null
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9K1
+    NotFoundGeneric:
+      description: Unknown vendor/account webhook route.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: INTEGRATION_NOT_FOUND
+              message: No inbound webhook route for this path
+              retryable: false
+              retry_after_ms: null
+              circuit: null
+              reason: null
+              upstream: null
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9K2
+    IdempotencyConflict:
+      description: Same Idempotency-Key with a different body, or the original request is still being processed synchronously.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: IDEMPOTENCY_CONFLICT
+              message: Idempotency-Key was already used with a different request body
+              retryable: false
+              retry_after_ms: null
+              circuit: null
+              reason: null
+              upstream: null
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9K3
+    PayloadTooLarge:
+      description: Body exceeds the size limit (1 MB default, 4 MB for LLM capabilities).
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: PAYLOAD_TOO_LARGE
+              message: Request body exceeds 1048576 bytes
+              retryable: false
+              retry_after_ms: null
+              circuit: null
+              reason: null
+              upstream: null
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9K4
+    UpstreamRejected:
+      description: The upstream rejected the request (4xx other than auth/rate limit). The vendor message is passed through in `message`.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+        X-Hub-Integration-Version:
+          $ref: '#/components/headers/X-Hub-Integration-Version'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: UPSTREAM_REJECTED
+              message: event name must not contain spaces
+              retryable: false
+              retry_after_ms: null
+              circuit: null
+              reason: null
+              upstream: { status: 400, code: E_INVALID_EVENT }
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9K5
+    RateLimited:
+      description: Upstream 429, account quota or tenant budget exhausted (`reason` distinguishes them).
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: UPSTREAM_RATE_LIMITED
+              message: Rate limit exceeded
+              retryable: true
+              retry_after_ms: 2000
+              circuit: null
+              reason: tenant_rate_limit
+              upstream: { status: null, code: null }
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9K6
+    InternalError:
+      description: Hub-side failure. `TRANSFORM_FAILED` is always a Hub bug and alerts the platform team. `INTERNAL_ERROR` covers any other unexpected failure.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            TRANSFORM_FAILED:
+              value:
+                error:
+                  code: TRANSFORM_FAILED
+                  message: Request transformation failed; platform team has been alerted
+                  retryable: false
+                  retry_after_ms: null
+                  circuit: null
+                  reason: null
+                  upstream: null
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9K7
+            INTERNAL_ERROR:
+              value:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Unexpected error
+                  retryable: true
+                  retry_after_ms: 1000
+                  circuit: null
+                  reason: null
+                  upstream: null
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9K8
+    UpstreamAuthFailed:
+      description: The upstream rejected the Hub's credentials. This is a Hub-side problem and pages on-call. Do not retry.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: UPSTREAM_AUTH_FAILED
+              message: Upstream rejected Hub credentials; on-call has been paged
+              retryable: false
+              retry_after_ms: null
+              circuit: null
+              reason: null
+              upstream: { status: 401, code: null }
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9K9
+    ServiceUnavailable:
+      description: Upstream unavailable (circuit open or vendor 5xx) or the integration is paused by an admin.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            UPSTREAM_UNAVAILABLE:
+              value:
+                error:
+                  code: UPSTREAM_UNAVAILABLE
+                  message: Vendor circuit is open
+                  retryable: true
+                  retry_after_ms: 30000
+                  circuit: open
+                  reason: circuit_open
+                  upstream: { status: null, code: null }
+                  request_id: req_01J9ABCDEFGHJKMNPQRSTVWXYZ
+            INTEGRATION_PAUSED:
+              value:
+                error:
+                  code: INTEGRATION_PAUSED
+                  message: Integration is paused by an administrator
+                  retryable: true
+                  retry_after_ms: 60000
+                  circuit: null
+                  reason: paused
+                  upstream: null
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KA
+    UpstreamTimeout:
+      description: The upstream exceeded its endpoint timeout (or `X-Request-Deadline`).
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: UPSTREAM_TIMEOUT
+              message: Upstream did not respond within 3000 ms
+              retryable: true
+              retry_after_ms: null
+              circuit: closed
+              reason: null
+              upstream: { status: null, code: null }
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KB
+    CallbackAck:
+      description: Any 2xx acknowledges the callback. The body is ignored.
+      content:
+        application/json:
+          schema:
+            type: object
+          example: { ok: true }
+
+  schemas:
+    Slug:
+      description: Registry identifier (tenant, integration, vendor, account, registrar endpoint). Case-sensitive.
+      type: string
+      pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$'
+    IntegrationId:
+      description: Stable integration ID. Case-sensitive.
+      type: string
+      pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$'
+      examples: [int_evt_brandA]
+    RequestId:
+      description: '`req_` + ULID (Crockford base32, 26 chars).'
+      type: string
+      pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$'
+      examples: [req_01J9Z3K8X2V7Q4M6N8P0R2S4T6]
+    SessionId:
+      description: '`ses_` + ULID.'
+      type: string
+      pattern: '^ses_[0-9A-HJKMNP-TV-Z]{26}$'
+    OperationName:
+      type: string
+      pattern: '^[a-z][a-z0-9_]{0,31}$'
+      examples: [default, generate, verify]
+    CapabilityKey:
+      description: '`<dotted.name>@v<major>`.'
+      type: string
+      pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$'
+      examples: [events.track@v1]
+    DeliveryMode:
+      type: string
+      enum: [sync, wait, async, async_callback]
+    OnCircuitOpen:
+      description: What happens when the upstream is unavailable (DESIGN §5.3). Caller-facing behaviour, not an identity.
+      type: string
+      enum: [fail_fast, failover, queue_if_allowed]
+    CallbackEventType:
+      type: string
+      enum: [request.completed, request.failed, request.expired, delivery.status]
+
+    CanonicalRequest:
+      description: |
+        Canonical request body. Its shape is defined per capability operation: see
+        `GET /v1/capabilities/{capability}` -> `operations[].request_schema`, and
+        `contracts/schemas/capabilities/`. It contains no vendor-specific fields.
+      type: object
+    CanonicalResponse:
+      description: Canonical response body, per capability operation (`operations[].response_schema`). Ignore unknown fields.
+      type: object
+
+    Accepted:
+      description: 202 body (DESIGN §4.3).
+      type: object
+      required: [request_id, status, reason, poll]
+      properties:
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        status:
+          description: '`accepted` = persisted for async delivery. `queued` = parked because the upstream is unavailable. `in_flight` = wait window elapsed and a worker is finishing it.'
+          type: string
+          enum: [accepted, queued, in_flight]
+        reason:
+          description: 'Known values: `async_mode`, `circuit_open`, `wait_window_elapsed`, `respond_async_preferred`. New values may be added.'
+          type: string
+          maxLength: 64
+        poll:
+          description: Relative URL of the request status resource.
+          type: string
+          examples: [/v1/requests/req_01J9Z3K8X2V7Q4M6N8P0R2S4T6]
+
+    ErrorEnvelope:
+      description: The single canonical error envelope.
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/CanonicalError'
+    CanonicalError:
+      $ref: '../schemas/events/canonical-error.json'
+
+    RequestState:
+      description: |
+        Request state (DESIGN §10.9). `accepted -> in_flight -> succeeded | retry_scheduled | parked | dead_lettered | expired`.
+        `failed` is the terminal state of a **sync** request that returned an error (no queue involved).
+        `dead_lettered` may go back to `accepted` on an operator replay.
+      type: string
+      enum: [accepted, in_flight, succeeded, retry_scheduled, parked, dead_lettered, expired, failed]
+    RequestStatus:
+      type: object
+      required: [request_id, integration_id, capability, operation, mode, status, attempts, created_at, updated_at]
+      properties:
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        integration_id:
+          $ref: '#/components/schemas/IntegrationId'
+        capability:
+          $ref: '#/components/schemas/CapabilityKey'
+        operation:
+          $ref: '#/components/schemas/OperationName'
+        mode:
+          $ref: '#/components/schemas/DeliveryMode'
+        status:
+          $ref: '#/components/schemas/RequestState'
+        idempotency_key:
+          type: [string, 'null']
+        attempts:
+          description: Upstream attempts made so far.
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          description: Set when the status is terminal (succeeded, failed, dead_lettered, expired).
+          type: [string, 'null']
+          format: date-time
+        next_attempt_at:
+          type: [string, 'null']
+          format: date-time
+        expires_at:
+          type: [string, 'null']
+          format: date-time
+        result:
+          description: Canonical response when `succeeded`, else null.
+          oneOf:
+            - $ref: '#/components/schemas/CanonicalResponse'
+            - type: 'null'
+        error:
+          description: Canonical error when `failed`, `dead_lettered` or `expired` (code `EXPIRED`), else null.
+          oneOf:
+            - $ref: '#/components/schemas/CanonicalError'
+            - type: 'null'
+
+    DryRunResult:
+      type: object
+      required: [request_id, dry_run, operation, upstream_request, redacted, warnings]
+      properties:
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        dry_run:
+          type: boolean
+          const: true
+        operation:
+          $ref: '#/components/schemas/OperationName'
+        upstream_request:
+          description: Exact upstream HTTP request the Hub would send (secrets replaced by `***`). This is the documented vendor-shape exception.
+          type: object
+          required: [method, url, headers]
+          properties:
+            method:
+              type: string
+              enum: [GET, POST, PUT, PATCH, DELETE]
+            url:
+              type: string
+              format: uri
+            headers:
+              type: object
+              additionalProperties:
+                type: string
+            body:
+              description: JSON body, or a string for non-JSON bodies (see `body_encoding`).
+              type: [object, array, string, 'null']
+            body_encoding:
+              type: string
+              enum: [json, text, base64]
+              default: json
+        redacted:
+          description: Paths (`headers.<name>`, `query.<name>`, `body.<json pointer>`) whose values were replaced by `***`.
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+
+    IntegrationSummary:
+      type: object
+      required: [integration_id, capability, operations, delivery_mode, interactive, paused, moves_money_or_quota, idempotency_key_required]
+      properties:
+        integration_id:
+          $ref: '#/components/schemas/IntegrationId'
+        capability:
+          $ref: '#/components/schemas/CapabilityKey'
+        operations:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OperationName'
+        delivery_mode:
+          $ref: '#/components/schemas/DeliveryMode'
+        interactive:
+          description: A person is waiting. Only `sync` mode is possible, and a 202 is never returned.
+          type: boolean
+        paused:
+          description: Admin kill switch is on. Invocations return 503 `INTEGRATION_PAUSED`.
+          type: boolean
+        moves_money_or_quota:
+          description: The integration moves money or consumes metered upstream quota. Callers (and the MCP server) must confirm before invoking and must send an Idempotency-Key.
+          type: boolean
+        idempotency_key_required:
+          description: Invocations without an Idempotency-Key are rejected with 400 `IDEMPOTENCY_KEY_REQUIRED`. It is always true when `moves_money_or_quota` is true.
+          type: boolean
+        description:
+          type: [string, 'null']
+          maxLength: 1024
+    IntegrationList:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrationSummary'
+        next_cursor:
+          type: [string, 'null']
+    IntegrationDetail:
+      allOf:
+        - $ref: '#/components/schemas/IntegrationSummary'
+        - type: object
+          required: [owned, ttl_ms, on_circuit_open, callback_events, capability_url]
+          properties:
+            owned:
+              description: True if the calling tenant owns the integration (false = it is a grantee).
+              type: boolean
+            wait_ms:
+              description: Wait window for `wait` mode, else null.
+              type: [integer, 'null']
+              minimum: 0
+            ttl_ms:
+              description: How long an accepted request may wait for delivery before it `expired`.
+              type: [integer, 'null']
+              minimum: 0
+            on_circuit_open:
+              $ref: '#/components/schemas/OnCircuitOpen'
+            callback_events:
+              description: Event types delivered to the tenant's registrar endpoints for this integration.
+              type: array
+              items:
+                $ref: '#/components/schemas/CallbackEventType'
+            capability_url:
+              type: string
+              examples: [/v1/capabilities/events.track@v1]
+
+    CapabilityOperation:
+      type: object
+      required: [name, idempotent, request_schema, response_schema]
+      properties:
+        name:
+          $ref: '#/components/schemas/OperationName'
+        description:
+          type: [string, 'null']
+        idempotent:
+          type: boolean
+        request_schema:
+          description: JSON Schema 2020-12 document (with `x-pii` annotations).
+          type: object
+        response_schema:
+          description: JSON Schema 2020-12 document.
+          type: object
+    CapabilityDescriptor:
+      type: object
+      required: [capability, name, major, minor, interactive, operations]
+      properties:
+        capability:
+          $ref: '#/components/schemas/CapabilityKey'
+        name:
+          type: string
+        major:
+          type: integer
+          minimum: 1
+        minor:
+          description: Current additive revision within the major. Caller-facing (capability schema version, DESIGN §6.2), unlike integration versions.
+          type: integer
+          minimum: 0
+        description:
+          type: [string, 'null']
+        interactive:
+          type: boolean
+        operations:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CapabilityOperation'
+
+    InboundWebhookAck:
+      type: object
+      required: [received, request_id]
+      properties:
+        received:
+          type: boolean
+          const: true
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        role:
+          type: string
+          enum: [gateway, worker, scheduler, admin]
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [ok, failing]
+
+    RequestCompletedEvent:
+      $ref: '../schemas/events/request.completed.json'
+    RequestFailedEvent:
+      $ref: '../schemas/events/request.failed.json'
+    RequestExpiredEvent:
+      $ref: '../schemas/events/request.expired.json'
+    DeliveryStatusEvent:
+      $ref: '../schemas/events/delivery.status.json'
+    HubEventEnvelope:
+      $ref: '../schemas/events/envelope.json'

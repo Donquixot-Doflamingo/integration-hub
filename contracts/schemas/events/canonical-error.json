@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CanonicalError",
+  "description": "The canonical caller-facing error object (DESIGN §4.3). Wrapped as {\"error\": CanonicalError} in HTTP error responses, and embedded as-is in request status resources and outbound callback events. Never contains a vendor name, account name or integration/transformer version (D12). Clients MUST treat an unknown `code` by falling back to the HTTP status and `retryable`.",
+  "type": "object",
+  "required": ["code", "message", "retryable", "request_id"],
+  "properties": {
+    "code": {
+      "description": "Canonical error code. DESIGN §4.4 codes plus the hub-public additions listed in contracts/README.md. `IDEMPOTENT_REPLAY` never appears with an HTTP error status (it is signalled by the `X-Hub-Idempotent-Replay` header); `EXPIRED` appears only in request status resources and callbacks.",
+      "type": "string",
+      "enum": [
+        "VALIDATION_FAILED",
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "UNAUTHORIZED",
+        "FORBIDDEN",
+        "INTEGRATION_NOT_FOUND",
+        "OPERATION_NOT_FOUND",
+        "CAPABILITY_NOT_FOUND",
+        "REQUEST_NOT_FOUND",
+        "SESSION_NOT_FOUND",
+        "IDEMPOTENCY_CONFLICT",
+        "IDEMPOTENT_REPLAY",
+        "PAYLOAD_TOO_LARGE",
+        "TRANSFORM_FAILED",
+        "INTERNAL_ERROR",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNAVAILABLE",
+        "UPSTREAM_RATE_LIMITED",
+        "UPSTREAM_REJECTED",
+        "UPSTREAM_AUTH_FAILED",
+        "INTEGRATION_PAUSED",
+        "NOT_READY",
+        "EXPIRED"
+      ]
+    },
+    "message": {
+      "description": "Human-readable message. For UPSTREAM_REJECTED this carries the vendor's message passed through (sanitised: no vendor name, no credentials).",
+      "type": "string",
+      "maxLength": 2048
+    },
+    "retryable": {
+      "description": "Whether the same request may be retried (with the same Idempotency-Key).",
+      "type": "boolean"
+    },
+    "retry_after_ms": {
+      "description": "Suggested minimum wait before retrying, in milliseconds. Mirrors the Retry-After response header (which is in seconds, rounded up).",
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "circuit": {
+      "description": "Breaker state seen by this request when relevant (UPSTREAM_UNAVAILABLE). Not an identifier of any vendor or account.",
+      "type": ["string", "null"],
+      "enum": ["open", "half_open", "closed", null]
+    },
+    "reason": {
+      "description": "Machine-readable sub-reason. Known values: `circuit_open`, `vendor_5xx`, `vendor_rate_limit`, `account_quota`, `tenant_rate_limit`, `budget`, `paused`, `no_active_version`, `ttl_elapsed`, `attempts_exhausted`, `schema`, `missing_scope`, `not_granted`. New values may be added in minor versions.",
+      "type": ["string", "null"],
+      "maxLength": 64
+    },
+    "upstream": {
+      "description": "Vendor-side outcome, stripped of any vendor identity. Present (possibly with null members) for UPSTREAM_* codes.",
+      "type": ["object", "null"],
+      "properties": {
+        "status": { "description": "Vendor HTTP status, if a response was received.", "type": ["integer", "null"], "minimum": 100, "maximum": 599 },
+        "code": { "description": "Vendor error code string, if the vendor returned one. Opaque; do not branch on it.", "type": ["string", "null"], "maxLength": 128 }
+      }
+    },
+    "details": {
+      "description": "Field-level details. For VALIDATION_FAILED: one entry per schema violation with a JSON pointer into the request body.",
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "pointer": { "description": "RFC 6901 JSON pointer into the request body.", "type": "string" },
+          "keyword": { "description": "JSON Schema keyword that failed (e.g. `required`, `type`).", "type": "string" },
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "request_id": {
+      "description": "The Hub request id (`req_` + ULID). Always present.",
+      "type": "string",
+      "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$"
+    }
+  }
+}

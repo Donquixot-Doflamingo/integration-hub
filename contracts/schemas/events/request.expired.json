@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RequestExpiredEvent",
+  "description": "Sent once when a queued/parked/retrying request passes its TTL (`expires_at`) before it could be delivered (DESIGN §10.7). The upstream call was NOT completed; the caller may decide to resubmit with a new Idempotency-Key.",
+  "allOf": [
+    { "$ref": "envelope.json" },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "request.expired" },
+        "data": {
+          "type": "object",
+          "required": ["status", "error", "attempts", "expires_at"],
+          "properties": {
+            "status": { "type": "string", "const": "expired" },
+            "error": {
+              "description": "Always code EXPIRED.",
+              "$ref": "canonical-error.json"
+            },
+            "attempts": { "description": "Attempts made before expiry (may be 0 if it stayed parked).", "type": "integer", "minimum": 0 },
+            "expires_at": { "type": "string", "format": "date-time" },
+            "last_state": {
+              "description": "State the request was in when it expired.",
+              "type": "string",
+              "enum": ["accepted", "retry_scheduled", "parked"]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "examples": [
+    {
+      "event_id": "evt_01J9Z5C3D4E5F6G7H8J9K0M1NR",
+      "type": "request.expired",
+      "spec_version": "1",
+      "occurred_at": "2026-10-31T15:15:00Z",
+      "tenant_id": "orders-service",
+      "integration_id": "int_evt_brandB",
+      "operation": "default",
+      "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JM",
+      "idempotency_key": null,
+      "data": {
+        "status": "expired",
+        "error": {
+          "code": "EXPIRED",
+          "message": "Request passed its TTL before delivery",
+          "retryable": false,
+          "retry_after_ms": null,
+          "circuit": null,
+          "reason": "ttl_elapsed",
+          "upstream": null,
+          "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JM"
+        },
+        "attempts": 0,
+        "expires_at": "2026-10-31T15:15:00Z",
+        "last_state": "parked"
+      }
+    }
+  ]
+}
