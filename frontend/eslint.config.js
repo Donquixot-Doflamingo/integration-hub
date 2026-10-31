@@ -15,6 +15,7 @@ export default ts.config(
 			'playwright-report/',
 			'.claude/',
 			'src/lib/api/schema.d.ts',
+			'src/lib/api/mocks/contract.gen.ts',
 			'static/mockServiceWorker.js'
 		]
 	},
@@ -29,7 +30,10 @@ export default ts.config(
 			// TypeScript already reports undefined identifiers (and knows about generated types).
 			'no-undef': 'off',
 			'@typescript-eslint/no-explicit-any': 'error',
-			'@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
+			'@typescript-eslint/no-unused-vars': [
+				'error',
+				{ argsIgnorePattern: '^_', varsIgnorePattern: '^_' }
+			]
 		}
 	},
 	{

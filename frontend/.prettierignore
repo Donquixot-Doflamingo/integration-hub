@@ -7,6 +7,7 @@ test-results/
 playwright-report/
 .claude/
 src/lib/api/schema.d.ts
+src/lib/api/mocks/contract.gen.ts
 static/mockServiceWorker.js
 
 # Docs owned by the repo-wide process (formatted by hand)

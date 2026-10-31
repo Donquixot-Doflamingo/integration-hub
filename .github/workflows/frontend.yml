@@ -37,11 +37,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install
         run: npm ci
-      - name: Generated API types are fresh (gen:api)
+      - name: Generated API types and mocks are fresh (gen:api)
         run: |
           npm run gen:api
-          git diff --exit-code -- src/lib/api/schema.d.ts || {
-            echo "::error file=frontend/src/lib/api/schema.d.ts::schema.d.ts is stale. Run 'npm run gen:api' in frontend/ and commit the result."
+          git diff --exit-code -- src/lib/api/schema.d.ts src/lib/api/mocks/contract.gen.ts || {
+            echo "::error::Generated API files are stale. Run 'npm run gen:api' in frontend/ and commit the result."
             exit 1
           }
       - name: Type check (svelte-check)

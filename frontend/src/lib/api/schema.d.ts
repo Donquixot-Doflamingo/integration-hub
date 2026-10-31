@@ -1777,13 +1777,13 @@ export interface components {
             method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
             path?: string;
             /** @default 3000 */
-            timeout_ms: number;
+            timeout_ms?: number;
             /** @default 500 */
-            connect_timeout_ms: number;
+            connect_timeout_ms?: number;
             idempotent?: boolean;
             batch_max?: number | null;
             /** @default false */
-            stream: boolean;
+            stream?: boolean;
         };
         VendorEndpointCreate: components["schemas"]["VendorEndpointFields"] & {
             name: string;
@@ -1895,7 +1895,7 @@ export interface components {
              * @default active
              * @enum {string}
              */
-            slot: "active" | "next";
+            slot?: "active" | "next";
             /** @description Defaults to the vendor health-probe endpoint. */
             endpoint_ref?: components["schemas"]["EndpointRefValue"];
         };
@@ -2167,18 +2167,18 @@ export interface components {
         DeliveryPolicy: {
             mode: components["schemas"]["DeliveryMode"];
             /** @default 3000 */
-            wait_ms: number | null;
+            wait_ms?: number | null;
             ttl_ms?: number | null;
             /**
              * @default fail_fast
              * @enum {string}
              */
-            on_circuit_open: "fail_fast" | "failover" | "queue_if_allowed";
+            on_circuit_open?: "fail_fast" | "failover" | "queue_if_allowed";
             /**
              * @default re_resolve
              * @enum {string}
              */
-            pending: "re_resolve" | "pinned";
+            pending?: "re_resolve" | "pinned";
             retry?: {
                 schedule_ms?: number[];
                 max_attempts?: number;
@@ -2210,7 +2210,7 @@ export interface components {
             /** @enum {string} */
             mode: "send" | "dry_run";
             /** @default 1 */
-            sample_ratio: number;
+            sample_ratio?: number;
         };
         /** @description Content of an integration version (DESIGN §3.4). Durations are in ms. */
         IntegrationSpec: {
@@ -2310,7 +2310,7 @@ export interface components {
             description?: string | null;
             grants?: components["schemas"]["Slug"][];
             /** @default false */
-            moves_money_or_quota: boolean;
+            moves_money_or_quota?: boolean;
             reason: components["schemas"]["Reason"];
         };
         IntegrationUpdate: {
@@ -2364,7 +2364,7 @@ export interface components {
                 weight: number;
             }[];
             /** @default true */
-            publish: boolean;
+            publish?: boolean;
             reason: components["schemas"]["Reason"];
         };
         PublishResult: {
@@ -2716,7 +2716,7 @@ export interface components {
             request_ids?: components["schemas"]["RequestIdValue"][];
             filter?: components["schemas"]["DlqFilter"];
             /** @default false */
-            dry_run: boolean;
+            dry_run?: boolean;
             reason: components["schemas"]["Reason"];
         };
         /** @description Exactly one of `request_ids` or `filter`. */
@@ -2724,7 +2724,7 @@ export interface components {
             request_ids?: components["schemas"]["RequestIdValue"][];
             filter?: components["schemas"]["DlqFilter"];
             /** @default false */
-            dry_run: boolean;
+            dry_run?: boolean;
             reason: components["schemas"]["Reason"];
         };
         DlqBulkResult: {

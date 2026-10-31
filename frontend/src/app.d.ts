@@ -14,3 +14,8 @@ declare global {
 }
 
 export {};
+
+declare global {
+	/** True in mock mode (`HUB_API_MOCKING=true`, set by `npm run dev:mock` / `build:mock`). Replaced at build time. */
+	const __API_MOCKING__: boolean;
+}

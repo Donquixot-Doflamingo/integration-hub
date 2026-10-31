@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **186** · done: **13** · todo: **173**
+Total tickets: **186** · done: **14** · todo: **172**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **186** · done: **13** · todo: **173**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 28 | 2 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 28 | 3 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1699,15 +1699,15 @@ Create `frontend/` with SvelteKit, Svelte 5 runes, TypeScript strict, ESLint/Pre
 
 ### HUB-252 — MSW mocks from the contract
 - **Epic:** EP-10 · **Type:** test · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-251 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-251 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `test/HUB-252-fe-msw-mocks`
 
 MSW handlers and typed fixtures for every admin operation so the console is built in parallel with the backend; dev server can run fully on mocks.
 
 **Acceptance criteria**
-- [ ] Every admin operation has a handler typed by the generated client
-- [ ] `npm run dev:mock` runs the console without a backend
-- [ ] Fixtures validated against the contract in a unit test
+- [x] Every admin operation has a handler typed by the generated client
+- [x] `npm run dev:mock` runs the console without a backend
+- [x] Fixtures validated against the contract in a unit test
 
 ### HUB-253 — Auth: OIDC stub login and /me
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

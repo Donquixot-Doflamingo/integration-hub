@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `test(frontend)` · add MSW mocks generated from the admin contract examples · HUB-252 · F-19
+  - All 79 admin operations answer with their contract example (status, ETag, `X-Hub-Request-Id`) via MSW
+  - `npm run dev:mock` runs the console in the browser with no backend; e2e runs against the same mocks
+  - Unit tests validate every success and error fixture against the contract schemas (Ajv, JSON Schema 2020-12)
+  - Typed test overrides: `mockOperation`, `mockError`, `mockPending`, `mockNetworkError`
 - 2026-10-31 · `chore(frontend)` · generate typed admin API client from the contract · HUB-251 · F-19
   - `npm run gen:api` writes `src/lib/api/schema.d.ts` from hub-admin.v1.yaml (79 operations); CI fails when it is stale
   - `adminClient()` wraps openapi-fetch with bearer auth, `X-Hub-Request-Id` capture and a typed `HubApiError` from the error envelope

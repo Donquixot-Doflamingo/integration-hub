@@ -14,7 +14,8 @@ export default defineConfig({
 	},
 	projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 	webServer: {
-		command: `npm run build && npm run preview -- --port ${PORT} --strictPort`,
+		// e2e runs the console on MSW contract mocks (no backend), like `npm run dev:mock`.
+		command: `npm run build:mock && npm run preview -- --port ${PORT} --strictPort`,
 		port: PORT,
 		reuseExistingServer: !process.env.CI,
 		timeout: 120_000
