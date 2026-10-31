@@ -23,6 +23,8 @@ commands:
   set [-file PATH] [-key-file PATH] [-slot active|next] [-version N] ACCOUNT KEY=VALUE...
       Replace one slot of ACCOUNT with the given values. The version defaults to the
       account's highest version + 1. Values must be at least 6 bytes (redaction minimum).
+      ACCOUNT may also be a registrar secret id (secret_ref localfile://<id>) with the value
+      signing_secret=<at least 16 bytes>; -slot next stages a rotation (both secrets sign).
   list [-file PATH] [-key-file PATH]
       Print accounts, slots, versions and key names. Never prints values.
 

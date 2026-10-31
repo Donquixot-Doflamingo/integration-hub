@@ -36,6 +36,20 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - In-progress claims expire after 5 minutes, so a crashed gateway never pins a key; late Complete or Release by a request that lost its claim changes nothing
   - Redis unavailable returns a typed ErrUnavailable within the 50 ms op timeout, for the edge's fail-closed or pass-through decision; responses over 1 MiB and credential headers are never stored
   - New metrics idempotency_hits_total{result}, idempotency_writes_total{op,result} and redis_op_duration_seconds{op}; Begin p99 0.23–0.30 ms against compose Redis (budget 1 ms)
+- 2026-10-31 · `feat(callbacks)` · dispatch signed callbacks with retries and a callback DLQ · HUB-120 · F-11
+  - A callback dispatcher claims due deliveries (FOR UPDATE SKIP LOCKED, never more than its free senders), signs and POSTs them through the SSRF guard and records each outcome with a guarded transition, so concurrent dispatchers never double-send
+  - Failed callbacks retry on their own schedule (5 s, 30 s, 2 min, 10 min, 30 min, 1 h, 2 h, 4 h, 6 h, 6 h, ±20 % jitter; 11 attempts over about 20 h), independent of vendor delivery, then move to the callback DLQ; unknown endpoints and refused URLs dead-letter at once
+  - Every attempt is audited as callback.delivered (hash and size of the body only, never the signature or secret) and counted in callback_deliveries_total, callback_latency_seconds and callback_ssrf_blocked_total; callback_queue_oldest_age_s and callback_dlq_count are sampled every 15 s
+  - Abandoned claims of a crashed dispatcher are retried after 30 s; Run stops cleanly after finishing the attempts it started
+- 2026-10-31 · `feat(callbacks)` · sign callback payloads and enqueue them in the caller's transaction · HUB-120 · F-11
+  - request.completed, request.failed, request.expired and delivery.status bodies are built to contracts/schemas/events (request_id and idempotency_key always present) and checked against the schemas
+  - X-Hub-Signature is t=<unix>,v1=<hex HMAC-SHA256(secret, t.body)>, with one v1 per secret during a rotation overlap; a Verify helper implements the receiver side (5-minute tolerance)
+  - Terminal transitions can write one callback delivery per matching subscription in the same transaction (new table hub.callback_deliveries, migration 00005), so a callback exists only if the transition commits; endpoints of other tenants are never used
+- 2026-10-31 · `feat(callbacks)` · add the SSRF-guarded sender and registrar signing secrets · HUB-119 · F-11
+  - Callbacks go through an SSRF guard: https only, no redirects followed, no environment proxy, 5 s per attempt, optional host allowlist
+  - The guard resolves the host in the dialer and connects to the checked IP, refusing private, loopback, link-local (incl. cloud metadata), CGNAT, multicast, unspecified, documentation, NAT64/6to4/Teredo and IPv4-mapped equivalents, so DNS rebinding after registration cannot reach an internal address
+  - Registrar signing secrets live in the encrypted credential file (hubctl creds set <id> signing_secret=…, -slot next for a rotation overlap), are redacted from logs once loaded and are served from the warm cache without decrypting
+  - A dev/test-only loopback allowance lets local test receivers on 127.0.0.1 use plain http; production wiring does not set it
 - 2026-10-31 · `perf(edge)` · add the overhead benchmark and the M3 summary · HUB-097 · F-06
   - BenchmarkInvokeOverhead measures Hub overhead (handler time minus vendor time) through the real credential cache, upstream client, audit writer and metrics: p99 0.42–0.51 ms with mockvendor at 0 ms (budget 5 ms), each stage reported against DESIGN §18.6
   - docs/milestones/M3.md: acceptance evidence, what was built, deferred work and deviations; F-05 and F-07 shipped, F-06, F-08 and F-21 in progress
