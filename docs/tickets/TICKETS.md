@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **93** · todo: **101** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **94** · todo: **100** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -13,7 +13,7 @@ Total tickets: **195** · done: **93** · todo: **101** · other (in-progress/in
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
-| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 7 |
+| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 8 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
@@ -973,15 +973,15 @@ Apply the §10.3 schedule (+1 s … +1 h, 8 attempts) with full jitter, per-inte
 
 ### HUB-114 — Scheduler role: leader election, due retries, TTL expiry
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-111 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-111 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-114-scheduler-ttl`
 
 Implement the `scheduler` role as a leader-elected singleton (Postgres advisory lock) with hot standby that promotes due retries and expires envelopes past `expires_at` (DESIGN §10.7, §17).
 
 **Acceptance criteria**
-- [ ] Only one scheduler is active; standby takes over within 15 s of leader death
-- [ ] Envelopes past TTL move to `expired` and emit `request.expired`
-- [ ] TTL defaults per capability, overridable per integration
+- [x] Only one scheduler is active; standby takes over within 15 s of leader death
+- [x] Envelopes past TTL move to `expired` and emit `request.expired`
+- [x] TTL defaults per capability, overridable per integration
 
 ### HUB-115 — Async mode and request status endpoint
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend

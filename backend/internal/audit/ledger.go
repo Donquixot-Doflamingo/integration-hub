@@ -128,6 +128,15 @@ func (Ledger) SaveResult(ctx context.Context, db DB, requestID, tenant string, r
 	return nil
 }
 
+// PruneResults deletes kept results past their expiry.
+func (Ledger) PruneResults(ctx context.Context, db DB, now time.Time) (int64, error) {
+	tag, err := db.Exec(ctx, `DELETE FROM hub.request_results WHERE expires_at < $1`, now)
+	if err != nil {
+		return 0, fmt.Errorf("audit: prune results: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 // RequestStatus is the contract RequestStatus (getRequestStatus).
 type RequestStatus struct {
 	RequestID      string               `json:"request_id"`

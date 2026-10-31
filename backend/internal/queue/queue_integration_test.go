@@ -289,7 +289,11 @@ func TestExpireOnlyWaitingEnvelopes(t *testing.T) {
 	_ = q.Enqueue(ctx, p, waiting)
 	_ = q.EnqueueClaimed(ctx, p, claimed, "worker", 30*time.Second) // wait-mode immediate attempt: in_flight at insert
 	due, err := q.DueExpiries(ctx, p, 100)
-	if err != nil || !slices.Contains(due, waiting.RequestID) || slices.Contains(due, claimed.RequestID) {
+	ids := make([]string, 0, len(due))
+	for _, e := range due {
+		ids = append(ids, e.RequestID)
+	}
+	if err != nil || !slices.Contains(ids, waiting.RequestID) || slices.Contains(ids, claimed.RequestID) {
 		t.Fatalf("due %v %v", due, err)
 	}
 	if err := q.Expire(ctx, p, waiting.RequestID); err != nil {

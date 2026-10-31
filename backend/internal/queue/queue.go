@@ -250,18 +250,37 @@ func (o *Outbox) ExpireClaimed(ctx context.Context, db DB, id, worker string) er
 	return guarded(tag, err, "expire", id)
 }
 
-// DueExpiries lists up to n envelopes whose TTL passed while they waited (scheduler).
-func (o *Outbox) DueExpiries(ctx context.Context, db DB, n int) ([]string, error) {
-	rows, err := db.Query(ctx, `SELECT request_id FROM hub.outbox WHERE status IN ('accepted', 'retry_scheduled', 'parked')
+// DueExpiries lists up to n waiting envelopes whose TTL passed (scheduler).
+func (o *Outbox) DueExpiries(ctx context.Context, db DB, n int) ([]core.Envelope, error) {
+	rows, err := db.Query(ctx, `SELECT envelope, attempt FROM hub.outbox WHERE status IN ('accepted', 'retry_scheduled', 'parked')
 		AND expires_at <= $1 ORDER BY expires_at LIMIT $2`, o.now(), n)
 	if err != nil {
 		return nil, fmt.Errorf("queue: due expiries: %w", err)
 	}
-	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	envs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (core.Envelope, error) {
+		var body []byte
+		var e core.Envelope
+		var attempt int
+		if err := row.Scan(&body, &attempt); err != nil {
+			return e, err
+		}
+		err := json.Unmarshal(body, &e)
+		e.Attempt = attempt // the row's count, not the stored envelope's
+		return e, err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("queue: due expiries: %w", err)
 	}
-	return ids, nil
+	return envs, nil
+}
+
+// PruneDeadLetters deletes dead letters older than retention (DESIGN §10.6: 14 days).
+func (o *Outbox) PruneDeadLetters(ctx context.Context, db DB, retention time.Duration) (int64, error) {
+	tag, err := db.Exec(ctx, `DELETE FROM hub.dead_letters WHERE created_at < $1`, o.now().Add(-retention))
+	if err != nil {
+		return 0, fmt.Errorf("queue: prune dead letters: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // Replay puts a dead letter back as accepted, due now (dead_lettered → accepted; operator

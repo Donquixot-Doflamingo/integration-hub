@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(delivery)` · add the leader-elected scheduler with TTL expiry and pruning · HUB-114 · F-09
+  - The scheduler role elects one leader with a Postgres advisory lock held on its own session; a standby takes over within its poll interval (5 s by default) when the leader dies; scheduler_leader shows who leads
+  - Envelopes waiting past their TTL (accepted, retry_scheduled or parked) become expired, with the request.expired terminal event in the same transaction; dead letters older than 14 days and kept results past 7 days are pruned hourly
 - 2026-10-31 · `feat(edge)` · add async and wait delivery, request status and idempotency · HUB-115 · F-09
   - async and async_callback integrations answer 202 (request_id, status accepted, poll, Location) only after the requests row and the outbox envelope committed; a worker delivers
   - wait integrations persist, attempt at once in the gateway and answer 200 (or the canonical error) within wait_ms, else 202 in_flight while the gateway finishes; its claim keeps workers away so the request is never delivered twice
