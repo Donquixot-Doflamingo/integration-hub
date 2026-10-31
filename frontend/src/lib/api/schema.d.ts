@@ -148,7 +148,10 @@ export interface paths {
         };
         /**
          * List accounts
-         * @description Credentialed vendor instances with lifecycle state and credential-slot summary. Secrets are never returned.
+         * @description Credentialed vendor instances with lifecycle state and credential-slot summary. Secrets are
+         *     never returned. Since 1.1.0 each row also carries `dead_letter_count` and
+         *     `dead_letter_oldest_at` (dead letters whose last attempt used the account, within retention;
+         *     filter them with `listDeadLetters?account_id=`).
          */
         get: operations["listAccounts"];
         put?: never;
@@ -576,7 +579,10 @@ export interface paths {
         };
         /**
          * List integrations
-         * @description Summary rows for the integrations list view, including the current targets of the active version.
+         * @description Summary rows for the integrations list view, including the current targets of the active
+         *     version. Filters combine with AND and apply before pagination, so every page holds only
+         *     matching rows. `has_active_version` and `active_version_behind` (since 1.1.0) find
+         *     integrations that were never published and those with a newer version or draft waiting.
          */
         get: operations["listIntegrations"];
         put?: never;
@@ -1843,6 +1849,17 @@ export interface components {
             /** @description Queued requests pinned to this account (pending: pinned) or bound to its vendor sessions. */
             pinned_requests: number;
             open_sessions: number;
+            /**
+             * @description Dead-lettered requests whose last attempt used this account, not yet replayed and still within retention (14 days). Computed from the DLQ store; may lag by up to a minute. Since 1.1.0.
+             * @example 1
+             */
+            dead_letter_count?: number;
+            /**
+             * Format: date-time
+             * @description When the oldest of those entries was dead-lettered; `null` when there are none. Since 1.1.0.
+             * @example 2026-10-31T11:02:40Z
+             */
+            dead_letter_oldest_at?: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1863,6 +1880,17 @@ export interface components {
                 half_open?: number;
                 closed?: number;
             };
+            /**
+             * @description Dead-lettered requests whose last attempt used this account, not yet replayed and still within retention (14 days). Computed from the DLQ store; may lag by up to a minute. Since 1.1.0.
+             * @example 1
+             */
+            dead_letter_count?: number;
+            /**
+             * Format: date-time
+             * @description When the oldest of those entries was dead-lettered; `null` when there are none. Since 1.1.0.
+             * @example 2026-10-31T11:02:40Z
+             */
+            dead_letter_oldest_at?: string | null;
             /** Format: date-time */
             updated_at: string;
         };
@@ -2820,6 +2848,7 @@ export interface components {
         /** @description Invalid parameters or body. */
         BadRequest: {
             headers: {
+                "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                 [name: string]: unknown;
             };
             content: {
@@ -2848,6 +2877,7 @@ export interface components {
         /** @description Missing, expired or invalid OIDC token. */
         Unauthorized: {
             headers: {
+                "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                 [name: string]: unknown;
             };
             content: {
@@ -2870,6 +2900,7 @@ export interface components {
         /** @description The caller's role is below the operation's `x-required-role`, or the object is outside the tenant_viewer scope. */
         Forbidden: {
             headers: {
+                "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                 [name: string]: unknown;
             };
             content: {
@@ -2894,6 +2925,7 @@ export interface components {
         /** @description Object not found (or not visible to this tenant_viewer). */
         NotFound: {
             headers: {
+                "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                 [name: string]: unknown;
             };
             content: {
@@ -2919,6 +2951,7 @@ export interface components {
         /** @description State conflict (already exists, concurrent publish, invalid transition, object in use). */
         Conflict: {
             headers: {
+                "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                 [name: string]: unknown;
             };
             content: {
@@ -2944,6 +2977,7 @@ export interface components {
         /** @description Invalid lifecycle transition, or retire blocked by references. */
         LifecycleConflict: {
             headers: {
+                "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                 [name: string]: unknown;
             };
             content: {
@@ -2953,6 +2987,7 @@ export interface components {
         /** @description If-Match did not match the current ETag. */
         PreconditionFailed: {
             headers: {
+                "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                 [name: string]: unknown;
             };
             content: {
@@ -2977,6 +3012,7 @@ export interface components {
         /** @description Publish-time validation failed (DESIGN §6.4). The report is in `error.meta.report`, and failing checks are also in `details`. */
         PublishValidationFailed: {
             headers: {
+                "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                 [name: string]: unknown;
             };
             content: {
@@ -3028,6 +3064,7 @@ export interface components {
         /** @description Unexpected server error. */
         InternalError: {
             headers: {
+                "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                 [name: string]: unknown;
             };
             content: {
@@ -3153,6 +3190,11 @@ export interface components {
     requestBodies: never;
     headers: {
         /**
+         * @description Hub request id for this admin call (`req_` + ULID). Present on every response, success or error. Equals `error.request_id` on errors. Operators paste it into the request explorer and support tickets.
+         * @example req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
+         */
+        "X-Hub-Request-Id": components["schemas"]["RequestIdValue"];
+        /**
          * @description Opaque entity tag (quoted revision or version).
          * @example "3"
          */
@@ -3174,6 +3216,7 @@ export interface operations {
             /** @description Current user. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3230,6 +3273,7 @@ export interface operations {
             /** @description A page of vendors. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3315,6 +3359,7 @@ export interface operations {
             /** @description Created. */
             201: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -3390,6 +3435,7 @@ export interface operations {
             /** @description Vendor. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -3521,6 +3567,7 @@ export interface operations {
             /** @description Updated. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -3589,6 +3636,7 @@ export interface operations {
             /** @description A page of endpoints. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3654,6 +3702,7 @@ export interface operations {
             /** @description Created. */
             201: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3707,6 +3756,7 @@ export interface operations {
             /** @description Endpoint. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3771,6 +3821,7 @@ export interface operations {
             /** @description A page of accounts. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3791,6 +3842,26 @@ export interface operations {
                      *             "half_open": 0,
                      *             "closed": 1
                      *           },
+                     *           "dead_letter_count": 1,
+                     *           "dead_letter_oldest_at": "2026-10-31T11:02:40Z",
+                     *           "updated_at": "2026-10-30T12:00:00Z"
+                     *         },
+                     *         {
+                     *           "account_id": "ct-brandA-in-v2",
+                     *           "vendor_id": "clevertap",
+                     *           "region": "in",
+                     *           "state": "active",
+                     *           "active_cred_version": 1,
+                     *           "next_cred_version": null,
+                     *           "credential_expires_at": null,
+                     *           "integrations_using": 1,
+                     *           "breaker_states": {
+                     *             "open": 0,
+                     *             "half_open": 0,
+                     *             "closed": 1
+                     *           },
+                     *           "dead_letter_count": 0,
+                     *           "dead_letter_oldest_at": null,
                      *           "updated_at": "2026-10-30T12:00:00Z"
                      *         }
                      *       ],
@@ -3843,6 +3914,7 @@ export interface operations {
             /** @description Created. */
             201: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -3908,6 +3980,7 @@ export interface operations {
             /** @description Account. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -3944,6 +4017,8 @@ export interface operations {
                      *       ],
                      *       "pinned_requests": 0,
                      *       "open_sessions": 0,
+                     *       "dead_letter_count": 1,
+                     *       "dead_letter_oldest_at": "2026-10-31T11:02:40Z",
                      *       "created_at": "2026-06-01T10:00:00Z",
                      *       "updated_at": "2026-10-30T12:00:00Z"
                      *     }
@@ -3993,6 +4068,7 @@ export interface operations {
             /** @description Updated. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -4069,6 +4145,7 @@ export interface operations {
             /** @description Probe outcome (also 200 when the probe fails; see `ok`). */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4128,6 +4205,7 @@ export interface operations {
             /** @description Next credential stored. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4192,6 +4270,7 @@ export interface operations {
             /** @description Promoted. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4256,6 +4335,7 @@ export interface operations {
             /** @description Deleted. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4313,6 +4393,7 @@ export interface operations {
             /** @description Transitioned. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4380,6 +4461,7 @@ export interface operations {
             /** @description A page of capabilities. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4457,6 +4539,7 @@ export interface operations {
             /** @description Created. */
             201: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4525,6 +4608,7 @@ export interface operations {
             /** @description Capability version. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4599,6 +4683,7 @@ export interface operations {
             /** @description A page of capability versions (schemas omitted; fetch one with getCapability). */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4675,6 +4760,7 @@ export interface operations {
             /** @description Created. */
             201: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4769,6 +4855,7 @@ export interface operations {
             /** @description A page of transformers. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4840,6 +4927,7 @@ export interface operations {
             /** @description Transformation output. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4906,6 +4994,7 @@ export interface operations {
             /** @description Golden results (200 even when some fail; see `passed`). */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4957,6 +5046,7 @@ export interface operations {
             /** @description Transformer. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5044,6 +5134,7 @@ export interface operations {
             /** @description A page of versions. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5142,6 +5233,7 @@ export interface operations {
             /** @description Created. */
             201: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5219,6 +5311,7 @@ export interface operations {
             /** @description Transformer version. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5297,6 +5390,22 @@ export interface operations {
                  */
                 paused?: boolean;
                 /**
+                 * @description `true`: only integrations with an active (published) version. `false`: only integrations
+                 *     without one (created but never published; invocations answer 503 `INTEGRATION_PAUSED`
+                 *     with reason `no_active_version`). Omitted: no filter. Since 1.1.0.
+                 * @example false
+                 */
+                has_active_version?: boolean;
+                /**
+                 * @description `true`: only integrations that have an active version and something newer waiting: a
+                 *     newer version (`latest_version` > `active_version`) or a draft (`has_draft`). `false`:
+                 *     only integrations whose active version is the latest, with no draft. Integrations
+                 *     without an active version match neither value (use `has_active_version=false`).
+                 *     Omitted: no filter. Since 1.1.0.
+                 * @example true
+                 */
+                active_version_behind?: boolean;
+                /**
                  * @description Case-insensitive substring match on id and display name.
                  * @example brand
                  */
@@ -5321,6 +5430,7 @@ export interface operations {
             /** @description A page of integrations. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5386,6 +5496,7 @@ export interface operations {
             /** @description Created. */
             201: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -5439,6 +5550,7 @@ export interface operations {
             /** @description Integration. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -5553,6 +5665,7 @@ export interface operations {
             /** @description Updated. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -5625,6 +5738,7 @@ export interface operations {
             /** @description A page of versions. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5740,6 +5854,7 @@ export interface operations {
             /** @description Draft created. */
             201: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5834,6 +5949,7 @@ export interface operations {
             /** @description Integration version. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5963,6 +6079,7 @@ export interface operations {
             /** @description Draft updated. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6062,6 +6179,7 @@ export interface operations {
             /** @description Validation report (200 even when invalid; see `valid`). */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6168,6 +6286,7 @@ export interface operations {
             /** @description Published. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6222,6 +6341,7 @@ export interface operations {
             /** @description Rolled back. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6277,6 +6397,7 @@ export interface operations {
             /** @description Diff. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6347,6 +6468,7 @@ export interface operations {
             /** @description Paused. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6408,6 +6530,7 @@ export interface operations {
             /** @description Resumed. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6483,6 +6606,7 @@ export interface operations {
             /** @description New version created (and published if requested). */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6537,6 +6661,7 @@ export interface operations {
             /** @description A page of tenants. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6593,6 +6718,7 @@ export interface operations {
             /** @description Created. */
             201: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -6645,6 +6771,7 @@ export interface operations {
             /** @description Tenant. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -6712,6 +6839,7 @@ export interface operations {
             /** @description Updated. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -6780,6 +6908,7 @@ export interface operations {
             /** @description A page of keys. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6840,6 +6969,7 @@ export interface operations {
             /** @description Created. Store `secret` now. It cannot be retrieved again. */
             201: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6891,6 +7021,7 @@ export interface operations {
             /** @description Key. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6946,6 +7077,7 @@ export interface operations {
             /** @description Revoked. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7007,6 +7139,7 @@ export interface operations {
             /** @description Rotated. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7083,6 +7216,7 @@ export interface operations {
             /** @description A page of endpoints. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7139,6 +7273,7 @@ export interface operations {
             /** @description Created. */
             201: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -7189,6 +7324,7 @@ export interface operations {
             /** @description Endpoint. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -7240,6 +7376,7 @@ export interface operations {
             /** @description Deleted. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7293,6 +7430,7 @@ export interface operations {
             /** @description Updated. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -7353,6 +7491,7 @@ export interface operations {
             /** @description Rotated. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7407,6 +7546,7 @@ export interface operations {
             /** @description A page of snapshots. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7460,6 +7600,7 @@ export interface operations {
             /** @description Latest snapshot metadata. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -7482,6 +7623,7 @@ export interface operations {
             /** @description No newer snapshot within `wait`. */
             304: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -7511,6 +7653,7 @@ export interface operations {
             /** @description Snapshot. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -7562,6 +7705,7 @@ export interface operations {
             /** @description Snapshot blob. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
@@ -7659,6 +7803,7 @@ export interface operations {
             /** @description A page of requests. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7714,6 +7859,7 @@ export interface operations {
             /** @description Request. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7784,6 +7930,7 @@ export interface operations {
             /** @description Timeline. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7905,6 +8052,7 @@ export interface operations {
             /** @description Attempts. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7969,6 +8117,7 @@ export interface operations {
             /** @description Unsealed events. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     /**
                      * @description Always `no-store`.
                      * @example no-store
@@ -8074,6 +8223,7 @@ export interface operations {
             /** @description A page of DLQ entries. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -8124,6 +8274,7 @@ export interface operations {
             /** @description DLQ entry. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -8218,6 +8369,7 @@ export interface operations {
             /** @description Replay result. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -8264,6 +8416,7 @@ export interface operations {
             /** @description Purge result. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -8323,6 +8476,7 @@ export interface operations {
             /** @description A page of breakers. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -8381,6 +8535,7 @@ export interface operations {
             /** @description Breaker. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -8478,6 +8633,7 @@ export interface operations {
             /** @description Forced open. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -8546,6 +8702,7 @@ export interface operations {
             /** @description Forced closed. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -8613,6 +8770,7 @@ export interface operations {
             /** @description Force cleared. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -8702,6 +8860,7 @@ export interface operations {
             /** @description A page of change-log entries. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -8752,6 +8911,7 @@ export interface operations {
             /** @description Change-log entry. */
             200: {
                 headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
                     [name: string]: unknown;
                 };
                 content: {

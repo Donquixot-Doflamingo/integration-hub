@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: Integration Hub - Caller API
-  version: 1.0.0
+  version: 1.0.1
   summary: The vendor-agnostic API internal services call to reach any third party.
   description: |
     Callers send a **stable integration ID** plus a **canonical request body** and get a canonical
@@ -665,7 +665,9 @@ paths:
       description: |
         200 when the node can serve traffic: a config snapshot is loaded and Postgres and Redis are
         reachable (for the roles that need them). 503 `NOT_READY` otherwise, with one `details`
-        entry per failing check.
+        entry per failing check. Each entry carries only `message`, naming the check (for example
+        `redis unreachable`); there is no request body, so there is no `pointer`. Like every error,
+        the body carries `request_id`, equal to the `X-Hub-Request-Id` header.
       security: []
       responses:
         '200':
@@ -696,12 +698,8 @@ paths:
                   message: Node is not ready
                   retryable: true
                   retry_after_ms: 1000
-                  circuit: null
-                  reason: null
-                  upstream: null
                   details:
-                    - pointer: /checks/snapshot
-                      message: no config snapshot loaded yet
+                    - message: redis unreachable
                   request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JQ
 
 webhooks:
