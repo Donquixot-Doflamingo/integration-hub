@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **190** · done: **34** · todo: **156**
+Total tickets: **190** · done: **35** · todo: **155**
 
 ## Epics
 
@@ -10,7 +10,7 @@ Total tickets: **190** · done: **34** · todo: **156**
 | --- | --- | --- | --- | --- | --- | --- |
 | EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
-| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 5 |
+| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 6 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 0 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
@@ -462,7 +462,7 @@ Validate the whole config set: referenced vendors/accounts/transformers/endpoint
 **Acceptance criteria**
 - [x] Table test with ≥ 15 invalid configs, each asserting the exact error path and message
 - [x] All errors are reported in one pass, not just the first
-- [ ] Valid dev config produces zero errors
+- [x] Valid dev config produces zero errors
 
 ### HUB-044 — Snapshot build and atomic swap
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
@@ -490,15 +490,15 @@ Watch `config/` in dev, debounce changes, rebuild and swap the snapshot; an inva
 
 ### HUB-046 — Dev config set
 - **Epic:** EP-02 · **Type:** chore · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-043 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-043 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `chore/HUB-046-dev-config`
 
 Add `config/` with `events.track@v1`, vendor `clevertap` pointing at mockvendor, accounts `ct-brandA-in`, `ct-brandB-us`, tenant `orders-service`, integrations `int_evt_brandA`, `int_evt_brandB`, `int_evt_brandB_min` (DESIGN §19 M1).
 
 **Acceptance criteria**
-- [ ] Dev config loads and validates with zero errors
-- [ ] Account credentials reference the local encrypted file, never plaintext
-- [ ] Capability schema matches `contracts/schemas/capabilities/`
+- [x] Dev config loads and validates with zero errors
+- [x] Account credentials reference the local encrypted file, never plaintext
+- [x] Capability schema matches `contracts/schemas/capabilities/`
 
 ### HUB-047 — Postgres registry tables and sqlc queries
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend

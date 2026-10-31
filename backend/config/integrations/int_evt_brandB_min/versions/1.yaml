@@ -1,0 +1,28 @@
+# DESIGN §3.4, minus the moengage failover (no second engagement vendor in dev yet).
+integration: int_evt_brandB_min
+owner_tenant: orders-service
+grants: []
+capability: events.track@v1
+version: 1
+targets:
+  - vendor: clevertap
+    account: ct-brandB-us
+    transformer: { request: T2@3, response: R2@1 }
+    weight: 100
+delivery:
+  mode: wait
+  wait_ms: 3000
+  ttl: 6h
+  on_circuit_open: queue_if_allowed
+  pending: re_resolve
+breaker:
+  override: { open_after_consecutive_timeouts: 3 }
+webhooks:
+  - event: delivery.status
+    endpoint: reg_orders_cb
+audit:
+  payloads: masked
+  retention: 30d
+publish:
+  author: platform-team
+  reason: "brand B needs campaign field"

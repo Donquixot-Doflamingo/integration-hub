@@ -1,0 +1,12 @@
+# Dev transformer for mockvendor, from DESIGN §7.4. The CleverTap payload shape is illustrative:
+# before production, verify field names, endpoint and auth headers against the current CleverTap
+# upload API docs and set docs_url (AGENTS §3.3). Compiled by internal/transform from M2.
+# Minimal response: the caller only wants status and vendor_ref.
+transformer: R2
+version: 1
+kind: response
+capability: events.track@v1
+response:
+  # Expressions containing ": " (the ternary) must be quoted to be valid YAML.
+  status:     'len(res.body.unprocessed ?? []) == 0 ? "ok" : "partial"'
+  vendor_ref: header(res, "X-Request-Id")

@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `chore(config)` · add the M1 dev registry config · HUB-046 · F-03
+  - backend/config: events.track@v1 (schema from contracts/), vendor clevertap on mockvendor, accounts ct-brandA-in / ct-brandB-us (localfile credentials), transformers T1@7, T2@3, R1@2, R2@1, integrations int_evt_brandA (v1–v2), int_evt_brandB, int_evt_brandB_min, tenant orders-service, registrar reg_orders_cb
+  - Dev config builds with zero problems; a documented test-only dev API key resolves to orders-service
+  - Expressions with ': ' must be quoted in transformer YAML (the DESIGN §7.4 examples are not valid YAML as printed)
 - 2026-10-31 · `feat(registry)` · build immutable snapshots and swap them atomically · HUB-044 · F-03
   - registry.Build = load + validate + index; snapshots carry a sha256 checksum over every config file and capability schema
   - registry.Store publishes snapshots through an atomic pointer with strictly increasing versions; readers are lock-free and keep a consistent view

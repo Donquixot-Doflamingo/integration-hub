@@ -1,0 +1,28 @@
+# Dev transformer for mockvendor, from DESIGN §7.4. The CleverTap payload shape is illustrative:
+# before production, verify field names, endpoint and auth headers against the current CleverTap
+# upload API docs and set docs_url (AGENTS §3.3). Compiled by internal/transform from M2.
+transformer: R1
+version: 2
+kind: response
+capability: events.track@v1
+response:
+  # Expressions containing ": " (the ternary) must be quoted to be valid YAML.
+  status:     'len(res.body.unprocessed ?? []) == 0 ? "ok" : "partial"'
+  accepted:   res.body.processed
+  rejected:   res.body.unprocessed
+  vendor_ref: header(res, "X-Request-Id")
+  raw:        res.body
+errors:
+  - when: res.status == 401 || res.status == 403
+    code: UPSTREAM_AUTH_FAILED
+    retryable: false
+  - when: res.status == 429
+    code: UPSTREAM_RATE_LIMITED
+    retryable: true
+    retry_after_ms: int(header(res, "Retry-After") ?? "1") * 1000
+  - when: res.status >= 500
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+  - when: res.status >= 400
+    code: UPSTREAM_REJECTED
+    retryable: false

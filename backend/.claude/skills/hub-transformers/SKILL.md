@@ -39,6 +39,13 @@ batch: { path: d, max: 1000 }
 ```
 Left side = target path; right side = an `expr-lang/expr` expression. Literal strings must be quoted *inside* YAML (`'"event"'`). ~80 % of lines should be plain paths.
 
+### YAML quoting (the §7.4 examples are not valid YAML as printed)
+An expression is a YAML scalar, so YAML syntax wins:
+- Quote any expression containing `: ` (the ternary `c ? "a" : "b"`, inline maps): `status: 'len(res.body.unprocessed ?? []) == 0 ? "ok" : "partial"'`.
+- Write a multi-line expression as a block scalar (`>-`), e.g. `evtData: >-` followed by the `merge(..., { brand: ..., campaign: ... })` lines.
+- String literals inside expressions keep their double quotes inside single-quoted YAML: `type: '"event"'`.
+The registry loader rejects invalid YAML with `file: line N: ...` (found in M1 on the dev config).
+
 ## Expression context (§7.2)
 | Var | Available in | Notes |
 | --- | --- | --- |

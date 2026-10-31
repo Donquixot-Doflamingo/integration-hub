@@ -1,0 +1,4 @@
+# events.track@v1: the schema lives in contracts/ (ADR-0004); this file only points at it.
+capability: events.track@v1
+schema_ref: schemas/capabilities/events.track.v1.request.json
+default_ttl: 6h
