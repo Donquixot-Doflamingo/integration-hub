@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `chore(backend)` · create Go module and package layout · HUB-020 · F-01
+  - backend/go.mod (module github.com/Donquixot-Doflamingo/integration-hub/backend, go 1.25 minimum)
+  - Every DESIGN §18.1 package with doc.go, plus internal/core and internal/testkit (ADR-0001 accepted)
+  - internal/archtest enforces the TECH_SPEC §4.1 import table
 - 2026-10-31 · `chore(infra)` · install and record the dev toolchain · HUB-012 · F-01
   - Go 1.27.3, Node 22.23.4, Docker 29.9.2 + Compose 5.6.1 on Colima, golangci-lint 2.15.0 installed via Homebrew
   - Versions and PATH notes recorded in TECH_SPEC §3

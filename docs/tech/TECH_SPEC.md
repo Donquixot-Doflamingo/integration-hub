@@ -143,7 +143,7 @@ integration-hub/
 └── docs/{DESIGN.md, product/, features/, tech/, tickets/, process/}
 ```
 
-`internal/*` matches DESIGN §18.1 exactly, except the proposed `internal/core` (§4.1). Binary-private code lives under `cmd/<bin>/internal/` so it cannot be imported by other binaries and does not add top-level packages.
+`internal/*` matches DESIGN §18.1, plus `internal/core` (shared leaf types, ADR-0001) and `internal/testkit` (test-only helpers such as the in-process mockvendor). Binary-private code lives under `cmd/<bin>/internal/` so it cannot be imported by other binaries and does not add top-level packages.
 
 ---
 
@@ -155,7 +155,7 @@ Packages may import only packages in **lower** layers (or the same layer where l
 | Layer | Package | May import (internal) | Never imports |
 | --- | --- | --- | --- |
 | L0 | `telemetry` | nothing internal (stdlib, OTel, Prometheus client only) | everything else — **leaf** |
-| L0 | `core` (proposed) | nothing internal | everything else — **leaf**. Holds IDs (ULID request ids), `Envelope`, canonical error codes (DESIGN §4.4), `VendorRequest`/`VendorResponse`, `Outcome`, `Mode`, request states (DESIGN §10.9) |
+| L0 | `core` | nothing internal | everything else — **leaf**. Holds IDs (ULID request ids), `Envelope`, canonical error codes (DESIGN §4.4), `VendorRequest`/`VendorResponse`, `Outcome`, `Mode`, request states (DESIGN §10.9) |
 | L1 | `transform` | core, telemetry | registry, upstream, creds (gets `creds` as a plain map in `TransformInput`) |
 | L2 | `registry` | core, transform, telemetry | resolve, creds, upstream, queue, any app package |
 | L3 | `resolve` | core, registry, telemetry | transform execution, upstream, queue |
@@ -169,6 +169,7 @@ Packages may import only packages in **lower** layers (or the same layer where l
 | L7 | `edge` | core, registry, resolve, transform, creds, upstream, queue, sessions, audit, delivery (shared `Attempter`), telemetry | webhooks, control |
 | L7 | `webhooks` | core, registry, transform, audit, callbacks, telemetry | edge, delivery, control |
 | L7 | `control` | core, registry, transform, resolve, creds, upstream, queue, audit, sessions, telemetry | edge, delivery, webhooks |
+| test | `testkit` | nothing internal (core and telemetry allowed) | must never be imported by production code; only `cmd/mockvendor` and `_test.go` files use it |
 | bin | `cmd/*` | anything | — |
 | SDK | `pkg/hubclient` | **nothing** under `internal/` (public SDK; wire types are its own or generated) | internal/* |
 
@@ -209,7 +210,7 @@ sqlc generates per-owner query packages (`internal/<pkg>/db`). A transaction tha
 
 ### 4.4 Enforcement
 - `golangci-lint` `depguard` rules generated from the table above (`backend/.golangci.yml`).
-- A unit test `internal/archtest` (or `go list -deps` in `make lint`) fails if any edge outside the table exists.
+- `internal/archtest` (unit test, runs in `make test`) fails if any internal edge outside the table exists, if `pkg/`, `cmd/mockvendor` or `cmd/hubmcp` import `internal/` (other than `testkit` for mockvendor), or if production code imports `testkit`.
 - `telemetry` and `core` have a test asserting zero internal imports.
 
 ---

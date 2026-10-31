@@ -225,15 +225,15 @@ Walk the user through the open questions that the contracts did not settle (PRD 
 
 ### HUB-020 — Create backend Go module and package layout
 - **Epic:** EP-01 · **Type:** chore · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-012 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-012 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-020-go-module-layout`
 
 Create `backend/go.mod` (`github.com/Donquixot-Doflamingo/integration-hub/backend`) and the empty package layout from DESIGN §18.1 (`cmd/hub`, `cmd/hubctl`, `cmd/mockvendor`, `cmd/hubmcp`, `internal/*`, `pkg/hubclient`, `config/`, `migrations/`).
 
 **Acceptance criteria**
-- [ ] `go build ./...` succeeds in `backend/`
-- [ ] Every §18.1 package exists with a `doc.go` describing its responsibility
-- [ ] `go vet ./...` is clean
+- [x] `go build ./...` succeeds in `backend/`
+- [x] Every §18.1 package exists with a `doc.go` describing its responsibility
+- [x] `go vet ./...` is clean
 
 ### HUB-021 — Makefile targets and golangci-lint config
 - **Epic:** EP-01 · **Type:** chore · **Area:** infra
