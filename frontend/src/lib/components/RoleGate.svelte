@@ -17,7 +17,8 @@
 	}: {
 		access: Access;
 		min?: Role;
-		children: Snippet;
+		/** Optional: a gate can carry only the `denied` note (e.g. before a screen's controls exist). */
+		children?: Snippet;
 		/** Receives the role that would be needed, e.g. to say "Needs the Editor role". */
 		denied?: Snippet<[string]>;
 	} = $props();
@@ -26,7 +27,7 @@
 </script>
 
 {#if allowed}
-	{@render children()}
+	{@render children?.()}
 {:else}
 	{@render denied?.(roleLabels[min])}
 {/if}

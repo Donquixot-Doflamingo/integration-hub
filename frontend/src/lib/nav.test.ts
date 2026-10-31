@@ -33,6 +33,10 @@ describe('breadcrumbsFor', () => {
 		{
 			path: '/integrations/int_evt_brandA/versions',
 			want: ['Console', 'Integrations', 'int_evt_brandA', 'versions']
+		},
+		{
+			path: '/integrations/int_evt_brandA/versions/8',
+			want: ['Console', 'Integrations', 'int_evt_brandA', 'v8']
 		}
 	])('$path', ({ path, want }) => {
 		const crumbs = breadcrumbsFor(path);

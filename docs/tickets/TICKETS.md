@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **193** · done: **33** · todo: **160**
+Total tickets: **193** · done: **34** · todo: **159**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **193** · done: **33** · todo: **160**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 34 | 8 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 34 | 9 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1794,15 +1794,15 @@ Searchable, filterable list of integrations (tenant, capability, paused, active 
 
 ### HUB-257 — Integration detail and version history
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-256 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-256 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `feat/HUB-257-fe-integration-detail`
 
 Detail page with active version spec (targets, weights, failover, delivery, breaker, webhooks, audit) and version history with author, reason, date.
 
 **Acceptance criteria**
-- [ ] History shows every version newest first
-- [ ] Active version clearly marked
-- [ ] Component tests against MSW
+- [x] History shows every version newest first (follows `next_cursor` across pages, sorted by version)
+- [x] Active version clearly marked ("Active" badge in text + icon, and the "Active version vN" section)
+- [x] Component tests against MSW (`routes/(app)/integrations/[integration_id]/page.test.ts`)
 
 ### HUB-258 — Version diff view
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

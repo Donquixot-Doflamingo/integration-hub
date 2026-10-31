@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import type { IntegrationSummary } from '$lib/api/types';
 	import Icon from '$lib/components/Icon.svelte';
 	import ListView from '$lib/components/ListView.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Pager from '$lib/components/Pager.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { sectionFor } from '$lib/nav';
+	import { integrationStatus } from '$lib/status';
 	import { formatUtc } from '$lib/utils/format';
 	import { DEFAULT_PAGE_SIZE, PAGE_SIZES, type Paging } from '$lib/utils/paging';
 	import type { PageData } from './$types';
@@ -42,13 +42,6 @@
 		);
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- hrefFor builds on resolve()
 		goto(hrefFor(next, firstPage(limit ?? DEFAULT_PAGE_SIZE)), { keepFocus: true, noScroll: true });
-	}
-
-	function state(i: IntegrationSummary) {
-		if (i.paused) return { tone: 'neutral', icon: 'pause', label: 'Paused' } as const;
-		if (i.active_version == null)
-			return { tone: 'warn', icon: 'alert', label: 'No active version' } as const;
-		return { tone: 'ok', icon: 'closed', label: 'Live' } as const;
 	}
 </script>
 
@@ -182,9 +175,12 @@
 	onretry={invalidateAll}
 >
 	{#snippet row(i)}
-		{@const s = state(i)}
+		{@const s = integrationStatus(i)}
 		<th scope="row" class:paused={i.paused}>
-			<code class="id">{i.integration_id}</code>
+			<a
+				href={resolve('/(app)/integrations/[integration_id]', { integration_id: i.integration_id })}
+				><code class="id">{i.integration_id}</code></a
+			>
 			{#if i.description}<span class="desc">{i.description}</span>{/if}
 		</th>
 		<td>{i.owner_tenant}</td>

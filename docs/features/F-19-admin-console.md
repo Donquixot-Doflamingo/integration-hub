@@ -114,6 +114,7 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-253 | Auth behind an `AuthProvider` interface: dev role-picker provider (mock / `PUBLIC_AUTH_MODE=dev`), OIDC placeholder (HUB-282); signed httpOnly session cookie; `/login`, `POST /logout`; redirect to login with `next`; `/me`-based `access` and `RoleGate` for mutation controls |
 | HUB-255 | Shared states: `AsyncView` (keeps data while refetching), `ListView`, `ErrorPanel` (code, message, hint, details, retry helps, request id + copy), `EmptyState` (none vs filtered), `Skeleton`, `ErrorPage` for both error routes; a test enforces their use on every page |
 | HUB-256 | Integrations list: search, owner tenant (a select of own tenants for tenant viewers), capability, paused, vendor and account filters plus page size in the URL; removable chips and Clear all; cursor paging with Previous/Next kept in the URL; Paused / No active version / draft marked in text |
+| HUB-257 | Integration detail `/integrations/{id}`: status, owner, capability, versions, grants, money flag, paused reason; active spec (targets + weights, failover, delivery, breaker override, webhooks, audit, shadow); full version history newest first (all pages) with Active/Draft marked; version page `/integrations/{id}/versions/{n}`; read-only note for viewer and tenant viewer via `RoleGate` |
 | HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
@@ -128,3 +129,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-10-31 | HUB-253: auth design, config and security notes | frontend-engineer |
 | 2026-10-31 | HUB-255: shared state components | frontend-engineer |
 | 2026-10-31 | HUB-256: integrations list; CCR-002 | frontend-engineer |
+| 2026-10-31 | HUB-257: integration detail and version history | frontend-engineer |

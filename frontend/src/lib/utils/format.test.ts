@@ -20,6 +20,9 @@ describe('format', () => {
 		[61_000, '61 s'],
 		[5_400_000, '90 min'],
 		[14_400_000, '4 h'],
+		[21_600_000, '6 h'],
+		[2_592_000_000, '30 d'],
+		[7_776_000_000, '90 d'],
 		[null, '-']
 	])('formatDurationMs(%s) = %s', (ms, want) => expect(formatDurationMs(ms)).toBe(want));
 

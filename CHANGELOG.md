@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add integration detail page and version history · HUB-257 · F-19
+  - Integration ids in the list open a detail page: status, owner tenant, capability, active and latest version, grants, money flag and pause reason
+  - The active version's spec in plain terms: targets with weights and transformers, failover order, delivery, breaker override, webhooks, audit and shadow traffic
+  - Version history lists every version newest first with author, reason and dates; the active version and drafts are labelled; each version opens its own page with its spec
+  - Viewers and tenant viewers see a read-only note where editors will get publish, rollback, weights and pause (HUB-259/260)
+
 - 2026-10-31 · `feat(frontend)` · add integrations list with URL filters and cursor paging · HUB-256 · F-19
   - Search and filter integrations by owner tenant, capability, paused state, vendor and account; tenant viewers pick among their own tenants and see no vendor or account filters
   - Filters and page size live in the URL (shareable, survive reload), show as removable chips with "Clear all", and reset paging when changed
