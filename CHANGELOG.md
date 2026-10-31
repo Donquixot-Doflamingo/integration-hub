@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(features)` · add feature docs F-01 to F-22 with template and index · HUB-003 · F-01..F-22
+  - Feature template and index
+  - One doc per feature with contract operationIds, observability, security, failure modes and tests
 - 2026-10-31 · `docs(product)` · add PRD, personas and user stories · HUB-002 · F-01
   - PRD with FR/NFR, success metrics, release plan, risks, deviations DV-1..DV-6 and open questions
   - Six personas including the AI-assisted developer
