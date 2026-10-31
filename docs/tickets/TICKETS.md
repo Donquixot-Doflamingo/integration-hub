@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **192** · done: **32** · todo: **160**
+Total tickets: **193** · done: **33** · todo: **160**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **192** · done: **32** · todo: **160**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 33 | 7 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 34 | 8 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1782,15 +1782,15 @@ Shared components for loading skeletons, empty states and error envelopes (code,
 
 ### HUB-256 — Integrations list
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-253, HUB-255 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-253, HUB-255 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `feat/HUB-256-fe-integrations-list`
 
 Searchable, filterable list of integrations (tenant, capability, paused, active version) with pagination.
 
 **Acceptance criteria**
-- [ ] Filters reflected in the URL
-- [ ] Paused integrations visibly marked
-- [ ] Component tests against MSW
+- [x] Filters reflected in the URL (search, tenant, capability, paused, vendor, account, page size, cursor; the active-version filter waits for CCR-002 / HUB-283)
+- [x] Paused integrations visibly marked ("Paused" badge, text + icon; also "No active version" and "draft")
+- [x] Component tests against MSW (`routes/(app)/integrations/page.test.ts`, `filters.test.ts`)
 
 ### HUB-257 — Integration detail and version history
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
@@ -2090,6 +2090,18 @@ Filed by frontend-engineer during HUB-253. Replace the placeholder `oidcProvider
 - [ ] Browser-side admin API calls are authorised without exposing the token to JavaScript (BFF proxy or server loads), documented in an ADR
 - [ ] Token expiry: silent refresh or redirect to login with `expired=1`; sign-out ends the IdP session when supported
 - [ ] Tested against the dev issuer in e2e (HUB-277)
+
+### HUB-283 — CCR-002: active-version filters on listIntegrations
+- **Epic:** EP-10 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-006, HUB-256 · **Feature:** F-19 · **Stories:** US-1902
+- **Branch:** `contract/HUB-283-integrations-version-filters`
+
+Filed by frontend-engineer during HUB-256. Full CCR text (before/after YAML): `frontend/CCR-NOTES.md` § CCR-002. HUB-256 asks for an "active version" filter on the integrations list, but `listIntegrations` has no version parameter, and filtering one cursor page client-side would miss matches. Proposed additive booleans `has_active_version` and `active_version_behind`. `hub-admin` minor bump.
+
+**Acceptance criteria**
+- [ ] Both query parameters added to `listIntegrations` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
+- [ ] Backend list handler implements them, covered by contract tests (EP-08)
+- [ ] Console adds the filter (URL params, chips) after `npm run gen:api` and removes `TODO(CCR-002)`
 
 ## EP-11 — MCP server + consumer skill + SDK
 

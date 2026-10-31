@@ -6,12 +6,13 @@ import { contractMocks } from '$lib/api/mocks/contract.gen';
 import { mockError, mockOperation, mockPending } from '$lib/api/mocks/handlers';
 import type { OperationId } from '$lib/api/mocks/types';
 import { server } from '$lib/api/mocks/server';
+import { accessFromRoles } from '$lib/auth/roles';
 
 // HUB-254: every section route exists, loads its list operation (MSW, contract examples) and
 // shows loading, empty, error and populated states.
 
 const invalidateAll = vi.fn();
-vi.mock('$app/navigation', () => ({ invalidateAll: () => invalidateAll() }));
+vi.mock('$app/navigation', () => ({ invalidateAll: () => invalidateAll(), goto: vi.fn() }));
 
 type LoadFn = (event: { fetch: typeof fetch; url: URL }) => unknown;
 interface SectionCase {
@@ -94,7 +95,9 @@ const cases: SectionCase[] = [
 async function renderSection(c: SectionCase) {
 	const [{ default: Page }, { load }] = await Promise.all([c.page(), c.load()]);
 	const data = await load({ fetch, url: new URL(`http://console.test${c.path}`) });
-	return render(Page, { props: { data: data as never } });
+	// Layout data every (app) page receives (HUB-253).
+	const layout = { access: accessFromRoles(['editor']) };
+	return render(Page, { props: { data: { ...layout, ...(data as object) } as never } });
 }
 
 beforeEach(() => invalidateAll.mockReset());
@@ -108,7 +111,8 @@ describe.each(cases)('$path', (c) => {
 		const example = contractMocks[c.op].example as { items: unknown[] };
 		expect(rows).toHaveLength(example.items.length + 1);
 		expect(within(table).getAllByRole('rowheader')[0]).toHaveTextContent(c.firstRow);
-		expect(screen.getByText(/rows? shown/)).toBeInTheDocument();
+		// Row count, or the pager on screens that page (HUB-256).
+		expect(screen.getByText(/rows? shown|^Page 1:/)).toBeInTheDocument();
 	});
 
 	it('shows a loading state while the call is pending', async () => {

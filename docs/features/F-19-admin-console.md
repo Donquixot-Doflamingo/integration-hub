@@ -113,10 +113,11 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-252 | MSW handlers for all 79 admin operations from contract examples (`contract.gen.ts`, generated); fixtures validated with Ajv 2020-12; `npm run dev:mock` with no backend |
 | HUB-253 | Auth behind an `AuthProvider` interface: dev role-picker provider (mock / `PUBLIC_AUTH_MODE=dev`), OIDC placeholder (HUB-282); signed httpOnly session cookie; `/login`, `POST /logout`; redirect to login with `next`; `/me`-based `access` and `RoleGate` for mutation controls |
 | HUB-255 | Shared states: `AsyncView` (keeps data while refetching), `ListView`, `ErrorPanel` (code, message, hint, details, retry helps, request id + copy), `EmptyState` (none vs filtered), `Skeleton`, `ErrorPage` for both error routes; a test enforces their use on every page |
+| HUB-256 | Integrations list: search, owner tenant (a select of own tenants for tenant viewers), capability, paused, vendor and account filters plus page size in the URL; removable chips and Clear all; cursor paging with Previous/Next kept in the URL; Paused / No active version / draft marked in text |
 | HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
-Contract gaps found while building: CCR-001 (`X-Hub-Request-Id` not declared on admin responses), see `frontend/CCR-NOTES.md`.
+Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hub-Request-Id` not declared on admin responses, HUB-278), CCR-002 (no active-version filter on `listIntegrations`, HUB-283).
 
 ## Changelog of this doc
 | Date | Change | Author |
@@ -126,3 +127,4 @@ Contract gaps found while building: CCR-001 (`X-Hub-Request-Id` not declared on 
 | 2026-10-31 | HUB-279: framework version decision and advisory assessment | frontend-engineer |
 | 2026-10-31 | HUB-253: auth design, config and security notes | frontend-engineer |
 | 2026-10-31 | HUB-255: shared state components | frontend-engineer |
+| 2026-10-31 | HUB-256: integrations list; CCR-002 | frontend-engineer |

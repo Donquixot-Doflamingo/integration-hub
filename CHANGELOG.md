@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add integrations list with URL filters and cursor paging · HUB-256 · F-19
+  - Search and filter integrations by owner tenant, capability, paused state, vendor and account; tenant viewers pick among their own tenants and see no vendor or account filters
+  - Filters and page size live in the URL (shareable, survive reload), show as removable chips with "Clear all", and reset paging when changed
+  - Previous / Next paging with the API cursor; the way back is kept in the URL
+  - Paused, "No active version" and draft integrations are marked in text; filter by active version waits for CCR-002 (HUB-283)
+
 - 2026-10-31 · `feat(frontend)` · add shared loading, empty and error states for every page · HUB-255 · F-19
   - Error panels show the error code, HTTP status, message, what to do, field details, whether retrying helps (with the server's delay) and the request id with a copy button
   - Empty lists say whether nothing exists yet or the filters hide everything, with a "Clear all filters" link

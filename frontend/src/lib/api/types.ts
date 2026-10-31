@@ -28,3 +28,15 @@ export type Slug = Schemas['Slug'];
 
 /** Identity a console session carries (subset of `Me`; no token, safe to send to the browser). */
 export type SessionUser = Pick<Me, 'subject' | 'email' | 'name' | 'roles' | 'tenants'>;
+
+export type IntegrationSummary = Schemas['IntegrationSummary'];
+export type Integration = Schemas['Integration'];
+export type IntegrationVersion = Schemas['IntegrationVersion'];
+export type IntegrationVersionSummary = Schemas['IntegrationVersionSummary'];
+export type IntegrationSpec = Schemas['IntegrationSpec'];
+export type VersionDiff = Schemas['VersionDiff'];
+export type DiffOp = Schemas['DiffOp'];
+/** Query parameters of `listIntegrations`. */
+export type ListIntegrationsQuery = NonNullable<
+	Operations['listIntegrations']['parameters']['query']
+>;
