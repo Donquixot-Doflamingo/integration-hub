@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: Integration Hub - Admin (Control Plane) API
-  version: 1.0.0
+  version: 1.1.0
   summary: Control plane for vendors, accounts, capabilities, transformers, integrations, tenants and operations.
   description: |
     The control plane (DESIGN §16.1). Unlike the caller API, this API **does** show vendors,
@@ -29,6 +29,10 @@ info:
 
     **Secrets** are write-only (`writeOnly: true`). They are never returned, except a newly minted
     API key or registrar signing secret, which is shown exactly once in the create/rotate response.
+
+    **Request ids.** Every response, success or error, carries `X-Hub-Request-Id` (`req_` + ULID).
+    On errors it equals `error.request_id`. Clients show it wherever they report a failure, also
+    when the body is not the error envelope (for example a proxy 502).
 
     Conventions: timestamps RFC 3339 UTC; durations integer ms; cursor pagination (`cursor`,
     `limit` ≤ 200, response `next_cursor`); errors use the canonical envelope
@@ -77,6 +81,9 @@ paths:
       responses:
         '200':
           description: Current user.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -109,6 +116,9 @@ paths:
       responses:
         '200':
           description: A page of vendors.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -162,6 +172,8 @@ paths:
         '201':
           description: Created.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -210,6 +222,8 @@ paths:
         '200':
           description: Vendor.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -283,6 +297,8 @@ paths:
         '200':
           description: Updated.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -332,6 +348,9 @@ paths:
       responses:
         '200':
           description: A page of endpoints.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -381,6 +400,9 @@ paths:
       responses:
         '201':
           description: Created.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -421,6 +443,9 @@ paths:
       responses:
         '200':
           description: Endpoint.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -472,6 +497,9 @@ paths:
       responses:
         '200':
           description: A page of accounts.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -522,6 +550,8 @@ paths:
         '201':
           description: Created.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -567,6 +597,8 @@ paths:
         '200':
           description: Account.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -617,6 +649,8 @@ paths:
         '200':
           description: Updated.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -675,6 +709,9 @@ paths:
       responses:
         '200':
           description: Probe outcome (also 200 when the probe fails; see `ok`).
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -723,6 +760,9 @@ paths:
       responses:
         '200':
           description: Next credential stored.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -770,6 +810,9 @@ paths:
       responses:
         '200':
           description: Promoted.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -813,6 +856,9 @@ paths:
       responses:
         '200':
           description: Deleted.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -861,6 +907,9 @@ paths:
       responses:
         '200':
           description: Transitioned.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -908,6 +957,9 @@ paths:
       responses:
         '200':
           description: A page of capabilities.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -958,6 +1010,9 @@ paths:
       responses:
         '201':
           description: Created.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1003,6 +1058,9 @@ paths:
       responses:
         '200':
           description: Capability version.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1045,6 +1103,9 @@ paths:
       responses:
         '200':
           description: A page of capability versions (schemas omitted; fetch one with getCapability).
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1089,6 +1150,9 @@ paths:
       responses:
         '201':
           description: Created.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1158,6 +1222,9 @@ paths:
       responses:
         '200':
           description: A page of transformers.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1212,6 +1279,9 @@ paths:
       responses:
         '200':
           description: Transformation output.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1256,6 +1326,9 @@ paths:
       responses:
         '200':
           description: Golden results (200 even when some fail; see `passed`).
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1290,6 +1363,9 @@ paths:
       responses:
         '200':
           description: Transformer.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1342,6 +1418,9 @@ paths:
       responses:
         '200':
           description: A page of versions.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1390,6 +1469,9 @@ paths:
       responses:
         '201':
           description: Created.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1438,6 +1520,9 @@ paths:
       responses:
         '200':
           description: Transformer version.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1508,6 +1593,9 @@ paths:
       responses:
         '200':
           description: A page of integrations.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1558,6 +1646,8 @@ paths:
         '201':
           description: Created.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -1604,6 +1694,8 @@ paths:
         '200':
           description: Integration.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -1671,6 +1763,8 @@ paths:
         '200':
           description: Updated.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -1727,6 +1821,9 @@ paths:
       responses:
         '200':
           description: A page of versions.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1773,6 +1870,9 @@ paths:
       responses:
         '201':
           description: Draft created.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1823,6 +1923,9 @@ paths:
       responses:
         '200':
           description: Integration version.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1877,6 +1980,9 @@ paths:
       responses:
         '200':
           description: Draft updated.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1934,6 +2040,9 @@ paths:
       responses:
         '200':
           description: Validation report (200 even when invalid; see `valid`).
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -1984,6 +2093,9 @@ paths:
       responses:
         '200':
           description: Published.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2031,6 +2143,9 @@ paths:
       responses:
         '200':
           description: Rolled back.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2086,6 +2201,9 @@ paths:
       responses:
         '200':
           description: Diff.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2128,6 +2246,9 @@ paths:
       responses:
         '200':
           description: Paused.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2179,6 +2300,9 @@ paths:
       responses:
         '200':
           description: Resumed.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2239,6 +2363,9 @@ paths:
       responses:
         '200':
           description: New version created (and published if requested).
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2281,6 +2408,9 @@ paths:
       responses:
         '200':
           description: A page of tenants.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2320,6 +2450,8 @@ paths:
         '201':
           description: Created.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -2362,6 +2494,8 @@ paths:
         '200':
           description: Tenant.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -2408,6 +2542,8 @@ paths:
         '200':
           description: Updated.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -2461,6 +2597,9 @@ paths:
       responses:
         '200':
           description: A page of keys.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2498,6 +2637,9 @@ paths:
       responses:
         '201':
           description: Created. Store `secret` now. It cannot be retrieved again.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2528,6 +2670,9 @@ paths:
       responses:
         '200':
           description: Key.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2561,6 +2706,9 @@ paths:
       responses:
         '200':
           description: Revoked.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2601,6 +2749,9 @@ paths:
       responses:
         '200':
           description: Rotated.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2638,6 +2789,9 @@ paths:
       responses:
         '200':
           description: A page of endpoints.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2676,6 +2830,8 @@ paths:
         '201':
           description: Created.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -2709,6 +2865,8 @@ paths:
         '200':
           description: Endpoint.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -2745,6 +2903,8 @@ paths:
         '200':
           description: Updated.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -2777,6 +2937,9 @@ paths:
       responses:
         '200':
           description: Deleted.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2816,6 +2979,9 @@ paths:
       responses:
         '200':
           description: Rotated.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2849,6 +3015,9 @@ paths:
       responses:
         '200':
           description: A page of snapshots.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -2895,6 +3064,8 @@ paths:
         '200':
           description: Latest snapshot metadata.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -2905,6 +3076,8 @@ paths:
         '304':
           description: No newer snapshot within `wait`.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
         '400':
@@ -2928,6 +3101,8 @@ paths:
         '200':
           description: Snapshot.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -2967,6 +3142,8 @@ paths:
         '200':
           description: Snapshot blob.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             ETag:
               $ref: '#/components/headers/ETag'
           content:
@@ -3051,6 +3228,9 @@ paths:
       responses:
         '200':
           description: A page of requests.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3094,6 +3274,9 @@ paths:
       responses:
         '200':
           description: Request.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3145,6 +3328,9 @@ paths:
       responses:
         '200':
           description: Timeline.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3178,6 +3364,9 @@ paths:
       responses:
         '200':
           description: Attempts.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3220,6 +3409,8 @@ paths:
         '200':
           description: Unsealed events.
           headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
             Cache-Control:
               description: Always `no-store`.
               schema:
@@ -3294,6 +3485,9 @@ paths:
       responses:
         '200':
           description: A page of DLQ entries.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3322,6 +3516,9 @@ paths:
       responses:
         '200':
           description: DLQ entry.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3375,6 +3572,9 @@ paths:
       responses:
         '200':
           description: Replay result.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3413,6 +3613,9 @@ paths:
       responses:
         '200':
           description: Purge result.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3464,6 +3667,9 @@ paths:
       responses:
         '200':
           description: A page of breakers.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3493,6 +3699,9 @@ paths:
       responses:
         '200':
           description: Breaker.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3548,6 +3757,9 @@ paths:
       responses:
         '200':
           description: Forced open.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3587,6 +3799,9 @@ paths:
       responses:
         '200':
           description: Forced closed.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3625,6 +3840,9 @@ paths:
       responses:
         '200':
           description: Force cleared.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3685,6 +3903,9 @@ paths:
       responses:
         '200':
           description: A page of change-log entries.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3719,6 +3940,9 @@ paths:
       responses:
         '200':
           description: Change-log entry.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
           content:
             application/json:
               schema:
@@ -3920,6 +4144,12 @@ components:
       example: req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
 
   headers:
+    X-Hub-Request-Id:
+      description: Hub request id for this admin call (`req_` + ULID). Present on every response, success or error. Equals `error.request_id` on errors. Operators paste it into the request explorer and support tickets.
+      required: true
+      schema:
+        $ref: '#/components/schemas/RequestIdValue'
+      example: req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
     ETag:
       description: Opaque entity tag (quoted revision or version).
       schema:
@@ -3929,6 +4159,9 @@ components:
   responses:
     BadRequest:
       description: Invalid parameters or body.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
       content:
         application/json:
           schema:
@@ -3945,6 +4178,9 @@ components:
               request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KC
     Unauthorized:
       description: Missing, expired or invalid OIDC token.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
       content:
         application/json:
           schema:
@@ -3960,6 +4196,9 @@ components:
               request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KD
     Forbidden:
       description: The caller's role is below the operation's `x-required-role`, or the object is outside the tenant_viewer scope.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
       content:
         application/json:
           schema:
@@ -3975,6 +4214,9 @@ components:
               request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KE
     NotFound:
       description: Object not found (or not visible to this tenant_viewer).
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
       content:
         application/json:
           schema:
@@ -3990,6 +4232,9 @@ components:
               request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KF
     Conflict:
       description: State conflict (already exists, concurrent publish, invalid transition, object in use).
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
       content:
         application/json:
           schema:
@@ -4005,6 +4250,9 @@ components:
               request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KG
     LifecycleConflict:
       description: Invalid lifecycle transition, or retire blocked by references.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
       content:
         application/json:
           schema:
@@ -4032,6 +4280,9 @@ components:
                   request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KJ
     PreconditionFailed:
       description: If-Match did not match the current ETag.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
       content:
         application/json:
           schema:
@@ -4047,6 +4298,9 @@ components:
               request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KK
     PublishValidationFailed:
       description: Publish-time validation failed (DESIGN §6.4). The report is in `error.meta.report`, and failing checks are also in `details`.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
       content:
         application/json:
           schema:
@@ -4069,6 +4323,9 @@ components:
               request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KM
     InternalError:
       description: Unexpected server error.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
       content:
         application/json:
           schema:

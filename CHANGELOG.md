@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `contract(admin)` · declare X-Hub-Request-Id on every admin response · HUB-278 · F-19
+  - hub-admin 1.1.0 (minor): every admin response, success or error, declares the `X-Hub-Request-Id` header (`req_` + ULID), equal to `error.request_id` on errors
+  - The console can show a request id for successful calls and for failures without the error envelope (proxy 502, HTML) once it regenerates its client; backend admin contract tests can require the header
+
 - 2026-10-31 · `contract(public)` · align the getReadyz 503 example with the readiness checks · HUB-033 · F-01
   - hub-public 1.0.1 (patch): the `/readyz` 503 example shows one `details` entry per failing check with `message` only (`redis unreachable`), as the backend returns it
   - The `getReadyz` description says each detail names a failing check and that `request_id` equals the `X-Hub-Request-Id` header

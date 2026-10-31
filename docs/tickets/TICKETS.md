@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **64** · todo: **130**
+Total tickets: **194** · done: **65** · todo: **129**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **194** · done: **64** · todo: **130**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 16 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 17 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -2044,16 +2044,18 @@ Run the e2e suite against a compose stack (hub admin + Postgres + Redis + mockve
 
 ### HUB-278 — CCR-001: declare X-Hub-Request-Id on every admin response
 - **Epic:** EP-10 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-006, HUB-251 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-006, HUB-251 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `contract/HUB-278-admin-request-id-header`
 
 Filed by frontend-engineer during HUB-251. Full CCR text (before/after YAML): `frontend/CCR-NOTES.md` § CCR-001. `hub-public` declares `X-Hub-Request-Id` on every response but `hub-admin` does not, so the console cannot rely on it for successful calls or non-envelope failures, and backend contract tests do not require it. Additive, `hub-admin` 1.0.0 → 1.1.0.
 
 **Acceptance criteria**
-- [ ] `components.headers.X-Hub-Request-Id` added and referenced by every `hub-admin` response; examples updated
-- [ ] `hub-admin` `info.version` 1.1.0 and `contracts/CHANGELOG.md` entry
+- [x] `components.headers.X-Hub-Request-Id` added and referenced by every `hub-admin` response; examples updated
+- [x] `hub-admin` `info.version` 1.1.0 and `contracts/CHANGELOG.md` entry
 - [ ] Console removes the `TODO(CCR-001)` fallback after `npm run gen:api`
 - [ ] Backend admin contract tests (EP-08) require the header
+
+Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1, together with HUB-283 and HUB-284; notice `contracts/notices/2026-10-31-round-1.md`). The last two criteria belong to the frontend (`npm run gen:api`, remove `TODO(CCR-001)`) and the backend (EP-08 admin contract tests) and stay open until they land.
 
 ### HUB-279 — Evaluate SvelteKit 3 before form actions land
 - **Epic:** EP-10 · **Type:** chore · **Area:** frontend

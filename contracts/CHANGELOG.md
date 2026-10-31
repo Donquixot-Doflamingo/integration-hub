@@ -5,6 +5,10 @@ Entry format: `- YYYY-MM-DD · <document> <version> · <CCR / HUB-###> · <summa
 
 ## 2026-10-31
 
+- 2026-10-31 · `hub-admin` 1.1.0 · CCR-001 / HUB-278 · Every admin response declares `X-Hub-Request-Id` (additive, minor)
+  - New `components.headers.X-Hub-Request-Id` (`req_` + ULID, required, equals `error.request_id` on errors), referenced by all 80 inline responses of the 79 operations and by the 9 shared `components.responses`.
+  - `info.description` documents the header. No body, parameter or schema change.
+  - 1.1.0 is the pending version of contract round 1: HUB-283 and HUB-284 extend it in the same release.
 - 2026-10-31 · `hub-public` 1.0.1 · HUB-033 · `getReadyz` 503 example matches what `/readyz` returns (patch, example and description only)
   - The example has one `details` entry with `message` only (`redis unreachable`), as the backend emits it; the old entry carried a `pointer` into a request body that `/readyz` does not have.
   - The example drops the `circuit`/`reason`/`upstream` nulls the backend omits, and keeps its `request_id` (already present in 1.0.0; the CCR's "before" snippet predates the freeze).
