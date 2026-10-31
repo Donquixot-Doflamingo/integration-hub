@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `chore(frontend)` · keep SvelteKit 2 with a double-slash path guard · HUB-279 · F-19
+  - Requests whose path starts with `//` get a 404 before routing (workaround for GHSA-pfhg-q3qv-9q6r, which SvelteKit fixes only in 3.0)
+  - ADR-0009: why the console stays on SvelteKit 2.70.3 (Kit 3 needs TypeScript 6, which the API type generator does not support yet) and the upgrade deadline (2027-01-31, HUB-281)
+  - F-19 lists both Kit advisories against what the console actually uses; `npm audit --omit=dev` has 0 findings
+
 - 2026-10-31 · `docs(tickets)` · close EP-10 CI acceptance and add a ticket counter script · HUB-250, HUB-251 · F-19
   - HUB-250 and HUB-251 done: the frontend workflow ran green on PR #3
   - docs/tickets/recount.py recomputes the ticket totals and epic/feature tables (--check for CI); counters fixed after the M0 merge (190 tickets, 29 done)

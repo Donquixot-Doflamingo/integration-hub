@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **190** · done: **29** · todo: **161**
+Total tickets: **191** · done: **30** · todo: **161**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **190** · done: **29** · todo: **161**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 31 | 4 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 32 | 5 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -2041,15 +2041,15 @@ Filed by frontend-engineer during HUB-251. Full CCR text (before/after YAML): `f
 
 ### HUB-279 — Evaluate SvelteKit 3 before form actions land
 - **Epic:** EP-10 · **Type:** chore · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-250 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-250 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `chore/HUB-279-sveltekit-3-evaluation`
 
 `npm audit` (2026-10-31) reports two advisories against SvelteKit 2.x: a redirect issue with enhanced form submission, and an XSS that only affects prerendered pages (the console prerenders nothing). npm's only fix is SvelteKit 3. Decide before the first form-action ticket (HUB-259+): upgrade, or document why 2.x is safe for this console. Re-check the ESLint/minimatch advisory chain at the same time.
 
 **Acceptance criteria**
-- [ ] Advisories assessed against the console's actual use (form actions, prerendering), written up in F-19
-- [ ] Either upgraded to SvelteKit 3 with all checks green, or an ADR records why 2.x stays and until when
-- [ ] `npm audit --omit=dev` has no unassessed high or critical findings
+- [x] Advisories assessed against the console's actual use (form actions, prerendering), written up in F-19
+- [x] Either upgraded to SvelteKit 3 with all checks green, or an ADR records why 2.x stays and until when (ADR-0009: stays on 2.70.3 with a `//` path guard; upgrade by 2027-01-31 at the latest, HUB-281)
+- [x] `npm audit --omit=dev` has no unassessed high or critical findings (0 findings on 2026-10-31)
 
 ### HUB-280 — Run Playwright e2e in frontend CI
 - **Epic:** EP-10 · **Type:** test · **Area:** infra
@@ -2062,6 +2062,19 @@ The e2e suite (axe a11y, keyboard, 768 px drawer, theme) runs only locally today
 - [ ] `frontend.yml` runs e2e on `frontend/**` PRs; a failing e2e test fails the PR
 - [ ] Browser binaries cached; job under 8 min
 - [ ] Playwright HTML report uploaded as an artifact on failure
+
+### HUB-281 — Upgrade the console to SvelteKit 3
+- **Epic:** EP-10 · **Type:** chore · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-279 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `chore/HUB-281-sveltekit-3`
+
+Filed by frontend-engineer during HUB-279 (ADR-0009). Move to `@sveltejs/kit` 3 + `@sveltejs/adapter-node` 6 + TypeScript 6 once `openapi-typescript` (or a replacement) supports TypeScript 6, or by 2027-01-31 at the latest. Known migration steps from the HUB-279 trial: config from `svelte.config.js` into `sveltekit({...})` in `vite.config.ts` (also update `eslint.config.js` and `src/lib/runes-mode.test.ts`), `$lib` -> `#lib` subpath imports, `tsconfig.json` extends `$app/tsconfig`, `$env/*` and `$app/types` `Pathname` / `resolve()` changes. Update the skills and `frontend/AGENTS.md`, which say SvelteKit 2.
+
+**Acceptance criteria**
+- [ ] Upgraded without `overrides` or `--legacy-peer-deps`; lockfile committed
+- [ ] `npm run check && npm run lint && npm test && npm run build` and `npm run test:e2e` green
+- [ ] `npm audit` shows neither Kit advisory (GHSA-pfhg-q3qv-9q6r, GHSA-27mw-82g8-phjj); ADR-0009 marked superseded
+- [ ] Skills, `frontend/AGENTS.md` and `frontend/README.md` say SvelteKit 3
 
 ## EP-11 — MCP server + consumer skill + SDK
 

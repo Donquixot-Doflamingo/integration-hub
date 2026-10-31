@@ -93,12 +93,24 @@ Screens ship as their admin endpoints freeze; behind OIDC from the first deploy.
 ## Tickets
 HUB-250 – HUB-299.
 
+## Framework version and advisories (HUB-279)
+Decision: **stay on SvelteKit 2.70.3** for now ([ADR-0009](../tech/adr/0009-console-stays-on-sveltekit-2.md)); upgrade under HUB-281 by 2027-01-31 at the latest.
+
+| Advisory (fixed only in Kit 3.0.0) | Needs | This console | Status |
+| --- | --- | --- | --- |
+| GHSA-pfhg-q3qv-9q6r, open redirect via `use:enhance` (Low) | a route accepting `//`-prefixed paths + enhanced form actions | No form actions yet; HUB-259+ will add `use:enhance` | Mitigated: `src/hooks.server.ts` answers 404 for every `//` path before routing (advisory workaround) |
+| GHSA-27mw-82g8-phjj, XSS in prerendered pages via untrusted `cache-control` (Low) | prerendering + `setHeaders` with untrusted `cache-control` | Nothing is prerendered; no request-derived `setHeaders` | Not applicable; rule: never enable `prerender` on 2.x |
+
+Other `npm audit` findings (minimatch under ESLint/typescript-eslint/openapi-typescript, deepmerge under the build, `cookie <0.7.0` under Kit) are dev/build-time only or not reachable (fixed cookie names). `npm audit --omit=dev`: 0 findings.
+Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (our API type generator) only supports TypeScript 5, so the install needs an override; Kit 3 also moves config out of `svelte.config.js`, removes `$lib` and changes `$env`, and its 3.0.0 is one month old.
+
 ## Shipped so far
 | Ticket | What shipped |
 | --- | --- |
 | HUB-250 | `frontend/` scaffold: SvelteKit 2 + Svelte 5 (runes enforced) + TypeScript strict, adapter-node (SSR), ESLint/Prettier, Vitest + Testing Library, Playwright; `.github/workflows/frontend.yml` |
 | HUB-251 | `npm run gen:api` -> `src/lib/api/schema.d.ts`; `adminClient()` (openapi-fetch, bearer token, `X-Hub-Request-Id`, typed `HubApiError` from the envelope); lint guard against hand-written API types; CI freshness check |
 | HUB-252 | MSW handlers for all 79 admin operations from contract examples (`contract.gen.ts`, generated); fixtures validated with Ajv 2020-12; `npm run dev:mock` with no backend |
+| HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
 Contract gaps found while building: CCR-001 (`X-Hub-Request-Id` not declared on admin responses), see `frontend/CCR-NOTES.md`.
@@ -108,3 +120,4 @@ Contract gaps found while building: CCR-001 (`X-Hub-Request-Id` not declared on 
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-10-31 | Status in-progress; shipped HUB-250, 251, 252, 254; config and CCR-001 noted | frontend-engineer |
+| 2026-10-31 | HUB-279: framework version decision and advisory assessment | frontend-engineer |
