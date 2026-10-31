@@ -165,6 +165,15 @@ func (o *Outbox) Nack(ctx context.Context, db DB, id, worker string, retryAt tim
 	return guarded(tag, err, "nack", id)
 }
 
+// Defer puts a claimed envelope back without counting the claim as an attempt (the integration
+// is paused, or the retry budget is spent before anything was sent).
+func (o *Outbox) Defer(ctx context.Context, db DB, id, worker string, retryAt time.Time, reason string) error {
+	tag, err := db.Exec(ctx, `UPDATE hub.outbox SET status = CASE WHEN attempt <= 1 THEN 'accepted' ELSE 'retry_scheduled' END,
+			attempt = GREATEST(attempt - 1, 0), next_attempt_at = $3, last_error = $4, claimed_by = NULL, claimed_until = NULL, updated_at = $5
+		WHERE request_id = $1 AND status = 'in_flight' AND claimed_by = $2`, id, worker, retryAt, reason, o.now())
+	return guarded(tag, err, "defer", id)
+}
+
 // Park holds an envelope for its account + endpoint while the circuit is open
 // (in_flight → parked). Release drains parked envelopes in arrival order.
 func (o *Outbox) Park(ctx context.Context, db DB, id, worker, account, endpoint string) error {
@@ -220,6 +229,13 @@ func (o *Outbox) DeadLetter(ctx context.Context, db DB, id, worker string, d Dea
 func (o *Outbox) Expire(ctx context.Context, db DB, id string) error {
 	tag, err := db.Exec(ctx, `DELETE FROM hub.outbox WHERE request_id = $1 AND status IN ('accepted', 'retry_scheduled', 'parked')
 		AND expires_at <= $2`, id, o.now())
+	return guarded(tag, err, "expire", id)
+}
+
+// ExpireClaimed removes an envelope its worker found past its TTL before attempting it
+// (in_flight → expired, guarded by the claim).
+func (o *Outbox) ExpireClaimed(ctx context.Context, db DB, id, worker string) error {
+	tag, err := db.Exec(ctx, `DELETE FROM hub.outbox WHERE request_id = $1 AND status = 'in_flight' AND claimed_by = $2`, id, worker)
 	return guarded(tag, err, "expire", id)
 }
 

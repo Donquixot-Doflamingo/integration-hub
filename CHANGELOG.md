@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(delivery)` · add the delivery worker with backoff, retry budget and DLQ policy · HUB-112 · F-09
+  - Workers claim due envelopes per pool, check the TTL, re-resolve the active version (unless pinned or session-bound), re-transform the canonical body and deliver through the shared attempter
+  - Retryable failures (timeout, unavailable, rate limited) follow DESIGN §10.3 (+1 s … +1 h, 8 attempts, full jitter, never sooner than Retry-After); rejections, auth failures and transformer errors dead-letter at once with the last request and response; an envelope that crashed a worker twice is dead-lettered as poison
+  - Retries are limited to 20 % of each account's live traffic (retry_budget_exhausted_total); paused integrations are held without spending an attempt; every terminal change commits with the requests row, the kept result and the callback hook in one transaction
 - 2026-10-31 · `refactor(delivery)` · share one attempter across the sync, wait and worker paths · HUB-112 · F-09
   - No behaviour change for callers: the sync path now runs through delivery.Attempter (transform, credentials, upstream, classification, response map), which the wait path and the worker reuse in M4
   - Attempt rows record the integration version used; migration 00004 also adds requests.updated_at and hub.request_results (final result kept 7 days for status polling)

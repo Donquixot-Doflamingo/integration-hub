@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **88** · todo: **105** · other (in-progress/in-review/blocked): **2**
+Total tickets: **195** · done: **90** · todo: **104** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -13,7 +13,7 @@ Total tickets: **195** · done: **88** · todo: **105** · other (in-progress/in
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
-| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 2 |
+| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 4 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
@@ -948,28 +948,28 @@ Implement states `accepted → in_flight → succeeded | retry_scheduled | parke
 
 ### HUB-112 — Worker loop with re-resolve and poison detector
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-111, HUB-083, HUB-085, HUB-087 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-111, HUB-083, HUB-085, HUB-087 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-112-worker-loop`
 
 Implement the §18.4 worker loop: claim, TTL check, re-resolve (active unless pinned/session), paused → nack, transform, upstream, classify → Ack/Nack/DeadLetter, record attempt. An envelope that crashes a worker twice is dead-lettered (DESIGN §10.6).
 
 **Acceptance criteria**
-- [ ] Envelope holds canonical body only; worker re-transforms at send time
-- [ ] Poison envelope dead-lettered after two crashes
-- [ ] Each attempt row records the integration version used
+- [x] Envelope holds canonical body only; worker re-transforms at send time
+- [x] Poison envelope dead-lettered after two crashes
+- [x] Each attempt row records the integration version used
 
 ### HUB-113 — Backoff, retry budget and DLQ policy
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-113-backoff-retry-budget`
 
 Apply the §10.3 schedule (+1 s … +1 h, 8 attempts) with full jitter, per-integration override, `max(backoff, Retry-After)` for 429, a retry budget of ≤ 20 % of account live traffic, and dead-letter with reason, last request/response and history (DESIGN §10.2, §10.6).
 
 **Acceptance criteria**
-- [ ] Jittered delays stay within the schedule bounds (property test)
-- [ ] 429 with `Retry-After: 10` waits ≥ 10 s
-- [ ] Retries beyond the budget are deferred and counted in `retry_budget_exhausted_total`
-- [ ] 401/403 and other 4xx dead-letter immediately
+- [x] Jittered delays stay within the schedule bounds (property test)
+- [x] 429 with `Retry-After: 10` waits ≥ 10 s
+- [x] Retries beyond the budget are deferred and counted in `retry_budget_exhausted_total`
+- [x] 401/403 and other 4xx dead-letter immediately
 
 ### HUB-114 — Scheduler role: leader election, due retries, TTL expiry
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend

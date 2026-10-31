@@ -16,6 +16,16 @@ const (
 	ResponseTransformFailed = "response.transform_failed"
 	RequestCompleted        = "request.completed"
 	RequestFailed           = "request.failed"
+	// Queued requests (DESIGN §13.1 "plus"): persisted in the outbox, accepted (202 sent),
+	// parked on an open circuit, the payload policy applied, the TTL passed, dead-lettered, and
+	// an attempt scheduled for later.
+	RequestPersisted    = "request.persisted"
+	RequestAccepted     = "request.accepted"
+	RequestParked       = "request.parked"
+	PolicyApplied       = "policy.applied"
+	RequestExpired      = "request.expired"
+	RequestDeadLettered = "request.dead_lettered"
+	RetryScheduled      = "retry.scheduled"
 )
 
 // PayloadState says what request_events.payload holds.
