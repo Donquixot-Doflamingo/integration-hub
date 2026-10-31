@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(transform)` · build vendor requests and dry-runs · HUB-064 · F-04
+  - Program.BuildRequest evaluates method, path, headers, query and body into the vendor request; header/query values must be scalars, nil omits them
+  - Program.DryRun returns the same request with credential-derived values masked (*** by target and by value)
+  - The dev T1 and T2 transformers build the expected payloads, T2 reading account.config.brand_code
 - 2026-10-31 · `feat(transform)` · add data, encoding and domain standard library functions · HUB-063 · F-04
   - merge, pick, omit, flatten, toJSON (compact, sorted keys), fromJSON; sha256, hmacSHA256, base64, urlEncode; uuid() injectable for deterministic goldens
   - phoneE164, emailNormalize, currencyMinor (exact decimals, rejects excess precision, ISO 4217 exponents), maskPAN and maskAadhaar (last 4 only, never the full identifier)
