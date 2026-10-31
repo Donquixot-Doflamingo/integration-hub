@@ -4,13 +4,14 @@ One vendor-agnostic API through which every internal service talks to every thir
 
 Callers send a **stable integration ID** and a **canonical body**. The Hub picks the vendor, the account and the transformer, applies delivery policy, rate limits and circuit breakers, calls the vendor now or via a durable queue, maps the response back, and keeps a lossless audit trail. Swapping a vendor or an account is a config publish. Callers change nothing.
 
-> **Status: Phase 2, M0 scaffold and M1 config registry done** ([M0](docs/milestones/M0.md), [M1](docs/milestones/M1.md)). Next: M2 transformer engine.
+> **Status: Phase 2, M0–M2 done**: scaffold, config registry, transformer engine ([M0](docs/milestones/M0.md), [M1](docs/milestones/M1.md), [M2](docs/milestones/M2.md)). Next: M3 gateway sync path and audit.
 
 ```bash
 make doctor                 # toolchain check
 make up                     # Postgres 16 + Redis 7
 make -C backend test itest  # unit (-race) + integration
 deploy/smoke/m0.sh          # M0 acceptance smoke test
+make -C backend goldens     # transformer golden fixtures
 ```
 
 ## Monorepo

@@ -1,0 +1,29 @@
+{
+  "user": {
+    "id": "u_7"
+  },
+  "event": {
+    "name": "loan_viewed",
+    "timestamp": "2026-10-31T09:15:00Z",
+    "properties": {
+      "product": "pl"
+    }
+  },
+  "context": {
+    "campaign": "diwali_2026"
+  },
+  "_context": {
+    "creds": {
+      "account_id": "fixture-account-id",
+      "passcode": "fixture-passcode"
+    },
+    "account": {
+      "id": "ct-brandB-us",
+      "region": "us",
+      "config": {
+        "project_id": "DEV-PROJECT-B",
+        "brand_code": "B"
+      }
+    }
+  }
+}

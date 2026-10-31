@@ -6,6 +6,50 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tickets)` · close HUB-067 after the goldens CI step ran green · HUB-067 · F-04
+  - Backend CI on PR #6 ran make goldens green (17/17) with every other job
+- 2026-10-31 · `test(transform)` · record M2 acceptance and milestone summary · HUB-071 · F-04
+  - docs/milestones/M2.md: accept-line evidence, what was built, nine deviations, deferred items
+  - F-04 shipped; README and CLAUDE.md show M2 done
+- 2026-10-31 · `perf(transform)` · benchmark a 4 KB request and response transform · HUB-070 · F-04
+  - BenchmarkTransform4KB (T1 build + R1 map on a 4 KB events.track body) reports p99: 17–18 µs vs the 0.5 ms budget, 119 allocs/op; it fails if p99 exceeds 0.5 ms
+  - Result recorded in TECH_SPEC next to the latency budget
+- 2026-10-31 · `feat(registry)` · compile transformers into the snapshot and refuse failing goldens · HUB-069 · F-03, F-04
+  - Building a snapshot compiles every transformer once and runs its goldens; a type error, a failing golden or a transformer without goldens refuses the snapshot with transformer, file and fixture case named
+  - Snapshot.Programs holds one compiled program per ID@version, shared by every integration version that references it
+- 2026-10-31 · `feat(config)` · verify the CleverTap transformers against vendor docs and add goldens · HUB-068 · F-04
+  - T1, T2, R1, R2 checked against developer.clevertap.com/docs/upload-events-api (cited in each file): Content-Type adds charset=utf-8; R1 maps unprocessed records to {reason}; a 503 for a missing account ID is UPSTREAM_AUTH_FAILED, not a retryable outage
+  - 17 golden cases: T1 minimal/full (unicode, offset timestamp), T2 campaign/organic (brand from account config), R1 success/partial and 7 error cases, R2 success/partial/5xx; make goldens runs in backend CI
+  - Response mapping: res.body is parsed JSON only; non-JSON bodies (HTML error pages) are res.text
+- 2026-10-31 · `feat(transform)` · add the golden fixture runner and hubctl transform test · HUB-067 · F-04
+  - transform.RunGoldens runs fixtures/<case>.input.json → .expected_request.json and .vendor_response.json → .expected_response.json, with a pinned clock and fake creds from _context
+  - Mismatches print as JSON-pointer diffs ("/body/d/0/ts: expected 1, got 1793438100"); a transformer without fixtures fails
+  - hubctl transform test [-config-dir] [-contracts-dir] [-v] [T1|T1@7...]: exit 0 all pass, 1 any failure, 2 usage/config error; make goldens
+- 2026-10-31 · `feat(transform)` · enforce transformer depth, size, memory and time budgets · HUB-066 · F-04
+  - Expressions over 24 levels of nesting or 500 AST nodes fail at compile; built bodies and mapped responses over 1 MB fail with TRANSFORM_FAILED
+  - Pathological map/filter loops abort on the VM memory budget (100 k) within the 5 ms time budget + 1 ms; the time budget is also checked after every transform
+- 2026-10-31 · `feat(transform)` · map vendor responses and errors to canonical results · HUB-065 · F-04
+  - Program.MapResponse: ordered error rules (first match wins) with retry_after_ms and message; unmatched 4xx/5xx are classified by status, never mapped as success
+  - Mapped responses are validated against the capability response schema; header(res, name) reads headers case-insensitively
+  - Transformer failures (EvalError → TRANSFORM_FAILED) record transformer, target and expression but never input values; Detail() holds the engine message for fixture debugging only
+- 2026-10-31 · `feat(transform)` · build vendor requests and dry-runs · HUB-064 · F-04
+  - Program.BuildRequest evaluates method, path, headers, query and body into the vendor request; header/query values must be scalars, nil omits them
+  - Program.DryRun returns the same request with credential-derived values masked (*** by target and by value)
+  - The dev T1 and T2 transformers build the expected payloads, T2 reading account.config.brand_code
+- 2026-10-31 · `feat(transform)` · add data, encoding and domain standard library functions · HUB-063 · F-04
+  - merge, pick, omit, flatten, toJSON (compact, sorted keys), fromJSON; sha256, hmacSHA256, base64, urlEncode; uuid() injectable for deterministic goldens
+  - phoneE164, emailNormalize, currencyMinor (exact decimals, rejects excess precision, ISO 4217 exponents), maskPAN and maskAadhaar (last 4 only, never the full identifier)
+- 2026-10-31 · `feat(transform)` · add string and time standard library functions · HUB-062 · F-04
+  - format, truncate (rune-safe, optional suffix), epochSeconds, epochMillis, parseTime, formatTime, addDuration, alongside the lower/upper/trim/split/join/replace builtins
+  - now() comes from the evaluation input, so goldens are deterministic; zones are UTC or fixed offsets only (IANA names would read zoneinfo from disk)
+- 2026-10-31 · `feat(transform)` · compile expressions once against a typed environment · HUB-061 · F-04
+  - Every transformer expression is compiled once (expr-lang 1.17.8); req.* paths are checked against the capability schema, so req.user.idd fails at compile with transformer and target path
+  - Request mappings see req, hdr, account, creds, session, now; response mappings res, account, now; creds only in headers/query unless allow_creds_in_body; only the DESIGN §7.3 builtins (no reduce, sortBy, ...)
+  - Field access is nil-safe and nil object fields are not sent; expressions using # must be quoted in YAML
+- 2026-10-31 · `feat(transform)` · parse transformer YAML into target trees · HUB-060 · F-04
+  - Request sections (method, path, headers, query, body), response mappings, ordered error rules and batch become target trees with paths like request.body.d[0].evtName
+  - Unknown keys, duplicate or case-conflicting targets, non-expression headers, mapped TRANSFORM_FAILED and invalid batch paths fail with their target path
+  - core gains VendorRequest/VendorResponse
 - 2026-10-31 · `docs(frontend)` · accept ADR-0009 and require encrypted OIDC sessions · HUB-279, HUB-282 · F-19
   - ADR-0009 (stay on SvelteKit 2.70.3 with the // path guard until HUB-281) accepted by the lead
   - HUB-282 now requires the OIDC token to be unreadable from the session cookie (encrypt the payload or use a server-side store)

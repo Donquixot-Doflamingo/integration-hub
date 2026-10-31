@@ -1,0 +1,7 @@
+{
+  "status": 400,
+  "body": {
+    "status": "fail",
+    "error": "Batch size exceeded"
+  }
+}

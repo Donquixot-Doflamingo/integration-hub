@@ -65,6 +65,10 @@ capability: events.track@v1
 response:
   status: '"ok"'
 `,
+	"transformers/T1/fixtures/basic.input.json":            `{"user": {"id": "u_1"}, "event": {"name": "e"}}`,
+	"transformers/T1/fixtures/basic.expected_request.json": `{"method": "POST", "path": "/1/upload"}`,
+	"transformers/R2/fixtures/ok.vendor_response.json":     `{"status": 200, "body": {}}`,
+	"transformers/R2/fixtures/ok.expected_response.json":   `{"response": {"status": "ok"}}`,
 	"integrations/int_evt_brandA/integration.yaml": `
 integration: int_evt_brandA
 owner_tenant: orders-service
