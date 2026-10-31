@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(registry)` · compile transformers into the snapshot and refuse failing goldens · HUB-069 · F-03, F-04
+  - Building a snapshot compiles every transformer once and runs its goldens; a type error, a failing golden or a transformer without goldens refuses the snapshot with transformer, file and fixture case named
+  - Snapshot.Programs holds one compiled program per ID@version, shared by every integration version that references it
 - 2026-10-31 · `feat(config)` · verify the CleverTap transformers against vendor docs and add goldens · HUB-068 · F-04
   - T1, T2, R1, R2 checked against developer.clevertap.com/docs/upload-events-api (cited in each file): Content-Type adds charset=utf-8; R1 maps unprocessed records to {reason}; a 503 for a missing account ID is UPSTREAM_AUTH_FAILED, not a retryable outage
   - 17 golden cases: T1 minimal/full (unicode, offset timestamp), T2 campaign/organic (brand from account config), R1 success/partial and 7 error cases, R2 success/partial/5xx; make goldens runs in backend CI

@@ -1,9 +1,11 @@
 package registry
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"path"
+	"strings"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/transform"
 )
@@ -51,4 +53,54 @@ func (c *Config) CompileTransformer(ref TransformerRef) (*transform.Program, err
 // TransformerFixtures returns the fixtures/ directory of a transformer (golden cases).
 func TransformerFixtures(config fs.FS, ref TransformerRef) (fs.FS, error) {
 	return fs.Sub(config, path.Join("transformers", ref.ID, "fixtures"))
+}
+
+// compileAll compiles every transformer once and runs its goldens (DESIGN §6.4, AGENTS §3.4). A
+// type error or failing golden refuses the snapshot, naming the transformer and fixture.
+func (c *Config) compileAll(config fs.FS) (map[TransformerRef]*transform.Program, error) {
+	programs := make(map[TransformerRef]*transform.Program, len(c.Transformers))
+	var ps ConfigErrors
+	for _, ref := range sortedRefs(c.Transformers) {
+		file := c.file("transformer", ref.String())
+		prog, err := c.CompileTransformer(ref)
+		if err != nil {
+			var ce *transform.CompileError
+			if errors.As(err, &ce) {
+				for _, p := range ce.Problems {
+					ps.add(file, p.Path, "%s", p.Message)
+				}
+			} else {
+				ps.add(file, "", "%v", err)
+			}
+			continue
+		}
+		fixtures, err := TransformerFixtures(config, ref)
+		if err != nil {
+			ps.add(file, "", "fixtures: %v", err)
+			continue
+		}
+		failed := false
+		for _, r := range transform.RunGoldens(prog, fixtures) {
+			if r.Passed() {
+				continue
+			}
+			failed = true
+			at := path.Join("transformers", ref.ID, "fixtures", r.Case)
+			if r.Case == "" {
+				at = path.Join("transformers", ref.ID, "fixtures")
+			}
+			msg := r.Err
+			if len(r.Diffs) > 0 {
+				msg = "golden mismatch: " + strings.Join(r.Diffs, "; ")
+			}
+			ps.add(at, "", "%s: %s", ref, msg)
+		}
+		if !failed {
+			programs[ref] = prog
+		}
+	}
+	if len(ps) > 0 {
+		return nil, ps
+	}
+	return programs, nil
 }
