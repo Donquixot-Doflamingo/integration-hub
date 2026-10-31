@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **91** · todo: **103** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **92** · todo: **102** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **195** · done: **91** · todo: **103** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 24 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 25 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1993,14 +1993,16 @@ Shipped (frontend-engineer, `feat(frontend): add tenant pages with create, edit 
 
 ### HUB-271 — API keys with show-once
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-270 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-270 · **Feature:** F-19 · **Stories:** US-1906
 - **Branch:** `feat/HUB-271-fe-api-keys`
 
 Create, rotate (with overlap) and revoke tenant API keys; plaintext shown exactly once with copy action and never stored.
 
+Shipped (frontend-engineer, `feat(frontend): add API keys with the secret shown exactly once (HUB-271)`): an "API keys" section on `/tenants/{id}` (`listApiKeys` for the tenant, all pages, state filter `key_state` in the URL): prefix, state in text, scopes, created, expires, last used, replaced by; never a secret. Admins create (`createApiKey`: scopes `invoke` / `dry_run` / `requests_read`, optionally narrowed to one integration, description, UTC expiry), rotate (`rotateApiKey`, overlap none / 1 h / 24 h / 7 d / 30 d) and revoke (`revokeApiKey`, prefix typed). The new secret is shown once in `SecretOnce` (read-only field, Copy with a polite "Copied", "This is the only time it is shown" warning; Escape does not close it, Done needs "I have stored it" ticked). Show-once is enforced by: `ConfirmDialog oneTimeSecret` (the action answer goes to the reveal only, page data reloads with `invalidateAll`, never applied as the page's `form`); `createKey` / `rotateKey` refuse non-enhanced posts (`requireEnhanced`, no full HTML page with the key in the browser history); the notice carries only the change and request ids; nothing logged, stored or put in a URL.
+
 **Acceptance criteria**
-- [ ] Key plaintext not present in any store or after dialog close (test)
-- [ ] Rotation shows overlap expiry
+- [x] Key plaintext not present in any store or after dialog close (test) (`api-keys.test.ts`: after Done the secret is in no DOM node, input value, local/session storage, URL, `history.state` or console call, `update()` was never called so it never became page `form`, nothing re-displays it; `e2e/api-keys.test.ts` repeats the checks in Chromium after Done, after reload and after Back/Forward, plus console messages and request URLs)
+- [x] Rotation shows overlap expiry (the reveal and the notice say until when the old key works, from `old_key.expires_at`, with the overlap; unit and e2e)
 
 ### HUB-272 — Registrar endpoints
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

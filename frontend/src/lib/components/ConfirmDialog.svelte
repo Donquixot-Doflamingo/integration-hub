@@ -37,6 +37,7 @@
 		children,
 		fields,
 		extra,
+		oneTimeSecret = false,
 		onsuccess,
 		onfailure
 	}: {
@@ -62,6 +63,12 @@
 		fields?: Snippet<[FieldErrors]>;
 		/** Shown under the error, e.g. the failing publish checks. */
 		extra?: Snippet;
+		/**
+		 * The success answer carries a secret shown once (a new API key, HUB-271). It goes to
+		 * `onsuccess` only: the page data is reloaded with `invalidateAll` instead of `update`, so the
+		 * result is never applied as the page's `form` (where it would outlive the reveal).
+		 */
+		oneTimeSecret?: boolean;
 		onsuccess?: (data: ActionSuccessData) => void;
 		/** The action's failure data, e.g. to mark publish problems on the spec editor. */
 		onfailure?: (data: ActionFailureData) => void;
@@ -150,7 +157,8 @@
 					open = false;
 					onsuccess?.(result.data as ActionSuccessData);
 					// Reload the page data so the new state (active version, pause) shows.
-					await update({ reset: false });
+					if (oneTimeSecret) await invalidateAll();
+					else await update({ reset: false });
 				} else if (result.type === 'failure') {
 					const data = result.data as ActionFailureData | undefined;
 					error = data?.error ? fromPlainError(data.error) : null;

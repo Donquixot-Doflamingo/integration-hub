@@ -64,13 +64,21 @@ export async function runAction(
 		session?: Session | null;
 		url?: string;
 		cookies?: Record<string, string>;
+		/** Sent like `use:enhance` (`x-sveltekit-action: true`); false = a plain no-JS form post. */
+		enhanced?: boolean;
 	} = {}
 ): Promise<ActionResult> {
 	const url = new URL(opts.url ?? 'http://console.test/page');
 	const action = actions[name];
 	if (!action) return { type: 'error', status: 404, error: new Error(`no action ${name}`) };
 	const event = {
-		request: new Request(`${url.origin}${url.pathname}?/${name}`, { method: 'POST', body: form }),
+		request: new Request(`${url.origin}${url.pathname}?/${name}`, {
+			method: 'POST',
+			body: form,
+			headers: opts.enhanced
+				? { accept: 'application/json', 'x-sveltekit-action': 'true' }
+				: undefined
+		}),
 		params: opts.params ?? {},
 		locals: { session: opts.session === undefined ? testSession : opts.session },
 		url,
@@ -117,7 +125,8 @@ export function enhance(form: HTMLFormElement, submit?: SubmitFunction) {
 			? await runAction(w.actions, name, formData, {
 					params: w.params,
 					session: w.session,
-					cookies: w.cookies
+					cookies: w.cookies,
+					enhanced: true
 				})
 			: { type: 'error', status: 500, error: new Error('useActions() was not called') };
 		if (typeof after === 'function') {

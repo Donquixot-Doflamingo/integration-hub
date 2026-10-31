@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-01 · `feat(frontend)` · add API keys with the secret shown exactly once · HUB-271 · F-19
+  - Each tenant page lists its API keys by prefix, state, scopes, expiry and last use, filterable by state; no key is ever shown in the list
+  - Admins create keys (scopes, optionally limited to one integration, optional expiry), rotate them with an overlap and revoke them with the prefix typed, each with a reason and the change log id
+  - A new or rotated key appears once, with a Copy button and a clear warning; after Done it is gone from the page and cannot be shown again, and a rotation says until when the old key keeps working
+
 - 2026-10-31 · `feat(frontend)` · add tenant pages with create, edit and disable · HUB-270 · F-19
   - Tenants can be searched by id or name, with paging; each opens a page with its contact, rate limit, owned integrations (linked) and active key count
   - Admins create tenants and edit their name, description, contact and rate limit in a form checked against the contract before anything is sent; only changed fields are saved, with a reason

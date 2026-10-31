@@ -85,6 +85,9 @@ when a page under `src/routes/(app)/` renders its own `{#await}` instead):
   needs viewer) and `/tenants/{id}`. Create and edit go through `ConfirmDialog` with `TenantFields`; the checks
   live in `tenants/tenant-form.ts` and run in the browser and in the form actions. Edits send the loaded ETag
   (`ApiResult.etag`) as `If-Match`.
+- API keys (`tenants/[tenant_id]/ApiKeys.svelte`, `keys.ts`): a new secret only ever goes from the action answer to
+  `$lib/components/SecretOnce.svelte` and is dropped on Done. Any action that answers with a secret must use
+  `ConfirmDialog oneTimeSecret` and `requireEnhanced` (`$lib/server/actions.ts`), and must not log it.
 
 ## Auth (HUB-253)
 Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.

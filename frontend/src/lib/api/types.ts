@@ -101,3 +101,10 @@ export type TenantChange = Schemas['TenantChange'];
 export type RateLimit = Schemas['RateLimit'];
 /** Query parameters of `listTenants`. */
 export type ListTenantsQuery = NonNullable<Operations['listTenants']['parameters']['query']>;
+export type ApiKey = Schemas['ApiKey'];
+export type ApiKeyState = Schemas['ApiKeyState'];
+export type ApiKeyScope = Schemas['ApiKeyScope'];
+export type ApiKeyCreate = Schemas['ApiKeyCreate'];
+export type ApiKeyChange = Schemas['ApiKeyChange'];
+export type ApiKeySecretChange = Schemas['ApiKeySecretChange'];
+export type ApiKeyRotateResult = Schemas['ApiKeyRotateResult'];

@@ -13,6 +13,7 @@
 	import { formatNumber, formatUtc } from '$lib/utils/format';
 	import type { PageData } from './$types';
 	import TenantFields from '../TenantFields.svelte';
+	import ApiKeys from './ApiKeys.svelte';
 	import {
 		canSend,
 		EMPTY_VALUES,
@@ -168,6 +169,14 @@
 		</section>
 	{/snippet}
 </AsyncView>
+
+<ApiKeys
+	tenantId={id}
+	access={data.access}
+	keys={data.keys}
+	keyState={data.keyState}
+	onnotice={(n) => (notice = n)}
+/>
 
 {#if current}
 	{@const t = current.tenant}

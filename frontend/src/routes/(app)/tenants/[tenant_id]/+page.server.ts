@@ -1,6 +1,15 @@
-import { actionApi, finish, invalid, readReason, requireSession, text } from '$lib/server/actions';
+import {
+	actionApi,
+	finish,
+	invalid,
+	readReason,
+	requireEnhanced,
+	requireSession,
+	text
+} from '$lib/server/actions';
 import type { Actions } from './$types';
 import { API_FIELDS, BEFORE_PREFIX, updateBody, valuesFromForm } from '../tenant-form';
+import { createKeyBody, KEY_ID, keyValuesFromForm, overlapFromForm } from './keys';
 
 // HUB-270: edit a tenant and disable / enable it (updateTenant, admin, merge-patch). Both send the
 // ETag the page was loaded with as If-Match, so a concurrent change answers 412
@@ -46,8 +55,70 @@ export const actions = {
 			})
 		);
 		return finish('setDisabled', res);
+	},
+
+	// HUB-271: API keys (admin). createKey and rotateKey answer with the new secret, shown once:
+	// only enhanced (fetch) submissions, so it never lands in a full page the browser keeps in its
+	// history. The secret passes through untouched and is not logged.
+	createKey: async (event) => {
+		requireSession(event);
+		const notEnhanced = requireEnhanced('createKey', event);
+		if (notEnhanced) return notEnhanced;
+		const form = await event.request.formData();
+		const reason = readReason('createKey', form);
+		if (!reason.ok) return reason.failure;
+		const built = createKeyBody(event.params.tenant_id, keyValuesFromForm(form), reason.reason);
+		if (!built.ok) return invalid('createKey', built.fields);
+		const res = await actionApi(event).call((c) => c.POST('/api-keys', { body: built.body }));
+		return finish('createKey', res, ['reason', 'scopes', 'description', 'expires_at']);
+	},
+
+	rotateKey: async (event) => {
+		requireSession(event);
+		const notEnhanced = requireEnhanced('rotateKey', event);
+		if (notEnhanced) return notEnhanced;
+		const form = await event.request.formData();
+		const reason = readReason('rotateKey', form);
+		if (!reason.ok) return reason.failure;
+		const keyId = keyIdFrom(form);
+		if (!keyId) return invalid('rotateKey', { key_id: 'Reload the page and pick the key again.' });
+		const overlap = overlapFromForm(form);
+		if (overlap === null) return invalid('rotateKey', { overlap_ms: 'Pick an overlap.' });
+		const res = await actionApi(event).call((c) =>
+			c.POST('/api-keys/{key_id}/rotate', {
+				params: { path: { key_id: keyId } },
+				body: { overlap_ms: overlap, reason: reason.reason }
+			})
+		);
+		return finish('rotateKey', res, ['reason', 'overlap_ms']);
+	},
+
+	revokeKey: async (event) => {
+		requireSession(event);
+		const form = await event.request.formData();
+		const reason = readReason('revokeKey', form);
+		if (!reason.ok) return reason.failure;
+		const keyId = keyIdFrom(form);
+		if (!keyId) return invalid('revokeKey', { key_id: 'Reload the page and pick the key again.' });
+		// The prefix must be typed (checked again here): revoking is immediate and final.
+		const prefix = text(form, 'prefix');
+		if (!prefix || text(form, 'confirm').trim() !== prefix) {
+			return invalid('revokeKey', { confirm: `Type ${prefix || 'the key prefix'} to confirm.` });
+		}
+		const res = await actionApi(event).call((c) =>
+			c.POST('/api-keys/{key_id}/revoke', {
+				params: { path: { key_id: keyId } },
+				body: { reason: reason.reason }
+			})
+		);
+		return finish('revokeKey', res);
 	}
 } satisfies Actions;
+
+function keyIdFrom(form: FormData): string | null {
+	const id = text(form, 'key_id');
+	return KEY_ID.test(id) ? id : null;
+}
 
 /** `If-Match` from the hidden `if_match` field (the ETag of the loaded tenant), when there is one. */
 function ifMatch(form: FormData): { 'If-Match'?: string } {
