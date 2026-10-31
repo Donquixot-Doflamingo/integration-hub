@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `chore(backend)` · add Makefile targets and golangci-lint config · HUB-021 · F-01
+  - backend/Makefile: build test itest lint fmt bench run mockvendor up down migrate doctor
+  - backend/.golangci.yml (v2, pinned 2.15.0) with depguard keeping transform pure and forbidigo banning fmt.Print/log/time.Sleep
+  - Root Makefile delegating to backend/ and frontend/
 - 2026-10-31 · `chore(backend)` · create Go module and package layout · HUB-020 · F-01
   - backend/go.mod (module github.com/Donquixot-Doflamingo/integration-hub/backend, go 1.25 minimum)
   - Every DESIGN §18.1 package with doc.go, plus internal/core and internal/testkit (ADR-0001 accepted)

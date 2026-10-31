@@ -237,16 +237,16 @@ Create `backend/go.mod` (`github.com/Donquixot-Doflamingo/integration-hub/backen
 
 ### HUB-021 — Makefile targets and golangci-lint config
 - **Epic:** EP-01 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-021-makefile-lint`
 
 Add `backend/Makefile` with `build test itest lint bench run` (DESIGN §19 M0) and a `.golangci.yml` with a strict but practical linter set.
 
 **Acceptance criteria**
-- [ ] `make build` produces `hub`, `hubctl`, `mockvendor`, `hubmcp` binaries
-- [ ] `make test` runs `go test -race ./...`
-- [ ] `make itest` runs tests tagged `integration`
-- [ ] `make lint` passes on the scaffold
+- [x] `make build` produces `hub`, `hubctl`, `mockvendor`, `hubmcp` binaries
+- [x] `make test` runs `go test -race ./...`
+- [x] `make itest` runs tests tagged `integration`
+- [x] `make lint` passes on the scaffold
 
 ### HUB-022 — CI workflow for backend
 - **Epic:** EP-01 · **Type:** chore · **Area:** infra

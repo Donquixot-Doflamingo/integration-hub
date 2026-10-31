@@ -45,7 +45,7 @@ type listedPackage struct {
 
 func listPackages(t *testing.T) []listedPackage {
 	t.Helper()
-	out, err := exec.Command("go", "list", "-json", module+"/...").Output()
+	out, err := exec.CommandContext(t.Context(), "go", "list", "-json", module+"/...").Output()
 	if err != nil {
 		t.Fatalf("go list: %v", err)
 	}
