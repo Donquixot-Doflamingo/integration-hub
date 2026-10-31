@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `chore(frontend)` · generate typed admin API client from the contract · HUB-251 · F-19
+  - `npm run gen:api` writes `src/lib/api/schema.d.ts` from hub-admin.v1.yaml (79 operations); CI fails when it is stale
+  - `adminClient()` wraps openapi-fetch with bearer auth, `X-Hub-Request-Id` capture and a typed `HubApiError` from the error envelope
+  - `npm run lint` rejects hand-written API types and raw `fetch` to `/admin/v1` outside `src/lib/api/`
+  - CCR-001 filed in `frontend/CCR-NOTES.md`: admin spec does not declare `X-Hub-Request-Id`
 - 2026-10-31 · `chore(frontend)` · scaffold SvelteKit admin console · HUB-250 · F-19
   - `frontend/` is a SvelteKit 2 + Svelte 5 (runes enforced) + TypeScript strict app on adapter-node
   - ESLint flat config + Prettier, Vitest + Testing Library (jsdom), Playwright with a smoke e2e

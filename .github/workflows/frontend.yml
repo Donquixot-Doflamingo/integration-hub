@@ -1,16 +1,18 @@
-# Admin console (frontend/) CI: type check, lint, unit tests and production build.
-# Runs only when the console (or this workflow) changes. See frontend/AGENTS.md.
+# Admin console (frontend/) CI: generated-client freshness, type check, lint, unit tests, build.
+# Runs when the console, the admin contract or this workflow changes. See frontend/AGENTS.md.
 name: frontend
 
 on:
   pull_request:
     paths:
       - 'frontend/**'
+      - 'contracts/openapi/hub-admin.v1.yaml'
       - '.github/workflows/frontend.yml'
   push:
     branches: [main]
     paths:
       - 'frontend/**'
+      - 'contracts/openapi/hub-admin.v1.yaml'
       - '.github/workflows/frontend.yml'
 
 permissions:
@@ -35,6 +37,13 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install
         run: npm ci
+      - name: Generated API types are fresh (gen:api)
+        run: |
+          npm run gen:api
+          git diff --exit-code -- src/lib/api/schema.d.ts || {
+            echo "::error file=frontend/src/lib/api/schema.d.ts::schema.d.ts is stale. Run 'npm run gen:api' in frontend/ and commit the result."
+            exit 1
+          }
       - name: Type check (svelte-check)
         run: npm run check
       - name: Lint (prettier + eslint)

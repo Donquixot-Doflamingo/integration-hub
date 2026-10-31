@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **186** · done: **12** · todo: **174**
+Total tickets: **186** · done: **13** · todo: **173**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **186** · done: **12** · todo: **174**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 28 | 1 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 28 | 2 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1687,15 +1687,15 @@ Create `frontend/` with SvelteKit, Svelte 5 runes, TypeScript strict, ESLint/Pre
 
 ### HUB-251 — Generated API client (gen:api)
 - **Epic:** EP-10 · **Type:** chore · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-250, HUB-006 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-250, HUB-006 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `chore/HUB-251-fe-gen-api`
 
 `npm run gen:api` generates types from `contracts/openapi/hub-admin.v1.yaml` with openapi-typescript and wraps openapi-fetch in a typed client with auth and error-envelope handling (AGENTS §4.5).
 
 **Acceptance criteria**
 - [ ] Generated types committed; CI fails if regeneration produces a diff
-- [ ] No hand-written API types in `src/` (lint rule or grep check)
-- [ ] Client surfaces the error envelope as a typed error
+- [x] No hand-written API types in `src/` (lint rule or grep check)
+- [x] Client surfaces the error envelope as a typed error
 
 ### HUB-252 — MSW mocks from the contract
 - **Epic:** EP-10 · **Type:** test · **Area:** frontend
