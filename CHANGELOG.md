@@ -6,6 +6,44 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(frontend)` · accept ADR-0009 and require encrypted OIDC sessions · HUB-279, HUB-282 · F-19
+  - ADR-0009 (stay on SvelteKit 2.70.3 with the // path guard until HUB-281) accepted by the lead
+  - HUB-282 now requires the OIDC token to be unreadable from the session cookie (encrypt the payload or use a server-side store)
+- 2026-10-31 · `feat(frontend)` · add side-by-side and path-list version diff · HUB-258 · F-19
+  - Compare any two versions of an integration: pick From and To in the version history, or follow a row's "vs vN" link to the version it was based on
+  - Side by side: old on the left, new on the right, removed and added lines marked with - / + and a text label as well as colour; long unchanged stretches fold behind "Show N unchanged lines"
+  - Changed paths: each JSON path with Added / Removed / Changed and its value before and after, plus a one-line summary of what differs
+  - The pair and the view are in the URL; without a pair the page opens on the newest version against the active one
+
+- 2026-10-31 · `feat(frontend)` · add integration detail page and version history · HUB-257 · F-19
+  - Integration ids in the list open a detail page: status, owner tenant, capability, active and latest version, grants, money flag and pause reason
+  - The active version's spec in plain terms: targets with weights and transformers, failover order, delivery, breaker override, webhooks, audit and shadow traffic
+  - Version history lists every version newest first with author, reason and dates; the active version and drafts are labelled; each version opens its own page with its spec
+  - Viewers and tenant viewers see a read-only note where editors will get publish, rollback, weights and pause (HUB-259/260)
+
+- 2026-10-31 · `feat(frontend)` · add integrations list with URL filters and cursor paging · HUB-256 · F-19
+  - Search and filter integrations by owner tenant, capability, paused state, vendor and account; tenant viewers pick among their own tenants and see no vendor or account filters
+  - Filters and page size live in the URL (shareable, survive reload), show as removable chips with "Clear all", and reset paging when changed
+  - Previous / Next paging with the API cursor; the way back is kept in the URL
+  - Paused, "No active version" and draft integrations are marked in text; filter by active version waits for CCR-002 (HUB-283)
+
+- 2026-10-31 · `feat(frontend)` · add shared loading, empty and error states for every page · HUB-255 · F-19
+  - Error panels show the error code, HTTP status, message, what to do, field details, whether retrying helps (with the server's delay) and the request id with a copy button
+  - Empty lists say whether nothing exists yet or the filters hide everything, with a "Clear all filters" link
+  - While a list or detail reloads, the previous data stays on screen (marked as updating) instead of flashing a skeleton
+  - Unknown pages and load errors use the same panel, inside the console shell or with a link back home
+
+- 2026-10-31 · `feat(frontend)` · add console sign-in, session cookie and role gating · HUB-253 · F-19
+  - Every console page needs a session; signed-out users land on `/login` and return to the page they asked for
+  - Dev sign-in (mock builds or `PUBLIC_AUTH_MODE=dev`): pick admin, editor, viewer or tenant viewer (with tenants); OIDC is a placeholder that lists missing settings until HUB-282
+  - The session is an HMAC-signed httpOnly cookie; no token or session data in the browser's storage; sign out from the user menu
+  - Mutation controls are gated by the role from `/me` (`RoleGate`): hidden for viewer and tenant viewer, and for everyone when `/me` fails
+
+- 2026-10-31 · `chore(frontend)` · keep SvelteKit 2 with a double-slash path guard · HUB-279 · F-19
+  - Requests whose path starts with `//` get a 404 before routing (workaround for GHSA-pfhg-q3qv-9q6r, which SvelteKit fixes only in 3.0)
+  - ADR-0009: why the console stays on SvelteKit 2.70.3 (Kit 3 needs TypeScript 6, which the API type generator does not support yet) and the upgrade deadline (2027-01-31, HUB-281)
+  - F-19 lists both Kit advisories against what the console actually uses; `npm audit --omit=dev` has 0 findings
+
 - 2026-10-31 · `docs(tickets)` · close HUB-047 after the sqlc CI job ran green · HUB-047 · F-03
   - All backend jobs green on PR #4, including the new sqlc freshness job
 - 2026-10-31 · `test(registry)` · record M1 acceptance and milestone summary · HUB-049 · F-03

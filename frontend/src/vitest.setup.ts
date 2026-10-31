@@ -4,6 +4,7 @@ import { server } from '$lib/api/mocks/server';
 
 // SvelteKit's runtime env is not populated under Vitest; tests use the default admin API base.
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
+vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
 // Every test runs against MSW built from the contract examples. Unmocked requests fail loudly.
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));

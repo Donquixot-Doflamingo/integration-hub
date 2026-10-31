@@ -82,7 +82,12 @@
 		<Breadcrumbs pathname={page.url.pathname} />
 		<div class="tools">
 			<ThemeSwitch />
-			<UserMenu me={data.me} />
+			<UserMenu
+				me={data.me}
+				user={data.session.user}
+				provider={data.session.provider}
+				expiresAt={data.session.expiresAt}
+			/>
 		</div>
 	</header>
 

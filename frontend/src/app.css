@@ -166,3 +166,27 @@ code,
 		transition-duration: 0.01ms !important;
 	}
 }
+
+/* Label / value grids for detail views (integration header, spec sections). */
+.facts {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+	gap: var(--space-3) var(--space-5);
+	margin: 0;
+	font-size: var(--text-sm);
+}
+.facts > div {
+	min-width: 0;
+}
+.facts dt {
+	color: var(--ink-muted);
+	font-size: var(--text-xs);
+	font-weight: 600;
+}
+.facts dd {
+	margin: 0.1rem 0 0;
+	overflow-wrap: anywhere;
+}
+.muted {
+	color: var(--ink-muted);
+}

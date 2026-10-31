@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **190** · done: **39** · todo: **151**
+Total tickets: **193** · done: **45** · todo: **148**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **190** · done: **39** · todo: **151**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 31 | 4 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 34 | 10 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1745,15 +1745,17 @@ MSW handlers and typed fixtures for every admin operation so the console is buil
 
 ### HUB-253 — Auth: OIDC stub login and /me
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-252 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-252 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `feat/HUB-253-fe-auth`
 
 Login via the dev OIDC stub, session handling, `/me` fetch and role-aware guards for `admin | editor | viewer | tenant_viewer`.
 
+Shipped (frontend-engineer): no OIDC stub exists yet, so auth sits behind an `AuthProvider` interface with a dev provider (role picker; mock builds or `PUBLIC_AUTH_MODE=dev`) and a config-wired OIDC placeholder; real OIDC is HUB-282. Session is an HMAC-signed httpOnly cookie.
+
 **Acceptance criteria**
-- [ ] Unauthenticated users redirected to login
-- [ ] Controls for mutations hidden/disabled for `viewer`
-- [ ] Unit tests for the guard per role
+- [x] Unauthenticated users redirected to login (unit: `(app)/+layout.server.ts`; e2e: `e2e/auth.test.ts`)
+- [x] Controls for mutations hidden/disabled for `viewer` (`RoleGate` + `access`, component-tested per role; also hidden for `tenant_viewer` and when `/me` fails. No mutation control exists yet: HUB-259/260 must use `RoleGate`)
+- [x] Unit tests for the guard per role (`src/lib/auth/roles.test.ts`, `RoleGate.test.ts`)
 
 ### HUB-254 — Layout and navigation
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
@@ -1768,50 +1770,50 @@ App shell with sidebar navigation (Integrations, Health, Requests, DLQ, Transfor
 
 ### HUB-255 — Error, empty and loading states
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-251, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-251, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `feat/HUB-255-fe-states`
 
 Shared components for loading skeletons, empty states and error envelopes (code, message, request_id, retryable) used by every page.
 
 **Acceptance criteria**
-- [ ] Every list/detail page uses the shared components (checked in review + test)
-- [ ] Error component shows `request_id` with copy action
-- [ ] Component tests for each state
+- [x] Every list/detail page uses the shared components (checked in review + test: `states.test.ts` scans every `(app)` page and both `+error.svelte`)
+- [x] Error component shows `request_id` with copy action
+- [x] Component tests for each state (`states.test.ts`, `shell.test.ts`, `sections.test.ts`)
 
 ### HUB-256 — Integrations list
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-253, HUB-255 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-253, HUB-255 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `feat/HUB-256-fe-integrations-list`
 
 Searchable, filterable list of integrations (tenant, capability, paused, active version) with pagination.
 
 **Acceptance criteria**
-- [ ] Filters reflected in the URL
-- [ ] Paused integrations visibly marked
-- [ ] Component tests against MSW
+- [x] Filters reflected in the URL (search, tenant, capability, paused, vendor, account, page size, cursor; the active-version filter waits for CCR-002 / HUB-283)
+- [x] Paused integrations visibly marked ("Paused" badge, text + icon; also "No active version" and "draft")
+- [x] Component tests against MSW (`routes/(app)/integrations/page.test.ts`, `filters.test.ts`)
 
 ### HUB-257 — Integration detail and version history
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-256 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-256 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `feat/HUB-257-fe-integration-detail`
 
 Detail page with active version spec (targets, weights, failover, delivery, breaker, webhooks, audit) and version history with author, reason, date.
 
 **Acceptance criteria**
-- [ ] History shows every version newest first
-- [ ] Active version clearly marked
-- [ ] Component tests against MSW
+- [x] History shows every version newest first (follows `next_cursor` across pages, sorted by version)
+- [x] Active version clearly marked ("Active" badge in text + icon, and the "Active version vN" section)
+- [x] Component tests against MSW (`routes/(app)/integrations/[integration_id]/page.test.ts`)
 
 ### HUB-258 — Version diff view
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `feat/HUB-258-fe-version-diff`
 
 Compare any two versions using the admin diff endpoint, with side-by-side and path-list views.
 
 **Acceptance criteria**
-- [ ] Changed, added and removed paths highlighted
-- [ ] Diff selectable from history rows
+- [x] Changed, added and removed paths highlighted (symbol + text label + colour, side by side and in the path list)
+- [x] Diff selectable from history rows (From/To radios + "Compare selected versions", and a per-row "vs vN" link to the version it was based on)
 
 ### HUB-259 — Publish and rollback flows with mandatory reason
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
@@ -2041,15 +2043,15 @@ Filed by frontend-engineer during HUB-251. Full CCR text (before/after YAML): `f
 
 ### HUB-279 — Evaluate SvelteKit 3 before form actions land
 - **Epic:** EP-10 · **Type:** chore · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-250 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-250 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `chore/HUB-279-sveltekit-3-evaluation`
 
 `npm audit` (2026-10-31) reports two advisories against SvelteKit 2.x: a redirect issue with enhanced form submission, and an XSS that only affects prerendered pages (the console prerenders nothing). npm's only fix is SvelteKit 3. Decide before the first form-action ticket (HUB-259+): upgrade, or document why 2.x is safe for this console. Re-check the ESLint/minimatch advisory chain at the same time.
 
 **Acceptance criteria**
-- [ ] Advisories assessed against the console's actual use (form actions, prerendering), written up in F-19
-- [ ] Either upgraded to SvelteKit 3 with all checks green, or an ADR records why 2.x stays and until when
-- [ ] `npm audit --omit=dev` has no unassessed high or critical findings
+- [x] Advisories assessed against the console's actual use (form actions, prerendering), written up in F-19
+- [x] Either upgraded to SvelteKit 3 with all checks green, or an ADR records why 2.x stays and until when (ADR-0009: stays on 2.70.3 with a `//` path guard; upgrade by 2027-01-31 at the latest, HUB-281)
+- [x] `npm audit --omit=dev` has no unassessed high or critical findings (0 findings on 2026-10-31)
 
 ### HUB-280 — Run Playwright e2e in frontend CI
 - **Epic:** EP-10 · **Type:** test · **Area:** infra
@@ -2062,6 +2064,45 @@ The e2e suite (axe a11y, keyboard, 768 px drawer, theme) runs only locally today
 - [ ] `frontend.yml` runs e2e on `frontend/**` PRs; a failing e2e test fails the PR
 - [ ] Browser binaries cached; job under 8 min
 - [ ] Playwright HTML report uploaded as an artifact on failure
+
+### HUB-281 — Upgrade the console to SvelteKit 3
+- **Epic:** EP-10 · **Type:** chore · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-279 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `chore/HUB-281-sveltekit-3`
+
+Filed by frontend-engineer during HUB-279 (ADR-0009). Move to `@sveltejs/kit` 3 + `@sveltejs/adapter-node` 6 + TypeScript 6 once `openapi-typescript` (or a replacement) supports TypeScript 6, or by 2027-01-31 at the latest. Known migration steps from the HUB-279 trial: config from `svelte.config.js` into `sveltekit({...})` in `vite.config.ts` (also update `eslint.config.js` and `src/lib/runes-mode.test.ts`), `$lib` -> `#lib` subpath imports, `tsconfig.json` extends `$app/tsconfig`, `$env/*` and `$app/types` `Pathname` / `resolve()` changes. Update the skills and `frontend/AGENTS.md`, which say SvelteKit 2.
+
+**Acceptance criteria**
+- [ ] Upgraded without `overrides` or `--legacy-peer-deps`; lockfile committed
+- [ ] `npm run check && npm run lint && npm test && npm run build` and `npm run test:e2e` green
+- [ ] `npm audit` shows neither Kit advisory (GHSA-pfhg-q3qv-9q6r, GHSA-27mw-82g8-phjj); ADR-0009 marked superseded
+- [ ] Skills, `frontend/AGENTS.md` and `frontend/README.md` say SvelteKit 3
+
+### HUB-282 — Real OIDC sign-in for the console
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-282-fe-oidc`
+
+Filed by frontend-engineer during HUB-253. Replace the placeholder `oidcProvider` (`frontend/src/lib/server/auth/oidc.ts`) with Authorization Code + PKCE against the Hub issuer (`hub admin` OIDC stub, DESIGN §19 M7; contract `securitySchemes.oidc`). Needs the issuer to exist (backend M7) and a decision on how browser-side loads reach `/admin/v1` with the token: today only server-side fetches get it (`handleFetch`); client navigations call the admin API from the browser, so either a same-origin BFF proxy route that adds the bearer token from the session, or server loads for every screen.
+
+**Acceptance criteria**
+- [ ] Discovery, PKCE (S256), `state` and `nonce` checked; callback route sets the session cookie; `/me` read after login
+- [ ] Browser-side admin API calls are authorised without exposing the token to JavaScript (BFF proxy or server loads), documented in an ADR
+- [ ] Token expiry: silent refresh or redirect to login with `expired=1`; sign-out ends the IdP session when supported
+- [ ] Tested against the dev issuer in e2e (HUB-277)
+- [ ] The access (and refresh) token is never readable from the cookie value: today the session cookie is signed but **not encrypted** (base64 JSON). Encrypt the session payload (e.g. AES-256-GCM with a key derived from `HUB_SESSION_SECRET`) or keep tokens in a server-side session store keyed by an opaque id (lead review of HUB-253)
+
+### HUB-283 — CCR-002: active-version filters on listIntegrations
+- **Epic:** EP-10 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-006, HUB-256 · **Feature:** F-19 · **Stories:** US-1902
+- **Branch:** `contract/HUB-283-integrations-version-filters`
+
+Filed by frontend-engineer during HUB-256. Full CCR text (before/after YAML): `frontend/CCR-NOTES.md` § CCR-002. HUB-256 asks for an "active version" filter on the integrations list, but `listIntegrations` has no version parameter, and filtering one cursor page client-side would miss matches. Proposed additive booleans `has_active_version` and `active_version_behind`. `hub-admin` minor bump.
+
+**Acceptance criteria**
+- [ ] Both query parameters added to `listIntegrations` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
+- [ ] Backend list handler implements them, covered by contract tests (EP-08)
+- [ ] Console adds the filter (URL params, chips) after `npm run gen:api` and removes `TODO(CCR-002)`
 
 ## EP-11 — MCP server + consumer skill + SDK
 

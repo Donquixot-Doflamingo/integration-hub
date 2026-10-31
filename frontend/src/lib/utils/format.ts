@@ -12,13 +12,14 @@ export function formatNumber(n: number | null | undefined): string {
 	return typeof n === 'number' && Number.isFinite(n) ? numberFormat.format(n) : '-';
 }
 
-/** Durations with units: 61000 -> `61 s`, 1840 -> `1,840 ms`, 5400000 -> `90 min`. */
+/** Durations with units: 61000 -> `61 s`, 1840 -> `1,840 ms`, 5400000 -> `90 min`, 2592000000 -> `30 d`. */
 export function formatDurationMs(ms: number | null | undefined): string {
 	if (typeof ms !== 'number' || !Number.isFinite(ms)) return '-';
 	if (ms < 10_000) return `${formatNumber(Math.round(ms))} ms`;
 	if (ms < 120_000) return `${formatNumber(Math.round(ms / 1000))} s`;
 	if (ms < 7_200_000) return `${formatNumber(Math.round(ms / 60_000))} min`;
-	return `${formatNumber(Math.round(ms / 3_600_000))} h`;
+	if (ms < 172_800_000) return `${formatNumber(Math.round(ms / 3_600_000))} h`;
+	return `${formatNumber(Math.round(ms / 86_400_000))} d`;
 }
 
 /** Byte sizes: 48213 -> `47.1 KiB`. */

@@ -38,3 +38,41 @@ already were in the contract.
 - **Rollout**: contract PR first
 - **Current workaround**: `client.ts` reads the header as a best-effort fallback (`TODO(CCR-001)`); error
   bodies' `request_id` always wins.
+
+### CCR-002: active-version filter on `listIntegrations`
+- **Requested by**: frontend-engineer (ticket HUB-256)
+- **Why**: HUB-256 (F-19, US-1902) asks for an integrations list filterable by tenant, capability, paused and
+  **active version**. Operators look for integrations that have no active version yet (created, never published:
+  invocations answer 503 `INTEGRATION_PAUSED` / `no_active_version`) and for those whose active version lags the
+  latest (a draft or unpublished version waiting). `listIntegrations` has `tenant_id`, `capability`, `vendor_id`,
+  `account_id`, `paused` and `q`, but nothing on versions. Filtering one page client-side would be wrong with cursor
+  pagination (matches on later pages would be missed), so the console does not offer the filter until the API does.
+- **Document**: `hub-admin.v1.yaml`
+- **Operation / schema**: `listIntegrations`, `GET /integrations`
+- **Before**:
+  ```yaml
+  # parameters: TenantFilter, capability, vendor_id, account_id, paused, Q, Cursor, Limit
+  # (no version filter)
+  ```
+- **After**:
+  ```yaml
+        - name: has_active_version
+          in: query
+          description: true = only integrations with an active (published) version; false = only those without one.
+          schema:
+            type: boolean
+          example: false
+        - name: active_version_behind
+          in: query
+          description: true = only integrations whose latest version is newer than the active one (an unpublished draft or version is waiting).
+          schema:
+            type: boolean
+          example: true
+  ```
+- **Breaking?**: no (additive optional query parameters) -> minor bump
+- **Consumers affected**: backend list handler (registry query), frontend `routes/(app)/integrations` filters, hubmcp
+  (optional, list tool)
+- **Error codes**: none new (`VALIDATION_FAILED` for a non-boolean value, as for `paused`)
+- **Rollout**: contract PR first
+- **Current workaround**: none in the UI; `TODO(CCR-002)` in `src/routes/(app)/integrations/filters.ts`. The list
+  shows the active and latest version per row and marks "No active version" and "Draft" so operators can scan for them.

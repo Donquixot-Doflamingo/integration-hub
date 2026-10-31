@@ -71,7 +71,15 @@ export interface Crumb {
 	href: string;
 }
 
-/** Breadcrumb trail for a pathname: Console > Section > deeper segments (as-is, decoded). */
+/**
+ * Segments that name a sub-collection and only make sense with the next one: `versions/8` becomes
+ * one crumb "v8" (there is no page at `.../versions`).
+ */
+const PREFIXED: Record<string, (next: string) => string> = { versions: (v) => `v${v}` };
+/** Readable labels for fixed sub-page segments. */
+const LABELS: Record<string, string> = { diff: 'Compare' };
+
+/** Breadcrumb trail for a pathname: Console > Section > deeper segments (decoded). */
 export function breadcrumbsFor(pathname: string): Crumb[] {
 	const crumbs: Crumb[] = [{ label: 'Console', href: '/' }];
 	const section = sectionFor(pathname);
@@ -79,9 +87,18 @@ export function breadcrumbsFor(pathname: string): Crumb[] {
 	crumbs.push({ label: section.label, href: section.href });
 	const rest = pathname.slice(section.href.length).split('/').filter(Boolean);
 	let href = section.href;
-	for (const segment of rest) {
+	for (let i = 0; i < rest.length; i++) {
+		const segment = rest[i]!;
+		const prefix = PREFIXED[segment];
+		const nextSegment = rest[i + 1];
+		if (prefix && nextSegment !== undefined) {
+			href += `/${segment}/${nextSegment}`;
+			crumbs.push({ label: prefix(decodeURIComponent(nextSegment)), href });
+			i++;
+			continue;
+		}
 		href += `/${segment}`;
-		crumbs.push({ label: decodeURIComponent(segment), href });
+		crumbs.push({ label: LABELS[segment] ?? decodeURIComponent(segment), href });
 	}
 	return crumbs;
 }

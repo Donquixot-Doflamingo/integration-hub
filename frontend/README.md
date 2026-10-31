@@ -53,5 +53,35 @@ band that names the admin API (striped in mock mode). Below 1024 px the sidebar 
 Visual direction: cool workspace, slate-navy rail, one teal accent; Atkinson Hyperlegible Next/Mono (self-hosted via
 Fontsource) because ids like `req_01J9Z...` must not confuse 0/O or 1/l. Tokens live in `src/app.css`.
 
+## Shared states (HUB-255)
+Every data view uses these, so loading, empty and error look and behave the same everywhere (a unit test fails
+when a page under `src/routes/(app)/` renders its own `{#await}` instead):
+| Component | Use it for |
+| --- | --- |
+| `AsyncView` | One `api.call(...)` from `load`: skeleton while loading, `ErrorPanel` on failure, `children(data)` on success; keeps the previous data (marked busy) while a new call runs |
+| `ListView` | A list operation: `AsyncView` + table skeleton with the real columns + `EmptyState` + accessible table (sticky first column); `footer` snippet for paging |
+| `ErrorPanel` | Any failed call: canonical `code`, HTTP status, message, operator hint, validation details (JSON pointers), whether retrying helps (with `retry_after_ms`), request id with copy, Retry |
+| `EmptyState` | "Nothing exists yet" vs `filtered` ("filters hide everything", with a Clear all filters link) |
+| `Skeleton` | Loading placeholder for detail sections |
+| `ErrorPage` | Body of both `+error.svelte` pages (unknown routes, errors thrown from loads) |
+
+## Integration screens (HUB-256 to HUB-258)
+- `/integrations`: filters and page size in the URL (`filters.ts`), chips, cursor paging (`$lib/utils/paging.ts`, `Pager`).
+- `/integrations/{id}`: header, active spec (`$lib/components/integration/SpecView.svelte`), full version history
+  (`collectPages` follows `next_cursor`), From/To selection for a diff; `/integrations/{id}/versions/{n}` for one version.
+- `/integrations/{id}/diff?from=&to=&view=split|paths`: `$lib/components/diff/` (`DiffSplit` from the unified YAML diff,
+  `DiffPaths` from the structured ops), helpers in `$lib/utils/diff.ts`. Reuse these for the publish preview (HUB-259).
+
+## Auth (HUB-253)
+Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.
+- Provider per deployment (`src/lib/server/auth/`): **dev** (role picker: admin, editor, viewer, tenant viewer
+  with tenants) in mock builds or with `PUBLIC_AUTH_MODE=dev`; otherwise **OIDC**, a placeholder that reports
+  missing `HUB_OIDC_ISSUER` / `HUB_OIDC_CLIENT_ID` / `HUB_OIDC_REDIRECT_URI` and refuses sign-in until HUB-282.
+- Session: HMAC-signed httpOnly SameSite=Lax cookie, 8 h. Key `HUB_SESSION_SECRET` (32+ chars); dev mode
+  without it uses a random per-process key. No token or session data in web storage. Sign out: `POST /logout`.
+- Gating: `/me` (awaited in `(app)/+layout.ts`) gives `data.access`; wrap mutation controls in `RoleGate`
+  (hidden for viewer and tenant viewer, and for everyone when `/me` failed). In mock mode MSW's `/me`
+  answers as the identity picked at login.
+
 Runes mode is enforced in `svelte.config.js` for every project component; Svelte 4 syntax fails to compile.
 CI: [`.github/workflows/frontend.yml`](../.github/workflows/frontend.yml), runs on `frontend/**` changes.

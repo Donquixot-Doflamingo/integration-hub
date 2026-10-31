@@ -4,7 +4,7 @@
 A SvelteKit (Svelte 5 + TypeScript) control-plane UI in `frontend/`, pulled forward from Release 2 (PRD DV-2) and built in parallel with backend milestones against the frozen admin contract. It covers cutover, health, investigation and recovery workflows.
 
 ## Status
-`in-progress` — 2026-10-31 (scaffold, generated client, contract mocks and app shell shipped; screens follow HUB-253+).
+`in-progress` — 2026-10-31 (scaffold, client, mocks, shell, sign-in and role gating, shared states, integrations list, detail, history and diff shipped; mutations follow with HUB-259+).
 
 ## Owner
 `frontend-engineer`.
@@ -41,7 +41,7 @@ On-call and integration admins cannot run incidents or cutovers efficiently from
 
 ## UX / API surface
 - Typed client generated from `contracts/openapi/hub-admin.v1.yaml` (`npm run gen:api`); no hand-written API types (AGENTS.md §4.6).
-- Auth: OIDC authorization code + PKCE; role from token claims (`getMe`) drives which actions render.
+- Auth: OIDC authorization code + PKCE (HUB-282, pending the Hub issuer); until then a dev provider (role picker) in mock builds or with `PUBLIC_AUTH_MODE=dev`. `getMe` drives which actions render (`RoleGate`, fails closed when `/me` fails).
 - Mutations always show a confirmation dialog with required **reason** and a preview (diff or match count).
 
 ## Behaviour & rules
@@ -58,7 +58,8 @@ On-call and integration admins cannot run incidents or cutovers efficiently from
 None.
 
 ## Config impact
-`PUBLIC_ADMIN_API_BASE` (runtime, default `/admin/v1` on the console origin), OIDC client id/issuer (HUB-253).
+`PUBLIC_ADMIN_API_BASE` (runtime, default `/admin/v1` on the console origin).
+Auth (HUB-253): `PUBLIC_AUTH_MODE` (`dev` selects the role-picker provider; anything else OIDC), `HUB_SESSION_SECRET` (session cookie HMAC key, 32+ chars, required for OIDC), `HUB_OIDC_ISSUER`, `HUB_OIDC_CLIENT_ID`, `HUB_OIDC_REDIRECT_URI` (OIDC placeholder; wiring in HUB-282).
 Build-time `HUB_API_MOCKING=true` (`npm run dev:mock` / `build:mock`) runs the console on MSW contract mocks with client-side rendering; normal builds contain no mock code.
 
 ## Observability
@@ -68,7 +69,7 @@ Build-time `HUB_API_MOCKING=true` (`npm run dev:mock` / `build:mock`) runs the c
 | Metric | Admin API metrics cover usage (F-16) | |
 
 ## Security & PII
-Tokens in memory (no localStorage); CSP strict; no payload caching in the browser beyond the session; API key plaintext shown once.
+Session in an HMAC-signed httpOnly SameSite=Lax cookie set by the login action; tokens stay server side (never in page data or web storage); post-login `next` restricted to same-origin paths; CSP strict; no payload caching in the browser beyond the session; API key plaintext shown once.
 
 ## Failure modes
 | Failure | Behaviour | Caller sees |
@@ -93,18 +94,41 @@ Screens ship as their admin endpoints freeze; behind OIDC from the first deploy.
 ## Tickets
 HUB-250 – HUB-299.
 
+## Framework version and advisories (HUB-279)
+Decision: **stay on SvelteKit 2.70.3** for now ([ADR-0009](../tech/adr/0009-console-stays-on-sveltekit-2.md)); upgrade under HUB-281 by 2027-01-31 at the latest.
+
+| Advisory (fixed only in Kit 3.0.0) | Needs | This console | Status |
+| --- | --- | --- | --- |
+| GHSA-pfhg-q3qv-9q6r, open redirect via `use:enhance` (Low) | a route accepting `//`-prefixed paths + enhanced form actions | No form actions yet; HUB-259+ will add `use:enhance` | Mitigated: `src/hooks.server.ts` answers 404 for every `//` path before routing (advisory workaround) |
+| GHSA-27mw-82g8-phjj, XSS in prerendered pages via untrusted `cache-control` (Low) | prerendering + `setHeaders` with untrusted `cache-control` | Nothing is prerendered; no request-derived `setHeaders` | Not applicable; rule: never enable `prerender` on 2.x |
+
+Other `npm audit` findings (minimatch under ESLint/typescript-eslint/openapi-typescript, deepmerge under the build, `cookie <0.7.0` under Kit) are dev/build-time only or not reachable (fixed cookie names). `npm audit --omit=dev`: 0 findings.
+Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (our API type generator) only supports TypeScript 5, so the install needs an override; Kit 3 also moves config out of `svelte.config.js`, removes `$lib` and changes `$env`, and its 3.0.0 is one month old.
+
 ## Shipped so far
 | Ticket | What shipped |
 | --- | --- |
 | HUB-250 | `frontend/` scaffold: SvelteKit 2 + Svelte 5 (runes enforced) + TypeScript strict, adapter-node (SSR), ESLint/Prettier, Vitest + Testing Library, Playwright; `.github/workflows/frontend.yml` |
 | HUB-251 | `npm run gen:api` -> `src/lib/api/schema.d.ts`; `adminClient()` (openapi-fetch, bearer token, `X-Hub-Request-Id`, typed `HubApiError` from the envelope); lint guard against hand-written API types; CI freshness check |
 | HUB-252 | MSW handlers for all 79 admin operations from contract examples (`contract.gen.ts`, generated); fixtures validated with Ajv 2020-12; `npm run dev:mock` with no backend |
+| HUB-253 | Auth behind an `AuthProvider` interface: dev role-picker provider (mock / `PUBLIC_AUTH_MODE=dev`), OIDC placeholder (HUB-282); signed httpOnly session cookie; `/login`, `POST /logout`; redirect to login with `next`; `/me`-based `access` and `RoleGate` for mutation controls |
+| HUB-255 | Shared states: `AsyncView` (keeps data while refetching), `ListView`, `ErrorPanel` (code, message, hint, details, retry helps, request id + copy), `EmptyState` (none vs filtered), `Skeleton`, `ErrorPage` for both error routes; a test enforces their use on every page |
+| HUB-256 | Integrations list: search, owner tenant (a select of own tenants for tenant viewers), capability, paused, vendor and account filters plus page size in the URL; removable chips and Clear all; cursor paging with Previous/Next kept in the URL; Paused / No active version / draft marked in text |
+| HUB-257 | Integration detail `/integrations/{id}`: status, owner, capability, versions, grants, money flag, paused reason; active spec (targets + weights, failover, delivery, breaker override, webhooks, audit, shadow); full version history newest first (all pages) with Active/Draft marked; version page `/integrations/{id}/versions/{n}`; read-only note for viewer and tenant viewer via `RoleGate` |
+| HUB-258 | Version diff `/integrations/{id}/diff?from=&to=` on `diffIntegrationVersions`: side-by-side view from the unified YAML diff (old left, new right, `-`/`+` and text labels, long unchanged runs folded) and a path list from the structured ops (Added/Removed/Changed, before/after); summary line; version pickers, swap, view in the URL; default pair newest vs active; selectable from history rows |
+| HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
-Contract gaps found while building: CCR-001 (`X-Hub-Request-Id` not declared on admin responses), see `frontend/CCR-NOTES.md`.
+Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hub-Request-Id` not declared on admin responses, HUB-278), CCR-002 (no active-version filter on `listIntegrations`, HUB-283).
 
 ## Changelog of this doc
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-10-31 | Status in-progress; shipped HUB-250, 251, 252, 254; config and CCR-001 noted | frontend-engineer |
+| 2026-10-31 | HUB-279: framework version decision and advisory assessment | frontend-engineer |
+| 2026-10-31 | HUB-253: auth design, config and security notes | frontend-engineer |
+| 2026-10-31 | HUB-255: shared state components | frontend-engineer |
+| 2026-10-31 | HUB-256: integrations list; CCR-002 | frontend-engineer |
+| 2026-10-31 | HUB-257: integration detail and version history | frontend-engineer |
+| 2026-10-31 | HUB-258: version diff view | frontend-engineer |

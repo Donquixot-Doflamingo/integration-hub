@@ -1,7 +1,7 @@
 import { delay, http, HttpResponse, type HttpHandler } from 'msw';
 import { REQUEST_ID_HEADER } from '../client';
 import type { AdminErrorEnvelope } from '../errors';
-import type { OperationResponse } from '../types';
+import type { OperationResponse, SessionUser } from '../types';
 import { contractMocks } from './contract.gen';
 import type { OperationId } from './types';
 
@@ -117,3 +117,22 @@ export function createHandlers(opts: HandlerOptions = {}): HttpHandler[] {
 }
 
 export const handlers = createHandlers();
+
+/**
+ * The contract's `/me` example re-addressed to a dev-login identity (mock mode, HUB-253). Roles and
+ * tenants come from the dev session; permissions keep the example's editor list for `editor` and
+ * `admin` and are empty for read-only roles (the contract defines no per-role list).
+ */
+export function mockMe(user: SessionUser): OperationResponse<'getMe'> {
+	const example = contractMocks.getMe.example;
+	const writer = user.roles.some((r) => r === 'admin' || r === 'editor');
+	return {
+		...example,
+		subject: user.subject,
+		name: user.name ?? null,
+		email: user.email ?? null,
+		roles: [...user.roles],
+		tenants: [...user.tenants],
+		permissions: writer ? [...example.permissions] : []
+	};
+}

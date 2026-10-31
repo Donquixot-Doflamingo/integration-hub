@@ -27,3 +27,13 @@ export const requestStatus: Record<RequestState, StatusView> = {
 	expired: { tone: 'neutral', icon: 'changelog', label: 'Expired' },
 	failed: { tone: 'danger', icon: 'open', label: 'Failed' }
 };
+
+/** Integration state in text + icon: paused wins, then "no active version", else live. */
+export function integrationStatus(i: {
+	paused: boolean;
+	active_version: number | null;
+}): StatusView {
+	if (i.paused) return { tone: 'neutral', icon: 'pause', label: 'Paused' };
+	if (i.active_version == null) return { tone: 'warn', icon: 'alert', label: 'No active version' };
+	return { tone: 'ok', icon: 'closed', label: 'Live' };
+}
