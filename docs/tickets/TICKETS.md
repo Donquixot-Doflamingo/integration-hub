@@ -1,0 +1,2292 @@
+# Integration Hub — Ticket Backlog
+
+Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
+
+Total tickets: **186** · done: **11** · todo: **175**
+
+## Epics
+
+| Epic | Name | Milestone | Features | ID range | Tickets | Done |
+| --- | --- | --- | --- | --- | --- | --- |
+| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 11 |
+| EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 13 | 0 |
+| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 0 |
+| EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 0 |
+| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
+| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
+| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
+| EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
+| EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
+| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 28 | 0 |
+| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
+| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
+
+## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
+
+### HUB-001 — Save DESIGN.md and create AGENTS.md / CLAUDE.md
+- **Epic:** EP-00 · **Type:** docs · **Area:** docs
+- **Status:** done · **Depends on:** — · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `docs/HUB-001-design-and-agents`
+
+Save the kickoff design unchanged as `docs/DESIGN.md` (DESIGN §0 first actions) and write the operating manual `AGENTS.md` plus a short `CLAUDE.md` that imports it, carrying the language rule, working rules and the §2 decisions table.
+
+**Acceptance criteria**
+- [x] `docs/DESIGN.md` is byte-identical to the kickoff file
+- [x] `AGENTS.md` covers repo map, product rules, contract-first workflow, tickets, git, changelog, DoD
+- [x] `CLAUDE.md` is under 150 lines and imports `AGENTS.md`
+
+### HUB-002 — Write PRD, personas and user stories
+- **Epic:** EP-00 · **Type:** docs · **Area:** docs
+- **Status:** done · **Depends on:** HUB-001 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `docs/HUB-002-prd-personas-stories`
+
+Create `docs/product/PRD.md`, `PERSONAS.md` and `USER_STORIES.md` from DESIGN §1, §3, §14 (AGENTS §8 step 1). Stories use `US-FFxx` ids grouped by feature with Given/When/Then criteria.
+
+**Acceptance criteria**
+- [x] PRD states goals, non-goals and the §1 success metrics
+- [x] Every feature F-01…F-22 has at least one user story
+- [x] Stories have Given/When/Then acceptance criteria
+
+### HUB-003 — Write feature docs F-01…F-22 and feature index
+- **Epic:** EP-00 · **Type:** docs · **Area:** docs
+- **Status:** done · **Depends on:** HUB-002 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `docs/HUB-003-feature-docs`
+
+Create one `docs/features/F-XX-<slug>.md` per feature from `_TEMPLATE.md`, plus `docs/features/README.md` as the index (AGENTS §8 step 2). Each doc lists stories, contracts touched, metrics/logs/alerts and tickets.
+
+**Acceptance criteria**
+- [x] `docs/features/_TEMPLATE.md` and `README.md` exist
+- [x] One doc per feature F-01…F-22 with status `proposed`
+- [x] Each doc links its epic in this backlog
+
+### HUB-004 — Write tech spec, observability, testing, security docs and ADRs
+- **Epic:** EP-00 · **Type:** docs · **Area:** docs
+- **Status:** done · **Depends on:** HUB-001 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `docs/HUB-004-tech-docs-adrs`
+
+Create `docs/tech/TECH_SPEC.md`, `OBSERVABILITY.md`, `TESTING_STRATEGY.md`, `SECURITY.md` and the initial ADRs in `docs/tech/adr/` recording the §2 decisions (Go + expr, Postgres outbox, re-resolve default, etc.).
+
+**Acceptance criteria**
+- [x] Each doc exists and cites the DESIGN sections it elaborates
+- [x] ADRs cover at least D8, D9, D10 and the monorepo/contract-first layout
+- [x] OBSERVABILITY.md lists every §16.2 metric and §16.3 alert
+
+### HUB-005 — Write process docs: git workflow, contract changes, release
+- **Epic:** EP-00 · **Type:** docs · **Area:** docs
+- **Status:** done · **Depends on:** HUB-001 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `docs/HUB-005-process-docs`
+
+Create `docs/process/GIT_WORKFLOW.md`, `CONTRACT_CHANGES.md` and `RELEASE.md` expanding AGENTS §4, §6, §7.
+
+**Acceptance criteria**
+- [x] Branch naming, commit format and merge-commit policy documented
+- [x] Contract change request template and steward flow documented
+- [x] Release steps turn `[Unreleased]` into a versioned section
+
+### HUB-006 — Freeze v1 contracts: public, admin, mockvendor, MCP tools, capability + event schemas
+- **Epic:** EP-00 · **Type:** contract · **Area:** contracts
+- **Status:** done · **Depends on:** HUB-001 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `contract/HUB-006-freeze-v1-contracts`
+
+Author the OpenAPI 3.1 documents in `contracts/openapi/` (public caller API §4, admin API §16.1, mockvendor control API §19 M0), the MCP tool definitions, and JSON Schemas for capabilities (`events.track@v1`, …) and webhook events (§12). These are the only interface between backend, frontend, MCP and SDKs (AGENTS §4).
+
+**Acceptance criteria**
+- [x] Public, admin and mockvendor OpenAPI documents lint clean
+- [x] MCP tool schemas and capability/event JSON Schemas (2020-12) exist
+- [x] `contracts/CHANGELOG.md` records v1.0.0 of each document
+- [x] No caller-facing schema exposes vendor, account or version
+
+### HUB-007 — Add backend skills
+- **Epic:** EP-00 · **Type:** chore · **Area:** backend
+- **Status:** done · **Depends on:** HUB-001 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-007-backend-skills`
+
+Add skills under `backend/.claude/skills/` (Go idioms, architecture, system design, testing, profiling, structured logging, debugging, observability, Postgres/outbox patterns, MCP builder) per AGENTS §12.
+
+**Acceptance criteria**
+- [x] Each skill has a `SKILL.md` with a description
+- [x] Third-party skills carry `LICENSE.txt` and are listed in `THIRD_PARTY_SKILLS.md`
+
+### HUB-008 — Add frontend, process and consumer skills
+- **Epic:** EP-00 · **Type:** chore · **Area:** frontend
+- **Status:** done · **Depends on:** HUB-001 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-008-frontend-process-consumer-skills`
+
+Add frontend skills (`frontend/.claude/skills/`), repo-wide process skills (`.claude/skills/`: PRD, stories, feature docs, tickets, commits/changelog, ADRs) and the first cut of the consumer skill in `clients/claude-skill/`.
+
+**Acceptance criteria**
+- [x] Frontend skills cover Svelte 5/SvelteKit, design, typed client, testing, a11y
+- [x] Process skills exist at repo root
+- [x] `clients/claude-skill/integration-hub/SKILL.md` explains invoking the Hub without vendor knowledge
+
+### HUB-009 — Define sub-agents
+- **Epic:** EP-00 · **Type:** chore · **Area:** docs
+- **Status:** done · **Depends on:** HUB-001 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-009-sub-agents`
+
+Create `.claude/agents/` definitions for `contract-steward`, `backend-engineer`, `frontend-engineer` and `docs-keeper` (AGENTS §11).
+
+**Acceptance criteria**
+- [x] Each agent file states scope, folders it may edit and skills it uses
+- [x] Only `contract-steward` may edit `contracts/`
+
+### HUB-010 — Write the ticket backlog
+- **Epic:** EP-00 · **Type:** docs · **Area:** docs
+- **Status:** done · **Depends on:** HUB-003, HUB-006 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `docs/HUB-010-ticket-backlog`
+
+Create `docs/tickets/README.md` and `docs/tickets/TICKETS.md` covering every milestone in DESIGN §19 plus the admin console, MCP server and Release 2 placeholders.
+
+**Acceptance criteria**
+- [x] Every ticket follows AGENTS §5 format with testable acceptance criteria
+- [x] Every §19 Accept line maps to at least one ticket
+- [x] Parallel tracks and critical path are documented
+
+### HUB-011 — Add CHANGELOG, PR template and CI placeholder
+- **Epic:** EP-00 · **Type:** chore · **Area:** infra
+- **Status:** done · **Depends on:** HUB-001 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-011-changelog-pr-template-ci`
+
+Create root `CHANGELOG.md` with `[Unreleased]`, `.github/pull_request_template.md` with the AGENTS §9 DoD checklist, and a placeholder CI workflow that later tickets fill in.
+
+**Acceptance criteria**
+- [x] `CHANGELOG.md` follows the AGENTS §7 entry format
+- [x] PR template contains the DoD checklist
+- [x] `.github/workflows/ci.yml` exists and runs on pull requests
+
+### HUB-012 — Install toolchain on the dev machine
+- **Epic:** EP-00 · **Type:** chore · **Area:** infra
+- **Status:** todo · **Depends on:** — · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-012-install-toolchain`
+
+Install and verify Go 1.25, Node 22 (with npm), Docker (with compose v2) and golangci-lint on the development machine so M0 and the frontend scaffold can start.
+
+**Acceptance criteria**
+- [ ] `go version` reports 1.25.x
+- [ ] `node --version` reports v22.x
+- [ ] `docker compose version` works and `docker run hello-world` succeeds
+- [ ] `golangci-lint --version` works
+- [ ] Versions recorded in `docs/tech/TECH_SPEC.md` (via docs-keeper)
+
+### HUB-013 — Configure GitHub branch protection on main
+- **Epic:** EP-00 · **Type:** chore · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-013-branch-protection`
+
+Protect `main` so it changes only via PRs (AGENTS §6). Requires the repo owner to act in GitHub settings; the agent prepares the exact checklist and verifies afterwards.
+
+**Acceptance criteria**
+- [ ] Direct pushes to `main` are rejected (verified with a test push from a branch-less clone)
+- [ ] PRs require passing CI status checks and one approval
+- [ ] Merge commits allowed; squash and rebase merges disabled
+- [ ] User confirms the settings were applied
+
+### HUB-014 — CI: contract lint job (Redocly / Spectral)
+- **Epic:** EP-00 · **Type:** chore · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-006, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-014-ci-contract-lint`
+
+Add a CI job that lints every OpenAPI document in `contracts/openapi/` and validates the JSON Schemas in `contracts/schemas/`, and fails if `info.version` changed without a `contracts/CHANGELOG.md` entry (AGENTS §4.3).
+
+**Acceptance criteria**
+- [ ] CI fails on an intentionally broken OpenAPI document
+- [ ] CI fails when a contract file changes without a version bump + changelog entry
+- [ ] Job runs only when `contracts/**` changes and finishes in < 2 min
+
+### HUB-015 — make contracts-check: repeatable contract validation (Redocly lint, ajv for JSON Schemas, $ref + example + vendor-leak checks)
+- **Epic:** EP-00 · **Type:** chore · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-012 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-015-contracts-check`
+
+Replace the throwaway script used for the 1.0.0 freeze with a repeatable `make contracts-check` target (`contracts/README.md` "Validate locally"). It lints the three OpenAPI documents with Redocly, compiles every JSON Schema under `contracts/schemas/` with ajv (draft 2020-12), resolves every `$ref`, validates every example against its schema, and runs the caller vendor-leak check (D12) and the MCP `maps_to` operationId check. HUB-014's CI job calls this target.
+
+**Acceptance criteria**
+- [ ] `make contracts-check` exits 0 on the frozen 1.0.0 contracts and non-zero on an intentionally broken `$ref`, example or schema
+- [ ] Redocly lint covers `hub-public.v1.yaml`, `hub-admin.v1.yaml` and `mockvendor.v1.yaml`; ajv compiles `contracts/schemas/**/*.json`
+- [ ] Vendor-leak check fails if a `hub-public` parameter, header or body field names a vendor, account or version (documented exceptions `dryRunIntegration` and `receiveVendorWebhook` allow-listed)
+- [ ] Every `maps_to` operationId in `contracts/mcp/hubmcp-tools.json` exists in its spec
+- [ ] Tool versions pinned; usage documented in `contracts/README.md` via a CCR to the contract-steward
+
+### HUB-016 — Resolve Phase-1 design open questions with the user and record ADRs
+- **Epic:** EP-00 · **Type:** docs · **Area:** docs
+- **Status:** todo · **Depends on:** — · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `docs/HUB-016-open-questions-adrs`
+
+Walk the user through the open questions that the contracts did not settle (PRD §14 Q1–Q8, Q11; OI-1 dry-run exception; TECH_SPEC §22; open questions in the feature docs) and record each decision as an ADR in `docs/tech/adr/` (AGENTS §8 step 3), updating PRD, feature docs and tickets to match.
+
+**Acceptance criteria**
+- [ ] Every open question in PRD §14 and §14.1 is marked resolved (with an ADR link) or explicitly deferred with an owner
+- [ ] One ADR per decision that changes architecture, data model or a DESIGN §2 decision
+- [ ] Decisions that change a shape are filed as CCRs (`docs/process/CONTRACT_CHANGES.md`), not edited into `contracts/`
+- [ ] Feature docs' "Open questions" sections updated to match
+
+## EP-01 — M0 Scaffold
+
+### HUB-020 — Create backend Go module and package layout
+- **Epic:** EP-01 · **Type:** chore · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-012 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-020-go-module-layout`
+
+Create `backend/go.mod` (`github.com/Donquixot-Doflamingo/integration-hub/backend`) and the empty package layout from DESIGN §18.1 (`cmd/hub`, `cmd/hubctl`, `cmd/mockvendor`, `cmd/hubmcp`, `internal/*`, `pkg/hubclient`, `config/`, `migrations/`).
+
+**Acceptance criteria**
+- [ ] `go build ./...` succeeds in `backend/`
+- [ ] Every §18.1 package exists with a `doc.go` describing its responsibility
+- [ ] `go vet ./...` is clean
+
+### HUB-021 — Makefile targets and golangci-lint config
+- **Epic:** EP-01 · **Type:** chore · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-021-makefile-lint`
+
+Add `backend/Makefile` with `build test itest lint bench run` (DESIGN §19 M0) and a `.golangci.yml` with a strict but practical linter set.
+
+**Acceptance criteria**
+- [ ] `make build` produces `hub`, `hubctl`, `mockvendor`, `hubmcp` binaries
+- [ ] `make test` runs `go test -race ./...`
+- [ ] `make itest` runs tests tagged `integration`
+- [ ] `make lint` passes on the scaffold
+
+### HUB-022 — CI workflow for backend
+- **Epic:** EP-01 · **Type:** chore · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-021, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-022-ci-backend`
+
+Fill the CI placeholder with backend jobs: lint, `make test` (race), `make itest` with Postgres 16 and Redis 7 service containers, and build all binaries.
+
+**Acceptance criteria**
+- [ ] CI runs lint, unit (race), integration and build jobs on every PR
+- [ ] A failing unit test makes the PR check fail
+- [ ] Go module and build caches are used; full run < 10 min
+
+### HUB-023 — docker-compose with Postgres 16 + Redis 7 and goose migrations
+- **Epic:** EP-01 · **Type:** chore · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `chore/HUB-023-compose-migrations`
+
+Add `deploy/docker-compose.yml` (Postgres 16, Redis 7, healthchecks) and wire `goose` migrations in `backend/migrations/` with an empty baseline and `make migrate` (DESIGN §18.7).
+
+**Acceptance criteria**
+- [ ] `docker compose up -d` brings both services to healthy
+- [ ] `make migrate` applies the baseline against compose Postgres
+- [ ] `make itest` uses the compose services
+
+### HUB-024 — hub binary with role entrypoints and config loading
+- **Epic:** EP-01 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `feat/HUB-024-hub-roles-config`
+
+Implement `hub gateway | worker | scheduler | admin` (DESIGN §17) with config from env + flags (listen addr, DB/Redis URLs, snapshot source) and graceful shutdown.
+
+**Acceptance criteria**
+- [ ] Each role starts and stops cleanly on SIGTERM within 10 s
+- [ ] Unknown role exits non-zero with usage text
+- [ ] Config precedence flag > env > default is table-tested
+
+### HUB-025 — /healthz and /readyz endpoints
+- **Epic:** EP-01 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-024, HUB-023 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `feat/HUB-025-healthz-readyz`
+
+Every role serves `/healthz` (process alive) and `/readyz` (Postgres, Redis reachable and, for gateway/worker, a snapshot loaded) (DESIGN §19 M0).
+
+**Acceptance criteria**
+- [ ] `/healthz` returns 200 as soon as the process is up
+- [ ] `/readyz` returns 503 with a reason when Postgres or Redis is down
+- [ ] Integration test covers both states
+
+### HUB-026 — Redacting slog handler
+- **Epic:** EP-01 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `feat/HUB-026-redacting-slog`
+
+Add an `internal/telemetry` `slog.Handler` that holds current secret values and replaces any occurrence in messages and attributes with `***` (DESIGN §9, AGENTS §3.5).
+
+**Acceptance criteria**
+- [ ] Registered secret values never appear in output, in message, attrs or nested groups (table test)
+- [ ] Secrets can be added/removed at runtime safely under `-race`
+- [ ] Handler overhead benchmarked and recorded
+
+### HUB-027 — OpenTelemetry and metrics skeleton
+- **Epic:** EP-01 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-024 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `feat/HUB-027-otel-metrics-skeleton`
+
+Wire the OTel SDK (tracer provider, OTLP exporter optional), a Prometheus `/metrics` endpoint, and a middleware helper that publishes per-stage duration metrics (DESIGN §16.2, §18.5 rule 5).
+
+**Acceptance criteria**
+- [ ] `/metrics` exposes Go runtime metrics and a sample `hub_overhead_ms` histogram
+- [ ] Incoming `traceparent` is continued in a span
+- [ ] Tracing can be disabled by config with no exporter running
+
+### HUB-028 — mockvendor server, control API and request recording
+- **Epic:** EP-01 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-020, HUB-006 · **Feature:** F-02 · **Stories:** US-02xx
+- **Branch:** `feat/HUB-028-mockvendor-core`
+
+Implement `cmd/mockvendor` per the mockvendor contract: arbitrary routes, a control API to set per-route behaviour and reset, and recording of received requests for test assertions (DESIGN §19 M0).
+
+**Acceptance criteria**
+- [ ] Control API matches the frozen mockvendor OpenAPI document
+- [ ] Recorded requests (method, path, headers, body) can be listed and cleared
+- [ ] A Go test helper starts mockvendor in-process on a random port
+
+### HUB-029 — mockvendor fault behaviours
+- **Epic:** EP-01 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-028 · **Feature:** F-02 · **Stories:** US-02xx
+- **Branch:** `feat/HUB-029-mockvendor-behaviours`
+
+Add every M0 behaviour: fixed/random latency, status codes, error ratio, 429 with `Retry-After`, hard down (connection refused), slow drip, malformed body.
+
+**Acceptance criteria**
+- [ ] Each behaviour has its own table-driven test proving the observed effect
+- [ ] Error ratio converges within ±5 % over 1 000 calls
+- [ ] Hard down yields connection refused, not an HTTP error
+
+### HUB-030 — mockvendor inbound webhook sender
+- **Epic:** EP-01 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-028 · **Feature:** F-02 · **Stories:** US-02xx
+- **Branch:** `feat/HUB-030-mockvendor-webhooks`
+
+Let mockvendor send signed or unsigned webhooks to a configured Hub URL on demand, for later inbound webhook tests (DESIGN §12.2, §19 M0).
+
+**Acceptance criteria**
+- [ ] Control API call triggers a POST with the given body and headers
+- [ ] HMAC signing option produces a verifiable signature
+- [ ] Test covers delivery to an httptest receiver
+
+### HUB-031 — Contract test harness with kin-openapi
+- **Epic:** EP-01 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-006, HUB-025 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `test/HUB-031-contract-test-harness`
+
+Add a test helper that loads the frozen OpenAPI documents with kin-openapi and validates every request/response recorded in handler tests (AGENTS §4.6).
+
+**Acceptance criteria**
+- [ ] Helper validates status, headers and body against the operation in the contract
+- [ ] A deliberately wrong response fails the test with the JSON pointer
+- [ ] `/healthz` and `/readyz` are validated (or explicitly excluded with a reason)
+
+### HUB-032 — M0 acceptance and milestone summary
+- **Epic:** EP-01 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-022, HUB-025, HUB-029, HUB-030, HUB-031 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `test/HUB-032-m0-acceptance`
+
+Prove the M0 Accept line and post the milestone wrap-up (AGENTS §10).
+
+**Acceptance criteria**
+- [ ] `docker compose up` + `hub gateway` serves `/healthz` (scripted smoke test in CI)
+- [ ] All mockvendor behaviours covered by tests
+- [ ] `make test` and `make itest` green
+- [ ] Milestone summary with Deviations posted; feature docs F-01, F-02 updated
+
+## EP-02 — M1 Config registry
+
+### HUB-040 — Config domain types
+- **Epic:** EP-02 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-03 · **Stories:** US-03xx
+- **Branch:** `feat/HUB-040-config-domain-types`
+
+Define Go types in `internal/registry` for capability, vendor (+ endpoints `name@n`), account, transformer reference, integration with versions and active pointer, tenant, API key, registrar endpoint (DESIGN §3.1, §3.4, §8.1).
+
+**Acceptance criteria**
+- [ ] Types round-trip YAML ↔ struct for the §3.4 and §8.3 examples
+- [ ] Integration versions are immutable values (no exported setters)
+
+### HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- **Epic:** EP-02 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
+- **Branch:** `feat/HUB-041-loaders-cap-vendor-account`
+
+Load capability schemas (JSON Schema 2020-12 + `x-pii`, `interactive`, `operations`) and compile them with `santhosh-tekuri/jsonschema`; load vendor and account YAML (DESIGN §8.1, §8.3).
+
+**Acceptance criteria**
+- [ ] Capability schemas from `contracts/schemas/capabilities/` compile once at load
+- [ ] `x-pii` paths and `interactive` flag are exposed on the compiled capability
+- [ ] Vendor endpoints parse timeouts, idempotent, batch_max and breaker defaults
+
+### HUB-042 — Loaders: integration versions, tenant, API keys, registrar endpoints
+- **Epic:** EP-02 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
+- **Branch:** `feat/HUB-042-loaders-integration-tenant`
+
+Load integration YAML with all versions (targets, weights, failover, delivery, breaker, webhooks, audit, publish meta), tenants with hashed API keys and grants, and registrar endpoints (DESIGN §3.4, §8.1).
+
+**Acceptance criteria**
+- [ ] Loader accepts the §3.4 example verbatim
+- [ ] API keys are only ever stored as hashes
+- [ ] Delivery defaults applied: mode `wait`, `wait_ms` 3000, `on_circuit_open` `fail_fast`, `pending` `re_resolve` (§2 D3/D4/D10)
+
+### HUB-043 — Cross-reference validation with path-qualified errors
+- **Epic:** EP-02 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-041, HUB-042 · **Feature:** F-03 · **Stories:** US-03xx
+- **Branch:** `feat/HUB-043-config-validation`
+
+Validate the whole config set: referenced vendors/accounts/transformers/endpoints/registrar endpoints exist, weights sum to 100, interactive capabilities only use `sync` (§5.4), `wait|async|async_callback` declare a polling path or subscription (§5.2). Errors carry a file + YAML path.
+
+**Acceptance criteria**
+- [ ] Table test with ≥ 15 invalid configs, each asserting the exact error path and message
+- [ ] All errors are reported in one pass, not just the first
+- [ ] Valid dev config produces zero errors
+
+### HUB-044 — Snapshot build and atomic swap
+- **Epic:** EP-02 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-043 · **Feature:** F-03 · **Stories:** US-03xx
+- **Branch:** `feat/HUB-044-snapshot-atomic-swap`
+
+Build an immutable `Snapshot` with in-memory indexes (DESIGN §18.3) and expose `Registry.Snapshot()` backed by an atomic pointer swap.
+
+**Acceptance criteria**
+- [ ] Concurrent readers during repeated swaps pass under `-race`
+- [ ] Readers holding an old snapshot keep a consistent view
+- [ ] Snapshot carries a monotonically increasing version and checksum
+
+### HUB-045 — Dev file watcher
+- **Epic:** EP-02 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-044 · **Feature:** F-03 · **Stories:** US-03xx
+- **Branch:** `feat/HUB-045-dev-file-watcher`
+
+Watch `config/` in dev, debounce changes, rebuild and swap the snapshot; an invalid change keeps the last good snapshot and logs the errors (DESIGN §19 M1, §6.4).
+
+**Acceptance criteria**
+- [ ] Editing a valid file swaps the snapshot within 2 s
+- [ ] An invalid edit is rejected and the previous snapshot keeps serving
+- [ ] Watcher is off unless explicitly enabled
+
+### HUB-046 — Dev config set
+- **Epic:** EP-02 · **Type:** chore · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-043 · **Feature:** F-03 · **Stories:** US-03xx
+- **Branch:** `chore/HUB-046-dev-config`
+
+Add `config/` with `events.track@v1`, vendor `clevertap` pointing at mockvendor, accounts `ct-brandA-in`, `ct-brandB-us`, tenant `orders-service`, integrations `int_evt_brandA`, `int_evt_brandB`, `int_evt_brandB_min` (DESIGN §19 M1).
+
+**Acceptance criteria**
+- [ ] Dev config loads and validates with zero errors
+- [ ] Account credentials reference the local encrypted file, never plaintext
+- [ ] Capability schema matches `contracts/schemas/capabilities/`
+
+### HUB-047 — Postgres registry tables and sqlc queries
+- **Epic:** EP-02 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-023, HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
+- **Branch:** `feat/HUB-047-registry-tables`
+
+Add migrations for registry tables of DESIGN §18.2 (tenants, api_keys, vendors, vendor_endpoints, accounts, account_credentials, capabilities, transformers, integrations, integration_versions, integration_grants, registrar_endpoints, config_snapshots) with sqlc queries.
+
+**Acceptance criteria**
+- [ ] `make migrate` creates all tables; down migration reverses cleanly
+- [ ] `integration_versions` and `transformers` reject UPDATE (trigger or permissions) to enforce immutability
+- [ ] sqlc code generated and compiled in CI
+
+### HUB-048 — Snapshot persistence and boot from last good
+- **Epic:** EP-02 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-044, HUB-047 · **Feature:** F-03 · **Stories:** US-03xx
+- **Branch:** `feat/HUB-048-snapshot-persistence`
+
+Persist each snapshot (checksum, author, diff, blob in object storage; local directory in dev) to `config_snapshots`, and let nodes boot from the last stored snapshot when the control plane is down (DESIGN §8.2, §17).
+
+**Acceptance criteria**
+- [ ] Snapshot blob checksum verified on load; corrupted blob is refused
+- [ ] Gateway boots with the control plane unavailable using the last blob
+- [ ] Snapshots older than 90 days are pruned by a job
+
+### HUB-049 — M1 acceptance and milestone summary
+- **Epic:** EP-02 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-045, HUB-046, HUB-048 · **Feature:** F-03 · **Stories:** US-03xx
+- **Branch:** `test/HUB-049-m1-acceptance`
+
+Prove the M1 Accept line and post the wrap-up.
+
+**Acceptance criteria**
+- [ ] Invalid configs rejected with precise errors (table tests green)
+- [ ] Snapshot swap under concurrent reads is race-free (`-race`)
+- [ ] Milestone summary with Deviations posted; F-03 doc updated
+
+## EP-03 — M2 Transformer engine
+
+### HUB-060 — Transformer DSL parser
+- **Epic:** EP-03 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-040 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `feat/HUB-060-dsl-parser`
+
+Parse transformer YAML (request: method/path/headers/query/body; response; errors; batch; stream placeholder) into an AST of target paths → expression strings (DESIGN §7.1, §7.4).
+
+**Acceptance criteria**
+- [ ] T1/R1 examples from §7.4 parse into the expected AST
+- [ ] Duplicate or conflicting target paths fail with a path-qualified error
+- [ ] Unknown top-level keys fail parsing
+
+### HUB-061 — Typed expression env and compile-once
+- **Epic:** EP-03 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-060, HUB-041 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `feat/HUB-061-typed-env-compile`
+
+Build an `expr-lang/expr` env typed from the capability schema with `req`, `hdr`, `account`, `creds`, `session`, `res`, `now()` (DESIGN §7.2) and compile every expression once at snapshot build.
+
+**Acceptance criteria**
+- [ ] Reference to a missing field (`req.user.idd`) fails compile with transformer + path
+- [ ] `res` is unavailable in request mapping and fails compile if used
+- [ ] No expression is compiled on the request path (asserted by a counter in tests)
+
+### HUB-062 — Stdlib: strings and time
+- **Epic:** EP-03 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-061 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `feat/HUB-062-stdlib-strings-time`
+
+Implement `lower upper trim split join replace format truncate` and `now epochSeconds epochMillis parseTime formatTime addDuration` (DESIGN §7.3).
+
+**Acceptance criteria**
+- [ ] Table tests for every function incl. edge cases (empty, unicode, invalid time)
+- [ ] `now()` is injectable for deterministic goldens
+
+### HUB-063 — Stdlib: data, encoding/identity and domain functions
+- **Epic:** EP-03 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-061 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `feat/HUB-063-stdlib-data-domain`
+
+Implement `?? merge pick omit flatten map filter len toJSON fromJSON`, `uuid sha256 hmacSHA256 base64 urlEncode`, `phoneE164 emailNormalize currencyMinor maskPAN maskAadhaar` (DESIGN §7.3).
+
+**Acceptance criteria**
+- [ ] Table tests for every function
+- [ ] `maskPAN` / `maskAadhaar` never return the full identifier
+- [ ] `uuid` is deterministic under a seeded test source
+
+### HUB-064 — Request mapping, credential target rule and dry-run
+- **Epic:** EP-03 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-061 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `feat/HUB-064-request-mapping`
+
+Implement `BuildRequest` (method, path, headers, query, body) and a dry-run function returning the exact vendor request. `creds.*` is allowed only in header/query/auth targets unless `allow_creds_in_body: true` (DESIGN §7.2, §7.6).
+
+**Acceptance criteria**
+- [ ] `creds.*` in a body target fails compile unless `allow_creds_in_body` is set
+- [ ] Dry-run output equals what `BuildRequest` would send, with secrets redacted
+- [ ] Account config values (`account.config.*`) resolve correctly
+
+### HUB-065 — Response and error mapping
+- **Epic:** EP-03 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-061 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `feat/HUB-065-response-error-mapping`
+
+Implement `MapResponse`: full/minimal response mapping and ordered error rules (`when` → `code`, `retryable`, `retry_after_ms`) with `header(res, ...)` (DESIGN §7.4 R1/R2).
+
+**Acceptance criteria**
+- [ ] First matching error rule wins (table test with overlapping rules)
+- [ ] Response output is validated against the capability response schema
+- [ ] A throwing expression yields `TRANSFORM_FAILED` with the failing expression recorded
+
+### HUB-066 — Transformer safety budgets
+- **Epic:** EP-03 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-064, HUB-065 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `feat/HUB-066-safety-budgets`
+
+Enforce max expression depth, max output size and a per-transform time budget; no loops beyond `map`/`filter`, no network or disk (DESIGN §7.1).
+
+**Acceptance criteria**
+- [ ] Over-deep expression rejected at compile
+- [ ] Output larger than the limit fails with `TRANSFORM_FAILED`
+- [ ] A pathological `map` exceeding the time budget aborts within budget + 1 ms
+
+### HUB-067 — Golden fixture runner and `hubctl transform test`
+- **Epic:** EP-03 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-064, HUB-065 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `feat/HUB-067-golden-runner`
+
+Run `fixtures/<name>.input.json` → `.expected_request.json` and `.vendor_response.json` → `.expected_response.json` for each transformer, as a library and as `hubctl transform test` (DESIGN §7.6).
+
+**Acceptance criteria**
+- [ ] Mismatch prints a readable JSON diff with paths
+- [ ] Exit code non-zero on any failing golden
+- [ ] Runs in CI on every PR touching `config/transformers/`
+
+### HUB-068 — Transformers T1, T2, R1, R2 with fixtures
+- **Epic:** EP-03 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-067, HUB-062, HUB-063, HUB-046 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `feat/HUB-068-t1-t2-r1-r2`
+
+Author T1, T2, R1, R2 from DESIGN §7.4 with golden fixtures; verify CleverTap field names against the current upload API docs and cite the URL in each file (AGENTS §3.3).
+
+**Acceptance criteria**
+- [ ] Each transformer has ≥ 2 golden cases incl. an error response
+- [ ] Doc URL comment present in each transformer file
+- [ ] `hubctl transform test` passes for all four
+
+### HUB-069 — Compile transformers into the snapshot; reject failing goldens
+- **Epic:** EP-03 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-044, HUB-067 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `feat/HUB-069-snapshot-transformers`
+
+Snapshot build compiles all transformers and runs their goldens; a snapshot with a type error or failing golden is refused (AGENTS §3.4, DESIGN §6.4).
+
+**Acceptance criteria**
+- [ ] Snapshot build fails if any golden fails, naming the transformer and fixture
+- [ ] Compiled transformers are shared across integrations referencing the same `T@n`
+
+### HUB-070 — BenchmarkTransform4KB
+- **Epic:** EP-03 · **Type:** perf · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-068 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `perf/HUB-070-bench-transform-4kb`
+
+Benchmark request + response transform on a 4 KB `events.track` payload and record p99 (DESIGN §7.6.5, §18.6).
+
+**Acceptance criteria**
+- [ ] `BenchmarkTransform4KB` p99 ≤ 0.5 ms on the reference machine
+- [ ] Allocations per op recorded; result checked into `docs/tech/` via docs-keeper
+
+### HUB-071 — M2 acceptance and milestone summary
+- **Epic:** EP-03 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-066, HUB-069, HUB-070 · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `test/HUB-071-m2-acceptance`
+
+Prove the M2 Accept line and post the wrap-up.
+
+**Acceptance criteria**
+- [ ] Goldens pass
+- [ ] Test: reference to a missing field fails compile
+- [ ] Budget limits enforced (tests green)
+- [ ] `BenchmarkTransform4KB` ≤ 0.5 ms p99
+- [ ] Milestone summary posted; F-04 doc updated
+
+## EP-04 — M3 Gateway sync path + audit
+
+### HUB-080 — Edge HTTP server, request id and error envelope
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-024, HUB-027, HUB-031 · **Feature:** F-06 · **Stories:** US-06xx
+- **Branch:** `feat/HUB-080-edge-server-envelope`
+
+Build the gateway router (`chi`) with recover, request id (`req_` + ULID), trace continuation and the canonical error envelope with every §4.4 code and HTTP status.
+
+**Acceptance criteria**
+- [ ] Every response carries `X-Hub-Request-Id`
+- [ ] Panic in a handler returns the envelope with 500 and is logged without body secrets
+- [ ] Error code → HTTP status mapping table-tested against §4.4 and the public contract
+
+### HUB-081 — Tenant API key auth and grant check
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-080, HUB-044 · **Feature:** F-05 · **Stories:** US-05xx
+- **Branch:** `feat/HUB-081-tenant-auth-grants`
+
+Authenticate `Authorization: Bearer` against the in-memory hashed key set and check the tenant owns or is granted the integration (DESIGN §5.1 step 1, §16.5). No DB access on this path.
+
+**Acceptance criteria**
+- [ ] Bad key → 401 `UNAUTHORIZED`; non-owner/non-grantee → 403 `FORBIDDEN`; unknown id → 404 `INTEGRATION_NOT_FOUND`
+- [ ] Key comparison is constant-time
+- [ ] Middleware publishes its duration metric and stays < 100 µs p99
+
+### HUB-082 — Body limit and capability schema validation
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-080, HUB-041 · **Feature:** F-05 · **Stories:** US-05xx
+- **Branch:** `feat/HUB-082-body-limit-validation`
+
+Enforce body limits (1 MB default, 4 MB LLM) and validate the body against the pre-compiled capability schema, returning 400 `VALIDATION_FAILED` with JSON pointers (DESIGN §5.1 step 2, §16.5).
+
+**Acceptance criteria**
+- [ ] Oversized body rejected before full read
+- [ ] Each validation error lists its JSON pointer in `details`
+- [ ] Validation of a 4 KB body ≤ 0.8 ms p99 (benchmark)
+
+### HUB-083 — Resolver: active version and weighted target
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-044 · **Feature:** F-06 · **Stories:** US-06xx
+- **Branch:** `feat/HUB-083-resolver-weights`
+
+Implement `Resolver.Resolve` (DESIGN §18.3): version 0 → active, else exact version; weighted target chosen by hash of idempotency key or request id; failover chain and policies returned.
+
+**Acceptance criteria**
+- [ ] Same route key always picks the same target (stickiness test)
+- [ ] Weights 90/10 distribute within ±2 % over 100 000 keys
+- [ ] Resolve ≤ 0.05 ms p99 (benchmark)
+
+### HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-044, HUB-026 · **Feature:** F-07 · **Stories:** US-07xx
+- **Branch:** `feat/HUB-084-cred-source-local`
+
+Implement `CredentialSource` backed by an AES-GCM encrypted local file with a dev key, a decrypted cache keyed `account + cred_version` (TTL 5 min, warmed on snapshot load) and registration of every secret with the redacting logger (DESIGN §9).
+
+**Acceptance criteria**
+- [ ] No decryption happens on the request path (cache warmed at snapshot load; asserted in test)
+- [ ] Every loaded secret is registered for redaction
+- [ ] Tampered ciphertext fails closed with a clear error
+
+### HUB-085 — Auth schemes: static headers, bearer, basic
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-084, HUB-064 · **Feature:** F-07 · **Stories:** US-07xx
+- **Branch:** `feat/HUB-085-auth-schemes-basic`
+
+Add `internal/creds` auth-scheme plugins for static headers (CleverTap), bearer (OpenAI/Anthropic) and basic (Twilio) (DESIGN §9).
+
+**Acceptance criteria**
+- [ ] Each scheme injects the right header (table test)
+- [ ] Injected values never appear in `request.transformed` audit or logs
+- [ ] Scheme chosen from the vendor definition, not the transformer
+
+### HUB-086 — Upstream client: per-account pools, timeouts, deadline, egress allowlist
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-042 · **Feature:** F-06 · **Stories:** US-06xx
+- **Branch:** `feat/HUB-086-upstream-client`
+
+Implement `Upstream.Do` with a per-account HTTP pool, `connect_timeout_ms` and `timeout_ms` per endpoint, `X-Request-Deadline` cap, TLS 1.2+ and egress restricted to hosts declared in the vendor definition (DESIGN §10.1, §16.5).
+
+**Acceptance criteria**
+- [ ] Timeout and connect-timeout honoured within ±10 % (mockvendor latency tests)
+- [ ] `X-Request-Deadline` lower than endpoint timeout wins
+- [ ] Request to an undeclared host is refused before dialing
+
+### HUB-087 — Outcome classification and sync retry rule
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-086, HUB-065 · **Feature:** F-06 · **Stories:** US-06xx
+- **Branch:** `feat/HUB-087-outcome-classification`
+
+Map vendor outcomes to canonical codes (DESIGN §4.4, §10.2) via response/error transformers, with one immediate retry on timeout/reset only if the endpoint is idempotent or an idempotency key is present.
+
+**Acceptance criteria**
+- [ ] Timeout → 504 `UPSTREAM_TIMEOUT`; 5xx → 503 `UPSTREAM_UNAVAILABLE`; 429 → 429 with `retry_after_ms`; 401/403 → 502 `UPSTREAM_AUTH_FAILED`; other 4xx → 422 `UPSTREAM_REJECTED` (table test)
+- [ ] Non-idempotent endpoint without key is never retried
+- [ ] Vendor message passed through for `UPSTREAM_REJECTED`
+
+### HUB-088 — Invoke handlers (sync pipeline)
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-081, HUB-082, HUB-083, HUB-085, HUB-087 · **Feature:** F-06 · **Stories:** US-06xx
+- **Branch:** `feat/HUB-088-invoke-sync`
+
+Wire `POST /v1/integrations/{id}/invoke` and `/invoke/{op}` through the §18.4 sync pipeline (resolve → transform → upstream → response map → respond) with per-stage duration metrics; debug-only `X-Hub-Integration-Version`.
+
+**Acceptance criteria**
+- [ ] Happy path returns the canonical response from mockvendor
+- [ ] Unknown `op` for a multi-operation capability → 404 with envelope
+- [ ] No DB or registry read on the path (test with DB stopped after warm-up)
+- [ ] Responses validate against `contracts/openapi/hub-public.v1.yaml`
+
+### HUB-089 — Dry-run endpoint
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-088, HUB-064 · **Feature:** F-06 · **Stories:** US-06xx
+- **Branch:** `feat/HUB-089-dry-run-endpoint`
+
+Implement `dryRunIntegration` (`POST /v1/integrations/{id}/dry-run`) returning the exact upstream request (method, URL, headers, body) the Hub would send, without sending it (DESIGN §4.1, §7.6.3). This is the documented, scope-gated exception to the no-vendor-leak rule (PRD DV-6): key scope `dry_run` required, audited with `dry_run: true`.
+
+**Acceptance criteria**
+- [ ] Mockvendor records zero calls during dry-run; no queue entry or idempotency record is created
+- [ ] Credentials and secret values appear only as `***` in output
+- [ ] Key without scope `dry_run` → 403 `FORBIDDEN`, reason `missing_scope`
+- [ ] Response validates against the public contract
+
+### HUB-090 — Discovery endpoints
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-081, HUB-041 · **Feature:** F-05 · **Stories:** US-05xx
+- **Branch:** `feat/HUB-090-discovery-endpoints`
+
+Implement `GET /v1/integrations` (integrations visible to the calling tenant), `GET /v1/integrations/{id}` and `GET /v1/capabilities/{capability}` (request/response schemas, operations, interactive flag).
+
+**Acceptance criteria**
+- [ ] A tenant only sees integrations it owns or is granted
+- [ ] No vendor, account or version field in any discovery response (contract + grep test)
+- [ ] Responses validate against the public contract
+
+### HUB-091 — Audit tables and buffered non-blocking writer
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-023 · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `feat/HUB-091-audit-writer`
+
+Add day-partitioned `requests`, `request_events`, `request_attempts` and an `AuditSink` with bounded channel, batch insert, drop counter and `audit_events_dropped_total` (DESIGN §13.4, §18.5 rule 3).
+
+**Acceptance criteria**
+- [ ] `Emit` never blocks (test with a stalled DB)
+- [ ] Dropped events increment the counter
+- [ ] Partitions for the next 7 days are created automatically
+
+### HUB-092 — Sync audit events with hashes
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-091, HUB-088 · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `feat/HUB-092-audit-sync-events`
+
+Emit every §13.1 event for the sync path, each with sha256 + byte size of the payload, tenant key replaced by its hash, and secrets redacted; bodies over 64 KB spill to object storage (DESIGN §13.1, §13.3).
+
+**Acceptance criteria**
+- [ ] A sync request produces received → validated → resolved → transformed → sent → responded → response.transformed → completed
+- [ ] `integration.resolved` records version and snapshot version
+- [ ] Every event stores sha256 and bytes even when the body is not stored
+
+### HUB-093 — Payload policies: full, masked, metadata_only
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-092, HUB-041 · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `feat/HUB-093-payload-policies`
+
+Apply the integration's audit policy: `full`, `masked` (default; `x-pii` fields masked/hashed), `metadata_only` (no bodies). `sealed` lands in HUB-209 (DESIGN §13.2).
+
+**Acceptance criteria**
+- [ ] `masked` masks every `x-pii` path in all stored stages (table test)
+- [ ] `metadata_only` stores no bodies but keeps hashes and sizes
+- [ ] Policy recorded on the `requests` row
+
+### HUB-094 — pkg/hubclient: Result / Queued / Error
+- **Epic:** EP-04 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-006 · **Feature:** F-21 · **Stories:** US-21xx
+- **Branch:** `feat/HUB-094-hubclient-core`
+
+Ship the Go SDK core generated/written against the public contract: `Invoke` returns `Result`, `Queued` (for 202, never success) or a typed `Error` with `Retryable` and `RetryAfter` (DESIGN §4.5).
+
+**Acceptance criteria**
+- [ ] A 202 can only be observed as `Queued` (compile-time distinct type)
+- [ ] Error envelope decoded into typed codes
+- [ ] Tests run against an httptest server validated by the contract harness
+
+### HUB-095 — E2E: every error class maps to the right canonical code
+- **Epic:** EP-04 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-088, HUB-029 · **Feature:** F-06 · **Stories:** US-06xx
+- **Branch:** `test/HUB-095-e2e-error-classes`
+
+End-to-end tests caller → hub → mockvendor for every vendor outcome class (DESIGN §19 M3 Accept).
+
+**Acceptance criteria**
+- [ ] One test case per row of §10.2 sync column plus validation/auth/not-found errors
+- [ ] Each asserts HTTP status, `code`, `retryable` and `retry_after_ms`
+- [ ] Runs in `make itest`
+
+### HUB-096 — Audit completeness and secret grep test
+- **Epic:** EP-04 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-092, HUB-093, HUB-095 · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `test/HUB-096-audit-secret-grep`
+
+Verify the audit timeline is complete for every e2e case and that no secret value appears anywhere in stored events or logs (DESIGN §19 M3 Accept).
+
+**Acceptance criteria**
+- [ ] Timeline for each e2e case contains all expected event types in order
+- [ ] Grep of all `request_events` payloads and captured logs finds no secret value
+- [ ] Test fails if a new secret is added to dev creds and leaks
+
+### HUB-097 — Overhead benchmark, public contract tests and M3 summary
+- **Epic:** EP-04 · **Type:** perf · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-088, HUB-089, HUB-090, HUB-092, HUB-094, HUB-096 · **Feature:** F-06 · **Stories:** US-06xx
+- **Branch:** `perf/HUB-097-m3-overhead-bench`
+
+Measure Hub-added latency with mockvendor at 0 ms, run contract tests for all M3 public endpoints, and post the M3 wrap-up.
+
+**Acceptance criteria**
+- [ ] Overhead p99 ≤ 5 ms with mockvendor at 0 ms (DESIGN §19 M3 Accept)
+- [ ] Per-stage durations reported against §18.6 budget
+- [ ] All M3 endpoints pass contract validation
+- [ ] Milestone summary posted; F-05…F-08 docs updated
+
+## EP-05 — M4 Outbox, worker, modes, idempotency, callbacks
+
+### HUB-110 — Postgres outbox Queue implementation
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-023 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `feat/HUB-110-outbox-queue`
+
+Add the `outbox` and `dead_letters` tables with §18.2 indexes and implement `Queue` (DESIGN §11.2): `Enqueue` durable before return, `Claim` with `SKIP LOCKED` and 30 s visibility timeout, `Ack`, `Nack`, `Park`, `Release`, `DeadLetter`.
+
+**Acceptance criteria**
+- [ ] Two concurrent claimers never receive the same envelope (itest)
+- [ ] Expired visibility makes an envelope claimable again
+- [ ] `Release(account, endpoint, limit)` releases in arrival order
+
+### HUB-111 — Request state machine with guarded transitions
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-110, HUB-091 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `feat/HUB-111-state-machine`
+
+Implement states `accepted → in_flight → succeeded | retry_scheduled | parked | dead_lettered | expired` (plus terminal `failed` for sync errors, contract `RequestState`) with compare-and-set transitions (DESIGN §10.9).
+
+**Acceptance criteria**
+- [ ] Every allowed transition succeeds and every other one is refused (table test)
+- [ ] Concurrent double-complete attempts result in exactly one terminal transition
+
+### HUB-112 — Worker loop with re-resolve and poison detector
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-111, HUB-083, HUB-085, HUB-087 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `feat/HUB-112-worker-loop`
+
+Implement the §18.4 worker loop: claim, TTL check, re-resolve (active unless pinned/session), paused → nack, transform, upstream, classify → Ack/Nack/DeadLetter, record attempt. An envelope that crashes a worker twice is dead-lettered (DESIGN §10.6).
+
+**Acceptance criteria**
+- [ ] Envelope holds canonical body only; worker re-transforms at send time
+- [ ] Poison envelope dead-lettered after two crashes
+- [ ] Each attempt row records the integration version used
+
+### HUB-113 — Backoff, retry budget and DLQ policy
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `feat/HUB-113-backoff-retry-budget`
+
+Apply the §10.3 schedule (+1 s … +1 h, 8 attempts) with full jitter, per-integration override, `max(backoff, Retry-After)` for 429, a retry budget of ≤ 20 % of account live traffic, and dead-letter with reason, last request/response and history (DESIGN §10.2, §10.6).
+
+**Acceptance criteria**
+- [ ] Jittered delays stay within the schedule bounds (property test)
+- [ ] 429 with `Retry-After: 10` waits ≥ 10 s
+- [ ] Retries beyond the budget are deferred and counted in `retry_budget_exhausted_total`
+- [ ] 401/403 and other 4xx dead-letter immediately
+
+### HUB-114 — Scheduler role: leader election, due retries, TTL expiry
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-111 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `feat/HUB-114-scheduler-ttl`
+
+Implement the `scheduler` role as a leader-elected singleton (Postgres advisory lock) with hot standby that promotes due retries and expires envelopes past `expires_at` (DESIGN §10.7, §17).
+
+**Acceptance criteria**
+- [ ] Only one scheduler is active; standby takes over within 15 s of leader death
+- [ ] Envelopes past TTL move to `expired` and emit `request.expired`
+- [ ] TTL defaults per capability, overridable per integration
+
+### HUB-115 — Async mode and request status endpoint
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-088, HUB-110, HUB-111 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `feat/HUB-115-async-mode-status`
+
+`async` mode persists the envelope and returns 202 with `request_id`, `status`, `poll`; `GET /v1/requests/{request_id}` returns status and final canonical result (DESIGN §4.3, §5.2).
+
+**Acceptance criteria**
+- [ ] 202 is returned only after the outbox insert committed
+- [ ] Async accept p99 ≤ 10 ms (benchmark)
+- [ ] Status endpoint is tenant-scoped (other tenants get 404)
+- [ ] Responses validate against the public contract
+
+### HUB-116 — Wait mode
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-115, HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `feat/HUB-116-wait-mode`
+
+`wait` persists first, attempts immediately in the gateway, returns 200 within `wait_ms` or 202 `in_flight` and lets the worker finish (DESIGN §5.2, D3).
+
+**Acceptance criteria**
+- [ ] Vendor at 100 ms → 200 with result; vendor at 5 s with `wait_ms` 3000 → 202 `in_flight` then `succeeded` via worker
+- [ ] Gateway attempt and worker never both deliver (guarded transition test)
+
+### HUB-117 — Async audit events and attempt records
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-111, HUB-092 · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `feat/HUB-117-audit-async-events`
+
+Emit `request.persisted`, `request.accepted`, `request.parked`, `policy.applied`, attempt events and terminal records written synchronously in the delivery transaction (DESIGN §13.1, §13.4).
+
+**Acceptance criteria**
+- [ ] Async request timeline complete from accept to terminal state
+- [ ] Terminal record and status update commit atomically
+- [ ] `queue_wait_ms` recorded on the final record
+
+### HUB-118 — Idempotency store
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-088, HUB-023 · **Feature:** F-10 · **Stories:** US-10xx
+- **Branch:** `feat/HUB-118-idempotency`
+
+Redis-backed idempotency scoped to tenant + integration, 24 h: completed requests replay the stored result with `X-Hub-Idempotent-Replay: true`; an in-progress async duplicate returns the existing request's 202, a sync one or a different body gets 409 `IDEMPOTENCY_CONFLICT`; integrations with `moves_money_or_quota: true` reject requests without a key (DESIGN §4.2, §5.1 step 4, §6.3).
+
+**Acceptance criteria**
+- [ ] Replay returns identical body and status with the replay header
+- [ ] Missing key on a `moves_money_or_quota` integration → 400 `IDEMPOTENCY_KEY_REQUIRED`
+- [ ] Same key with a different body → 409 `IDEMPOTENCY_CONFLICT`
+- [ ] Redis down → fail closed for mandatory-key capabilities, pass-through otherwise (documented)
+
+### HUB-119 — Registrar endpoints and SSRF guard
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-042, HUB-023 · **Feature:** F-11 · **Stories:** US-11xx
+- **Branch:** `feat/HUB-119-registrar-ssrf`
+
+Store registrar endpoints (URL on allowlisted host, signing secret ref) and implement the SSRF guard: resolve host, refuse private/link-local ranges, no redirects, 5 s timeout (DESIGN §12.1).
+
+**Acceptance criteria**
+- [ ] Callbacks to 10.0.0.0/8, 169.254.0.0/16, ::1, etc. refused (table test incl. DNS rebinding case)
+- [ ] Redirect responses are not followed
+- [ ] Signing secrets stored encrypted and registered for redaction
+
+### HUB-120 — Subscriptions and signed callback delivery
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-119, HUB-111 · **Feature:** F-11 · **Stories:** US-11xx
+- **Branch:** `feat/HUB-120-signed-callbacks`
+
+On terminal states, enqueue `callback_deliveries` for each subscription and POST with `X-Hub-Signature: t=<unix>,v1=HMAC-SHA256(secret, t + "." + body)`; payload carries `request_id` and `idempotency_key`; own retry schedule and DLQ (DESIGN §12.1).
+
+**Acceptance criteria**
+- [ ] Event types `request.completed|failed|expired` delivered per subscription
+- [ ] Failed callback retries independently of vendor delivery and dead-letters after the schedule
+- [ ] Payload validates against `contracts/schemas/events/`
+
+### HUB-121 — async_callback mode end-to-end
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-120, HUB-115 · **Feature:** F-11 · **Stories:** US-11xx
+- **Branch:** `feat/HUB-121-async-callback-mode`
+
+`async_callback` persists → 202 → worker → signed POST of the result to the subscribed endpoint; publish/validation rejects the mode without a subscription (DESIGN §5.2).
+
+**Acceptance criteria**
+- [ ] E2E: caller receives 202 then a signed callback with the canonical result
+- [ ] Integration with `async_callback` and no subscription fails validation
+
+### HUB-122 — M4 tests: worker crash and duplicate submissions
+- **Epic:** EP-05 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-112, HUB-116, HUB-118 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `test/HUB-122-m4-crash-duplicates`
+
+Chaos-style tests for the first two M4 Accept items.
+
+**Acceptance criteria**
+- [ ] Kill a worker mid-flight → envelope reclaimed after visibility timeout and delivered once from the caller's view
+- [ ] Duplicate submissions with the same key → exactly one vendor call (mockvendor recording), for sync, wait and async
+
+### HUB-123 — M4 tests: callback signature and TTL expiry; M4 summary
+- **Epic:** EP-05 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-121, HUB-114, HUB-117, HUB-122 · **Feature:** F-11 · **Stories:** US-11xx
+- **Branch:** `test/HUB-123-m4-callback-ttl`
+
+Remaining M4 Accept items plus the wrap-up.
+
+**Acceptance criteria**
+- [ ] Callback signature verified by a test receiver; tampered body or timestamp > 5 min is rejected
+- [ ] TTL expiry produces `expired` status and an `request.expired` callback
+- [ ] Milestone summary posted; F-09…F-11 docs updated
+
+## EP-06 — M5 Resilience
+
+### HUB-140 — Breaker state machine (account, endpoint)
+- **Epic:** EP-06 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-087 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `feat/HUB-140-breaker-state-machine`
+
+Local breaker per `(account, endpoint)`: open on > 50 % failures over 30 s with ≥ 20 calls (429 half weight) or 5 consecutive timeouts; open 30 s doubling to 10 min; half-open 3 probes (DESIGN §10.4).
+
+**Acceptance criteria**
+- [ ] Table tests for every transition incl. 429 half weight and consecutive-timeout trip
+- [ ] Open window doubles on each re-open and caps at 10 min
+- [ ] Any half-open probe failure re-opens
+
+### HUB-141 — Redis-shared breaker state with local cache
+- **Epic:** EP-06 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-140, HUB-023 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `feat/HUB-141-breaker-redis-shared`
+
+Share breaker state via Redis so all nodes agree within ~1 s; the hot path reads only the local cache, sync with Redis happens off the request path (DESIGN §10.4, §18.5 rule 6).
+
+**Acceptance criteria**
+- [ ] Two gateway nodes converge on open/closed within 1 s (itest)
+- [ ] Redis outage keeps last local state and never blocks requests
+- [ ] `breaker_state` and `breaker_transitions_total` exported
+
+### HUB-142 — Integration breaker overrides and pause
+- **Epic:** EP-06 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-141, HUB-088 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `feat/HUB-142-breaker-overrides-pause`
+
+Apply per-integration overrides that tighten thresholds (e.g. 3 consecutive timeouts) and the pause kill switch: sync/wait → 503 `INTEGRATION_PAUSED`, nothing parked; worker nacks paused envelopes (DESIGN §10.4).
+
+**Acceptance criteria**
+- [ ] Override trips the integration's view at 3 timeouts while the shared breaker stays closed
+- [ ] Paused integration returns `INTEGRATION_PAUSED`; other integrations on the same account unaffected
+
+### HUB-143 — Synthetic health probes while open
+- **Epic:** EP-06 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-141, HUB-114 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `feat/HUB-143-health-probes`
+
+Scheduler runs the vendor's `health_probe` (dry where possible) every 30 s while a breaker is open so recovery is detected without live traffic (DESIGN §8.3, §10.4).
+
+**Acceptance criteria**
+- [ ] Probe runs only while open/half-open
+- [ ] Successful probes move the breaker to half-open and then closed
+- [ ] Probe calls are visible in mockvendor recordings and never counted as tenant traffic
+
+### HUB-144 — on_circuit_open: fail_fast
+- **Epic:** EP-06 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-141, HUB-088 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `feat/HUB-144-on-circuit-open-fail-fast`
+
+Sync mode with an open circuit returns 503 `UPSTREAM_UNAVAILABLE` with `retry_after_ms` from the breaker window and `circuit: "open"`; nothing sent or queued (DESIGN §5.3, D4).
+
+**Acceptance criteria**
+- [ ] Mockvendor records zero calls while open
+- [ ] `retry_after_ms` equals remaining open window ±1 s
+
+### HUB-145 — on_circuit_open: failover and queue_if_allowed
+- **Epic:** EP-06 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-144, HUB-115 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `feat/HUB-145-failover-queue-if-allowed`
+
+`failover` resolves the next failover target and repeats from Transform (idempotent endpoints or keyed requests only; sets `X-Hub-Served-By: failover:1`; exhausted → fail_fast). `queue_if_allowed` downgrades to async only with `Prefer: respond-async` or a callback subscription (DESIGN §5.3).
+
+**Acceptance criteria**
+- [ ] Non-idempotent request without key never fails over
+- [ ] Exhausted chain returns fail_fast envelope
+- [ ] `queue_if_allowed` without the header or subscription returns fail_fast
+
+### HUB-146 — Parking on open breaker
+- **Epic:** EP-06 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-141, HUB-116, HUB-110 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `feat/HUB-146-parking`
+
+Wait mode with an open circuit returns 202 `status: queued, reason: circuit_open` at once; the worker parks envelopes tagged with account + endpoint in arrival order (DESIGN §5.2, §10.5).
+
+**Acceptance criteria**
+- [ ] Wait returns 202 queued without attempting the vendor
+- [ ] Async envelopes move to `parked`; `parked_count` and `parked_oldest_age_s` exported
+
+### HUB-147 — Account rate limiter (Redis token bucket)
+- **Epic:** EP-06 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-086, HUB-023 · **Feature:** F-13 · **Stories:** US-13xx
+- **Branch:** `feat/HUB-147-account-rate-limiter`
+
+Shared Redis token bucket per account quota in the upstream client; live traffic has priority over drain/retries; workers wait for tokens instead of collecting 429s (DESIGN §10.8).
+
+**Acceptance criteria**
+- [ ] Aggregate send rate across 3 workers stays within 5 % of the account rps
+- [ ] Live traffic is served first when drain and live compete
+- [ ] `ratelimit_rejections_total{layer="account"}` exported
+
+### HUB-148 — Tenant limiter and bulkheads
+- **Epic:** EP-06 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-081, HUB-086 · **Feature:** F-13 · **Stories:** US-13xx
+- **Branch:** `feat/HUB-148-tenant-limiter-bulkheads`
+
+Token bucket per tenant + integration at the edge (→ 429 `UPSTREAM_RATE_LIMITED`) and per-account concurrency limit (default 64 in flight) with a separate LLM worker pool (DESIGN §10.8).
+
+**Acceptance criteria**
+- [ ] Tenant over budget gets 429 without touching the vendor
+- [ ] 65th concurrent call to one account waits or fails per config; other accounts unaffected
+- [ ] LLM pool exhaustion does not starve messaging workers
+
+### HUB-149 — Ramped drain scheduler
+- **Epic:** EP-06 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-146, HUB-143, HUB-147 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `feat/HUB-149-ramped-drain`
+
+On breaker close release parked envelopes at 20 % of the account rate for 30 s, doubling every 30 s to normal; re-open mid-drain stops the release (DESIGN §10.5).
+
+**Acceptance criteria**
+- [ ] Drain starts ≤ 60 s after recovery
+- [ ] Release rate follows 20 % → 40 % → 80 % → 100 % (±10 %)
+- [ ] Drained envelopes re-resolve at send time
+
+### HUB-150 — Chaos 1: vendor down
+- **Epic:** EP-06 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-144, HUB-146, HUB-029 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `test/HUB-150-chaos-1-vendor-down`
+
+DESIGN §19 M5 Accept scenario 1 with mockvendor hard down.
+
+**Acceptance criteria**
+- [ ] Breaker opens within the configured window
+- [ ] Sync gets 503 with `retry_after_ms` and `circuit: open`
+- [ ] Wait gets 202 `queued`; async envelopes park
+
+### HUB-151 — Chaos 2: vendor recovers and drain ramps
+- **Epic:** EP-06 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-149, HUB-150 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `test/HUB-151-chaos-2-recovery-drain`
+
+Scenario 2: probes close the breaker and the parked backlog drains with a ramp.
+
+**Acceptance criteria**
+- [ ] Probes close the breaker without live traffic
+- [ ] Drain starts ≤ 60 s after recovery
+- [ ] Observed send rate ramps 20 % → 100 % (measured from mockvendor recordings)
+
+### HUB-152 — Chaos 3: re-open mid-drain
+- **Epic:** EP-06 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-151 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `test/HUB-152-chaos-3-reopen-mid-drain`
+
+Scenario 3: the vendor fails again during the drain.
+
+**Acceptance criteria**
+- [ ] Breaker re-opens with doubled open window
+- [ ] Remaining envelopes stay parked; none dead-lettered or lost
+- [ ] Drain resumes after the next recovery
+
+### HUB-153 — Chaos 4: two integrations on one account; pause isolation
+- **Epic:** EP-06 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-142, HUB-150 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `test/HUB-153-chaos-4-shared-account`
+
+Scenario 4: integrations sharing an account trip and recover together; pausing one does not affect the other.
+
+**Acceptance criteria**
+- [ ] Both integrations see the open circuit within 1 s of each other
+- [ ] Both recover together
+- [ ] Pausing one returns `INTEGRATION_PAUSED` for it only
+
+### HUB-154 — Chaos 5: failover target serves; M5 summary
+- **Epic:** EP-06 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-145, HUB-150, HUB-151, HUB-152, HUB-153, HUB-148 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `test/HUB-154-chaos-5-failover`
+
+Scenario 5 plus the milestone wrap-up.
+
+**Acceptance criteria**
+- [ ] Failover policy serves from the failover target and sets `X-Hub-Served-By`
+- [ ] Audit records the failover attempt and target
+- [ ] All five chaos tests green in `make itest`
+- [ ] Milestone summary posted; F-12, F-13 docs updated
+
+## EP-07 — M6 Versioning & cutover
+
+### HUB-170 — Publish pipeline with full validation
+- **Epic:** EP-07 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-069, HUB-048, HUB-043 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `feat/HUB-170-publish-pipeline`
+
+Publish = validate (schemas compile, expressions type-check, goldens pass, response output conforms, referenced accounts/transformers exist and not retired, interactive → sync only, `supports` matches) → immutable version row → new snapshot (DESIGN §6.4, §8.2).
+
+**Acceptance criteria**
+- [ ] Each validation failure blocks publish with a path-qualified error (table test per rule)
+- [ ] Published versions cannot be modified
+- [ ] Publish requires author and reason
+
+### HUB-171 — Snapshot distribution to nodes
+- **Epic:** EP-07 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `feat/HUB-171-snapshot-distribution`
+
+Nodes long-poll `/admin/v1/snapshots/latest` and listen to a Redis ping, download, compile in the background and swap atomically; a node that cannot fetch keeps the last good snapshot (DESIGN §6.4, §8.2).
+
+**Acceptance criteria**
+- [ ] Publish reaches 3 nodes within 10 s (itest)
+- [ ] Control plane down → nodes keep serving last good
+- [ ] `snapshot_version` gauge exported per node
+
+### HUB-172 — Rollback as a new version
+- **Epic:** EP-07 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `feat/HUB-172-rollback-new-version`
+
+Rollback publishes a new version with the old content (v9 = v7); history stays linear, nothing is deleted (DESIGN §6.4).
+
+**Acceptance criteria**
+- [ ] Rollback to v7 creates v9 with v7's spec and a reason
+- [ ] Version list remains strictly increasing with no gaps
+
+### HUB-173 — Gradual cutover: weights and shadow
+- **Epic:** EP-07 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-083, HUB-170, HUB-092 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `feat/HUB-173-weights-shadow`
+
+Support weight changes across successive versions (90/10 → 50/50 → 0/100) and `shadow` targets: serve from A, copy to B, log B's result, never return it; dry-run-only shadow for vendors with side effects (DESIGN §6.4).
+
+**Acceptance criteria**
+- [ ] Shadow result recorded in audit and never returned to the caller
+- [ ] Side-effect vendors only receive dry-run shadow (no vendor call recorded)
+- [ ] Weight changes keep stickiness for unchanged buckets
+
+### HUB-174 — Re-resolve vs pinned at send time
+- **Epic:** EP-07 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-112, HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `feat/HUB-174-reresolve-pinned`
+
+Worker uses the active version for `pending: re_resolve` (default) and `resolved_version` for `pinned` or session envelopes; every attempt records its version (DESIGN §6.3, §11.3, D10).
+
+**Acceptance criteria**
+- [ ] Parked envelope re-resolves to v8 after publish (re_resolve)
+- [ ] Pinned envelope stays on v7
+- [ ] `request_attempts.integration_version` set on every attempt
+
+### HUB-175 — Vendor session store and pinning
+- **Epic:** EP-07 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-088, HUB-114 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `feat/HUB-175-vendor-sessions`
+
+`vendor_sessions` table; step 1 of a multi-op capability returns `X-Hub-Session`; later steps route to the pinned version + account; scheduler expires sessions; unknown/expired → 404 `SESSION_NOT_FOUND` (DESIGN §3.1, §6.3, §14).
+
+**Acceptance criteria**
+- [ ] Step 2 uses the version/account of step 1 even after a publish
+- [ ] Expired session → `SESSION_NOT_FOUND`
+- [ ] Session data never stores Aadhaar numbers (schema test)
+
+### HUB-176 — Account lifecycle and retire guard
+- **Epic:** EP-07 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-174, HUB-175, HUB-170 · **Feature:** F-15 · **Stories:** US-15xx
+- **Branch:** `feat/HUB-176-account-lifecycle`
+
+`active → draining → retired`: draining when no active version targets the account; retire refused while pinned requests or open sessions reference it; credentials deleted only at retire (DESIGN §6.5).
+
+**Acceptance criteria**
+- [ ] Account auto-enters `draining` after the last referencing publish
+- [ ] Retire refused with counts of pinned requests and sessions
+- [ ] Retired account cannot be referenced by a new publish
+
+### HUB-177 — Credential rotation (active / next)
+- **Epic:** EP-07 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-084, HUB-171 · **Feature:** F-15 · **Stories:** US-15xx
+- **Branch:** `feat/HUB-177-credential-rotation`
+
+Accounts hold `active` and `next` credentials: add next → connection test → promote → delete old. In-flight calls keep the injected credential; later attempts (incl. drain) use `active` at send time; cache invalidated on snapshot ping (DESIGN §6.6, §9).
+
+**Acceptance criteria**
+- [ ] Promote takes effect on all nodes within 10 s
+- [ ] A parked request drained after promotion uses the new credential
+- [ ] Every decrypt and credential change audited
+
+### HUB-178 — Cutover scenario 1: completed before publish (account, vendor, transformer)
+- **Epic:** EP-07 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-173, HUB-174, HUB-046 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `test/HUB-178-cutover-s1-completed`
+
+Add cutover fixtures (second account, second mock vendor e.g. `moengage`, transformer `T1@8`) and test §6.3 row 1 for each change type.
+
+**Acceptance criteria**
+- [ ] For account, vendor and transformer swaps: completed v7 requests keep v7, its account and payloads in audit
+- [ ] Publish rewrites no audit rows (row checksum test)
+
+### HUB-179 — Cutover scenario 2: in-flight stays on v7
+- **Epic:** EP-07 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `test/HUB-179-cutover-s2-inflight`
+
+§6.3 row 2 for each change type, using mockvendor slow drip to hold a request in flight across publish.
+
+**Acceptance criteria**
+- [ ] In-flight attempt completes on v7's target for all three change types
+- [ ] Attempt row records v7
+
+### HUB-180 — Cutover scenario 3: parked/queued re-resolve vs pinned
+- **Epic:** EP-07 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `test/HUB-180-cutover-s3-parked`
+
+§6.3 row 3 for each change type.
+
+**Acceptance criteria**
+- [ ] `re_resolve`: parked envelope delivered via v8's target
+- [ ] `pinned`: delivered via v7's target
+- [ ] Holds for account, vendor and transformer changes
+
+### HUB-181 — Cutover scenario 4: retry with same key resolves fresh
+- **Epic:** EP-07 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-178, HUB-118 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `test/HUB-181-cutover-s4-retry`
+
+§6.3 row 4 for each change type.
+
+**Acceptance criteria**
+- [ ] Retry of a failed v7 request with the same idempotency key lands on v8
+- [ ] A completed request with the same key is replayed, not re-sent
+
+### HUB-182 — Cutover scenario 5: first new request uses v8
+- **Epic:** EP-07 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `test/HUB-182-cutover-s5-new`
+
+§6.3 row 5 for each change type.
+
+**Acceptance criteria**
+- [ ] New request after propagation uses v8
+- [ ] Caller URL, body and response schema unchanged (contract validation)
+
+### HUB-183 — Cutover scenario 6: session step 2 stays on v7
+- **Epic:** EP-07 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-178, HUB-175 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `test/HUB-183-cutover-s6-session`
+
+§6.3 row 6 for each change type.
+
+**Acceptance criteria**
+- [ ] Step 2 of a session opened on v7 is served by v7's account and transformer
+- [ ] New sessions opened after publish use v8
+
+### HUB-184 — Retire guard and rollback acceptance; M6 summary
+- **Epic:** EP-07 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-176, HUB-172, HUB-177, HUB-179, HUB-180, HUB-181, HUB-182, HUB-183 · **Feature:** F-15 · **Stories:** US-15xx
+- **Branch:** `test/HUB-184-m6-acceptance`
+
+Remaining M6 Accept items, mixed-version propagation, and the wrap-up.
+
+**Acceptance criteria**
+- [ ] Retire refused while pinned requests or sessions exist; succeeds at zero
+- [ ] Rollback restores behaviour and leaves history linear
+- [ ] During propagation one node on v7 and another on v8 both record exact versions
+- [ ] Milestone summary posted; F-14, F-15 docs updated
+
+## EP-08 — M7 Control plane & hubctl
+
+### HUB-200 — Admin server, OIDC dev stub, RBAC and /me
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-080, HUB-006 · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `feat/HUB-200-admin-server-rbac`
+
+Serve `/admin/v1` in the `admin` role with an OIDC stub for dev (static issuer, signed dev tokens), RBAC `admin | editor | viewer | tenant_viewer`, and `GET /admin/v1/me` (DESIGN §16.1).
+
+**Acceptance criteria**
+- [ ] Unauthenticated → 401; insufficient role → 403 (table test per role)
+- [ ] `tenant_viewer` sees only its tenant's data
+- [ ] `/me` validates against `contracts/openapi/hub-admin.v1.yaml`
+
+### HUB-201 — Change log with mandatory reason
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-200, HUB-047 · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `feat/HUB-201-change-log`
+
+`change_log` table and middleware recording actor, action, object, before, after, reason for every admin mutation; mutations without a reason are rejected (DESIGN §16.1).
+
+**Acceptance criteria**
+- [ ] Every mutating endpoint writes exactly one change_log row (enforced by a test that enumerates routes)
+- [ ] Missing reason → 400
+- [ ] `GET /admin/v1/change-log` with filters
+
+### HUB-202 — Admin: vendors, capabilities, transformers
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-201, HUB-067 · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `feat/HUB-202-admin-vendors-caps-transformers`
+
+CRUD/read for vendors and capabilities; transformers list/get/create-version plus `dry-run` and `run-goldens` (DESIGN §16.1).
+
+**Acceptance criteria**
+- [ ] Transformer create refused when goldens fail
+- [ ] `run-goldens` returns per-fixture pass/fail with diffs
+- [ ] All responses validate against the admin contract
+
+### HUB-203 — Admin: accounts, test-connection, rotate, lifecycle
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-201, HUB-176, HUB-177 · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `feat/HUB-203-admin-accounts`
+
+Account endpoints incl. `test-connection`, credential `rotate` (add next / promote) and lifecycle transitions; secrets are write-only (DESIGN §16.1, §6.5, §6.6).
+
+**Acceptance criteria**
+- [ ] No endpoint ever returns secret material
+- [ ] Retire returns the guard's blocking counts
+- [ ] Every call writes a change_log row
+
+### HUB-204 — Admin: integrations read, version diff, snapshots
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-201, HUB-171 · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `feat/HUB-204-admin-integrations-read`
+
+List/get integrations, list versions, diff two versions (structured + text), and snapshots list/get/latest long-poll (DESIGN §16.1, §8.2).
+
+**Acceptance criteria**
+- [ ] Diff of v7 vs v8 shows exact changed paths
+- [ ] `snapshots/latest` long-poll returns within 1 s of a publish
+- [ ] Responses validate against the admin contract
+
+### HUB-205 — Admin: publish, rollback, weights, pause
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-204, HUB-170, HUB-172, HUB-142 · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `feat/HUB-205-admin-integrations-mutate`
+
+Mutating integration endpoints through the same publish pipeline: publish, rollback, set weights (new version), pause/resume; reason mandatory (DESIGN §16.1).
+
+**Acceptance criteria**
+- [ ] Validation errors returned path-qualified in the contract's error shape
+- [ ] Pause takes effect on all nodes within 10 s
+- [ ] Each mutation in change_log with before/after
+
+### HUB-206 — Admin: tenants, API keys, registrar endpoints
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-201, HUB-119 · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `feat/HUB-206-admin-tenants-keys`
+
+Tenants CRUD, API keys (shown once on create, rotation with overlap, revoke), registrar endpoints CRUD with SSRF validation (DESIGN §16.1, §16.5).
+
+**Acceptance criteria**
+- [ ] Key plaintext appears only in the create/rotate response
+- [ ] Old key keeps working during the overlap window then stops
+- [ ] Registrar URL on a private range rejected
+
+### HUB-207 — Admin: request search and timeline
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-201, HUB-117 · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `feat/HUB-207-admin-requests`
+
+Request explorer endpoints: search by tenant, integration, status, code, time range, idempotency key; timeline of events and attempts (DESIGN §16.1, §13).
+
+**Acceptance criteria**
+- [ ] Search uses indexed columns and is paginated (cursor)
+- [ ] Timeline returns events in seq order with hashes and sizes
+- [ ] `tenant_viewer` restricted to its tenant
+
+### HUB-208 — Sealed payload policy and audited unseal
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-207, HUB-093, HUB-084 · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `feat/HUB-208-sealed-unseal`
+
+`sealed` policy: full raw bytes field-level encrypted with a per-tenant key (local key source in dev); `POST /admin/v1/requests/{id}/unseal` decrypts for an authorised admin with a reason, audited (DESIGN §13.2, D6).
+
+**Acceptance criteria**
+- [ ] Sealed bodies unreadable in the DB (ciphertext test)
+- [ ] Unseal requires `admin` role and reason; writes change_log
+- [ ] Hashes and sizes match the original bytes
+
+### HUB-209 — Admin: DLQ and breakers
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-201, HUB-113, HUB-141 · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `feat/HUB-209-admin-dlq-breakers`
+
+DLQ list, replay by filter (tenant, integration, account, reason, time range; re-resolves and re-transforms), purge; breaker state list and force-open/close (DESIGN §10.6, §16.1).
+
+**Acceptance criteria**
+- [ ] Replay by filter moves matching entries to `accepted` and they deliver
+- [ ] Replay after a transformer fix uses the new transformer
+- [ ] Force-open is visible on all nodes within 1 s
+
+### HUB-210 — hubctl scaffold, export and plan
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-204, HUB-202 · **Feature:** F-17 · **Stories:** US-17xx
+- **Branch:** `feat/HUB-210-hubctl-plan`
+
+`hubctl` with auth config; `export` round-trips the registry (minus secrets) to YAML; `plan` diffs a local config dir against live and prints exact changes (DESIGN §16.1 config as code).
+
+**Acceptance criteria**
+- [ ] Export → plan against the same live shows no changes
+- [ ] Plan shows per-object path-level diffs
+- [ ] Secrets never written by export
+
+### HUB-211 — hubctl apply
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-210, HUB-205, HUB-206 · **Feature:** F-17 · **Stories:** US-17xx
+- **Branch:** `feat/HUB-211-hubctl-apply`
+
+`hubctl apply` publishes through the same pipeline as the API and UI, with reason and author (DESIGN §8.2, §16.1).
+
+**Acceptance criteria**
+- [ ] Apply of the dev config twice: second run makes no changes (idempotent)
+- [ ] Apply stops at the first validation failure with the path-qualified error
+- [ ] Each applied change writes change_log
+
+### HUB-212 — hubctl dry-run and replay
+- **Epic:** EP-08 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-210, HUB-209 · **Feature:** F-17 · **Stories:** US-17xx
+- **Branch:** `feat/HUB-212-hubctl-dryrun-replay`
+
+`hubctl dry-run <integration> <body.json>` and `hubctl replay --filter …` wrapping the admin endpoints (DESIGN §19 M7).
+
+**Acceptance criteria**
+- [ ] Dry-run prints the vendor request with secrets redacted
+- [ ] Replay prints the count and requires `--yes` unless `--dry-run`
+
+### HUB-213 — Admin contract tests and RBAC matrix
+- **Epic:** EP-08 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-202, HUB-203, HUB-205, HUB-206, HUB-207, HUB-208, HUB-209 · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `test/HUB-213-admin-contract-tests`
+
+Validate every admin endpoint response against `contracts/openapi/hub-admin.v1.yaml` and test the full role × endpoint permission matrix.
+
+**Acceptance criteria**
+- [ ] Every operation in the admin contract has at least one passing contract test
+- [ ] RBAC matrix test covers all four roles × all endpoints
+
+### HUB-214 — M7 acceptance and milestone summary
+- **Epic:** EP-08 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-211, HUB-212, HUB-213 · **Feature:** F-17 · **Stories:** US-17xx
+- **Branch:** `test/HUB-214-m7-acceptance`
+
+Prove the M7 Accept line and post the wrap-up.
+
+**Acceptance criteria**
+- [ ] `hubctl apply` of the dev config is idempotent
+- [ ] `plan` shows exact diffs
+- [ ] Every admin mutation appears in change_log
+- [ ] Milestone summary posted; F-16, F-17 docs updated
+
+## EP-09 — M8 Observability & hardening
+
+### HUB-230 — Metrics: full §16.2 set
+- **Epic:** EP-09 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-027, HUB-154, HUB-123 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `feat/HUB-230-metrics-full`
+
+Export every §16.2 metric with labels tenant, integration, vendor, account, version, with a cardinality guard; incl. `credential_expiry_days`, `queue_oldest_age_s`, `llm_*` placeholders.
+
+**Acceptance criteria**
+- [ ] Every metric in §16.2 present on `/metrics` (test enumerates names)
+- [ ] Label cardinality capped with an overflow bucket
+- [ ] `hub_overhead_ms` broken down by stage
+
+### HUB-231 — Tracing: edge, transform, upstream, callback spans
+- **Epic:** EP-09 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-027, HUB-088, HUB-120 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `feat/HUB-231-tracing-spans`
+
+OTel spans for edge, transform, upstream and callback; accept caller `traceparent`; forward it to vendors that accept it (DESIGN §16.4).
+
+**Acceptance criteria**
+- [ ] One trace links caller → gateway → worker → vendor → callback for an async request
+- [ ] Spans carry no secrets or bodies (attribute allowlist test)
+
+### HUB-232 — Alert rules and dashboards as code
+- **Epic:** EP-09 · **Type:** chore · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-230 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `chore/HUB-232-alerts-dashboards`
+
+Prometheus alert rules for every §16.3 alert with `promtool` unit tests, and dashboards JSON for tenant, vendor and platform views in `deploy/`.
+
+**Acceptance criteria**
+- [ ] Each §16.3 alert has a rule and a passing promtool test
+- [ ] Dashboards load in Grafana (CI JSON lint + import check)
+
+### HUB-233 — PII deletion job by subject identifier
+- **Epic:** EP-09 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-093, HUB-208 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `feat/HUB-233-pii-deletion`
+
+Job that purges stored payloads by subject identifier using `x-pii` tags while keeping hashes and metadata (DESIGN §16.5).
+
+**Acceptance criteria**
+- [ ] After deletion, no stored body contains the subject identifier (grep test)
+- [ ] Hashes, sizes and timelines remain
+- [ ] Deletion recorded in change_log
+
+### HUB-234 — Security hardening checks
+- **Epic:** EP-09 · **Type:** chore · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-086, HUB-022 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `chore/HUB-234-security-hardening`
+
+Add `gosec` and `govulncheck` to CI, verify TLS 1.2+ and egress allowlist enforcement, body limits and secret redaction across all roles (DESIGN §16.5, `docs/tech/SECURITY.md`).
+
+**Acceptance criteria**
+- [ ] CI fails on a high-severity gosec or known vulnerability
+- [ ] Test proves TLS < 1.2 vendor handshake fails
+- [ ] Secret grep over logs from the full itest run is empty
+
+### HUB-235 — Load test: 500 sync RPS + 2 000 async msg/s
+- **Epic:** EP-09 · **Type:** perf · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-097, HUB-154 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `perf/HUB-235-load-test`
+
+k6 or vegeta scripts and a compose-based laptop-scale setup with mockvendor; profile and fix hotspots; report budgets vs §18.6 (DESIGN §19 M8).
+
+**Acceptance criteria**
+- [ ] Overhead p99 ≤ 5 ms at 500 sync RPS
+- [ ] 2 000 async msg/s sustained for 10 min with queue age < 2 min
+- [ ] Report with pprof findings committed under `docs/tech/`
+
+### HUB-236 — Soak test with random vendor outages
+- **Epic:** EP-09 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-235, HUB-152 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `test/HUB-236-soak-test`
+
+Multi-hour soak with randomised mockvendor outages and worker restarts; reconcile accepted vs terminal requests (DESIGN §19 M8 Accept).
+
+**Acceptance criteria**
+- [ ] Zero lost async requests: every accepted request reaches a terminal state
+- [ ] No duplicate callbacks for any request
+- [ ] Results summarised with counts per terminal state
+
+### HUB-237 — Runbooks and M8 summary
+- **Epic:** EP-09 · **Type:** docs · **Area:** docs
+- **Status:** todo · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `docs/HUB-237-runbooks-m8`
+
+Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`, credential rotation, snapshot lag; post the M8 wrap-up.
+
+**Acceptance criteria**
+- [ ] Each paging alert links a runbook
+- [ ] Milestone summary posted; F-18 doc updated
+- [ ] Release notes for v1.0.0 prepared per `docs/process/RELEASE.md`
+
+## EP-10 — Admin console (SvelteKit)
+
+### HUB-250 — Scaffold SvelteKit admin console
+- **Epic:** EP-10 · **Type:** chore · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-012 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `chore/HUB-250-fe-scaffold`
+
+Create `frontend/` with SvelteKit, Svelte 5 runes, TypeScript strict, ESLint/Prettier, Vitest, Playwright, and npm scripts `dev build check test test:e2e`; CI job for the frontend.
+
+**Acceptance criteria**
+- [ ] `npm run check && npm test` green on the scaffold
+- [ ] CI runs check, unit and build for `frontend/**` changes
+- [ ] Svelte 5 runes mode enforced
+
+### HUB-251 — Generated API client (gen:api)
+- **Epic:** EP-10 · **Type:** chore · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-250, HUB-006 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `chore/HUB-251-fe-gen-api`
+
+`npm run gen:api` generates types from `contracts/openapi/hub-admin.v1.yaml` with openapi-typescript and wraps openapi-fetch in a typed client with auth and error-envelope handling (AGENTS §4.5).
+
+**Acceptance criteria**
+- [ ] Generated types committed; CI fails if regeneration produces a diff
+- [ ] No hand-written API types in `src/` (lint rule or grep check)
+- [ ] Client surfaces the error envelope as a typed error
+
+### HUB-252 — MSW mocks from the contract
+- **Epic:** EP-10 · **Type:** test · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-251 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `test/HUB-252-fe-msw-mocks`
+
+MSW handlers and typed fixtures for every admin operation so the console is built in parallel with the backend; dev server can run fully on mocks.
+
+**Acceptance criteria**
+- [ ] Every admin operation has a handler typed by the generated client
+- [ ] `npm run dev:mock` runs the console without a backend
+- [ ] Fixtures validated against the contract in a unit test
+
+### HUB-253 — Auth: OIDC stub login and /me
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-252 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-253-fe-auth`
+
+Login via the dev OIDC stub, session handling, `/me` fetch and role-aware guards for `admin | editor | viewer | tenant_viewer`.
+
+**Acceptance criteria**
+- [ ] Unauthenticated users redirected to login
+- [ ] Controls for mutations hidden/disabled for `viewer`
+- [ ] Unit tests for the guard per role
+
+### HUB-254 — Layout and navigation
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-250 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-254-fe-layout-nav`
+
+App shell with sidebar navigation (Integrations, Health, Requests, DLQ, Transformers, Tenants, Snapshots, Change log), breadcrumbs, user menu and light/dark theme.
+
+**Acceptance criteria**
+- [ ] Every section reachable by keyboard
+- [ ] Active route highlighted; layout works at 1280 px and 768 px
+
+### HUB-255 — Error, empty and loading states
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-251, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-255-fe-states`
+
+Shared components for loading skeletons, empty states and error envelopes (code, message, request_id, retryable) used by every page.
+
+**Acceptance criteria**
+- [ ] Every list/detail page uses the shared components (checked in review + test)
+- [ ] Error component shows `request_id` with copy action
+- [ ] Component tests for each state
+
+### HUB-256 — Integrations list
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-253, HUB-255 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-256-fe-integrations-list`
+
+Searchable, filterable list of integrations (tenant, capability, paused, active version) with pagination.
+
+**Acceptance criteria**
+- [ ] Filters reflected in the URL
+- [ ] Paused integrations visibly marked
+- [ ] Component tests against MSW
+
+### HUB-257 — Integration detail and version history
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-256 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-257-fe-integration-detail`
+
+Detail page with active version spec (targets, weights, failover, delivery, breaker, webhooks, audit) and version history with author, reason, date.
+
+**Acceptance criteria**
+- [ ] History shows every version newest first
+- [ ] Active version clearly marked
+- [ ] Component tests against MSW
+
+### HUB-258 — Version diff view
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-258-fe-version-diff`
+
+Compare any two versions using the admin diff endpoint, with side-by-side and path-list views.
+
+**Acceptance criteria**
+- [ ] Changed, added and removed paths highlighted
+- [ ] Diff selectable from history rows
+
+### HUB-259 — Publish and rollback flows with mandatory reason
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-259-fe-publish-rollback`
+
+Publish a new version (spec editor with validation) and rollback-as-new-version, both requiring a reason and confirming in a dialog; path-qualified validation errors shown inline.
+
+**Acceptance criteria**
+- [ ] Submit disabled until a reason is entered
+- [ ] Validation errors mapped to fields
+- [ ] Success shows the new version number
+
+### HUB-260 — Weights and pause flows with mandatory reason
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-260-fe-weights-pause`
+
+Edit target weights (must total 100) and pause/resume an integration, each with mandatory reason and confirmation.
+
+**Acceptance criteria**
+- [ ] Weights not summing to 100 cannot be submitted
+- [ ] Pause shows impact text and requires reason
+- [ ] Component tests against MSW
+
+### HUB-261 — Vendor and account health board
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-261-fe-health-board`
+
+Board of vendors/accounts with breaker state, error rate, parked count/age, DLQ count and lifecycle state, auto-refreshing.
+
+**Acceptance criteria**
+- [ ] Open breakers sorted first and visually distinct (not color only)
+- [ ] Auto-refresh interval configurable and pausable
+
+### HUB-262 — Breaker force controls
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-261 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-262-fe-breaker-force`
+
+Force-open / force-close per `(account, endpoint)` from the health board with mandatory reason, `admin` only.
+
+**Acceptance criteria**
+- [ ] Controls absent for non-admin roles
+- [ ] Confirmation dialog states the affected integrations
+
+### HUB-263 — Request explorer search
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-263-fe-request-search`
+
+Search requests by tenant, integration, status, code, time range and idempotency key with cursor pagination.
+
+**Acceptance criteria**
+- [ ] Search params in URL, shareable
+- [ ] Empty and error states covered
+
+### HUB-264 — Request timeline
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-263 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-264-fe-request-timeline`
+
+Timeline view of events and attempts with timings, versions, hashes/sizes and payload viewer that respects payload policy.
+
+**Acceptance criteria**
+- [ ] Events shown in seq order with durations
+- [ ] Sealed payloads show a locked placeholder
+- [ ] Attempt rows show integration version and account
+
+### HUB-265 — Unseal flow
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-264 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-265-fe-unseal`
+
+Unseal a sealed payload with mandatory reason (`admin` only); unsealed content shown in-session only and never cached.
+
+**Acceptance criteria**
+- [ ] Reason required; action logged message shown
+- [ ] Unsealed content cleared on navigation (test)
+
+### HUB-266 — DLQ list
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-266-fe-dlq-list`
+
+DLQ list with filters (tenant, integration, account, reason, time range) and entry detail (last vendor request/response, attempt history).
+
+**Acceptance criteria**
+- [ ] Filters in URL
+- [ ] Entry detail shows the reason and attempt history
+
+### HUB-267 — DLQ replay by filter and purge
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-266 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-267-fe-dlq-replay-purge`
+
+Replay all entries matching the current filter, and purge, each showing the affected count and requiring a reason.
+
+**Acceptance criteria**
+- [ ] Confirmation shows exact count from the API before submit
+- [ ] Purge requires typing the count to confirm
+
+### HUB-268 — Transformers viewer and goldens
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-268-fe-transformers`
+
+List transformers and versions, view YAML with syntax highlighting, and run goldens with per-fixture results and diffs.
+
+**Acceptance criteria**
+- [ ] Golden diffs rendered per fixture
+- [ ] Doc URL from the transformer header shown as a link
+
+### HUB-269 — Transformer dry-run
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-268 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-269-fe-transformer-dry-run`
+
+Dry-run a transformer version with a pasted canonical body and show the resulting vendor request (secrets redacted).
+
+**Acceptance criteria**
+- [ ] Invalid JSON input caught client-side
+- [ ] Result rendered as method, URL, headers, body
+
+### HUB-270 — Tenants pages
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-270-fe-tenants`
+
+List, create and edit tenants (rate limits, grants), with mandatory reason on mutations.
+
+**Acceptance criteria**
+- [ ] Create/edit forms validated per contract
+- [ ] `tenant_viewer` sees only its tenant
+
+### HUB-271 — API keys with show-once
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-270 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-271-fe-api-keys`
+
+Create, rotate (with overlap) and revoke tenant API keys; plaintext shown exactly once with copy action and never stored.
+
+**Acceptance criteria**
+- [ ] Key plaintext not present in any store or after dialog close (test)
+- [ ] Rotation shows overlap expiry
+
+### HUB-272 — Registrar endpoints
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-270 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-272-fe-registrar`
+
+Manage registrar endpoints per tenant (URL, secret rotation), surfacing SSRF validation errors.
+
+**Acceptance criteria**
+- [ ] Private-range URL error from API shown on the field
+- [ ] Secret is write-only in the UI
+
+### HUB-273 — Snapshots view
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-273-fe-snapshots`
+
+List snapshots with version, checksum, author, diff summary and time.
+
+**Acceptance criteria**
+- [ ] Latest snapshot highlighted
+- [ ] Diff summary expandable
+
+### HUB-274 — Change log view
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-274-fe-change-log`
+
+Filterable change log (actor, action, object, time) with before/after diff and reason.
+
+**Acceptance criteria**
+- [ ] Before/after rendered as a diff
+- [ ] Filters in URL
+
+### HUB-275 — Accessibility pass
+- **Epic:** EP-10 · **Type:** test · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-256, HUB-259, HUB-261, HUB-264, HUB-267, HUB-271 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `test/HUB-275-fe-a11y`
+
+Audit all pages with axe and keyboard-only navigation; fix issues to WCAG 2.2 AA.
+
+**Acceptance criteria**
+- [ ] axe reports zero serious/critical violations on every route (Playwright + axe)
+- [ ] All dialogs trap focus and restore it on close
+- [ ] Status never conveyed by color alone
+
+### HUB-276 — E2E suite on MSW
+- **Epic:** EP-10 · **Type:** test · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-259, HUB-260, HUB-262, HUB-265, HUB-267, HUB-269, HUB-271, HUB-272, HUB-273, HUB-274 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `test/HUB-276-fe-e2e-msw`
+
+Playwright suite covering the key flows (publish, rollback, pause, breaker force, unseal, DLQ replay, key create) against MSW.
+
+**Acceptance criteria**
+- [ ] Each listed flow has an e2e test
+- [ ] Suite runs in CI in < 5 min
+
+### HUB-277 — E2E against the real admin API
+- **Epic:** EP-10 · **Type:** test · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-276, HUB-214 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `test/HUB-277-fe-e2e-real`
+
+Run the e2e suite against a compose stack (hub admin + Postgres + Redis + mockvendor) once EP-08 is done.
+
+**Acceptance criteria**
+- [ ] All e2e tests pass against the real backend
+- [ ] Any contract mismatch filed as a contract change request, not patched locally
+
+## EP-11 — MCP server + consumer skill + SDK
+
+### HUB-300 — hubmcp scaffold with official MCP Go SDK (stdio)
+- **Epic:** EP-11 · **Type:** feat · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-020, HUB-006, HUB-094 · **Feature:** F-20 · **Stories:** US-20xx
+- **Branch:** `feat/HUB-300-hubmcp-scaffold`
+
+Create `cmd/hubmcp` using the official MCP Go SDK with stdio transport, config (Hub URL, tenant key from env, optional admin token) and tool registration from the frozen MCP tool definitions.
+
+**Acceptance criteria**
+- [ ] `hubmcp` starts over stdio and lists tools matching the contract
+- [ ] Tenant key read from env only and redacted in logs
+- [ ] Calls go through `pkg/hubclient`
+
+### HUB-301 — Streamable HTTP transport
+- **Epic:** EP-11 · **Type:** feat · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
+- **Branch:** `feat/HUB-301-hubmcp-http`
+
+Add streamable HTTP transport with bearer auth for shared deployments.
+
+**Acceptance criteria**
+- [ ] Same tool list over HTTP and stdio
+- [ ] Unauthenticated HTTP clients rejected
+
+### HUB-302 — Discovery tools
+- **Epic:** EP-11 · **Type:** feat · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
+- **Branch:** `feat/HUB-302-mcp-discovery-tools`
+
+Tools to list integrations, describe one, and fetch a capability's schemas, backed by the discovery endpoints (HUB-090 contract).
+
+**Acceptance criteria**
+- [ ] Tool outputs never contain vendor, account or version
+- [ ] Tested against a contract-validated fake Hub
+
+### HUB-303 — Invoke, request status and dry-run tools
+- **Epic:** EP-11 · **Type:** feat · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
+- **Branch:** `feat/HUB-303-mcp-invoke-tools`
+
+Tools to invoke an integration (returning Result vs Queued explicitly), get request status, and dry-run.
+
+**Acceptance criteria**
+- [ ] A 202 is reported as queued with the poll id, never as success
+- [ ] Error envelope surfaced with code, retryable, retry_after_ms
+
+### HUB-304 — Confirm guard for money/quota integrations
+- **Epic:** EP-11 · **Type:** feat · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-303 · **Feature:** F-20 · **Stories:** US-20xx
+- **Branch:** `feat/HUB-304-mcp-confirm-guard`
+
+For integrations with `moves_money_or_quota: true` (read via `getIntegration`), the invoke tool requires an explicit `confirm: true` and an idempotency key, and echoes a summary before calling.
+
+**Acceptance criteria**
+- [ ] Invoke without confirm returns a confirmation request and makes no Hub call
+- [ ] Missing idempotency key rejected client-side
+
+### HUB-305 — Admin read-only tools
+- **Epic:** EP-11 · **Type:** feat · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
+- **Branch:** `feat/HUB-305-mcp-admin-readonly`
+
+Read-only admin tools (request search/timeline, breaker states, DLQ list, integration versions) using a viewer token against `contracts/openapi/hub-admin.v1.yaml`; no mutating tools.
+
+**Acceptance criteria**
+- [ ] Tool set contains no mutating operation (test)
+- [ ] Fails clearly when no admin token is configured
+
+### HUB-306 — MCP tests
+- **Epic:** EP-11 · **Type:** test · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-301, HUB-302, HUB-303, HUB-304, HUB-305 · **Feature:** F-20 · **Stories:** US-20xx
+- **Branch:** `test/HUB-306-mcp-tests`
+
+Tool schema snapshot tests against the MCP contract, handler tests against a fake Hub, and an MCP Inspector smoke run.
+
+**Acceptance criteria**
+- [ ] Tool schemas equal the frozen definitions
+- [ ] Every tool has success and error tests
+
+### HUB-307 — MCP e2e against a running Hub
+- **Epic:** EP-11 · **Type:** test · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-306, HUB-097, HUB-123 · **Feature:** F-20 · **Stories:** US-20xx
+- **Branch:** `test/HUB-307-mcp-e2e`
+
+Run hubmcp against a compose Hub + mockvendor and exercise discovery, sync invoke, async invoke + status, dry-run.
+
+**Acceptance criteria**
+- [ ] All flows pass end to end
+- [ ] No vendor identity in any tool output except `hub_dry_run`, the documented exception (grep)
+
+### HUB-308 — hubclient polish: retries, polling, callback verifier
+- **Epic:** EP-11 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-094 · **Feature:** F-21 · **Stories:** US-21xx
+- **Branch:** `feat/HUB-308-hubclient-polish`
+
+Add retry helper honouring `retryable`/`retry_after_ms`, idempotency-key helper, poll-until-terminal helper, `X-Hub-Signature` verifier for tenants, and examples (DESIGN §4.5, §12.1).
+
+**Acceptance criteria**
+- [ ] Retry helper never retries non-retryable errors
+- [ ] Signature verifier rejects timestamps > 5 min old
+- [ ] Runnable examples per delivery mode
+
+### HUB-309 — Consumer skill polish and install docs
+- **Epic:** EP-11 · **Type:** docs · **Area:** docs
+- **Status:** todo · **Depends on:** HUB-008, HUB-303, HUB-308 · **Feature:** F-21 · **Stories:** US-21xx
+- **Branch:** `docs/HUB-309-consumer-skill-polish`
+
+Polish `clients/claude-skill/` (per-mode examples, error handling, the never-vendor rule) and write install docs for the skill and hubmcp in Claude Code / Claude Desktop.
+
+**Acceptance criteria**
+- [ ] Skill examples validate against the public contract
+- [ ] Install docs tested on a clean machine
+- [ ] Changes reflected in F-20/F-21 docs
+
+### HUB-310 — hubclient SSE reader for llm.chat streams
+- **Epic:** EP-11 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-308, HUB-333 · **Feature:** F-21 · **Stories:** US-21xx
+- **Branch:** `feat/HUB-310-hubclient-sse`
+
+Add an SSE reader to `pkg/hubclient` mapping canonical chunks (`delta.text`, `finish_reason`, `usage`) and terminal error events (DESIGN §15). Scheduled after streaming lands in Release 2.
+
+**Acceptance criteria**
+- [ ] Reader yields chunks in order and surfaces a terminal error event as an error
+- [ ] Context cancellation closes the stream
+
+## EP-12 — Release 2 (DESIGN §19 Phase 2)
+
+### HUB-330 — Inbound vendor webhooks and correlation
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-22xx
+- **Branch:** `feat/HUB-330-inbound-webhooks`
+
+Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §12.2: verify, correlate, inbound transformer, fan-out via subscriptions. Split into ~1-day tickets (with stories and feature doc updates) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-331 — Worker micro-batching
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-22xx
+- **Branch:** `feat/HUB-331-micro-batching`
+
+Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §7.5: group by account + endpoint in a 50–200 ms window; split per-record results. Split into ~1-day tickets (with stories and feature doc updates) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-332 — OAuth2, HMAC signing and mTLS auth schemes
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-22xx
+- **Branch:** `feat/HUB-332-auth-oauth2-hmac-mtls`
+
+Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §9: OAuth2 client credentials with single-flight refresh, HMAC request signing, per-account mTLS. Split into ~1-day tickets (with stories and feature doc updates) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-333 — llm.chat with streaming, failover and token accounting
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-22xx
+- **Branch:** `feat/HUB-333-llm-chat-streaming`
+
+Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §15: SSE relay, pre-first-byte failover, `supports` checks, token/cost metrics, budgets. Split into ~1-day tickets (with stories and feature doc updates) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-334 — Vendor session flows (Aadhaar OTP)
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-22xx
+- **Branch:** `feat/HUB-334-aadhaar-otp-sessions`
+
+Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §14: generate → verify via licensed KUA/ASA on the session store; OTP limits as account quota. Split into ~1-day tickets (with stories and feature doc updates) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-335 — Redirect hand-offs (DigiLocker, eSign, eNACH)
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-22xx
+- **Branch:** `feat/HUB-335-redirect-handoffs`
+
+Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §4.1, §14: `handoff_url`, `GET /handoff/return/{session_id}`, status webhook to tenant. Split into ~1-day tickets (with stories and feature doc updates) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-336 — Long-running consent requests (Account Aggregator)
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-22xx
+- **Branch:** `feat/HUB-336-aa-consent`
+
+Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §14: TTL in days, consent artefact store, inbound notifications as state-machine steps. Split into ~1-day tickets (with stories and feature doc updates) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-337 — Sealed audit hardening with KMS-backed tenant keys
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-22xx
+- **Branch:** `feat/HUB-337-sealed-kms`
+
+Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §13.2: production key management, 90-day retention and cold storage for sealed payloads. Split into ~1-day tickets (with stories and feature doc updates) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-338 — Admin UI phase 2: transformer editor and UI-to-Git
+- **Epic:** EP-12 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-22xx
+- **Branch:** `feat/HUB-338-admin-ui-phase2`
+
+Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §16.1, §19 Phase 2: transformer editor with live dry-run; UI changes land as Git commits. Split into ~1-day tickets (with stories and feature doc updates) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-339 — Tenant self-service
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-22xx
+- **Branch:** `feat/HUB-339-tenant-self-service`
+
+Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §19 Phase 2: tenants manage their own keys, registrar endpoints and subscriptions. Split into ~1-day tickets (with stories and feature doc updates) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-340 — KMS and Vault credential sources
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-22xx
+- **Branch:** `feat/HUB-340-kms-vault-creds`
+
+Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §9: `CredentialSource` implementations for cloud KMS and Vault transit behind the same interface. Split into ~1-day tickets (with stories and feature doc updates) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope and contracts
+
+## Parallel tracks
+
+Contracts were frozen in HUB-006, so the three tracks below only meet at contract tests and the late e2e tickets.
+
+| Track | Epics | Can start after | Joins the backend at |
+| --- | --- | --- | --- |
+| Backend core (sequential milestones) | EP-01 → EP-02 → EP-03 → EP-04 → EP-05 → EP-06 → EP-07 → EP-08 → EP-09 | HUB-012 | — |
+| Admin console | EP-10 (HUB-250…HUB-276 on MSW mocks) | HUB-012 + HUB-006 | HUB-277 (needs HUB-214, end of M7) |
+| MCP server + SDK + consumer skill | EP-11 (HUB-300…HUB-306, HUB-308, HUB-309 against a contract-validated fake Hub) | HUB-020 + HUB-094 (HUB-094 needs only HUB-006) | HUB-307 (needs HUB-097 and HUB-123, end of M4) |
+| Infra / repo hygiene | HUB-013, HUB-014, HUB-015 | now (HUB-015 after HUB-012) | independent |
+| Phase-1 decisions | HUB-016 | now | user availability |
+| Release 2 | EP-12 | HUB-237 (end of M8) | — |
+
+Concurrency inside the backend track (once the named prerequisite is done):
+
+- **EP-02 ∥ EP-03 start:** HUB-060 (DSL parser) needs only HUB-040, so the transformer engine starts while loaders and validation are built.
+- **EP-03 ∥ EP-04 groundwork:** HUB-086 (upstream client), HUB-091 (audit writer) and HUB-094 (hubclient) do not depend on the transformer engine.
+- **EP-05 groundwork early:** HUB-110 (outbox) and HUB-119 (registrar/SSRF) need only migrations and loaders and can run during M3.
+- **EP-06 limiters early:** HUB-147 and HUB-148 depend only on the upstream client and edge auth.
+- **EP-08 read endpoints:** HUB-200/201 can start once HUB-080 exists; mutations wait for EP-07.
+- **EP-09:** HUB-233/234 can run during M7.
+
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.

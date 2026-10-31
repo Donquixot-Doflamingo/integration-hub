@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tickets)` · add ticket backlog HUB-001 to HUB-399 · HUB-010 · F-01..F-22
+  - 186 tickets across EP-00..EP-12 with acceptance criteria, dependencies, parallel tracks and critical path
 - 2026-10-31 · `chore(agents)` · add contract-steward, backend, frontend and docs-keeper agents · HUB-009 · F-01
   - Sub-agent definitions; only contract-steward may edit contracts/
 - 2026-10-31 · `chore(skills)` · add frontend, repo-wide and consumer skills · HUB-008 · F-19, F-21
