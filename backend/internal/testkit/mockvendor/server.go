@@ -191,8 +191,17 @@ func (s *Server) setDefault(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) reset(w http.ResponseWriter, r *http.Request) {
 	req := ResetRequest{}
-	if r.ContentLength != 0 && r.Body != nil {
-		if !decode(w, r, &req) {
+	// The body is optional; an empty body may arrive with or without Content-Length (chunked).
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxSpecBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", "read body: "+err.Error(), nil)
+		return
+	}
+	if len(bytes.TrimSpace(raw)) > 0 {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid JSON body: "+err.Error(), nil)
 			return
 		}
 	}

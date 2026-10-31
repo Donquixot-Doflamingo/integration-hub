@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `test(contract)` · add contract test harness with kin-openapi · HUB-031 · F-01
+  - internal/testkit/contract validates live requests and responses (status, headers, body) against contracts/openapi/*.yaml and reports JSON pointers
+  - /healthz and /readyz (200 and 503) and every mockvendor control operation are contract-tested; HUB-028 acceptance closed
+  - Fixed: mockvendor reset rejected an empty chunked body
 - 2026-10-31 · `feat(mockvendor)` · add inbound webhook sender with HMAC and basic signing · HUB-030 · F-02
   - POST /__control/webhooks sends a webhook (POST/PUT, JSON or raw body, custom headers, delay) and reports the target's status, headers and body
   - Optional signing: hmac_sha256 over `<ts>.<raw body>` with a header template and timestamp offset for replay tests, or basic

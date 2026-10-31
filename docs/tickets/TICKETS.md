@@ -322,13 +322,13 @@ Wire the OTel SDK (tracer provider, OTLP exporter optional), a Prometheus `/metr
 
 ### HUB-028 — mockvendor server, control API and request recording
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-020, HUB-006 · **Feature:** F-02 · **Stories:** US-02xx
+- **Status:** done · **Depends on:** HUB-020, HUB-006 · **Feature:** F-02 · **Stories:** US-02xx
 - **Branch:** `feat/HUB-028-mockvendor-core`
 
 Implement `cmd/mockvendor` per the mockvendor contract: arbitrary routes, a control API to set per-route behaviour and reset, and recording of received requests for test assertions (DESIGN §19 M0).
 
 **Acceptance criteria**
-- [ ] Control API matches the frozen mockvendor OpenAPI document
+- [x] Control API matches the frozen mockvendor OpenAPI document
 - [x] Recorded requests (method, path, headers, body) can be listed and cleared
 - [x] A Go test helper starts mockvendor in-process on a random port
 
@@ -358,15 +358,15 @@ Let mockvendor send signed or unsigned webhooks to a configured Hub URL on deman
 
 ### HUB-031 — Contract test harness with kin-openapi
 - **Epic:** EP-01 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-006, HUB-025 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-006, HUB-025 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `test/HUB-031-contract-test-harness`
 
 Add a test helper that loads the frozen OpenAPI documents with kin-openapi and validates every request/response recorded in handler tests (AGENTS §4.6).
 
 **Acceptance criteria**
-- [ ] Helper validates status, headers and body against the operation in the contract
-- [ ] A deliberately wrong response fails the test with the JSON pointer
-- [ ] `/healthz` and `/readyz` are validated (or explicitly excluded with a reason)
+- [x] Helper validates status, headers and body against the operation in the contract
+- [x] A deliberately wrong response fails the test with the JSON pointer
+- [x] `/healthz` and `/readyz` are validated (or explicitly excluded with a reason)
 
 ### HUB-032 — M0 acceptance and milestone summary
 - **Epic:** EP-01 · **Type:** test · **Area:** backend

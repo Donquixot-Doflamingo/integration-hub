@@ -656,7 +656,7 @@ Versions are pinned in `go.mod` / `package-lock.json` at M0 (DESIGN §18.7: "con
 | CLI | `spf13/cobra` for `hubctl` | subcommands + completion |
 | MCP | `github.com/modelcontextprotocol/go-sdk` | ADR-0006; official SDK, stdio + streamable HTTP |
 | Tests | stdlib `testing` + `stretchr/testify` (require/assert only), `go.uber.org/goleak`, `testcontainers-go` | DESIGN §18.7 |
-| Contract tests | `getkin/kin-openapi` (`openapi3filter`) — **risk**: OpenAPI 3.1 support in kin-openapi is partial; fallback `pb33f/libopenapi-validator` (TESTING_STRATEGY §4) | AGENTS §4.6 |
+| Contract tests | `getkin/kin-openapi` v0.152 (`openapi3filter`, gorillamux router), wrapped by `internal/testkit/contract` (HUB-031). Spike result: all three 3.1 documents load and validate, and runtime request/response validation works (type arrays, external `$ref`s, response headers). kin applies 3.0 nullability to *examples* (false positive on `{}` schemas with `null` examples), so the harness disables example validation; examples are checked by `make contracts-check` (HUB-015). Fallback if runtime gaps appear: `pb33f/libopenapi-validator` (TESTING_STRATEGY §4) | AGENTS §4.6 |
 | Lint | `golangci-lint` (incl. depguard, errcheck, gosec, revive, bodyclose, noctx) | M0 |
 | Frontend | SvelteKit 2, Svelte 5 runes, TypeScript strict, `openapi-typescript` + `openapi-fetch`, Vitest + Testing Library, Playwright, MSW | ADR-0005 |
 | Load | k6 (scripted scenarios, thresholds) — vegeta for quick constant-rate checks | M8 |
