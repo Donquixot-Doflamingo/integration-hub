@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tech)` · add tech spec, observability plan, testing, security and ADRs · HUB-004 · F-01, F-18
+  - TECH_SPEC with architecture, package rules, sequences, data model
+  - OBSERVABILITY plan: SLOs, metric catalogue, log schema, tracing, profiling and leak detection, runbooks, alerts
+  - TESTING_STRATEGY, SECURITY threat model, ADR 0001-0008
 - 2026-10-31 · `docs(features)` · add feature docs F-01 to F-22 with template and index · HUB-003 · F-01..F-22
   - Feature template and index
   - One doc per feature with contract operationIds, observability, security, failure modes and tests
