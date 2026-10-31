@@ -334,15 +334,15 @@ Implement `cmd/mockvendor` per the mockvendor contract: arbitrary routes, a cont
 
 ### HUB-029 — mockvendor fault behaviours
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-028 · **Feature:** F-02 · **Stories:** US-02xx
+- **Status:** done · **Depends on:** HUB-028 · **Feature:** F-02 · **Stories:** US-02xx
 - **Branch:** `feat/HUB-029-mockvendor-behaviours`
 
 Add every M0 behaviour: fixed/random latency, status codes, error ratio, 429 with `Retry-After`, hard down (connection refused), slow drip, malformed body.
 
 **Acceptance criteria**
-- [ ] Each behaviour has its own table-driven test proving the observed effect
-- [ ] Error ratio converges within ±5 % over 1 000 calls
-- [ ] Hard down yields connection refused, not an HTTP error
+- [x] Each behaviour has its own table-driven test proving the observed effect
+- [x] Error ratio converges within ±5 % over 1 000 calls
+- [x] Hard down yields connection refused, not an HTTP error
 
 ### HUB-030 — mockvendor inbound webhook sender
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend

@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(mockvendor)` · add latency, error, rate-limit, down, slow-drip and malformed behaviours · HUB-029 · F-02
+  - Routes can delay (fixed/random), fail with an error ratio (seedable), answer 429 with Retry-After (every Nth or ratio, after a burst)
+  - down.mode reset (TCP reset), refuse (real connection refused, recovers when the route is removed) and hang; slow_drip streams the body in timed chunks
+  - malformed: truncated_json, invalid_json, wrong_content_type, empty_body, html_error_page; evaluation order follows the contract
 - 2026-10-31 · `feat(mockvendor)` · add mock vendor server, control API and request recording · HUB-028 · F-02
   - `mockvendor` serves the vendor surface on :8099 and the control API on :8098 (also on the vendor port), per contracts/openapi/mockvendor.v1.yaml
   - Routes with method/path-glob/header matching, priority and recency tie-break, `times`, configurable default behaviour, reset, health

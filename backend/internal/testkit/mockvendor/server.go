@@ -243,8 +243,11 @@ func (rs *routeState) active() bool { return rs.Remaining == nil || *rs.Remainin
 // plan is everything decided for one request while holding the lock, including every random
 // draw (rand.Rand is not safe for concurrent use), so responding needs no lock.
 type plan struct {
-	routeID string
-	beh     Behaviour
+	routeID     string
+	beh         Behaviour
+	latency     time.Duration
+	rateLimited bool
+	errored     bool
 }
 
 // match picks the active route with the highest priority (most recently set on a tie),
