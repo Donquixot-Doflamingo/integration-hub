@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(edge)` · add the gateway server, request ids and the error envelope · HUB-080 · F-06
+  - Every gateway response carries X-Hub-Request-Id (req_ + ULID), also in the logging context
+  - Panics become a 500 INTERNAL_ERROR envelope; the log has the panic and stack, never the body
+  - WriteError writes the canonical envelope with the status of its code and Retry-After (s) for 429/503; every code validated against the public contract
 - 2026-10-31 · `feat(frontend)` · add request timeline with policy-aware payload views · HUB-264 · F-19
   - Request ids in the explorer open `/requests/{id}`: status and error code, tenant, integration and version, capability, mode, vendor and account, timings (total, hub overhead, vendor, queue wait), idempotency key, audit policy, snapshot and trace id
   - The timeline lists every audit event in sequence order with its time, the gap since the previous event and since the first, size and SHA-256, and the attempt it belongs to

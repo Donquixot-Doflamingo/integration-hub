@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **63** · todo: **131**
+Total tickets: **194** · done: **64** · todo: **130**
 
 ## Epics
 
@@ -12,7 +12,7 @@ Total tickets: **194** · done: **63** · todo: **131**
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
-| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
+| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 1 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
@@ -685,15 +685,15 @@ Prove the M2 Accept line and post the wrap-up.
 
 ### HUB-080 — Edge HTTP server, request id and error envelope
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-024, HUB-027, HUB-031 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-024, HUB-027, HUB-031 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-080-edge-server-envelope`
 
 Build the gateway router (`chi`) with recover, request id (`req_` + ULID), trace continuation and the canonical error envelope with every §4.4 code and HTTP status.
 
 **Acceptance criteria**
-- [ ] Every response carries `X-Hub-Request-Id`
-- [ ] Panic in a handler returns the envelope with 500 and is logged without body secrets
-- [ ] Error code → HTTP status mapping table-tested against §4.4 and the public contract
+- [x] Every response carries `X-Hub-Request-Id`
+- [x] Panic in a handler returns the envelope with 500 and is logged without body secrets
+- [x] Error code → HTTP status mapping table-tested against §4.4 and the public contract
 
 ### HUB-081 — Tenant API key auth and grant check
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
