@@ -116,3 +116,49 @@ already were in the contract.
 - **Rollout**: contract PR first
 - **Status**: shipped in hub-admin 1.1.0 (HUB-284). The health board has the "Dead letters" column (count, oldest age,
   link to `/dlq?account_id=`, `src/routes/(app)/health/board.ts`); no `TODO(CCR-003)` left.
+
+### CCR-004: example of the registrar SSRF refusal
+- **Requested by**: frontend-engineer (ticket HUB-272)
+- **Why**: HUB-272 (F-19, US-1906) requires "Private-range URL error from API shown on the field". The contract says
+  `createRegistrarEndpoint` / `updateRegistrarEndpoint` reject private or link-local hosts with 400
+  `VALIDATION_FAILED`, but only the generic `BadRequest` example exists (pointer `/reason`). The console maps any
+  `VALIDATION_FAILED` pointer `/url` to the URL field, and its mock (`registrar-url-private` in
+  `src/lib/api/mocks/scenarios.ts`) uses that envelope with pointer `/url`, `keyword: ssrf` and a made-up message.
+  Backend and console should agree on the pointer (and ideally the keyword) so the error is guaranteed to land on
+  the field. Nothing is blocked: the envelope shape is already in the contract.
+- **Document**: `hub-admin.v1.yaml`
+- **Operation / schema**: `createRegistrarEndpoint` and `updateRegistrarEndpoint`, 400 response (example only)
+- **Before**:
+  ```yaml
+  '400':
+    $ref: '#/components/responses/BadRequest'   # example: pointer /reason, keyword required
+  ```
+- **After** (proposal):
+  ```yaml
+  '400':
+    description: Invalid body, or the URL host is not allowlisted / resolves to a private or link-local range.
+    headers:
+      X-Hub-Request-Id:
+        $ref: '#/components/headers/X-Hub-Request-Id'
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/AdminErrorEnvelope'
+        examples:
+          ssrf:
+            value:
+              error:
+                code: VALIDATION_FAILED
+                message: Callback URL refused
+                retryable: false
+                retry_after_ms: null
+                details:
+                  - { pointer: /url, keyword: ssrf, message: 'host orders.internal resolves to 10.0.0.12 (private range)' }
+                meta: null
+                request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KC
+  ```
+- **Breaking?**: no (example / description only) -> patch bump
+- **Consumers affected**: backend registrar handlers (use pointer `/url`), frontend mock scenario (switch to the example)
+- **Error codes**: none new
+- **Rollout**: contract PR first; the console needs no code change, only the mock preset swaps to the example
+- **Status**: requested (2026-11-01)

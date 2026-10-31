@@ -10,6 +10,14 @@ import {
 import type { Actions } from './$types';
 import { API_FIELDS, BEFORE_PREFIX, updateBody, valuesFromForm } from '../tenant-form';
 import { createKeyBody, KEY_ID, keyValuesFromForm, overlapFromForm } from './keys';
+import {
+	API_FIELDS as ENDPOINT_FIELDS,
+	createEndpointBody,
+	endpointValuesFromForm,
+	updateEndpointBody,
+	withoutSigningSecret
+} from './endpoints';
+import { SLUG } from '../tenant-form';
 
 // HUB-270: edit a tenant and disable / enable it (updateTenant, admin, merge-patch). Both send the
 // ETag the page was loaded with as If-Match, so a concurrent change answers 412
@@ -112,8 +120,113 @@ export const actions = {
 			})
 		);
 		return finish('revokeKey', res);
+	},
+
+	// HUB-272: registrar (callback) endpoints (admin). Create and rotate answer with the new
+	// signing secret; it is dropped here (`withoutSigningSecret`): the console never displays it.
+	// The SSRF guard's 400 pointer `/url` lands on the URL field.
+	createEndpoint: async (event) => {
+		requireSession(event);
+		const form = await event.request.formData();
+		const reason = readReason('createEndpoint', form);
+		if (!reason.ok) return reason.failure;
+		const built = createEndpointBody(
+			event.params.tenant_id,
+			endpointValuesFromForm(form),
+			reason.reason
+		);
+		if (!built.ok) return invalid('createEndpoint', built.fields);
+		const res = await actionApi(event).call((c) =>
+			c.POST('/registrar-endpoints', { body: built.body })
+		);
+		return finish('createEndpoint', withoutSigningSecret(res), ENDPOINT_FIELDS);
+	},
+
+	updateEndpoint: async (event) => {
+		requireSession(event);
+		const form = await event.request.formData();
+		const reason = readReason('updateEndpoint', form);
+		if (!reason.ok) return reason.failure;
+		const endpointId = endpointIdFrom(form);
+		if (!endpointId) return invalid('updateEndpoint', { url: 'Reload the page and try again.' });
+		const built = updateEndpointBody(
+			endpointValuesFromForm(form),
+			endpointValuesFromForm(form, BEFORE_PREFIX),
+			reason.reason
+		);
+		if (!built.ok) return invalid('updateEndpoint', built.fields);
+		const res = await actionApi(event).call((c) =>
+			c.PATCH('/registrar-endpoints/{endpoint_id}', {
+				params: { path: { endpoint_id: endpointId } },
+				body: built.body
+			})
+		);
+		return finish('updateEndpoint', res, ENDPOINT_FIELDS);
+	},
+
+	setEndpointDisabled: async (event) => {
+		requireSession(event);
+		const form = await event.request.formData();
+		const reason = readReason('setEndpointDisabled', form);
+		if (!reason.ok) return reason.failure;
+		const endpointId = endpointIdFrom(form);
+		const disabled = text(form, 'disabled');
+		if (!endpointId || (disabled !== 'true' && disabled !== 'false')) {
+			return invalid('setEndpointDisabled', { disabled: 'Reload the page and try again.' });
+		}
+		const res = await actionApi(event).call((c) =>
+			c.PATCH('/registrar-endpoints/{endpoint_id}', {
+				params: { path: { endpoint_id: endpointId } },
+				body: { disabled: disabled === 'true', reason: reason.reason }
+			})
+		);
+		return finish('setEndpointDisabled', res);
+	},
+
+	rotateSecret: async (event) => {
+		requireSession(event);
+		const form = await event.request.formData();
+		const reason = readReason('rotateSecret', form);
+		if (!reason.ok) return reason.failure;
+		const endpointId = endpointIdFrom(form);
+		if (!endpointId)
+			return invalid('rotateSecret', { overlap_ms: 'Reload the page and try again.' });
+		const overlap = overlapFromForm(form);
+		if (overlap === null) return invalid('rotateSecret', { overlap_ms: 'Pick an overlap.' });
+		const res = await actionApi(event).call((c) =>
+			c.POST('/registrar-endpoints/{endpoint_id}/rotate-secret', {
+				params: { path: { endpoint_id: endpointId } },
+				body: { overlap_ms: overlap, reason: reason.reason }
+			})
+		);
+		return finish('rotateSecret', withoutSigningSecret(res), ['reason', 'overlap_ms']);
+	},
+
+	deleteEndpoint: async (event) => {
+		requireSession(event);
+		const form = await event.request.formData();
+		const reason = readReason('deleteEndpoint', form);
+		if (!reason.ok) return reason.failure;
+		const endpointId = endpointIdFrom(form);
+		if (!endpointId)
+			return invalid('deleteEndpoint', { confirm: 'Reload the page and try again.' });
+		if (text(form, 'confirm').trim() !== endpointId) {
+			return invalid('deleteEndpoint', { confirm: `Type ${endpointId} to confirm.` });
+		}
+		// DELETE carries the reason as a query parameter (contract ReasonQuery).
+		const res = await actionApi(event).call((c) =>
+			c.DELETE('/registrar-endpoints/{endpoint_id}', {
+				params: { path: { endpoint_id: endpointId }, query: { reason: reason.reason } }
+			})
+		);
+		return finish('deleteEndpoint', res);
 	}
 } satisfies Actions;
+
+function endpointIdFrom(form: FormData): string | null {
+	const id = text(form, 'endpoint_id');
+	return SLUG.test(id) ? id : null;
+}
 
 function keyIdFrom(form: FormData): string | null {
 	const id = text(form, 'key_id');

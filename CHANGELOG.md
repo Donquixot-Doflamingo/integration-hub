@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-01 · `feat(frontend)` · add tenant callback endpoints with write-only secrets · HUB-272 · F-19
+  - Each tenant page lists its callback endpoints with URL, state, signing secret version (and until when the previous secret still signs) and how many integration versions use them
+  - Admins register, edit, disable or enable, rotate the signing secret with an overlap, and delete an endpoint (id typed), each with a reason and the change log id
+  - A URL the Hub refuses (not https, or a private or link-local address) is reported on the URL field; signing secrets are never shown in the console
+
 - 2026-11-01 · `feat(frontend)` · add API keys with the secret shown exactly once · HUB-271 · F-19
   - Each tenant page lists its API keys by prefix, state, scopes, expiry and last use, filterable by state; no key is ever shown in the list
   - Admins create keys (scopes, optionally limited to one integration, optional expiry), rotate them with an overlap and revoke them with the prefix typed, each with a reason and the change log id

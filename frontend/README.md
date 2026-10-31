@@ -88,6 +88,8 @@ when a page under `src/routes/(app)/` renders its own `{#await}` instead):
 - API keys (`tenants/[tenant_id]/ApiKeys.svelte`, `keys.ts`): a new secret only ever goes from the action answer to
   `$lib/components/SecretOnce.svelte` and is dropped on Done. Any action that answers with a secret must use
   `ConfirmDialog oneTimeSecret` and `requireEnhanced` (`$lib/server/actions.ts`), and must not log it.
+- Callback endpoints (`CallbackEndpoints.svelte`, `endpoints.ts`): signing secrets are write-only; the actions drop
+  `signing_secret` (`withoutSigningSecret`). Mock scenario `registrar-url-private` answers the SSRF refusal.
 
 ## Auth (HUB-253)
 Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.

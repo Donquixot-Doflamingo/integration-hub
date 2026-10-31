@@ -108,3 +108,7 @@ export type ApiKeyCreate = Schemas['ApiKeyCreate'];
 export type ApiKeyChange = Schemas['ApiKeyChange'];
 export type ApiKeySecretChange = Schemas['ApiKeySecretChange'];
 export type ApiKeyRotateResult = Schemas['ApiKeyRotateResult'];
+export type RegistrarEndpoint = Schemas['RegistrarEndpoint'];
+export type RegistrarEndpointCreate = Schemas['RegistrarEndpointCreate'];
+export type RegistrarEndpointUpdate = Schemas['RegistrarEndpointUpdate'];
+export type RegistrarEndpointChange = Schemas['RegistrarEndpointChange'];

@@ -14,6 +14,7 @@
 	import type { PageData } from './$types';
 	import TenantFields from '../TenantFields.svelte';
 	import ApiKeys from './ApiKeys.svelte';
+	import CallbackEndpoints from './CallbackEndpoints.svelte';
 	import {
 		canSend,
 		EMPTY_VALUES,
@@ -169,6 +170,13 @@
 		</section>
 	{/snippet}
 </AsyncView>
+
+<CallbackEndpoints
+	tenantId={id}
+	access={data.access}
+	endpoints={data.endpoints}
+	onnotice={(n) => (notice = n)}
+/>
 
 <ApiKeys
 	tenantId={id}

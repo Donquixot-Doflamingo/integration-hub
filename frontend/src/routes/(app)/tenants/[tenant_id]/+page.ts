@@ -37,6 +37,14 @@ export const load: PageLoad = async (event) => {
 				})
 			)
 		),
+		// HUB-272: the tenant's callback endpoints (listRegistrarEndpoints, tenant_viewer), all pages.
+		endpoints: collectPages((cursor) =>
+			api.call((c) =>
+				c.GET('/registrar-endpoints', {
+					params: { query: { tenant_id: tenantId, limit: 200, ...(cursor ? { cursor } : {}) } }
+				})
+			)
+		),
 		tenant: api.call((c) =>
 			c.GET('/tenants/{tenant_id}', { params: { path: { tenant_id: tenantId } } })
 		)

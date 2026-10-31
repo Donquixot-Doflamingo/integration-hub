@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **92** · todo: **102** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **93** · todo: **101** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **195** · done: **92** · todo: **102** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 25 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 26 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -2006,14 +2006,16 @@ Shipped (frontend-engineer, `feat(frontend): add API keys with the secret shown 
 
 ### HUB-272 — Registrar endpoints
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-270 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-270 · **Feature:** F-19 · **Stories:** US-1906
 - **Branch:** `feat/HUB-272-fe-registrar`
 
 Manage registrar endpoints per tenant (URL, secret rotation), surfacing SSRF validation errors.
 
+Shipped (frontend-engineer, `feat(frontend): add tenant callback endpoints with write-only secrets (HUB-272)`): a "Callback endpoints" section on `/tenants/{id}` (`listRegistrarEndpoints` for the tenant, all pages): id, enabled / disabled in text, URL and description, signing secret version (and the overlap while two secrets sign), subscribed versions, updated. Admins register (`createRegistrarEndpoint`: `Slug` id, `https://` URL checked in the browser and the action), edit URL / description (`updateRegistrarEndpoint`, only the changes), disable / enable, rotate the signing secret with an overlap (`rotateRegistrarSecret`) and delete (`deleteRegistrarEndpoint`, id typed, reason as query parameter, 409 while versions subscribe). Edits send no `If-Match`: the list returns no per-endpoint ETag (optional in the contract). Asked the steward for an SSRF error example (CCR-004).
+
 **Acceptance criteria**
-- [ ] Private-range URL error from API shown on the field
-- [ ] Secret is write-only in the UI
+- [x] Private-range URL error from API shown on the field (`VALIDATION_FAILED` pointer `/url` -> the URL field, marked invalid and described by the message, on register and edit; mock scenario `registrar-url-private` = the contract 400 envelope with pointer `/url`; `callback-endpoints.test.ts`, `e2e/registrar.test.ts`)
+- [x] Secret is write-only in the UI (the create / rotate actions drop `signing_secret` on the server (`withoutSigningSecret`), so it never reaches the browser; the list shows the secret version only; tests check the action answers, the DOM and, in e2e, the action response bodies for `whsec_`)
 
 ### HUB-273 — Snapshots view
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
