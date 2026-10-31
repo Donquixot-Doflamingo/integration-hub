@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `ci(backend)` · add backend CI workflow and M0 smoke test · HUB-022 · F-01
+  - PRs touching backend/, contracts/ or deploy/ run lint (golangci-lint v2.15.0), unit tests with -race, integration tests on compose Postgres + Redis, build, and the M0 smoke test
+  - deploy/smoke/m0.sh: compose up, migrate, hub gateway, asserts /healthz, /readyz (postgres+redis ok), /metrics, clean SIGTERM stop; runs locally and in CI
 - 2026-10-31 · `test(contract)` · add contract test harness with kin-openapi · HUB-031 · F-01
   - internal/testkit/contract validates live requests and responses (status, headers, body) against contracts/openapi/*.yaml and reports JSON pointers
   - /healthz and /readyz (200 and 503) and every mockvendor control operation are contract-tested; HUB-028 acceptance closed

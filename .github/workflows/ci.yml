@@ -1,6 +1,5 @@
-# Phase 1 placeholder CI. Checks repo hygiene only.
-# Phase 2 adds backend (lint, test -race, itest, contract tests), frontend (check, test, e2e)
-# and contract lint jobs (tickets HUB-020+, HUB-014).
+# Repo hygiene CI: contract files parse, every PR commit updates CHANGELOG.md.
+# Backend jobs: backend.yml (HUB-022). Frontend jobs: frontend.yml (HUB-250). Contract lint: HUB-014.
 name: ci
 
 on:

@@ -250,7 +250,7 @@ Add `backend/Makefile` with `build test itest lint bench run` (DESIGN §19 M0) a
 
 ### HUB-022 — CI workflow for backend
 - **Epic:** EP-01 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-021, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** in-review · **Depends on:** HUB-021, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-022-ci-backend`
 
 Fill the CI placeholder with backend jobs: lint, `make test` (race), `make itest` with Postgres 16 and Redis 7 service containers, and build all binaries.
