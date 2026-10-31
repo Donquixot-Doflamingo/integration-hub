@@ -1,21 +1,30 @@
 <script lang="ts">
-	import Icon from '$lib/components/Icon.svelte';
 	import { formatBytes } from '$lib/utils/format';
+	import type { PayloadView } from '$lib/utils/payload';
 	import { redactSecrets } from '$lib/utils/redact';
-	import type { PayloadView } from './timeline';
+	import Icon from './Icon.svelte';
 
 	/**
 	 * One payload under the audit policy (HUB-264, DESIGN §13.2): sealed payloads show a locked
 	 * placeholder with size and hash, metadata-only shows that no body was stored, everything else is
 	 * shown as the API returned it (masked values stay masked) behind a disclosure, with
 	 * secret-looking fields hidden as a second line of defence. Never unmasked client side.
+	 * Shared by the request timeline (HUB-264) and the DLQ entry (HUB-266).
 	 */
 	let {
 		view,
 		bytes,
 		sha256,
-		label = 'payload'
-	}: { view: PayloadView; bytes?: number; sha256?: string; label?: string } = $props();
+		label = 'payload',
+		emptyText
+	}: {
+		view: PayloadView;
+		bytes?: number;
+		sha256?: string;
+		label?: string;
+		/** Text when there is nothing to show (default "No {label}."). */
+		emptyText?: string;
+	} = $props();
 
 	const text = $derived(
 		view.kind === 'shown' ? JSON.stringify(redactSecrets(view.value), null, 2) : ''
@@ -34,7 +43,7 @@
 {:else if view.kind === 'metadata_only'}
 	<p class="meta">Metadata only: the policy stores no body{size ? ` (${size} seen)` : ''}.</p>
 {:else if view.kind === 'none'}
-	<p class="meta">No {label}.</p>
+	<p class="meta">{emptyText ?? `No ${label}.`}</p>
 {:else}
 	<details>
 		<summary>Show {label}{size ? ` (${size})` : ''}</summary>

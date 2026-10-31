@@ -66,11 +66,19 @@ when a page under `src/routes/(app)/` renders its own `{#await}` instead):
 | `ErrorPage` | Body of both `+error.svelte` pages (unknown routes, errors thrown from loads) |
 
 ## Integration screens (HUB-256 to HUB-258)
-- `/integrations`: filters and page size in the URL (`filters.ts`), chips, cursor paging (`$lib/utils/paging.ts`, `Pager`).
+- `/integrations`: filters (including the active-version filters of hub-admin 1.1.0) and page size in the URL (`filters.ts`), chips, cursor paging (`$lib/utils/paging.ts`, `Pager`).
 - `/integrations/{id}`: header, active spec (`$lib/components/integration/SpecView.svelte`), full version history
   (`collectPages` follows `next_cursor`), From/To selection for a diff; `/integrations/{id}/versions/{n}` for one version.
 - `/integrations/{id}/diff?from=&to=&view=split|paths`: `$lib/components/diff/` (`DiffSplit` from the unified YAML diff,
   `DiffPaths` from the structured ops), helpers in `$lib/utils/diff.ts`. Reuse these for the publish preview (HUB-259).
+
+## DLQ and transformer screens (HUB-266 to HUB-269)
+- `/dlq`: filters in the URL (`dlq/filters.ts`), cursor paging, `/dlq/{request_id}` entry (reason, attempts, payloads).
+  Replay (editor) and purge (admin) by filter: a dry-run count first, then `ConfirmDialog` with that exact count;
+  purge needs the count typed and is re-counted on the server (`dlq/+page.server.ts`, `dlq/bulk.ts`).
+- `/transformers`, `/transformers/{id}`, `/transformers/{id}/versions/{n}`: `$lib/components/transformer/`
+  (`VersionView`, `GoldensRunner`, `GoldensResult`, `DryRun`, `DryRunResult`), `CodeView` (text-only YAML highlighting,
+  `$lib/utils/yaml-highlight.ts`); form actions shared from `transformers/actions.server.ts`.
 
 ## Auth (HUB-253)
 Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.

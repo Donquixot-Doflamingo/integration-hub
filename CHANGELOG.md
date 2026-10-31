@@ -57,6 +57,31 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - The guard resolves the host in the dialer and connects to the checked IP, refusing private, loopback, link-local (incl. cloud metadata), CGNAT, multicast, unspecified, documentation, NAT64/6to4/Teredo and IPv4-mapped equivalents, so DNS rebinding after registration cannot reach an internal address
   - Registrar signing secrets live in the encrypted credential file (hubctl creds set <id> signing_secret=…, -slot next for a rotation overlap), are redacted from logs once loaded and are served from the warm cache without decrypting
   - A dev/test-only loopback allowance lets local test receivers on 127.0.0.1 use plain http; production wiring does not set it
+- 2026-10-31 · `feat(frontend)` · add transformer dry-run with client-side JSON checks · HUB-269 · F-19
+  - Editors can dry-run any transformer version with a pasted canonical body (or a vendor response for response transformers), starting from one of its fixtures, optionally for a given account
+  - Invalid JSON is caught in the browser with its line and column, before anything is sent
+  - The result shows the exact vendor request as method, URL, headers and body (credentials as `***`), or the canonical response or error, plus any compile errors with their line
+- 2026-10-31 · `feat(frontend)` · add transformer viewer with highlighted source and goldens · HUB-268 · F-19
+  - Filter transformers by kind, capability, vendor or id; each opens a page with its header, latest version and version history, and every version has its own page
+  - A version shows its author and reason, a link to the vendor documentation it cites, its stored goldens result, the YAML source with line numbers and syntax colours, and its golden fixtures
+  - Editors can run the goldens of any version: each fixture shows passed or failed, its error, and what differs from the expected output
+- 2026-10-31 · `feat(frontend)` · add DLQ replay and purge by filter with exact counts · HUB-267 · F-19
+  - Editors can replay every dead letter matching the current filters (all pages); the console counts them with a dry run first and the dialog names that exact number before anything is sent
+  - Admins can purge the same way, with the count typed to confirm; the purge is refused if the matching entries changed since they were counted
+  - Both need a reason; the notice shows how many were replayed or purged, the change log id and request id, and links to the replayed entries
+- 2026-10-31 · `feat(frontend)` · add DLQ list with URL filters and entry detail · HUB-266 · F-19
+  - Filter dead letters by tenant, integration, vendor, account, reason (error code or poison), replayed or not, and a UTC time range; every filter lives in the URL as a removable chip, with cursor paging
+  - Each dead letter opens a page with the reason and message, the attempt history, the canonical request and the last vendor request and response as stored (credentials stay `***`)
+  - Tenant viewers pick among their own tenants and see no vendor, account or vendor request
+- 2026-10-31 · `feat(frontend)` · add a dead letters column per account to the health board · HUB-284 · F-19
+  - Each account endpoint row shows the account's dead-letter count and how old the oldest is; the count links to the DLQ filtered by that account
+  - The board summary adds the number of dead-lettered requests across the accounts shown; "Unknown" when the API sends no figure
+- 2026-10-31 · `feat(frontend)` · add active-version filters to the integrations list · HUB-283 · F-19
+  - Filter integrations by "Active version" (published, or never published) and "Newer version or draft" (waiting to be published, or none waiting), across all pages
+  - Both filters live in the URL and show as removable chips; combining "never published" with the second filter explains why nothing matches
+- 2026-10-31 · `feat(frontend)` · adopt the documented X-Hub-Request-Id on every admin call · HUB-278 · F-19
+  - The console treats `X-Hub-Request-Id` as declared on every hub-admin response (1.1.0): errors show the error body's request id, or the header's when the body has none
+  - Success notices after a change (publish, rollback, weights, pause, breaker force) show the request id with a copy button, next to the change log id
 - 2026-10-31 · `perf(edge)` · add the overhead benchmark and the M3 summary · HUB-097 · F-06
   - BenchmarkInvokeOverhead measures Hub overhead (handler time minus vendor time) through the real credential cache, upstream client, audit writer and metrics: p99 0.42–0.51 ms with mockvendor at 0 ms (budget 5 ms), each stage reported against DESIGN §18.6
   - docs/milestones/M3.md: acceptance evidence, what was built, deferred work and deviations; F-05 and F-07 shipped, F-06, F-08 and F-21 in progress

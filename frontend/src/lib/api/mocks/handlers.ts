@@ -125,11 +125,31 @@ function coherentBody<Op extends OperationId>(op: Op) {
 	) => OperationResponse<Op>;
 }
 
+/**
+ * DLQ replay / purge (HUB-267) echo `dry_run` from the request: a dry run answers the example's
+ * counts with `dry_run: true` and `change_id: null` (contract: "Null for dry runs").
+ */
+function dlqBulk(op: 'replayDeadLetters' | 'purgeDeadLetters', opts: HandlerOptions): HttpHandler {
+	const m = contractMocks[op];
+	return http.post(mswPath(m.path), async ({ request }) => {
+		if (opts.latencyMs) await delay(opts.latencyMs);
+		const body = (await request.json().catch(() => null)) as { dry_run?: unknown } | null;
+		const dry = body?.dry_run === true;
+		return respond(dry ? { ...m.example, change_id: null, dry_run: true } : m.example, m.status, {
+			...m.headers
+		});
+	});
+}
+
 /** One contract-example handler per admin operation, most specific paths first. */
 export function createHandlers(opts: HandlerOptions = {}): HttpHandler[] {
 	return [...operationIds]
 		.sort(byPathSpecificity)
-		.map((op) => mockOperation(op, coherentBody(op), { latencyMs: opts.latencyMs }));
+		.map((op) =>
+			op === 'replayDeadLetters' || op === 'purgeDeadLetters'
+				? dlqBulk(op, opts)
+				: mockOperation(op, coherentBody(op), { latencyMs: opts.latencyMs })
+		);
 }
 
 export const handlers = createHandlers();

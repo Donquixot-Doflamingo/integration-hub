@@ -64,3 +64,30 @@ export type TimelineEventType = Schemas['TimelineEventType'];
 export type Attempt = Schemas['Attempt'];
 /** Query parameters of `searchRequests`. */
 export type SearchRequestsQuery = NonNullable<Operations['searchRequests']['parameters']['query']>;
+
+// DLQ console (HUB-266, HUB-267).
+export type DeadLetter = Schemas['DeadLetter'];
+export type DeadLetterDetail = Schemas['DeadLetterDetail'];
+export type DlqFilter = Schemas['DlqFilter'];
+export type DlqBulkResult = Schemas['DlqBulkResult'];
+/** Query parameters of `listDeadLetters`. */
+export type ListDeadLettersQuery = NonNullable<
+	Operations['listDeadLetters']['parameters']['query']
+>;
+
+// Transformers (HUB-268, HUB-269).
+export type TransformerKind = Schemas['TransformerKind'];
+export type TransformerSummary = Schemas['TransformerSummary'];
+export type Transformer = Schemas['Transformer'];
+export type TransformerVersion = Schemas['TransformerVersion'];
+export type TransformerVersionSummary = Schemas['TransformerVersionSummary'];
+export type GoldenFixture = Schemas['GoldenFixture'];
+export type GoldensRunResult = Schemas['GoldensRunResult'];
+export type GoldenResult = GoldensRunResult['results'][number];
+export type TransformerDryRunRequest = Schemas['TransformerDryRunRequest'];
+export type TransformerDryRunResult = Schemas['TransformerDryRunResult'];
+export type VendorRequestPreview = Schemas['VendorRequestPreview'];
+/** Query parameters of `listTransformers`. */
+export type ListTransformersQuery = NonNullable<
+	Operations['listTransformers']['parameters']['query']
+>;

@@ -55,6 +55,7 @@ export const actions = {
 		return {
 			op: 'saveDraft',
 			changeId: res.data.change_id,
+			requestId: res.requestId,
 			result: { version: saved, report: check.ok ? check.data : null }
 		} satisfies ActionSuccessData<SavedDraft>;
 	},
@@ -74,6 +75,7 @@ export const actions = {
 		return {
 			op: 'validate',
 			changeId: null,
+			requestId: res.requestId,
 			result: res.data
 		} satisfies ActionSuccessData<ValidationReport>;
 	},

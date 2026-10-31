@@ -2,30 +2,49 @@
 	import type { DiffOp } from '$lib/api/types';
 	import { formatValue, opLabels, pointerToPath } from '$lib/utils/diff';
 
-	/** Path list (HUB-258): one row per changed JSON pointer with before and after values. */
-	let { changes }: { changes: DiffOp[] } = $props();
+	/**
+	 * Path list (HUB-258): one row per changed JSON pointer with before and after values. Golden
+	 * results (HUB-268) reuse it with "Expected" / "Actual" headings.
+	 */
+	let {
+		changes,
+		label = 'Changed paths',
+		beforeLabel = 'Before',
+		afterLabel = 'After',
+		rootLabel
+	}: {
+		changes: DiffOp[];
+		/** Accessible name of the scroll region. */
+		label?: string;
+		beforeLabel?: string;
+		afterLabel?: string;
+		/** How the root pointer reads (default "(whole spec)"). */
+		rootLabel?: string;
+	} = $props();
 </script>
 
 {#if changes.length === 0}
 	<p class="none">No differences.</p>
 {:else}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-	<div class="scroll" role="region" aria-label="Changed paths" tabindex="0">
+	<div class="scroll" role="region" aria-label={label} tabindex="0">
 		<table>
-			<caption class="visually-hidden">Changed paths with values before and after</caption>
+			<caption class="visually-hidden"
+				>{label}: {beforeLabel.toLowerCase()} and {afterLabel.toLowerCase()} values</caption
+			>
 			<thead>
 				<tr>
 					<th scope="col">Path</th>
 					<th scope="col">Change</th>
-					<th scope="col">Before</th>
-					<th scope="col">After</th>
+					<th scope="col">{beforeLabel}</th>
+					<th scope="col">{afterLabel}</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each changes as c, i (i)}
 					<tr class={c.op}>
 						<th scope="row">
-							<code class="path">{pointerToPath(c.path)}</code>
+							<code class="path">{pointerToPath(c.path, rootLabel)}</code>
 							<code class="pointer">{c.path}</code>
 						</th>
 						<td class="op"

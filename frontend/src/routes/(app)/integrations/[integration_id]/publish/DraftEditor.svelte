@@ -52,7 +52,7 @@
 		integration: Integration;
 		draft: IntegrationVersion | null;
 		diff: Promise<ApiResult<VersionDiff> | null>;
-		onnotice: (message: string, changeId: string | null) => void;
+		onnotice: (message: string, changeId: string | null, requestId: string | null) => void;
 	} = $props();
 
 	const id = $derived(integration.integration_id);
@@ -111,7 +111,8 @@
 					draftReason = '';
 					onnotice(
 						`Saved draft v${d.result.version}. ${d.result.report ? (d.result.report.valid ? 'All publish checks pass.' : 'Some publish checks fail; see below.') : 'The publish checks could not run; run them again.'}`,
-						d.changeId
+						d.changeId,
+						d.requestId
 					);
 					await update({ reset: false });
 				} else if (result.type === 'failure') {
@@ -150,7 +151,8 @@
 		const r = d.result as PublishResult;
 		onnotice(
 			`Published v${r.active_version}. It is now the active version${r.previous_active_version ? ` (was v${r.previous_active_version})` : ''}${r.snapshot_version ? `, in snapshot ${r.snapshot_version}` : ''}.`,
-			d.changeId
+			d.changeId,
+			d.requestId
 		);
 		report = null;
 	}

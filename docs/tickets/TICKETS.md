@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **196** · done: **100** · todo: **95** · other (in-progress/in-review/blocked): **1**
+Total tickets: **196** · done: **104** · todo: **91** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **196** · done: **100** · todo: **95** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 19 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 23 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1942,47 +1942,55 @@ Unseal a sealed payload with mandatory reason (`admin` only); unsealed content s
 
 ### HUB-266 — DLQ list
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1904
 - **Branch:** `feat/HUB-266-fe-dlq-list`
 
 DLQ list with filters (tenant, integration, account, reason, time range) and entry detail (last vendor request/response, attempt history).
 
+Shipped (frontend-engineer, `feat(frontend): add DLQ list with URL filters and entry detail (HUB-266)`): `/dlq` on `listDeadLetters` with tenant (own tenants for tenant viewers), integration, vendor and account (not for tenant viewers), reason (code or `poison`, with suggestions), replayed, From/To in UTC (quick ranges up to 14 days; a reversed range is refused before calling) and page size; cursor paging. `/dlq/{request_id}` on `getDeadLetter`: reason and message first, replay state, link to the request timeline, attempt history (shared `AttemptsTable`, attempt order), canonical request and last vendor request/response as returned (`***` stays, secret-looking unmasked fields hidden); tenant viewers see no vendor, account or vendor exchange.
+
 **Acceptance criteria**
-- [ ] Filters in URL
-- [ ] Entry detail shows the reason and attempt history
+- [x] Filters in URL (names match `listDeadLetters`; chips and Clear all; reload restores the form; the health board's "Dead letters" link opens `/dlq?account_id=`; `dlq/filters.test.ts`, `dlq/page.test.ts`, `e2e/dlq.test.ts`)
+- [x] Entry detail shows the reason and attempt history (reason code and message in a highlighted block; attempts sorted by `attempt_no` with version, account, endpoint, vendor status, error, breaker; `dlq/[request_id]/page.test.ts`, e2e)
 
 ### HUB-267 — DLQ replay by filter and purge
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-266 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-266 · **Feature:** F-19 · **Stories:** US-1904
 - **Branch:** `feat/HUB-267-fe-dlq-replay-purge`
 
 Replay all entries matching the current filter, and purge, each showing the affected count and requiring a reason.
 
+Shipped (frontend-engineer, `feat(frontend): add DLQ replay and purge by filter with exact counts (HUB-267)`): an "Act on every match" box on `/dlq` with "Replay matching..." (editor, `replayDeadLetters`) and, set apart, "Purge matching..." (admin, `purgeDeadLetters`). Each first runs the operation with `dry_run: true` and the list's URL filters (as `DlqFilter`, all pages), then opens `ConfirmDialog` with that count in the title and body, the filters used, and warnings (filters that include already-replayed entries; more than 10,000 matches per call). Confirm sends the filter, the operator's reason and the counted number; success shows the result, change log id and request id, and for replay a link to the replayed entries (`replayed=true`). 0 matches says there is nothing to do without a dialog. The contract requires `reason` on dry runs too, so the count step sends a fixed console text (no change log entry: dry runs have no `change_id`). US-1904's "reports replayed ids" is met by that link: `DlqBulkResult` returns counts, not ids.
+
 **Acceptance criteria**
-- [ ] Confirmation shows exact count from the API before submit
-- [ ] Purge requires typing the count to confirm
+- [x] Confirmation shows exact count from the API before submit (the dry run's `matched`, capped at the per-call 10,000 with a note; `dlq/replay-purge.test.ts`, `dlq/bulk.test.ts`, `e2e/dlq.test.ts`)
+- [x] Purge requires typing the count to confirm (checked again in the action, which also re-counts with a dry run and refuses the purge when the selection changed since it was counted)
 
 ### HUB-268 — Transformers viewer and goldens
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1905
 - **Branch:** `feat/HUB-268-fe-transformers`
 
 List transformers and versions, view YAML with syntax highlighting, and run goldens with per-fixture results and diffs.
 
+Shipped (frontend-engineer, `feat(frontend): add transformer viewer with highlighted source and goldens (HUB-268)`): `/transformers` with kind, capability, vendor and search filters in the URL (chips, cursor paging); `/transformers/{id}` on `getTransformer` + `listTransformerVersions` (all pages): header, the latest version in full and the version history (goldens passing/failing in text, linked); `/transformers/{id}/versions/{n}` on `getTransformerVersion`. Each version shows author, reason, created, the cited vendor doc, the stored goldens summary, the DSL source (`CodeView`: line numbers and colours from a small text-only YAML tokenizer, no HTML), and the fixtures. Editors get "Run goldens for T1@7" (`runTransformerGoldens` with `ref`, a form action); viewers see why not; tenant viewers get a note (the API needs `viewer`). Read only: editing is Release 2.
+
 **Acceptance criteria**
-- [ ] Golden diffs rendered per fixture
-- [ ] Doc URL from the transformer header shown as a link
+- [x] Golden diffs rendered per fixture (summary line, failing fixtures first, Passed/Failed in text + icon, the error when a fixture threw, its `diff` as a path table headed Expected / Actual via the shared `DiffPaths`; `[transformer_id]/page.test.ts`, `e2e/transformers.test.ts`)
+- [x] Doc URL from the transformer header shown as a link (the version's `docs_url`, from `getTransformer`'s `latest` on the transformer page; opens in a new tab with `noopener`; only http(s) URLs become links)
 
 ### HUB-269 — Transformer dry-run
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-268 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-268 · **Feature:** F-19 · **Stories:** US-1905
 - **Branch:** `feat/HUB-269-fe-transformer-dry-run`
 
 Dry-run a transformer version with a pasted canonical body and show the resulting vendor request (secrets redacted).
 
+Shipped (frontend-engineer, `feat(frontend): add transformer dry-run with client-side JSON checks (HUB-269)`): a "Dry run" section on every transformer version (editor; viewers see why not) posting `dryRunTransformer` with `ref` through the `dryRun` form action. Request and inbound transformers take a canonical `input` (plus optional caller `headers`), response transformers a `vendor_response` (`status`, `headers`, `body`); the body starts from the first fixture that has one, any fixture can be loaded, and an optional account id injects that account's config. Results show compile errors with their line, the vendor request, or the canonical response / error. Secrets are shown exactly as the API redacted them (`***`), values under secret-looking keys that arrive unmasked are hidden, and nothing is logged or stored.
+
 **Acceptance criteria**
-- [ ] Invalid JSON input caught client-side
-- [ ] Result rendered as method, URL, headers, body
+- [x] Invalid JSON input caught client-side (`$lib/utils/dry-run.ts` + `json-input.ts` on submit: syntax errors with line and column, non-objects, empty input, non-string headers, a bad account id; the field is marked invalid and focused and no request is sent; the form action repeats the checks for the no-JS path; `dry-run.test.ts`, `json-input.test.ts`, `e2e/transformers.test.ts`)
+- [x] Result rendered as method, URL, headers, body (method and URL lines, a headers table, the body as JSON; API 400 pointers land on the field)
 
 ### HUB-270 — Tenants pages
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
@@ -2083,7 +2091,7 @@ Filed by frontend-engineer during HUB-251. Full CCR text (before/after YAML): `f
 **Acceptance criteria**
 - [x] `components.headers.X-Hub-Request-Id` added and referenced by every `hub-admin` response; examples updated
 - [x] `hub-admin` `info.version` 1.1.0 and `contracts/CHANGELOG.md` entry
-- [ ] Console removes the `TODO(CCR-001)` fallback after `npm run gen:api`
+- [x] Console removes the `TODO(CCR-001)` fallback after `npm run gen:api` (frontend-engineer, console round 4: `client.ts` documents the header as declared on every response, body `request_id` still wins on errors, an empty or missing header is `null`; success notices show the request id next to the change log id)
 - [ ] Backend admin contract tests (EP-08) require the header
 
 Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1, together with HUB-283 and HUB-284; notice `contracts/notices/2026-10-31-round-1.md`). The last two criteria belong to the frontend (`npm run gen:api`, remove `TODO(CCR-001)`) and the backend (EP-08 admin contract tests) and stay open until they land.
@@ -2149,7 +2157,7 @@ Filed by frontend-engineer during HUB-256. Full CCR text (before/after YAML): `f
 **Acceptance criteria**
 - [x] Both query parameters added to `listIntegrations` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
 - [ ] Backend list handler implements them, covered by contract tests (EP-08)
-- [ ] Console adds the filter (URL params, chips) after `npm run gen:api` and removes `TODO(CCR-002)`
+- [x] Console adds the filter (URL params, chips) after `npm run gen:api` and removes `TODO(CCR-002)` (frontend-engineer, console round 4: "Active version" (Published / None) and "Newer version or draft" (Waiting / None waiting) selects, `has_active_version` / `active_version_behind` in the URL, removable chips, a note when "None" is combined with the second filter, which matches nothing per the contract)
 
 Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1; notice `contracts/notices/2026-10-31-round-1.md`). `active_version_behind=true` means an active version exists and `latest_version > active_version` or `has_draft`; `false` means the active version is the latest with no draft; integrations without an active version match neither value. The backend and console criteria stay open for those sides.
 
@@ -2163,7 +2171,7 @@ Filed by frontend-engineer during HUB-261. Full CCR text (before/after YAML): `f
 **Acceptance criteria**
 - [x] Both properties on `AccountSummary` and `Account` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
 - [ ] Backend accounts handlers fill them from the DLQ store, covered by contract tests (EP-08)
-- [ ] Console health board adds a "Dead letters" column (count, oldest age, link to the filtered DLQ) after `npm run gen:api` and removes `TODO(CCR-003)`
+- [x] Console health board adds a "Dead letters" column (count, oldest age, link to the filtered DLQ) after `npm run gen:api` and removes `TODO(CCR-003)` (frontend-engineer, console round 4: the account's figure on each of its endpoint rows, linked to `/dlq?account_id=`, "oldest N min ago" with the UTC time in a tooltip, 0 without a link, Unknown when the account or the figure is missing; the summary line adds the total, each account counted once)
 
 Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1; notice `contracts/notices/2026-10-31-round-1.md`). Both properties are optional in the schema (additive); the backend should always fill them from 1.1.0 on. The backend and console criteria stay open for those sides.
 

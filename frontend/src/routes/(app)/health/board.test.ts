@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { contractMocks } from '$lib/api/mocks/contract.gen';
 import type { Breaker } from '$lib/api/types';
-import { buildBoard, forcedLabel, retryLabel, summarizeBoard } from './board';
+import {
+	buildBoard,
+	deadLettersOf,
+	forcedLabel,
+	retryLabel,
+	summarizeBoard,
+	totalDeadLetters
+} from './board';
 
 // HUB-261: health board grouping and ordering (worst first).
 
@@ -79,4 +86,44 @@ describe('forcedLabel', () => {
 		[{ forced: 'open', forced_until: '2026-10-31T10:30:00Z' }, 'Forced open until 10:30 UTC'],
 		[{ forced: 'closed', forced_until: null }, 'Forced closed until cleared']
 	] as const)('%j -> %s', (x, want) => expect(forcedLabel(x)).toBe(want));
+});
+
+describe('dead letters per account (HUB-284)', () => {
+	const account = contractMocks.listAccounts.example.items[0]!;
+
+	it('reads the account figure, null when the API sent none', () => {
+		expect(deadLettersOf(account)).toEqual({
+			count: account.dead_letter_count,
+			oldestAt: account.dead_letter_oldest_at
+		});
+		expect(
+			deadLettersOf({ ...account, dead_letter_count: 0, dead_letter_oldest_at: null })
+		).toEqual({ count: 0, oldestAt: null });
+		const { dead_letter_count: _c, dead_letter_oldest_at: _o, ...without } = account;
+		expect(deadLettersOf(without)).toBeNull();
+		expect(deadLettersOf(undefined)).toBeNull();
+	});
+
+	it('joins it onto every endpoint row of the account', () => {
+		const groups = buildBoard(
+			[b({ account_id: 'a', endpoint_ref: 'x@1' }), b({ account_id: 'a', endpoint_ref: 'y@1' })],
+			[{ ...account, account_id: 'a', dead_letter_count: 7 }]
+		);
+		expect(groups[0]!.rows.map((r) => r.deadLetters?.count)).toEqual([7, 7]);
+	});
+
+	it('totals each account once, null when no account has a figure', () => {
+		const accounts = [
+			{ ...account, account_id: 'a', dead_letter_count: 7 },
+			{ ...account, account_id: 'b', dead_letter_count: 5 },
+			{ ...account, account_id: 'c', dead_letter_count: 100 }
+		];
+		const breakers = [
+			b({ account_id: 'a', endpoint_ref: 'x@1' }),
+			b({ account_id: 'a', endpoint_ref: 'y@1' }),
+			b({ account_id: 'b' })
+		];
+		expect(totalDeadLetters(breakers, accounts)).toBe(12);
+		expect(totalDeadLetters(breakers, [])).toBeNull();
+	});
 });
