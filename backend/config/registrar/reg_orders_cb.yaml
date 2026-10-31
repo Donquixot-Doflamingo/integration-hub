@@ -1,0 +1,5 @@
+# Dev callback receiver for orders-service (any local HTTP listener on :8097).
+endpoint_id: reg_orders_cb
+tenant: orders-service
+url: http://127.0.0.1:8097/hub/callbacks
+secret_ref: localfile://reg_orders_cb

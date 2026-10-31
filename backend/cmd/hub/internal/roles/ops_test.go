@@ -31,7 +31,7 @@ var (
 )
 
 func TestHealthzIgnoresDependencies(t *testing.T) {
-	rec := serveOps(t, false, []Check{{"postgres", downCheck}}, "/healthz")
+	rec := serveOps(t, false, []Check{{Name: "postgres", Fn: downCheck}}, "/healthz")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, want 200 even when not ready", rec.Code)
 	}
@@ -49,10 +49,10 @@ func TestReadyz(t *testing.T) {
 		wantStatus  int
 		wantDetails []string
 	}{
-		{"all ok", true, []Check{{"postgres", okCheck}, {"redis", okCheck}}, http.StatusOK, nil},
-		{"redis down", true, []Check{{"postgres", okCheck}, {"redis", downCheck}}, http.StatusServiceUnavailable, []string{"redis unreachable"}},
-		{"both down", true, []Check{{"postgres", downCheck}, {"redis", downCheck}}, http.StatusServiceUnavailable, []string{"postgres unreachable", "redis unreachable"}},
-		{"shutting down", false, []Check{{"postgres", okCheck}}, http.StatusServiceUnavailable, []string{"role is starting or shutting down"}},
+		{"all ok", true, []Check{{Name: "postgres", Fn: okCheck}, {Name: "redis", Fn: okCheck}}, http.StatusOK, nil},
+		{"redis down", true, []Check{{Name: "postgres", Fn: okCheck}, {Name: "redis", Fn: downCheck}}, http.StatusServiceUnavailable, []string{"redis unreachable"}},
+		{"both down", true, []Check{{Name: "postgres", Fn: downCheck}, {Name: "redis", Fn: downCheck}}, http.StatusServiceUnavailable, []string{"postgres unreachable", "redis unreachable"}},
+		{"shutting down", false, []Check{{Name: "postgres", Fn: okCheck}}, http.StatusServiceUnavailable, []string{"role is starting or shutting down"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

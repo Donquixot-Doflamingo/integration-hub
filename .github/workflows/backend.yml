@@ -35,6 +35,18 @@ jobs:
           version: v2.15.0
           working-directory: backend
 
+  sqlc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Generated sqlc code is fresh
+        run: make sqlc-check
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -18,6 +18,9 @@ import (
 type Check struct {
 	Name string
 	Fn   func(ctx context.Context) error
+	// Failing is the detail shown in /readyz when Fn fails; default "<name> unreachable". The
+	// underlying error is only logged (it may carry host names).
+	Failing string
 }
 
 const checkTimeout = time.Second
@@ -74,7 +77,11 @@ func runChecks(ctx context.Context, checks []Check, log *slog.Logger) (map[strin
 	for i, c := range checks {
 		if errs[i] != nil {
 			results[c.Name] = "failing"
-			failing = append(failing, core.ErrorDetail{Message: c.Name + " unreachable"})
+			msg := c.Failing
+			if msg == "" {
+				msg = c.Name + " unreachable"
+			}
+			failing = append(failing, core.ErrorDetail{Message: msg})
 			log.WarnContext(ctx, "readiness check failed", slog.String("check", c.Name), slog.String("error", errs[i].Error()))
 			continue
 		}

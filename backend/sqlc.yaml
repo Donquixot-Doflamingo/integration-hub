@@ -1,0 +1,13 @@
+# sqlc: `make sqlc` regenerates; CI fails if the generated code is stale (postgres-patterns skill).
+version: "2"
+sql:
+  - engine: postgresql
+    schema: migrations
+    queries: internal/control/db/queries
+    gen:
+      go:
+        package: db
+        out: internal/control/db
+        sql_package: pgx/v5
+        emit_json_tags: true
+        emit_empty_slices: true

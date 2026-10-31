@@ -14,10 +14,12 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-func testConfig(role Role) Config {
+func testConfig(tb testing.TB, role Role) Config {
 	return Config{
 		Role: role, HTTPAddr: "127.0.0.1:0", OpsAddr: "127.0.0.1:0", PGDSN: "postgres://unused",
 		RedisAddr: "127.0.0.1:1", ShutdownGrace: 5 * time.Second, ReadyDrain: 50 * time.Millisecond,
+		ConfigDir: "../../../../config", ContractsDir: "../../../../../contracts",
+		DataDir: tb.TempDir(), BlobURL: "file://" + tb.TempDir(),
 	}
 }
 
@@ -31,7 +33,7 @@ func TestEveryRoleStartsAndStopsCleanly(t *testing.T) {
 			started := make(chan struct{})
 			done := make(chan error, 1)
 			go func() {
-				done <- Run(ctx, testConfig(role), slog.New(slog.DiscardHandler), Options{
+				done <- Run(ctx, testConfig(t, role), slog.New(slog.DiscardHandler), Options{
 					OnListen: func(name, addr string) {
 						mu.Lock()
 						defer mu.Unlock()
@@ -82,7 +84,7 @@ func TestEveryRoleStartsAndStopsCleanly(t *testing.T) {
 }
 
 func TestRunFailsWhenPortTaken(t *testing.T) {
-	cfg := testConfig(Gateway)
+	cfg := testConfig(t, Gateway)
 	first := make(chan string, 2)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -108,7 +110,7 @@ func TestRunFailsWhenPortTaken(t *testing.T) {
 // startRole runs role with the unit-test config until the test ends.
 func startRole(t *testing.T, role Role, opts Options) map[string]string {
 	t.Helper()
-	return startRoleWith(t, testConfig(role), opts)
+	return startRoleWith(t, testConfig(t, role), opts)
 }
 
 // startRoleWith runs a role with cfg until the test ends and returns its bound addresses.
