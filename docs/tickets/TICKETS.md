@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **190** · done: **30** · todo: **160**
+Total tickets: **190** · done: **32** · todo: **158**
 
 ## Epics
 
@@ -10,7 +10,7 @@ Total tickets: **190** · done: **30** · todo: **160**
 | --- | --- | --- | --- | --- | --- | --- |
 | EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
-| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 1 |
+| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 3 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 0 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
@@ -430,27 +430,27 @@ Define Go types in `internal/registry` for capability, vendor (+ endpoints `name
 
 ### HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-041-loaders-cap-vendor-account`
 
 Load capability schemas (JSON Schema 2020-12 + `x-pii`, `interactive`, `operations`) and compile them with `santhosh-tekuri/jsonschema`; load vendor and account YAML (DESIGN §8.1, §8.3).
 
 **Acceptance criteria**
-- [ ] Capability schemas from `contracts/schemas/capabilities/` compile once at load
-- [ ] `x-pii` paths and `interactive` flag are exposed on the compiled capability
-- [ ] Vendor endpoints parse timeouts, idempotent, batch_max and breaker defaults
+- [x] Capability schemas from `contracts/schemas/capabilities/` compile once at load
+- [x] `x-pii` paths and `interactive` flag are exposed on the compiled capability
+- [x] Vendor endpoints parse timeouts, idempotent, batch_max and breaker defaults
 
 ### HUB-042 — Loaders: integration versions, tenant, API keys, registrar endpoints
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-042-loaders-integration-tenant`
 
 Load integration YAML with all versions (targets, weights, failover, delivery, breaker, webhooks, audit, publish meta), tenants with hashed API keys and grants, and registrar endpoints (DESIGN §3.4, §8.1).
 
 **Acceptance criteria**
-- [ ] Loader accepts the §3.4 example verbatim
-- [ ] API keys are only ever stored as hashes
-- [ ] Delivery defaults applied: mode `wait`, `wait_ms` 3000, `on_circuit_open` `fail_fast`, `pending` `re_resolve` (§2 D3/D4/D10)
+- [x] Loader accepts the §3.4 example verbatim
+- [x] API keys are only ever stored as hashes
+- [x] Delivery defaults applied: mode `wait`, `wait_ms` 3000, `on_circuit_open` `fail_fast`, `pending` `re_resolve` (§2 D3/D4/D10)
 
 ### HUB-043 — Cross-reference validation with path-qualified errors
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend

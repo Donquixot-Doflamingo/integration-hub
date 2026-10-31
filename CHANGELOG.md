@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(registry)` · load capabilities, vendors, accounts, transformers, integrations, tenants · HUB-041, HUB-042 · F-03
+  - Capability schemas compile once from contracts/schemas/capabilities (JSON Schema 2020-12) with operations, interactive flag and x-pii paths
+  - Strict YAML loading (unknown fields fail) of every registry object; ids must equal file names; API keys only as sha256 hashes
+  - Delivery defaults applied: wait / 3000 ms / fail_fast / re_resolve; audit masked, 30 d; every problem reported as file: path: message in one pass
 - 2026-10-31 · `feat(registry)` · add config domain types · HUB-040 · F-03
   - Typed registry objects for capabilities, vendors (+ endpoints name@n), accounts, transformers, integrations and versions, tenants with hashed API keys, registrar endpoints
   - Durations accept Go units and days (30d); transformer refs parse T2@3
