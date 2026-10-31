@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **65** · todo: **129**
+Total tickets: **194** · done: **66** · todo: **128**
 
 ## Epics
 
@@ -12,7 +12,7 @@ Total tickets: **194** · done: **65** · todo: **129**
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
-| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 2 |
+| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 3 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
@@ -697,15 +697,15 @@ Build the gateway router (`chi`) with recover, request id (`req_` + ULID), trace
 
 ### HUB-081 — Tenant API key auth and grant check
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-080, HUB-044 · **Feature:** F-05 · **Stories:** US-05xx
+- **Status:** done · **Depends on:** HUB-080, HUB-044 · **Feature:** F-05 · **Stories:** US-05xx
 - **Branch:** `feat/HUB-081-tenant-auth-grants`
 
 Authenticate `Authorization: Bearer` against the in-memory hashed key set and check the tenant owns or is granted the integration (DESIGN §5.1 step 1, §16.5). No DB access on this path.
 
 **Acceptance criteria**
-- [ ] Bad key → 401 `UNAUTHORIZED`; non-owner/non-grantee → 403 `FORBIDDEN`; unknown id → 404 `INTEGRATION_NOT_FOUND`
-- [ ] Key comparison is constant-time
-- [ ] Middleware publishes its duration metric and stays < 100 µs p99
+- [x] Bad key → 401 `UNAUTHORIZED`; non-owner/non-grantee → 403 `FORBIDDEN`; unknown id → 404 `INTEGRATION_NOT_FOUND`
+- [x] Key comparison is constant-time
+- [x] Middleware publishes its duration metric and stays < 100 µs p99
 
 ### HUB-082 — Body limit and capability schema validation
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend

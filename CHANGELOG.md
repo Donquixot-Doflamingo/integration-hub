@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(edge)` · authenticate tenant keys and check grants · HUB-081 · F-05
+  - Bearer keys are hashed and matched against the snapshot's key index (no DB), hashes compared in constant time; revoked keys 401, suspended tenants 403
+  - Unknown integration 404 INTEGRATION_NOT_FOUND; not owner or grantee 403 not_granted; missing scope (invoke, dry_run, or <scope>:<integration>) 403 missing_scope; no snapshot 503 NOT_READY
+  - Auth middleware records hub_stage_duration_ms{stage=auth}: p99 11 µs
 - 2026-10-31 · `feat(resolve)` · resolve the active version and a sticky weighted target · HUB-083 · F-06
   - resolve.Resolve returns version (active or exact), target, failover chain, delivery policy and snapshot version; owner or grantee only
   - The weighted target is chosen by an FNV hash of the idempotency key or request id: the same key always gets the same target; 90/10 within ±2 % over 100 000 keys
