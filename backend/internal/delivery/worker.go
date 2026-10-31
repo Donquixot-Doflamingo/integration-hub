@@ -203,10 +203,10 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 		HubOverheadMS: telemetry.Millis(timings.Overhead(w.now())), VendorMS: telemetry.Millis(timings.Stage(telemetry.StageUpstream)),
 		QueueWaitMS: telemetry.Millis(queueWait),
 	}
-	w.Audit.Emit(audit.Batch{Events: trail.Events(), Attempts: out.Attempts})
-
-	_, err = w.Settler().Settle(ctx, env, w.Name, c.Attempt, account, out, final)
+	state, err := w.Settler().Settle(ctx, env, w.Name, c.Attempt, account, out, final)
 	report(err, "settle")
+	TerminalAudit(trail, c.Attempt, state, err, out.Err)
+	w.Audit.Emit(audit.Batch{Events: trail.Events(), Attempts: out.Attempts})
 }
 
 // Settler returns the worker's settle policy.

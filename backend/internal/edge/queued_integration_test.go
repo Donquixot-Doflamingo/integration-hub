@@ -67,7 +67,7 @@ func queuedSnapshot(t *testing.T, vendorURL string, tune func(id string, in *reg
 	return &cp
 }
 
-func newQueuedRig(t *testing.T, redisAddr string, tune func(string, *registry.Integration, *registry.IntegrationVersion)) *queuedRig {
+func newQueuedRig(t *testing.T, redisAddr string, tune func(string, *registry.Integration, *registry.IntegrationVersion), cfg ...func(*Deps, *delivery.Worker)) *queuedRig {
 	t.Helper()
 	dsn := os.Getenv("HUB_PG_DSN")
 	if dsn == "" {
@@ -116,6 +116,9 @@ func newQueuedRig(t *testing.T, redisAddr string, tune func(string, *registry.In
 	}
 	w := &delivery.Worker{Name: "worker-" + core.NewULID(time.Now()), Pool: queue.PoolMessaging, DB: db, Queue: q, Transitions: tr,
 		Snapshots: staticSnapshots{snap}, Attempter: attempter, Audit: audit.Discard{}, Budget: delivery.NewBudget(nil), Log: log}
+	for _, f := range cfg {
+		f(&d, w)
+	}
 	return &queuedRig{h: New(d).Handler(), mv: mv, db: db, worker: w, spec: contract.Load(t, "hub-public.v1.yaml")}
 }
 

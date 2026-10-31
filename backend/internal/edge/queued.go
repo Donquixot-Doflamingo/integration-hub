@@ -181,6 +181,7 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 		if err != nil && !delivery.IsLost(err) {
 			s.log.ErrorContext(ctx, "wait-mode settle failed", slog.String("integration", p.integration.Integration), slog.String("error", err.Error()))
 		}
+		delivery.TerminalAudit(p.trail, final.Attempts, state, err, res.Err)
 		s.deps.Audit.Emit(audit.Batch{Events: p.trail.Events(), Attempts: res.Attempts})
 		done <- waitOutcome{state: state, res: res, err: err}
 	}()

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **94** · todo: **100** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **96** · todo: **98** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -13,7 +13,7 @@ Total tickets: **195** · done: **94** · todo: **100** · other (in-progress/in
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
-| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 8 |
+| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 10 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
@@ -1009,15 +1009,15 @@ Implement the `scheduler` role as a leader-elected singleton (Postgres advisory 
 
 ### HUB-117 — Async audit events and attempt records
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-111, HUB-092 · **Feature:** F-08 · **Stories:** US-08xx
+- **Status:** done · **Depends on:** HUB-111, HUB-092 · **Feature:** F-08 · **Stories:** US-08xx
 - **Branch:** `feat/HUB-117-audit-async-events`
 
 Emit `request.persisted`, `request.accepted`, `request.parked`, `policy.applied`, attempt events and terminal records written synchronously in the delivery transaction (DESIGN §13.1, §13.4).
 
 **Acceptance criteria**
-- [ ] Async request timeline complete from accept to terminal state
-- [ ] Terminal record and status update commit atomically
-- [ ] `queue_wait_ms` recorded on the final record
+- [x] Async request timeline complete from accept to terminal state
+- [x] Terminal record and status update commit atomically
+- [x] `queue_wait_ms` recorded on the final record
 
 ### HUB-118 — Idempotency store
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
@@ -1071,14 +1071,14 @@ On terminal states, enqueue `callback_deliveries` for each subscription and POST
 
 ### HUB-122 — M4 tests: worker crash and duplicate submissions
 - **Epic:** EP-05 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-112, HUB-116, HUB-118 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-112, HUB-116, HUB-118 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `test/HUB-122-m4-crash-duplicates`
 
 Chaos-style tests for the first two M4 Accept items.
 
 **Acceptance criteria**
-- [ ] Kill a worker mid-flight → envelope reclaimed after visibility timeout and delivered once from the caller's view
-- [ ] Duplicate submissions with the same key → exactly one vendor call (mockvendor recording), for sync, wait and async
+- [x] Kill a worker mid-flight → envelope reclaimed after visibility timeout and delivered once from the caller's view
+- [x] Duplicate submissions with the same key → exactly one vendor call (mockvendor recording), for sync, wait and async
 
 ### HUB-123 — M4 tests: callback signature and TTL expiry; M4 summary
 - **Epic:** EP-05 · **Type:** test · **Area:** backend

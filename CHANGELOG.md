@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `test(edge)` · close queued attempts in the audit trail and prove crash and duplicate safety · HUB-117 · F-09
+  - Each queued attempt's audit block now ends with request.completed, retry.scheduled or request.dead_lettered, recorded only by the actor whose transition won
+  - make itest proves the async timeline from accept to completion, atomic terminal commits, a worker crash after the vendor call (reclaimed, one terminal state and one callback for the caller) and one vendor call for six concurrent duplicates in sync, wait and async mode
 - 2026-10-31 · `feat(hub)` · run the worker and scheduler roles and queue requests in the gateway · HUB-112 · F-09
   - hub worker --pool=messaging|llm now delivers queued requests; hub scheduler elects a leader and expires and prunes; hub gateway accepts async and wait requests and deduplicates Idempotency-Key through Redis
   - The Redis client fails fast when Redis is down (one dial retry, 250 ms dial, 100 ms read/write) so idempotency stays within its request-path budget

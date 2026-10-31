@@ -51,3 +51,24 @@ func (s Settler) Settle(ctx context.Context, env core.Envelope, worker string, n
 		LastVendorRequest: out.LastRequest, LastVendorResponse: out.LastResponse,
 	}})
 }
+
+// TerminalAudit adds the event that closes an attempt's audit block for the state it settled in
+// (nothing when the transition was lost: the winner records it).
+func TerminalAudit(trail *audit.Trail, n int, state core.State, err error, ce *core.CanonicalError) {
+	if err != nil {
+		return
+	}
+	meta := map[string]any{"attempt": n, "status": string(state)}
+	if ce != nil {
+		meta["code"] = string(ce.Code)
+	}
+	switch state {
+	case core.StateSucceeded:
+		trail.Add(audit.RequestCompleted, n, nil, meta)
+	case core.StateRetryScheduled:
+		trail.Add(audit.RetryScheduled, n, nil, meta)
+	case core.StateDeadLettered:
+		trail.Add(audit.RequestDeadLettered, n, nil, meta)
+	case core.StateAccepted, core.StateInFlight, core.StateParked, core.StateExpired, core.StateFailed:
+	}
+}
