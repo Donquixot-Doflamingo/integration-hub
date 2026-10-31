@@ -52,4 +52,8 @@ func (s *Server) Handler() http.Handler {
 	return withRequestID(withRecover(s.log, s.mux))
 }
 
-func (s *Server) routes() {}
+func (s *Server) routes() {
+	s.mux.Handle("GET /v1/integrations", s.authenticate(http.HandlerFunc(s.listIntegrations)))
+	s.mux.Handle("GET /v1/integrations/{integration_id}", s.authenticate(http.HandlerFunc(s.getIntegration)))
+	s.mux.Handle("GET /v1/capabilities/{capability}", s.authenticate(http.HandlerFunc(s.getCapability)))
+}

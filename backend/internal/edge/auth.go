@@ -94,7 +94,7 @@ func hasScope(k registry.APIKey, scope, integrationID string) bool {
 }
 
 // authorize resolves the integration's visibility for the caller: unknown → 404, not owner or
-// grantee → 403 not_granted, missing scope → 403 missing_scope. It writes the error and returns
+// grantee → 403 not_granted, missing scope → 403 missing_scope ("" = any key may). It writes the error and returns
 // false when the request must stop.
 func authorize(w http.ResponseWriter, r *http.Request, c Caller, integrationID, scope string) (*registry.Integration, bool) {
 	in, ok := c.Snap.Integrations[integrationID]
@@ -106,7 +106,7 @@ func authorize(w http.ResponseWriter, r *http.Request, c Caller, integrationID, 
 		WriteError(w, r, &core.CanonicalError{Code: core.CodeForbidden, Message: "The tenant may not use this integration", Reason: core.Ptr("not_granted")})
 		return nil, false
 	}
-	if !hasScope(c.Key, scope, integrationID) {
+	if scope != "" && !hasScope(c.Key, scope, integrationID) {
 		WriteError(w, r, &core.CanonicalError{Code: core.CodeForbidden, Message: "The API key lacks scope " + scope, Reason: core.Ptr("missing_scope")})
 		return nil, false
 	}

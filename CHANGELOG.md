@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(edge)` · add the discovery endpoints · HUB-090 · F-05
+  - GET /v1/integrations lists only integrations the tenant owns or is granted, filterable by capability, with opaque cursor paging
+  - GET /v1/integrations/{id} describes delivery mode, wait window, TTL, circuit-open behaviour and callback events; GET /v1/capabilities/{capability} returns the canonical schemas per operation
+  - No vendor, account, transformer or version appears in any discovery response
 - 2026-10-31 · `feat(edge)` · validate bodies against the capability schema with size limits · HUB-082 · F-05
   - Bodies over 1 MB (4 MB for llm.* capabilities) get 413 PAYLOAD_TOO_LARGE, refused from Content-Length before reading
   - Schema violations return 400 VALIDATION_FAILED, reason schema, one detail per violation with its JSON pointer and keyword
