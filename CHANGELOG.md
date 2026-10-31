@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add side-by-side and path-list version diff · HUB-258 · F-19
+  - Compare any two versions of an integration: pick From and To in the version history, or follow a row's "vs vN" link to the version it was based on
+  - Side by side: old on the left, new on the right, removed and added lines marked with - / + and a text label as well as colour; long unchanged stretches fold behind "Show N unchanged lines"
+  - Changed paths: each JSON path with Added / Removed / Changed and its value before and after, plus a one-line summary of what differs
+  - The pair and the view are in the URL; without a pair the page opens on the newest version against the active one
+
 - 2026-10-31 · `feat(frontend)` · add integration detail page and version history · HUB-257 · F-19
   - Integration ids in the list open a detail page: status, owner tenant, capability, active and latest version, grants, money flag and pause reason
   - The active version's spec in plain terms: targets with weights and transformers, failover order, delivery, breaker override, webhooks, audit and shadow traffic

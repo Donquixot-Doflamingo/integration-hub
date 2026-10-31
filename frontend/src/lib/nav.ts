@@ -76,6 +76,8 @@ export interface Crumb {
  * one crumb "v8" (there is no page at `.../versions`).
  */
 const PREFIXED: Record<string, (next: string) => string> = { versions: (v) => `v${v}` };
+/** Readable labels for fixed sub-page segments. */
+const LABELS: Record<string, string> = { diff: 'Compare' };
 
 /** Breadcrumb trail for a pathname: Console > Section > deeper segments (decoded). */
 export function breadcrumbsFor(pathname: string): Crumb[] {
@@ -96,7 +98,7 @@ export function breadcrumbsFor(pathname: string): Crumb[] {
 			continue;
 		}
 		href += `/${segment}`;
-		crumbs.push({ label: decodeURIComponent(segment), href });
+		crumbs.push({ label: LABELS[segment] ?? decodeURIComponent(segment), href });
 	}
 	return crumbs;
 }

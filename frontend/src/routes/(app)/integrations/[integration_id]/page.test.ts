@@ -109,6 +109,20 @@ describe('integration detail', () => {
 			'/integrations/int_evt_brandA/versions/7'
 		);
 		expect(screen.getByText('4 versions.')).toBeInTheDocument();
+
+		// HUB-258: any two versions can be compared from the history.
+		const form = screen.getByRole('form', { name: 'Compare versions' });
+		expect(form).toHaveAttribute('action', '/integrations/int_evt_brandA/diff');
+		expect(within(rows[1]!).getByRole('radio', { name: 'Compare from v7' })).toBeChecked();
+		expect(within(rows[0]!).getByRole('radio', { name: 'Compare to v8' })).not.toBeChecked();
+		// v8 in this fixture is based on v6 (copied from the v7 example).
+		expect(within(rows[0]!).getByRole('link', { name: 'vs v6' })).toHaveAttribute(
+			'href',
+			'/integrations/int_evt_brandA/diff?from=6&to=8'
+		);
+		expect(
+			within(form).getByRole('button', { name: 'Compare selected versions' })
+		).toBeInTheDocument();
 	});
 
 	it('says when there is no active version', async () => {

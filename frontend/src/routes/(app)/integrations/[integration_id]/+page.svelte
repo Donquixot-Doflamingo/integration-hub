@@ -14,6 +14,9 @@
 	let { data }: { data: PageData } = $props();
 
 	const id = $derived(data.integrationId);
+	const diffBase = $derived(
+		resolve('/(app)/integrations/[integration_id]/diff', { integration_id: id })
+	);
 	const versionHref = (v: number) =>
 		resolve('/(app)/integrations/[integration_id]/versions/[version]', {
 			integration_id: id,
@@ -102,52 +105,87 @@
 <section class="block" aria-labelledby="history-heading">
 	<h2 id="history-heading">Version history</h2>
 	<p class="meta">
-		Every version, newest first. Rollback publishes a copy, so nothing is ever removed.
+		Every version, newest first. Rollback publishes a copy, so nothing is ever removed. Pick a From
+		and a To version to compare them.
 	</p>
-	<ListView
-		result={data.versions}
-		noun="versions"
-		caption="Versions of {id}, newest first"
-		emptyTitle="No versions yet"
-		columns={[
-			{ label: 'Version', numeric: true },
-			{ label: 'State' },
-			{ label: 'Author' },
-			{ label: 'Reason' },
-			{ label: 'Created' },
-			{ label: 'Published' },
-			{ label: 'Based on', numeric: true }
-		]}
-		onretry={invalidateAll}
-	>
-		{#snippet row(v)}
-			<th scope="row" class="numeric" class:active={v.is_active}>
-				<a href={versionHref(v.version)}>v{v.version}</a>
-			</th>
-			<td>
-				{#if v.is_active}
-					<StatusBadge tone="ok" icon="check" label="Active" />
-				{:else if v.state === 'draft'}
-					<StatusBadge tone="warn" icon="changelog" label="Draft" />
-				{:else}
-					<span class="muted">Published</span>
-				{/if}
-			</td>
-			<td>{v.author}</td>
-			<td class="reason" title={v.reason}>{v.reason}</td>
-			<td>{formatUtc(v.created_at)}</td>
-			<td>{v.published_at ? formatUtc(v.published_at) : '-'}</td>
-			<td class="numeric">{v.based_on == null ? '-' : `v${v.based_on}`}</td>
-		{/snippet}
-		{#snippet empty()}<p>Create a draft with hubctl or the admin API.</p>{/snippet}
-		{#snippet footer(page)}
-			<p class="meta" role="status">
-				{page.items.length}
-				{page.items.length === 1 ? 'version' : 'versions'}.
-				{#if page.next_cursor}Showing the newest {page.items.length}; older versions are not loaded.{/if}
-			</p>
-		{/snippet}
-	</ListView>
+	<form method="GET" action={diffBase} aria-label="Compare versions">
+		<ListView
+			result={data.versions}
+			noun="versions"
+			caption="Versions of {id}, newest first"
+			emptyTitle="No versions yet"
+			columns={[
+				{ label: 'Version', numeric: true },
+				{ label: 'State' },
+				{ label: 'Author' },
+				{ label: 'Reason' },
+				{ label: 'Created' },
+				{ label: 'Published' },
+				{ label: 'Based on', numeric: true },
+				{ label: 'From' },
+				{ label: 'To' },
+				{ label: 'Changes' }
+			]}
+			onretry={invalidateAll}
+		>
+			{#snippet row(v)}
+				<th scope="row" class="numeric" class:active={v.is_active}>
+					<a href={versionHref(v.version)}>v{v.version}</a>
+				</th>
+				<td>
+					{#if v.is_active}
+						<StatusBadge tone="ok" icon="check" label="Active" />
+					{:else if v.state === 'draft'}
+						<StatusBadge tone="warn" icon="changelog" label="Draft" />
+					{:else}
+						<span class="muted">Published</span>
+					{/if}
+				</td>
+				<td>{v.author}</td>
+				<td class="reason" title={v.reason}>{v.reason}</td>
+				<td>{formatUtc(v.created_at)}</td>
+				<td>{v.published_at ? formatUtc(v.published_at) : '-'}</td>
+				<td class="numeric">{v.based_on == null ? '-' : `v${v.based_on}`}</td>
+				<td class="pick">
+					<input
+						type="radio"
+						name="from"
+						value={String(v.version)}
+						checked={v.is_active}
+						aria-label="Compare from v{v.version}"
+					/>
+				</td>
+				<td class="pick">
+					<input
+						type="radio"
+						name="to"
+						value={String(v.version)}
+						aria-label="Compare to v{v.version}"
+					/>
+				</td>
+				<td>
+					{#if v.based_on != null}
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- diffBase comes from resolve() -->
+						<a href="{diffBase}?from={v.based_on}&to={v.version}">vs v{v.based_on}</a>
+					{:else}-{/if}
+				</td>
+			{/snippet}
+			{#snippet empty()}<p>Create a draft with hubctl or the admin API.</p>{/snippet}
+			{#snippet footer(page)}
+				<div class="history-foot">
+					<p class="meta" role="status">
+						{page.items.length}
+						{page.items.length === 1 ? 'version' : 'versions'}.
+						{#if page.next_cursor}Showing the newest {page.items.length}; older versions are not
+							loaded.{/if}
+					</p>
+					{#if page.items.length > 1}
+						<button type="submit" class="compare">Compare selected versions</button>
+					{/if}
+				</div>
+			{/snippet}
+		</ListView>
+	</form>
 </section>
 
 <style>
@@ -194,6 +232,35 @@
 	}
 	.active a {
 		font-weight: 700;
+	}
+	.pick {
+		text-align: center;
+	}
+	.pick input {
+		accent-color: var(--signal);
+	}
+	.history-foot {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+		margin-top: var(--space-2);
+	}
+	.history-foot .meta {
+		margin: 0;
+	}
+	.compare {
+		padding: 0.35rem 0.9rem;
+		border: 1px solid var(--signal);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		color: var(--signal);
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.compare:hover {
+		background: var(--signal-wash);
 	}
 	.reason {
 		max-width: 22rem;
