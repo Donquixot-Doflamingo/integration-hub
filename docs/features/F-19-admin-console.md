@@ -131,7 +131,11 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
-Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hub-Request-Id` not declared on admin responses, HUB-278), CCR-002 (no active-version filter on `listIntegrations`, HUB-283), CCR-003 (no dead-letter count per account for the health board, HUB-284).
+Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hub-Request-Id` not declared on admin responses, HUB-278), CCR-002 (no active-version filter on `listIntegrations`, HUB-283), CCR-003 (no dead-letter count per account for the health board, HUB-284). All three shipped in hub-admin 1.1.0 (contract round 1, `contracts/notices/2026-10-31-round-1.md`); the console adopts them in round 4:
+
+| CCR | Console side |
+| --- | --- |
+| CCR-001 (HUB-278) | `client.ts` reads the declared `X-Hub-Request-Id` on every response; on errors the envelope's `request_id` wins, then the header; a missing or empty header is `null`. Form actions return the request id with the change log id (`ActionSuccessData.requestId`) and `ChangeNotice` shows it with a copy button. |
 
 ## Changelog of this doc
 | Date | Change | Author |
@@ -150,3 +154,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-10-31 | HUB-262: breaker force controls | frontend-engineer |
 | 2026-10-31 | HUB-263: request explorer search | frontend-engineer |
 | 2026-10-31 | HUB-264: request timeline | frontend-engineer |
+| 2026-10-31 | Contract round 1 adoption: CCR-001 / HUB-278 (request id header) | frontend-engineer |

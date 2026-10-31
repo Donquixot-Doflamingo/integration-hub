@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · adopt the documented X-Hub-Request-Id on every admin call · HUB-278 · F-19
+  - The console treats `X-Hub-Request-Id` as declared on every hub-admin response (1.1.0): errors show the error body's request id, or the header's when the body has none
+  - Success notices after a change (publish, rollback, weights, pause, breaker force) show the request id with a copy button, next to the change log id
 - 2026-10-31 · `build(frontend)` · regenerate the admin API client for contract round 1 · HUB-278 · F-19
   - The console's generated types and contract mocks now match hub-admin 1.1.0 (X-Hub-Request-Id on every response, active-version filters, per-account dead-letter count and age); no behaviour change yet
 - 2026-10-31 · `docs(contracts)` · add the round-1 contract notice for backend and frontend · HUB-278 · F-19

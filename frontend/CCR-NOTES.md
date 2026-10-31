@@ -36,8 +36,8 @@ already were in the contract.
 - **Consumers affected**: backend admin handlers (middleware sets it), frontend `src/lib/api/client.ts`, hubmcp (optional)
 - **Error codes**: none new
 - **Rollout**: contract PR first
-- **Current workaround**: `client.ts` reads the header as a best-effort fallback (`TODO(CCR-001)`); error
-  bodies' `request_id` always wins.
+- **Status**: shipped in hub-admin 1.1.0 (HUB-278). The console reads the documented header on every response
+  (`client.ts`, no `TODO(CCR-001)` left); error bodies' `request_id` still wins; success notices show the id.
 
 ### CCR-002: active-version filter on `listIntegrations`
 - **Requested by**: frontend-engineer (ticket HUB-256)

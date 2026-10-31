@@ -137,6 +137,39 @@ describe('adminClient', () => {
 		expect(r.error).toMatchObject(want);
 	});
 
+	describe('X-Hub-Request-Id (declared on every hub-admin response since 1.1.0, HUB-278)', () => {
+		const envelope = (request_id: string) => ({
+			error: { code: 'CONFLICT', message: 'Version moved', retryable: false, request_id }
+		});
+
+		it('takes the header when the envelope has no request id', async () => {
+			const api = adminClient({
+				baseUrl: BASE,
+				fetch: fakeFetch(
+					json(envelope(''), 409, { [REQUEST_ID_HEADER]: 'req_01J9Z3M1A5B7C9D1E3F5G7H9KG' })
+				).fn
+			});
+			const r = await api.call((c) => c.GET('/me'));
+			if (r.ok) throw new Error('expected error');
+			expect(r.requestId).toBe('req_01J9Z3M1A5B7C9D1E3F5G7H9KG');
+			expect(r.error.requestId).toBe('req_01J9Z3M1A5B7C9D1E3F5G7H9KG');
+		});
+
+		it('is null on a success when a proxy dropped the header', async () => {
+			const api = adminClient({ baseUrl: BASE, fetch: fakeFetch(json(me, 200)).fn });
+			const r = await api.call((c) => c.GET('/me'));
+			expect(r).toMatchObject({ ok: true, requestId: null });
+		});
+
+		it('treats an empty header as missing', async () => {
+			const api = adminClient({
+				baseUrl: BASE,
+				fetch: fakeFetch(json(me, 200, { [REQUEST_ID_HEADER]: '' })).fn
+			});
+			expect(await api.call((c) => c.GET('/me'))).toMatchObject({ ok: true, requestId: null });
+		});
+	});
+
 	it('maps a thrown fetch to NETWORK_ERROR with status 0', async () => {
 		const api = adminClient({
 			baseUrl: BASE,

@@ -41,7 +41,10 @@ export class HubApiError extends Error {
 	readonly code: HubErrorCode;
 	readonly retryable: boolean;
 	readonly retryAfterMs: number | null;
-	/** `req_...` id to quote to the platform team. Body `request_id` first, then the response header. */
+	/**
+	 * `req_...` id to quote to the platform team: the envelope's `request_id`, else the
+	 * `X-Hub-Request-Id` response header (declared on every admin response since hub-admin 1.1.0).
+	 */
 	readonly requestId: string | null;
 	readonly details: NonNullable<AdminError['details']>;
 	readonly meta: AdminError['meta'] | null;

@@ -63,7 +63,11 @@
 	let forceOpen = $state(false);
 	let forceKind = $state<ForceKind>('open');
 	let forceTarget = $state.raw<Breaker | null>(null);
-	let notice = $state.raw<{ message: string; changeId: string | null } | null>(null);
+	let notice = $state.raw<{
+		message: string;
+		changeId: string | null;
+		requestId: string | null;
+	} | null>(null);
 	function openForce(kind: ForceKind, b: Breaker) {
 		forceKind = kind;
 		forceTarget = b;
@@ -78,7 +82,8 @@
 			message: held
 				? `${held}: ${name} is now ${state}.`
 				: `Force cleared: ${name} is back under automatic control (${state}).`,
-			changeId: d.changeId
+			changeId: d.changeId,
+			requestId: d.requestId
 		};
 	}
 

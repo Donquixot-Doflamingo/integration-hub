@@ -67,7 +67,9 @@ export function finish<T extends { change_id?: string | null }>(
 	res: ApiResult<T>,
 	fieldNames: readonly string[] = ['reason']
 ): ActionSuccessData<T> | ActionFailure<ActionFailureData> {
-	if (res.ok) return { op, changeId: res.data.change_id ?? null, result: res.data };
+	if (res.ok) {
+		return { op, changeId: res.data.change_id ?? null, requestId: res.requestId, result: res.data };
+	}
 	const error = toPlainError(res.error);
 	const { fields } = detailsToFields(error.details, fieldNames);
 	// Status 0 (network) is not a valid HTTP status for `fail`; answer 502 (bad gateway).

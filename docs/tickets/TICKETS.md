@@ -2056,7 +2056,7 @@ Filed by frontend-engineer during HUB-251. Full CCR text (before/after YAML): `f
 **Acceptance criteria**
 - [x] `components.headers.X-Hub-Request-Id` added and referenced by every `hub-admin` response; examples updated
 - [x] `hub-admin` `info.version` 1.1.0 and `contracts/CHANGELOG.md` entry
-- [ ] Console removes the `TODO(CCR-001)` fallback after `npm run gen:api`
+- [x] Console removes the `TODO(CCR-001)` fallback after `npm run gen:api` (frontend-engineer, console round 4: `client.ts` documents the header as declared on every response, body `request_id` still wins on errors, an empty or missing header is `null`; success notices show the request id next to the change log id)
 - [ ] Backend admin contract tests (EP-08) require the header
 
 Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1, together with HUB-283 and HUB-284; notice `contracts/notices/2026-10-31-round-1.md`). The last two criteria belong to the frontend (`npm run gen:api`, remove `TODO(CCR-001)`) and the backend (EP-08 admin contract tests) and stay open until they land.

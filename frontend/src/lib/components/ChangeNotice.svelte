@@ -11,11 +11,14 @@
 	let {
 		message,
 		changeId,
+		requestId = null,
 		ondismiss
 	}: {
 		/** "Published v8. It is now the active version." */
 		message: string;
 		changeId: string | null;
+		/** `X-Hub-Request-Id` of the call that made the change (hub-admin 1.1.0, HUB-278). */
+		requestId?: string | null;
 		ondismiss?: () => void;
 	} = $props();
 </script>
@@ -30,6 +33,12 @@
 				<CopyButton value={changeId} label="Copy change log id" />
 				<!-- TODO(HUB-274): link the entry itself once the change log has a detail view. -->
 				<a href={resolve('/change-log')}>Open the change log</a>
+			</p>
+		{/if}
+		{#if requestId}
+			<p class="change">
+				Request id <code class="id">{requestId}</code>
+				<CopyButton value={requestId} label="Copy request id" />
 			</p>
 		{/if}
 	</div>
