@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **74** · todo: **119** · other (in-progress/in-review/blocked): **2**
+Total tickets: **195** · done: **75** · todo: **118** · other (in-progress/in-review/blocked): **2**
 
 ## Epics
 
@@ -12,7 +12,7 @@ Total tickets: **195** · done: **74** · todo: **119** · other (in-progress/in
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
-| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 11 |
+| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 12 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
@@ -770,15 +770,15 @@ Implement `Upstream.Do` with a per-account HTTP pool, `connect_timeout_ms` and `
 
 ### HUB-087 — Outcome classification and sync retry rule
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-086, HUB-065 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-086, HUB-065 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-087-outcome-classification`
 
 Map vendor outcomes to canonical codes (DESIGN §4.4, §10.2) via response/error transformers, with one immediate retry on timeout/reset only if the endpoint is idempotent or an idempotency key is present.
 
 **Acceptance criteria**
-- [ ] Timeout → 504 `UPSTREAM_TIMEOUT`; 5xx → 503 `UPSTREAM_UNAVAILABLE`; 429 → 429 with `retry_after_ms`; 401/403 → 502 `UPSTREAM_AUTH_FAILED`; other 4xx → 422 `UPSTREAM_REJECTED` (table test)
-- [ ] Non-idempotent endpoint without key is never retried
-- [ ] Vendor message passed through for `UPSTREAM_REJECTED`
+- [x] Timeout → 504 `UPSTREAM_TIMEOUT`; 5xx → 503 `UPSTREAM_UNAVAILABLE`; 429 → 429 with `retry_after_ms`; 401/403 → 502 `UPSTREAM_AUTH_FAILED`; other 4xx → 422 `UPSTREAM_REJECTED` (table test)
+- [x] Non-idempotent endpoint without key is never retried
+- [x] Vendor message passed through for `UPSTREAM_REJECTED`
 
 ### HUB-088 — Invoke handlers (sync pipeline)
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend

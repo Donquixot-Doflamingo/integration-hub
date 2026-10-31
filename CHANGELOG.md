@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(edge)` · classify upstream outcomes and apply the sync retry rule · HUB-087 · F-06
+  - Timeouts (endpoint or X-Request-Deadline) map to 504 UPSTREAM_TIMEOUT; refused, DNS, TLS, reset, protocol and egress failures to 503 UPSTREAM_UNAVAILABLE; vendor 5xx/429/401-403/other 4xx keep the response transformer's classification
+  - A sync attempt is retried once, immediately, only after a timeout or reset and only if the endpoint is idempotent or an Idempotency-Key was sent; a caller deadline is never retried
+  - 429 without a rule-set retry_after_ms gets it from Retry-After (seconds or HTTP date); UPSTREAM_REJECTED carries the vendor's own message and code when no rule sets one
 - 2026-10-31 · `fix(edge)` · answer 404 for integrations outside the tenant's set in discovery · HUB-090 · F-05
   - GET /v1/integrations/{id} for an integration the tenant neither owns nor is granted now returns 404 INTEGRATION_NOT_FOUND instead of 403, so integration ids cannot be enumerated
 - 2026-10-31 · `feat(edge)` · audit every authorized request through the shared pipeline · HUB-092 · F-08
