@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(milestones)` · add the M4 summary · HUB-123 · F-09
+  - docs/milestones/M4.md: acceptance evidence for every M4 line, what was built, deferred work, 7 deviations and 3 open questions
+  - F-09 in progress; new ticket HUB-124 for the per-integration retry schedule override
 - 2026-10-31 · `feat(delivery)` · send signed callbacks on terminal states and run the dispatcher · HUB-121 · F-11
   - async_callback requests now end with a signed request.completed, request.failed or request.expired callback to each subscribed registrar endpoint, enqueued in the same transaction as the terminal state change (never twice, never missing)
   - hub worker runs the callback dispatcher and warms registrar signing secrets; HUB_CALLBACK_ALLOW_LOOPBACK (dev only) lets callbacks reach a local http receiver

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **99** · todo: **94** · other (in-progress/in-review/blocked): **2**
+Total tickets: **196** · done: **100** · todo: **95** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -13,7 +13,7 @@ Total tickets: **195** · done: **99** · todo: **94** · other (in-progress/in-
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
-| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 13 |
+| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
@@ -1082,7 +1082,7 @@ Chaos-style tests for the first two M4 Accept items.
 
 ### HUB-123 — M4 tests: callback signature and TTL expiry; M4 summary
 - **Epic:** EP-05 · **Type:** test · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-121, HUB-114, HUB-117, HUB-122 · **Feature:** F-11 · **Stories:** US-11xx
+- **Status:** done · **Depends on:** HUB-121, HUB-114, HUB-117, HUB-122 · **Feature:** F-11 · **Stories:** US-11xx
 - **Branch:** `test/HUB-123-m4-callback-ttl`
 
 Remaining M4 Accept items plus the wrap-up.
@@ -1090,7 +1090,19 @@ Remaining M4 Accept items plus the wrap-up.
 **Acceptance criteria**
 - [x] Callback signature verified by a test receiver; tampered body or timestamp > 5 min is rejected
 - [x] TTL expiry produces `expired` status and an `request.expired` callback
-- [ ] Milestone summary posted; F-09…F-11 docs updated
+- [x] Milestone summary posted; F-09…F-11 docs updated
+
+### HUB-124 — Per-integration retry schedule override
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-113 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `feat/HUB-124-retry-override`
+
+DESIGN §10.3 says the backoff schedule is overridable per integration. Add an optional `delivery.retry: { schedule: [...], max_attempts }` to integration versions (validated: increasing steps, 1–20 attempts, total under the TTL) and use it in the worker and the wait-mode settle. Found in M4 (HUB-113 shipped the default schedule only).
+
+**Acceptance criteria**
+- [ ] An integration version with a custom schedule retries on that schedule (worker itest)
+- [ ] Invalid schedules are refused at snapshot build with a path-qualified error
+- [ ] Integrations without an override keep DESIGN §10.3
 
 ## EP-06 — M5 Resilience
 
