@@ -66,6 +66,18 @@ go run ./cmd/hubctl creds set ct-brandB-us account_id=TEST-ACCT-B-not-real passc
 go run ./cmd/hubctl creds list   # keys only, never values
 ```
 
+## Implementation (HUB-085)
+`creds.Apply(scheme, creds, *core.VendorRequest)` (and `ApplyVendor(vendor, ...)` = `Apply(vendor.Auth, ...)`); `ValidateScheme(name)` lets a snapshot build reject unknown schemes. The scheme always comes from the vendor definition's `auth:`, never from the transformer.
+
+| Scheme | Effect |
+| --- | --- |
+| `static_headers` | Injects nothing: the transformer maps `creds.*` into headers (T1). Apply checks every credential value is present as a header value and fails with `ErrMissingCredential` naming the key otherwise. |
+| `bearer` | `Authorization: Bearer <values.token>` |
+| `basic` | `Authorization: Basic base64(<values.username>:<values.password>)` |
+| anything else | `ErrUnknownScheme` |
+
+Order on the request path: `Cache.Get` → transformer (`Input.Creds = creds.Values`) → `BuildRequest` → **audit `request.transformed`** → `Apply` → `upstream.Do`. Apply never mutates the header map it receives (it installs a copy), so an audit snapshot that holds the transformer's map never sees injected bearer/basic values. Static-header credentials are in the transformer output by design, so the audit writer must still redact by value (`telemetry.SecretSet`). Errors name credential keys, never values. `BenchmarkInject`: bearer 0.14 µs / 3 allocs, static_headers 0.09 µs / 0 allocs (budget 20 µs).
+
 ## Data model impact
 `account_credentials(account_id, cred_version, slot, ciphertext, wrapped_key)` (DESIGN §18.2).
 
@@ -111,3 +123,4 @@ HUB-080 – HUB-109 (EP-04, filter `feature: F-07`).
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-10-31 | HUB-084: local encrypted source, cache, redaction, `hubctl creds` | backend-engineer |
+| 2026-10-31 | HUB-085: static_headers, bearer, basic schemes | backend-engineer |

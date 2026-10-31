@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(creds)` · add static_headers, bearer and basic auth schemes · HUB-085 · F-07
+  - The vendor definition's `auth:` picks the scheme: bearer sets `Authorization: Bearer <token>`, basic sets `Authorization: Basic base64(username:password)`, static_headers checks the transformer mapped every credential into a header
+  - Unknown schemes and missing credential values fail with errors that name the key, never the value
+  - Injection runs after the transformer and never edits the header map it was given, so the `request.transformed` snapshot cannot pick up injected values
+
 - 2026-10-31 · `feat(creds)` · add local encrypted credential source with warmed cache · HUB-084 · F-07
   - Dev credentials live in one AES-256-GCM file (`.data/dev-secrets.enc`, key from `HUB_DEV_KEY_FILE`); a tampered, truncated or wrongly keyed file is refused with a clear error and yields nothing
   - The request path reads credentials only from a cache warmed at snapshot load (TTL 5 min, background refresh); a miss is a typed error counted in `creds_cache_miss_total`, never an inline decrypt
