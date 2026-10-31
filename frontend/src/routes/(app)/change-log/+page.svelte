@@ -23,7 +23,7 @@
 		without,
 		type Filters
 	} from './filters';
-	import { objectHref } from './objects';
+	import { objectHref } from '$lib/objects';
 
 	let { data }: { data: PageData } = $props();
 	const section = sectionFor('/change-log')!;

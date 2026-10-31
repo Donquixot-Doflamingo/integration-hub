@@ -2,7 +2,8 @@ import { resolve } from '$app/paths';
 import type { ObjectType } from '$lib/api/types';
 
 /**
- * The console page of a change log object (HUB-274), when there is one. API keys and callback
+ * The console page of a registry object named by the change log (HUB-274) or a snapshot's changed
+ * objects (HUB-273), when there is one. API keys and callback
  * endpoints live on their tenant's page, which the entry does not name, so they get no link.
  */
 export function objectHref(type: ObjectType, id: string): string | null {

@@ -94,6 +94,8 @@ when a page under `src/routes/(app)/` renders its own `{#await}` instead):
 ## Change log and snapshots (HUB-273, HUB-274)
 - `/change-log`: filters in the URL (`change-log/filters.ts`), `/change-log/{change_id}` with before / after as a
   path diff (`$lib/utils/json-diff.ts` -> `DiffPaths`). `ChangeNotice` links every change id to its entry.
+- `/snapshots`: latest marked from `getLatestSnapshot`; `SnapshotChanges` reads `getSnapshot` when a row is expanded.
+  Object links for both screens: `$lib/objects.ts`.
 
 ## Auth (HUB-253)
 Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.

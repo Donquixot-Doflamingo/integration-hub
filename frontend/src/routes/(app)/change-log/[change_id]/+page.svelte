@@ -10,7 +10,7 @@
 	import { jsonDiff } from '$lib/utils/json-diff';
 	import type { PageData } from './$types';
 	import { objectTypeLabels } from '../filters';
-	import { objectHref } from '../objects';
+	import { objectHref } from '$lib/objects';
 
 	let { data }: { data: PageData } = $props();
 	const id = $derived(data.changeId);

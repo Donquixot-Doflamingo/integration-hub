@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **94** · todo: **100** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **95** · todo: **99** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **195** · done: **94** · todo: **100** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 27 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 28 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -2019,14 +2019,16 @@ Shipped (frontend-engineer, `feat(frontend): add tenant callback endpoints with 
 
 ### HUB-273 — Snapshots view
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1906
 - **Branch:** `feat/HUB-273-fe-snapshots`
 
 List snapshots with version, checksum, author, diff summary and time.
 
+Shipped (frontend-engineer, `feat(frontend): add snapshots view with latest marked and diff summary (HUB-273)`): `/snapshots` (`listSnapshots`, newest first, cursor paging in the URL): version, summary, author, change (linked to its change log entry), checksum (short, full value in the title and a copy button), size, created. `getLatestSnapshot` (`wait=0`, no long-poll) fills a "Latest snapshot" panel and marks its row. Each row has a "Show changes in N" disclosure that reads `getSnapshot` on first open and lists the changed objects versus the previous snapshot (created / updated / deleted, linked to their console page). The blob (`getSnapshotBlob`) is not offered: it is the nodes' internal format.
+
 **Acceptance criteria**
-- [ ] Latest snapshot highlighted
-- [ ] Diff summary expandable
+- [x] Latest snapshot highlighted (a "Latest" badge in text on its row plus a summary panel, from `getLatestSnapshot`; the list still renders when that call fails; `snapshots/page.test.ts`, `e2e/snapshots.test.ts`)
+- [x] Diff summary expandable (`aria-expanded` disclosure per row, `getSnapshot` read once on demand, error with request id inside the row, keyboard tested in e2e)
 
 ### HUB-274 — Change log view
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

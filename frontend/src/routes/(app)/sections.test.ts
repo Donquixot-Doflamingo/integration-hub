@@ -115,14 +115,18 @@ describe.each(cases)('$path', (c) => {
 		server.use(mockPending(c.op));
 		await renderSection(c);
 		expect(screen.getByRole('table')).toHaveAttribute('aria-busy', 'true');
-		expect(screen.getByText(/^Loading /)).toBeInTheDocument();
+		// Some sections load a second call beside the list (snapshots: the latest one, HUB-273).
+		expect(screen.getAllByText(/^Loading /).length).toBeGreaterThanOrEqual(1);
 	});
 
 	it('shows an empty state', async () => {
 		server.use(mockOperation(c.op, { items: [], next_cursor: null } as never));
 		await renderSection(c);
 		await waitFor(() => expect(screen.queryByRole('table')).toBeNull());
-		expect(screen.getByRole('status')).toHaveTextContent(/^(No |The dead-letter queue is empty)/);
+		const empty = screen
+			.getAllByRole('status')
+			.filter((s) => /^(No |The dead-letter queue is empty)/.test(s.textContent?.trim() ?? ''));
+		expect(empty).toHaveLength(1);
 	});
 
 	it('shows the error envelope with request id and retries', async () => {

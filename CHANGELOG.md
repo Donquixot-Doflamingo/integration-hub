@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-01 · `feat(frontend)` · add snapshots view with latest marked and diff summary · HUB-273 · F-19
+  - Snapshots list, newest first with paging, shows each version's summary, author, change log entry, checksum (with copy), size and time
+  - The snapshot the gateway nodes load now is marked "Latest" and summarised at the top
+  - Each snapshot can be expanded to list the registry objects it created, updated or deleted, linked to their pages
+
 - 2026-11-01 · `feat(frontend)` · add filterable change log with before/after diff · HUB-274 · F-19
   - Filter the change log by actor, action, object type, object id and a UTC time range; filters live in the URL as removable chips, with paging
   - Each entry opens a page with who changed what, when and why, and the before and after as a list of changed fields (added, removed, changed), plus both versions in full
