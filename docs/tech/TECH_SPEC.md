@@ -91,7 +91,7 @@ flowchart LR
 
 ## 3. Monorepo layout
 
-ADR-0001. Toolchain targets: **Go ≥ 1.25 (`go.mod` minimum), Node 22 LTS, Postgres 16, Redis 7**.
+ADR-0001. Toolchain targets: **Go ≥ 1.26 (`go.mod` minimum; goose v3.29 requires 1.26), Node 22 LTS, Postgres 16, Redis 7**.
 
 Installed on the dev machine (HUB-012, 2026-10-31, Homebrew on macOS 15 arm64): Go 1.27.3, Node 22.23.4 (keg-only `node@22`: put `/opt/homebrew/opt/node@22/bin` first on `PATH`; a Node 26 from Homebrew is also present and must not be used), Docker CLI 29.9.2 + Compose 5.6.1 on Colima 0.10.3 (`colima start --cpu 4 --memory 6`), golangci-lint 2.15.0. The compose plugin is found through `cliPluginsExtraDirs` in `~/.docker/config.json`.
 
@@ -665,13 +665,13 @@ Versions are pinned in `go.mod` / `package-lock.json` at M0 (DESIGN §18.7: "con
 
 ## 14. Local development
 
-Prerequisites (installed via HUB-012; versions in §3): Go ≥ 1.25, Node 22 LTS, Docker (or Colima/OrbStack) with Compose v2, `golangci-lint`, `sqlc`, `goose`, `k6`. A `make doctor` target checks versions.
+Prerequisites (installed via HUB-012; versions in §3): Go ≥ 1.26, Node 22 LTS, Docker (or Colima/OrbStack) with Compose v2, `golangci-lint`, `sqlc`, `goose`, `k6`. A `make doctor` target checks versions.
 
 ### 14.1 docker compose (`deploy/docker-compose.yml`)
 | Service | Image | Profile | Port |
 | --- | --- | --- | --- |
-| `postgres` | `postgres:16` (pinned digest) | default | 5432 |
-| `redis` | `redis:7` (pinned digest) | default | 6379 |
+| `postgres` | `postgres:16.15-alpine` (pinned digest) | default | 5432 |
+| `redis` | `redis:7.4.12-alpine` (pinned digest) | default | 6379 |
 | `mockvendor` | built from `backend/` | `apps` | 8099 / 8098 |
 | `hub-gateway`, `hub-worker`, `hub-scheduler`, `hub-admin` | built from `backend/` | `apps` | 8080 / 8081 |
 | `oidc-stub` | dev OIDC issuer (see §17.3) | `auth` | 8085 |
@@ -699,7 +699,7 @@ Root `Makefile` (delegates):
 | `benchcmp` | `benchstat main.txt bench.txt` |
 | `fuzz` | `go test -fuzz` targets for 60 s each (TESTING_STRATEGY §8) |
 | `run ROLE=gateway` | run a role against compose |
-| `migrate-up` / `migrate-down` / `migrate-new NAME=` | goose |
+| `migrate` | `hub migrate`: applies the goose migrations embedded in `backend/migrations` (no goose CLI dependency; new files are added by hand as `NNNNN_name.sql`, append-only) |
 | `dev-key` | generate the local AES key (git-ignored) |
 | `goldens` | `hubctl transform test ./config/transformers/...` |
 | `chaos` | `go test -tags=chaos ./test/chaos/...` (M5 scenarios) |

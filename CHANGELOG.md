@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `chore(infra)` · add compose Postgres and Redis with embedded goose migrations · HUB-023 · F-01
+  - deploy/docker-compose.yml: Postgres 16.15 and Redis 7.4.12, digest-pinned, with healthchecks
+  - backend/migrations embeds goose SQL; `hub migrate` / `make migrate` apply it; baseline creates schema hub
+  - `make itest` starts compose and runs integration-tagged tests; go.mod minimum is now Go 1.26 (goose v3.29)
 - 2026-10-31 · `chore(backend)` · add Makefile targets and golangci-lint config · HUB-021 · F-01
   - backend/Makefile: build test itest lint fmt bench run mockvendor up down migrate doctor
   - backend/.golangci.yml (v2, pinned 2.15.0) with depguard keeping transform pure and forbidigo banning fmt.Print/log/time.Sleep

@@ -163,7 +163,7 @@ Create root `CHANGELOG.md` with `[Unreleased]`, `.github/pull_request_template.m
 Install and verify Go 1.25, Node 22 (with npm), Docker (with compose v2) and golangci-lint on the development machine so M0 and the frontend scaffold can start.
 
 **Acceptance criteria**
-- [x] `go version` reports ≥ 1.25 (1.27.3 installed; `go.mod` keeps 1.25 as the minimum)
+- [x] `go version` reports ≥ 1.25 (1.27.3 installed; `go.mod` minimum is 1.26, see HUB-023)
 - [x] `node --version` reports v22.x
 - [x] `docker compose version` works and `docker run hello-world` succeeds
 - [x] `golangci-lint --version` works
@@ -262,15 +262,15 @@ Fill the CI placeholder with backend jobs: lint, `make test` (race), `make itest
 
 ### HUB-023 — docker-compose with Postgres 16 + Redis 7 and goose migrations
 - **Epic:** EP-01 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-023-compose-migrations`
 
 Add `deploy/docker-compose.yml` (Postgres 16, Redis 7, healthchecks) and wire `goose` migrations in `backend/migrations/` with an empty baseline and `make migrate` (DESIGN §18.7).
 
 **Acceptance criteria**
-- [ ] `docker compose up -d` brings both services to healthy
-- [ ] `make migrate` applies the baseline against compose Postgres
-- [ ] `make itest` uses the compose services
+- [x] `docker compose up -d` brings both services to healthy
+- [x] `make migrate` applies the baseline against compose Postgres
+- [x] `make itest` uses the compose services
 
 ### HUB-024 — hub binary with role entrypoints and config loading
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend

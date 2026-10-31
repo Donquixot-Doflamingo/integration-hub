@@ -23,6 +23,11 @@ linters:
     - unconvert
     - unparam
   settings:
+    errcheck:
+      exclude-functions: # CLI/usage output to an io.Writer; a failed write has no recovery
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
     forbidigo:
       forbid:
         - pattern: ^fmt\.Print

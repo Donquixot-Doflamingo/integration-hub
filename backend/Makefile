@@ -8,7 +8,7 @@ COMPOSE := docker compose -f ../deploy/docker-compose.yml
 export HUB_PG_DSN ?= postgres://hub:hub@localhost:5432/hub?sslmode=disable
 export HUB_REDIS_ADDR ?= localhost:6379
 
-.PHONY: all build test itest lint fmt bench run mockvendor migrate migrate-status up down doctor tidy clean
+.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean
 
 all: lint test build
 
@@ -20,7 +20,7 @@ build: ## Build every binary into bin/
 test: ## Unit tests with the race detector
 	$(GO) test -race -count=1 ./...
 
-itest: ## Integration tests (tag integration) against compose Postgres + Redis
+itest: up ## Integration tests (tag integration) against compose Postgres + Redis
 	$(GO) test -race -count=1 -tags integration ./...
 
 lint: ## golangci-lint (pinned) + gofmt check
@@ -47,11 +47,8 @@ up: ## Start Postgres + Redis
 down: ## Stop Postgres + Redis
 	$(COMPOSE) down
 
-migrate: ## Apply goose migrations to HUB_PG_DSN
-	$(GO) run github.com/pressly/goose/v3/cmd/goose -dir migrations postgres "$$HUB_PG_DSN" up
-
-migrate-status:
-	$(GO) run github.com/pressly/goose/v3/cmd/goose -dir migrations postgres "$$HUB_PG_DSN" status
+migrate: ## Apply embedded goose migrations to HUB_PG_DSN
+	$(GO) run ./cmd/hub migrate
 
 doctor: ## Check toolchain versions (TECH_SPEC §3)
 	@$(GO) version
