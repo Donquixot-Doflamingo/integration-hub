@@ -13,7 +13,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 )
 
-func responseValidator(t *testing.T) func(any) error {
+func responseValidator(t testing.TB) func(any) error {
 	t.Helper()
 	raw, err := os.ReadFile("../../../contracts/schemas/capabilities/events.track.v1.response.json")
 	if err != nil {
@@ -66,7 +66,7 @@ func compileResponse(t *testing.T, src string) *Program {
 	return p
 }
 
-func devResponse(t *testing.T, rel string) *Program {
+func devResponse(t testing.TB, rel string) *Program {
 	t.Helper()
 	p, err := Compile(devSpec(t, rel), Options{ValidateResponse: responseValidator(t)})
 	if err != nil {

@@ -580,6 +580,9 @@ DESIGN §18.6 is the budget (≈ 3.4 ms, target ≤ 5 ms p99 Hub overhead, 4 KB,
 | Audit + metrics | 0.1 ms | `stage="audit"`, `BenchmarkAuditEmit` (non-blocking send) |
 | **Total** | **≤ 5 ms** | `hub_overhead_ms` = server time − vendor time − deliberate waits |
 
+**Measured (HUB-070, 2026-10-31, Apple M4, Go 1.27, `BenchmarkTransform4KB`):** request transform (T1) + response mapping (R1) on a 4 KB `events.track@v1` body: **p99 17–18 µs**, mean 4.8 µs, 6.8 KB and 119 allocations per op (3 runs). Budget 0.5 ms p99, so about 28× headroom. Re-run with `go test -run '^$' -bench BenchmarkTransform4KB -benchmem ./internal/transform`; the benchmark fails if p99 > 0.5 ms.
+
+
 How it is enforced:
 1. **Benchmarks** per stage in `make bench`, compared with `benchstat` against `main` in CI; a > 10 % regression with p < 0.05 fails the `bench` job (TESTING_STRATEGY §9).
 2. **In-process e2e benchmark** (M3 acceptance): caller → hub → mockvendor at 0 ms latency, p99 from the `hub_overhead_ms` histogram ≤ 5 ms.

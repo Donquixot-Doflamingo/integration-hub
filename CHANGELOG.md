@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `perf(transform)` · benchmark a 4 KB request and response transform · HUB-070 · F-04
+  - BenchmarkTransform4KB (T1 build + R1 map on a 4 KB events.track body) reports p99: 17–18 µs vs the 0.5 ms budget, 119 allocs/op; it fails if p99 exceeds 0.5 ms
+  - Result recorded in TECH_SPEC next to the latency budget
 - 2026-10-31 · `feat(registry)` · compile transformers into the snapshot and refuse failing goldens · HUB-069 · F-03, F-04
   - Building a snapshot compiles every transformer once and runs its goldens; a type error, a failing golden or a transformer without goldens refuses the snapshot with transformer, file and fixture case named
   - Snapshot.Programs holds one compiled program per ID@version, shared by every integration version that references it

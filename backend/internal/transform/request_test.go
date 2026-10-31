@@ -16,7 +16,7 @@ var t1Input = Input{
 	Now:     fixedNow,
 }
 
-func compileDev(t *testing.T, rel string) *Program {
+func compileDev(t testing.TB, rel string) *Program {
 	t.Helper()
 	p, err := Compile(devSpec(t, rel), Options{RequestSchema: eventsSchema(t)})
 	if err != nil {
