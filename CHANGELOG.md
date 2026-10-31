@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-01 · `fix(frontend)` · end the change log diff summary as its own sentence · HUB-274 · F-19
+  - On a change log entry, the summary of changed fields ends with a full stop and the note about secrets is a separate line
+
 - 2026-11-01 · `fix(frontend)` · keep table live regions from widening the page · HUB-273 · F-19
   - The snapshots page no longer scrolls sideways at desktop width: copy buttons inside a table stay within the table's own scroll area
 

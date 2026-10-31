@@ -50,7 +50,8 @@ describe('change log entry', () => {
 				.getAllByRole('cell')
 				.map((c) => c.textContent?.trim())
 		).toEqual(['~ Changed', '7', '8']);
-		expect(screen.getByText(/1 path differ \(1 changed\): active_version/)).toBeInTheDocument();
+		expect(screen.getByText('1 path differ (1 changed): active_version.')).toBeInTheDocument();
+		expect(screen.getByText(/Secrets never appear here/)).toBeInTheDocument();
 	});
 
 	it('a create lists every field as added', async () => {

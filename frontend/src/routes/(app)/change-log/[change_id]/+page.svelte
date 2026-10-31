@@ -81,7 +81,9 @@
 					? 'Created: there was no object before this change.'
 					: c.after == null
 						? 'Deleted: there is no object after this change.'
-						: summarize(changes)}
+						: `${summarize(changes).replace(/\.$/, '')}.`}
+			</p>
+			<p class="meta">
 				Secrets never appear here (write-only fields are recorded as a fingerprint).
 			</p>
 			<DiffPaths {changes} label="Changed fields" rootLabel="(whole object)" />
