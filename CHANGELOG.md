@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(delivery)` · send signed callbacks on terminal states and run the dispatcher · HUB-121 · F-11
+  - async_callback requests now end with a signed request.completed, request.failed or request.expired callback to each subscribed registrar endpoint, enqueued in the same transaction as the terminal state change (never twice, never missing)
+  - hub worker runs the callback dispatcher and warms registrar signing secrets; HUB_CALLBACK_ALLOW_LOOPBACK (dev only) lets callbacks reach a local http receiver
+  - Status responses of failed or expired requests now always carry error.request_id, as the contract requires
 - 2026-10-31 · `test(edge)` · close queued attempts in the audit trail and prove crash and duplicate safety · HUB-117 · F-09
   - Each queued attempt's audit block now ends with request.completed, retry.scheduled or request.dead_lettered, recorded only by the actor whose transition won
   - make itest proves the async timeline from accept to completion, atomic terminal commits, a worker crash after the vendor call (reclaimed, one terminal state and one callback for the caller) and one vendor call for six concurrent duplicates in sync, wait and async mode

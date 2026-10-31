@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/callbacks"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/delivery"
@@ -36,9 +37,10 @@ type dataPlane struct {
 	client      *upstream.Client
 	audit       *audit.Writer
 	transitions *delivery.Transitions
-	edge        *edge.Server        // gateway
-	worker      *delivery.Worker    // worker
-	scheduler   *delivery.Scheduler // scheduler
+	edge        *edge.Server          // gateway
+	worker      *delivery.Worker      // worker
+	dispatcher  *callbacks.Dispatcher // worker: signed callbacks
+	scheduler   *delivery.Scheduler   // scheduler
 	wg          sync.WaitGroup
 	stop        context.CancelFunc
 }
@@ -52,7 +54,13 @@ func nodeName(role Role) string {
 func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *slog.Logger, secrets *telemetry.SecretSet, tp trace.TracerProvider, st *stores, reg *roleRegistry) (*dataPlane, error) {
 	dp := &dataPlane{log: log, name: nodeName(cfg.Role)}
 	q := &queue.Outbox{}
-	dp.transitions = &delivery.Transitions{DB: st.pg, Queue: q} // OnTerminal: callbacks (HUB-120)
+	// Terminal callbacks are enqueued in the terminal transaction of whichever role settles the
+	// request: the worker, the gateway (wait mode) or the scheduler (expiry).
+	enq, err := callbacks.NewEnqueuer(&reg.store, m, callbacks.EnqueueOptions{Log: log})
+	if err != nil {
+		return nil, err
+	}
+	dp.transitions = &delivery.Transitions{DB: st.pg, Queue: q, OnTerminal: delivery.CallbackHook(enq)}
 	if cfg.Role == Scheduler {
 		dp.scheduler = &delivery.Scheduler{DB: st.pg, Queue: q, Transitions: dp.transitions, Log: log}
 		dp.scheduler.RegisterMetrics(m.Registry)
@@ -109,12 +117,22 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 			Name: dp.name, Pool: cfg.WorkerPool, DB: st.pg, Queue: q, Transitions: dp.transitions, Snapshots: &reg.store,
 			Attempter: attempter, Audit: dp.audit, Masker: masker, Budget: budget, Metrics: m, Log: log,
 		}
+		if dp.dispatcher, err = callbacks.NewDispatcher(callbacks.DispatcherDeps{
+			Pool: st.pg, Snapshots: &reg.store, Secrets: creds.RegistrarSecrets{Cache: cache}, Audit: dp.audit,
+			Metrics: m, Log: log, TracerProvider: tp,
+		}, callbacks.DispatcherOptions{Guard: callbacks.GuardOptions{AllowLoopback: cfg.CallbackAllowLoopback}}); err != nil {
+			return nil, err
+		}
 	case Admin, Scheduler:
 	}
 	// Credentials of every account of a snapshot are loaded before it serves traffic; accounts
 	// that fail to load miss (503 / retry) rather than block the swap.
+	secretIDs := creds.AccountIDs
+	if cfg.Role == Worker { // the worker also signs callbacks
+		secretIDs = creds.SnapshotSecretIDs
+	}
 	reg.beforeSwap = func(ctx context.Context, s *registry.Snapshot) {
-		if err := cache.Warm(ctx, creds.AccountIDs(s)); err != nil {
+		if err := cache.Warm(ctx, secretIDs(s)); err != nil {
 			log.WarnContext(ctx, "credential warm-up incomplete", slog.String("error", err.Error()))
 		}
 	}
@@ -133,6 +151,13 @@ func (dp *dataPlane) start(ctx context.Context) {
 	}
 	if dp.worker != nil {
 		dp.wg.Go(func() { dp.worker.Run(ctx) })
+	}
+	if dp.dispatcher != nil {
+		dp.wg.Go(func() {
+			if err := dp.dispatcher.Run(ctx); err != nil {
+				dp.log.ErrorContext(ctx, "callback dispatcher stopped", slog.String("error", err.Error()))
+			}
+		})
 	}
 	if dp.scheduler != nil {
 		dp.wg.Go(func() { dp.scheduler.Run(ctx) })

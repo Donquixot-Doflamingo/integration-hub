@@ -109,7 +109,11 @@ func (Ledger) Progress(ctx context.Context, db DB, requestID string, status core
 func (Ledger) SaveResult(ctx context.Context, db DB, requestID, tenant string, result json.RawMessage, cerr *core.CanonicalError, at time.Time) error {
 	var errJSON []byte
 	if cerr != nil {
-		b, err := json.Marshal(cerr)
+		stored := *cerr
+		if stored.RequestID == "" { // the contract requires it on every canonical error
+			stored.RequestID = requestID
+		}
+		b, err := json.Marshal(stored)
 		if err != nil {
 			return fmt.Errorf("audit: encode error of %s: %w", requestID, err)
 		}
@@ -214,6 +218,9 @@ func (Ledger) Status(ctx context.Context, db DB, tenant, requestID string) (Requ
 	if len(errJSON) > 0 {
 		var ce core.CanonicalError
 		if err := json.Unmarshal(errJSON, &ce); err == nil {
+			if ce.RequestID == "" {
+				ce.RequestID = s.RequestID
+			}
 			s.Error = &ce
 		}
 	}

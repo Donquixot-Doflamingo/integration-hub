@@ -486,6 +486,7 @@ Flags override env. Env names: `HUB_*`. Loaded once at start into an immutable s
 | `HUB_CRED_SOURCE` | `localfile://.data/dev-secrets.enc` (not under `config/`: every file there is packed into snapshot blobs; git-ignored; `hubctl creds set`) | gateway (worker from M4) |
 | `HUB_DEV_KEY_FILE` | `.data/dev.key` (`hubctl creds init-key`, mode 0600, git-ignored). Missing → the gateway starts and every vendor call answers 503 `credentials_unavailable` | dev only |
 | `HUB_AUDIT_MASK_KEY` | unset → random per process (masked identifiers then change on restart); ≥ 32 bytes, environment only | gateway (worker from M4) |
+| `HUB_CALLBACK_ALLOW_LOOPBACK` | `false`; `true` lets callbacks reach loopback registrar endpoints over http (the dev registrar `http://127.0.0.1:8097`). Never set in production: the SSRF guard otherwise refuses loopback | worker, dev only |
 | `HUB_DEBUG_HEADERS` | `false`; `true` adds the debug-only `X-Hub-Integration-Version` to 200 responses | gateway, dev/support only |
 | `HUB_CONFIG_DIR` | `config` (dev registry, M1) | dev only |
 | `HUB_CONFIG_WATCH` | `false` (rebuild and swap on file changes, HUB-045) | dev only |

@@ -24,7 +24,9 @@ type TerminalEvent struct {
 	Result   json.RawMessage
 	Err      *core.CanonicalError
 	Attempts int
-	At       time.Time
+	// Version is the integration version the final attempt ran on (its subscriptions apply).
+	Version int
+	At      time.Time
 }
 
 // OnTerminal is called in the terminal transaction (callbacks.Enqueue in the role wiring).
@@ -99,7 +101,11 @@ func (t *Transitions) terminal(ctx context.Context, env core.Envelope, o Outcome
 			return err
 		}
 		if t.OnTerminal != nil {
-			ev := TerminalEvent{Envelope: env, State: o.Final.Status, Result: o.Result, Err: o.Err, Attempts: o.Final.Attempts, At: now}
+			version := o.Final.IntegrationVersion
+			if version == 0 {
+				version = env.ResolvedVersion
+			}
+			ev := TerminalEvent{Envelope: env, State: o.Final.Status, Result: o.Result, Err: o.Err, Attempts: o.Final.Attempts, Version: version, At: now}
 			if err := t.OnTerminal(ctx, tx, ev); err != nil {
 				return fmt.Errorf("delivery: terminal hook: %w", err)
 			}
