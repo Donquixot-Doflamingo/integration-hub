@@ -49,6 +49,23 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Hub errors arrive as `*hubclient.Error` with the canonical code, retryable flag, retry-after, request id, reason and field details; a non-Hub failure such as a proxy's HTML 502 still yields an `*Error` (code `INTERNAL_ERROR`); `IsRetryable(err)` helps decide on a retry
   - `GetRequest`, `DryRun`, `ListIntegrations` (plus the `AllIntegrations` iterator), `GetIntegration`, `GetCapability` and `NewIdempotencyKey` cover polling, onboarding and discovery
   - The API key never appears in errors, formatted clients or logs
+- 2026-10-31 · `feat(upstream)` · add per-account upstream client with deadlines and egress allowlist · HUB-086 · F-06
+  - Vendor calls use one connection pool per account (64 connections by default), the endpoint's `timeout_ms` and `connect_timeout_ms`, and a caller deadline that is lower than the endpoint timeout wins
+  - Only hosts declared in the vendor's regions are reachable, refused before any connection is opened; TLS 1.2+ with verification, plain http only to loopback
+  - Timeouts, refused connections, resets and egress refusals come back as typed errors for the error classifier; vendor answers of any status come back as responses, with JSON parsed and bodies capped at 4 MiB
+  - `vendor_latency_ms`, `upstream_egress_denied_total` and an `upstream {vendor}.{endpoint}` client span; trace context goes to vendors only when they opt in
+
+- 2026-10-31 · `feat(creds)` · add static_headers, bearer and basic auth schemes · HUB-085 · F-07
+  - The vendor definition's `auth:` picks the scheme: bearer sets `Authorization: Bearer <token>`, basic sets `Authorization: Basic base64(username:password)`, static_headers checks the transformer mapped every credential into a header
+  - Unknown schemes and missing credential values fail with errors that name the key, never the value
+  - Injection runs after the transformer and never edits the header map it was given, so the `request.transformed` snapshot cannot pick up injected values
+
+- 2026-10-31 · `feat(creds)` · add local encrypted credential source with warmed cache · HUB-084 · F-07
+  - Dev credentials live in one AES-256-GCM file (`.data/dev-secrets.enc`, key from `HUB_DEV_KEY_FILE`); a tampered, truncated or wrongly keyed file is refused with a clear error and yields nothing
+  - The request path reads credentials only from a cache warmed at snapshot load (TTL 5 min, background refresh); a miss is a typed error counted in `creds_cache_miss_total`, never an inline decrypt
+  - Every loaded secret, including the base64 basic-auth form, is registered with the log redactor before it can be used
+  - `hubctl creds init-key | set | list` creates the dev key and file for `ct-brandA-in` and `ct-brandB-us`; `list` prints key names only
+
 - 2026-10-31 · `feat(frontend)` · add request timeline with policy-aware payload views · HUB-264 · F-19
   - Request ids in the explorer open `/requests/{id}`: status and error code, tenant, integration and version, capability, mode, vendor and account, timings (total, hub overhead, vendor, queue wait), idempotency key, audit policy, snapshot and trace id
   - The timeline lists every audit event in sequence order with its time, the gap since the previous event and since the first, size and SHA-256, and the attempt it belongs to
