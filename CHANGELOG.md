@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(resolve)` · resolve the active version and a sticky weighted target · HUB-083 · F-06
+  - resolve.Resolve returns version (active or exact), target, failover chain, delivery policy and snapshot version; owner or grantee only
+  - The weighted target is chosen by an FNV hash of the idempotency key or request id: the same key always gets the same target; 90/10 within ±2 % over 100 000 keys
+  - p99 84 ns vs the 0.05 ms budget
 - 2026-10-31 · `feat(edge)` · add the gateway server, request ids and the error envelope · HUB-080 · F-06
   - Every gateway response carries X-Hub-Request-Id (req_ + ULID), also in the logging context
   - Panics become a 500 INTERNAL_ERROR envelope; the log has the panic and stack, never the body
