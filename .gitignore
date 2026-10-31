@@ -1,0 +1,38 @@
+# OS / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Go
+backend/bin/
+backend/dist/
+*.test
+*.out
+*.prof
+coverage.*
+backend/vendor/
+
+# Node / SvelteKit
+node_modules/
+frontend/.svelte-kit/
+frontend/build/
+frontend/test-results/
+frontend/playwright-report/
+
+# Python caches (vendored skill scripts)
+__pycache__/
+*.pyc
+
+# Local env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+backend/config/dev/credentials*.enc
+!backend/config/dev/credentials.example.*
+
+# Claude Code local-only settings
+.claude/settings.local.json
