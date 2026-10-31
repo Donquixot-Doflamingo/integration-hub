@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add transformer viewer with highlighted source and goldens · HUB-268 · F-19
+  - Filter transformers by kind, capability, vendor or id; each opens a page with its header, latest version and version history, and every version has its own page
+  - A version shows its author and reason, a link to the vendor documentation it cites, its stored goldens result, the YAML source with line numbers and syntax colours, and its golden fixtures
+  - Editors can run the goldens of any version: each fixture shows passed or failed, its error, and what differs from the expected output
 - 2026-10-31 · `feat(frontend)` · add DLQ replay and purge by filter with exact counts · HUB-267 · F-19
   - Editors can replay every dead letter matching the current filters (all pages); the console counts them with a dry run first and the dialog names that exact number before anything is sent
   - Admins can purge the same way, with the count typed to confirm; the purge is refused if the matching entries changed since they were counted

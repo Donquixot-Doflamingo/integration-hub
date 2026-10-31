@@ -59,16 +59,18 @@ export function readReason(op: string, form: Form) {
 }
 
 /**
- * Turns an admin API answer into the action's return value: success data with the `change_id`,
- * or `fail(status)` with the error (VALIDATION_FAILED pointers into `fieldNames` become fields).
+ * Turns an admin API answer into the action's return value: success data with the `change_id`
+ * (null for non-mutating operations such as goldens or dry runs), or `fail(status)` with the error
+ * (VALIDATION_FAILED pointers into `fieldNames` become fields).
  */
-export function finish<T extends { change_id?: string | null }>(
+export function finish<T extends object>(
 	op: string,
 	res: ApiResult<T>,
 	fieldNames: readonly string[] = ['reason']
 ): ActionSuccessData<T> | ActionFailure<ActionFailureData> {
 	if (res.ok) {
-		return { op, changeId: res.data.change_id ?? null, requestId: res.requestId, result: res.data };
+		const changeId = 'change_id' in res.data ? (res.data.change_id as string | null) : null;
+		return { op, changeId: changeId ?? null, requestId: res.requestId, result: res.data };
 	}
 	const error = toPlainError(res.error);
 	const { fields } = detailsToFields(error.details, fieldNames);

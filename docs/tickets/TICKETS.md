@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **70** · todo: **123** · other (in-progress/in-review/blocked): **1**
+Total tickets: **194** · done: **71** · todo: **122** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **194** · done: **70** · todo: **123** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 21 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 22 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1941,14 +1941,16 @@ Shipped (frontend-engineer, `feat(frontend): add DLQ replay and purge by filter 
 
 ### HUB-268 — Transformers viewer and goldens
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1905
 - **Branch:** `feat/HUB-268-fe-transformers`
 
 List transformers and versions, view YAML with syntax highlighting, and run goldens with per-fixture results and diffs.
 
+Shipped (frontend-engineer, `feat(frontend): add transformer viewer with highlighted source and goldens (HUB-268)`): `/transformers` with kind, capability, vendor and search filters in the URL (chips, cursor paging); `/transformers/{id}` on `getTransformer` + `listTransformerVersions` (all pages): header, the latest version in full and the version history (goldens passing/failing in text, linked); `/transformers/{id}/versions/{n}` on `getTransformerVersion`. Each version shows author, reason, created, the cited vendor doc, the stored goldens summary, the DSL source (`CodeView`: line numbers and colours from a small text-only YAML tokenizer, no HTML), and the fixtures. Editors get "Run goldens for T1@7" (`runTransformerGoldens` with `ref`, a form action); viewers see why not; tenant viewers get a note (the API needs `viewer`). Read only: editing is Release 2.
+
 **Acceptance criteria**
-- [ ] Golden diffs rendered per fixture
-- [ ] Doc URL from the transformer header shown as a link
+- [x] Golden diffs rendered per fixture (summary line, failing fixtures first, Passed/Failed in text + icon, the error when a fixture threw, its `diff` as a path table headed Expected / Actual via the shared `DiffPaths`; `[transformer_id]/page.test.ts`, `e2e/transformers.test.ts`)
+- [x] Doc URL from the transformer header shown as a link (the version's `docs_url`, from `getTransformer`'s `latest` on the transformer page; opens in a new tab with `noopener`; only http(s) URLs become links)
 
 ### HUB-269 — Transformer dry-run
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
