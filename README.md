@@ -4,7 +4,7 @@ One vendor-agnostic API through which every internal service talks to every thir
 
 Callers send a **stable integration ID** and a **canonical body**. The Hub picks the vendor, the account and the transformer, applies delivery policy, rate limits and circuit breakers, calls the vendor now or via a durable queue, maps the response back, and keeps a lossless audit trail. Swapping a vendor or an account is a config publish. Callers change nothing.
 
-> **Status: Phase 2, M0 scaffold done** ([summary](docs/milestones/M0.md)). Next: M1 config registry.
+> **Status: Phase 2, M0 scaffold and M1 config registry done** ([M0](docs/milestones/M0.md), [M1](docs/milestones/M1.md)). Next: M2 transformer engine.
 
 ```bash
 make doctor                 # toolchain check

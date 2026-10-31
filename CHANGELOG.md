@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `test(registry)` · record M1 acceptance and milestone summary · HUB-049 · F-03
+  - docs/milestones/M1.md: acceptance evidence, what was built, nine deviations, deferred items
+  - F-03 shipped; README and CLAUDE.md show M1 done
 - 2026-10-31 · `feat(registry)` · persist snapshots and boot from the last good one · HUB-048 · F-03
   - The admin role archives every new snapshot (hub.config_snapshots + gzip blob of its sources), deduplicated by checksum
   - Data-plane roles that cannot build their config boot from the archive, then from the local cache (HUB_DATA_DIR/snapshot.json.gz); corrupted or tampered blobs are refused
