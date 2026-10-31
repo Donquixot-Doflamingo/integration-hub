@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(hub)` · add role entrypoints, config loading and graceful shutdown · HUB-024 · F-01
+  - `hub gateway|worker|scheduler|admin` with config from flags > HUB_* env > defaults; secrets (HUB_PG_DSN) from env only and never logged
+  - Graceful shutdown: readiness off, drain delay, public then ops listener closed within HUB_SHUTDOWN_GRACE
+  - Unknown role or invalid config exits 2 with usage and every problem listed
 - 2026-10-31 · `chore(infra)` · add compose Postgres and Redis with embedded goose migrations · HUB-023 · F-01
   - deploy/docker-compose.yml: Postgres 16.15 and Redis 7.4.12, digest-pinned, with healthchecks
   - backend/migrations embeds goose SQL; `hub migrate` / `make migrate` apply it; baseline creates schema hub

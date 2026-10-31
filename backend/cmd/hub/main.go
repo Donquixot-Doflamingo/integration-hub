@@ -5,40 +5,76 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/cmd/hub/internal/roles"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/migrations"
 )
 
+const usage = `usage: hub <role> [flags]
+
+roles:
+  gateway     public caller API (/v1), inbound webhooks
+  worker      async delivery (--pool=messaging|llm)
+  scheduler   retries, drain, TTL expiry, health probes (leader-elected)
+  admin       control plane (/admin/v1)
+  migrate     apply database migrations and exit
+
+Run "hub <role> -h" for flags. Configuration: flags > HUB_* env > defaults (TECH_SPEC §8.1).`
+
 func main() {
-	os.Exit(run(context.Background(), os.Args[1:], os.Getenv, os.Stdout, os.Stderr))
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	code := run(ctx, os.Args[1:], os.Getenv, os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
 }
 
 func run(ctx context.Context, args []string, getenv func(string) string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: hub <gateway|worker|scheduler|admin|migrate> [flags]")
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	switch args[0] {
-	case "migrate":
+	if args[0] == "migrate" {
 		if err := migrate(ctx, getenv("HUB_PG_DSN"), stdout); err != nil {
 			fmt.Fprintln(stderr, "hub migrate:", err)
 			return 1
 		}
 		return 0
-	default:
-		fmt.Fprintf(stderr, "hub: role %q not implemented yet\n", args[0])
+	}
+
+	role, err := roles.ParseRole(args[0])
+	if err != nil {
+		fmt.Fprintf(stderr, "hub: %v\n\n%s\n", err, usage)
 		return 2
 	}
+	cfg, err := roles.Load(role, args[1:], getenv, stderr)
+	if errors.Is(err, flag.ErrHelp) {
+		return 2
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "hub %s: invalid configuration:\n%v\n", role, err)
+		return 2
+	}
+	log := slog.New(slog.NewJSONHandler(stderr, &slog.HandlerOptions{Level: cfg.LogLevel}))
+	if err := roles.Run(ctx, cfg, log, roles.Options{}); err != nil {
+		log.ErrorContext(ctx, "role exited with error", slog.String("error", err.Error()))
+		return 1
+	}
+	return 0
 }
 
 func migrate(ctx context.Context, dsn string, stdout io.Writer) error {
 	if dsn == "" {
-		return fmt.Errorf("HUB_PG_DSN is required")
+		return errors.New("HUB_PG_DSN is required")
 	}
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {

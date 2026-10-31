@@ -274,15 +274,15 @@ Add `deploy/docker-compose.yml` (Postgres 16, Redis 7, healthchecks) and wire `g
 
 ### HUB-024 — hub binary with role entrypoints and config loading
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `feat/HUB-024-hub-roles-config`
 
 Implement `hub gateway | worker | scheduler | admin` (DESIGN §17) with config from env + flags (listen addr, DB/Redis URLs, snapshot source) and graceful shutdown.
 
 **Acceptance criteria**
-- [ ] Each role starts and stops cleanly on SIGTERM within 10 s
-- [ ] Unknown role exits non-zero with usage text
-- [ ] Config precedence flag > env > default is table-tested
+- [x] Each role starts and stops cleanly on SIGTERM within 10 s
+- [x] Unknown role exits non-zero with usage text
+- [x] Config precedence flag > env > default is table-tested
 
 ### HUB-025 — /healthz and /readyz endpoints
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
