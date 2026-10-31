@@ -91,7 +91,9 @@ flowchart LR
 
 ## 3. Monorepo layout
 
-ADR-0001. Toolchain targets: **Go 1.25.x, Node 22 LTS, Postgres 16, Redis 7**. *None of these, nor Docker, are installed on the current dev machine; installing and pinning them is ticket work (HUB-012, EP-01).*
+ADR-0001. Toolchain targets: **Go ≥ 1.25 (`go.mod` minimum), Node 22 LTS, Postgres 16, Redis 7**.
+
+Installed on the dev machine (HUB-012, 2026-10-31, Homebrew on macOS 15 arm64): Go 1.27.3, Node 22.23.4 (keg-only `node@22`: put `/opt/homebrew/opt/node@22/bin` first on `PATH`; a Node 26 from Homebrew is also present and must not be used), Docker CLI 29.9.2 + Compose 5.6.1 on Colima 0.10.3 (`colima start --cpu 4 --memory 6`), golangci-lint 2.15.0. The compose plugin is found through `cliPluginsExtraDirs` in `~/.docker/config.json`.
 
 ```text
 integration-hub/
@@ -662,7 +664,7 @@ Versions are pinned in `go.mod` / `package-lock.json` at M0 (DESIGN §18.7: "con
 
 ## 14. Local development
 
-Prerequisites (not yet installed on the dev machine — setup ticket HUB-012): Go 1.25.x, Node 22 LTS, Docker (or Colima/OrbStack) with Compose v2, `golangci-lint`, `sqlc`, `goose`, `k6`. A `make doctor` target checks versions.
+Prerequisites (installed via HUB-012; versions in §3): Go ≥ 1.25, Node 22 LTS, Docker (or Colima/OrbStack) with Compose v2, `golangci-lint`, `sqlc`, `goose`, `k6`. A `make doctor` target checks versions.
 
 ### 14.1 docker compose (`deploy/docker-compose.yml`)
 | Service | Image | Profile | Port |

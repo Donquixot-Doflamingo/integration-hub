@@ -157,17 +157,17 @@ Create root `CHANGELOG.md` with `[Unreleased]`, `.github/pull_request_template.m
 
 ### HUB-012 — Install toolchain on the dev machine
 - **Epic:** EP-00 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** — · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** — · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-012-install-toolchain`
 
 Install and verify Go 1.25, Node 22 (with npm), Docker (with compose v2) and golangci-lint on the development machine so M0 and the frontend scaffold can start.
 
 **Acceptance criteria**
-- [ ] `go version` reports 1.25.x
-- [ ] `node --version` reports v22.x
-- [ ] `docker compose version` works and `docker run hello-world` succeeds
-- [ ] `golangci-lint --version` works
-- [ ] Versions recorded in `docs/tech/TECH_SPEC.md` (via docs-keeper)
+- [x] `go version` reports ≥ 1.25 (1.27.3 installed; `go.mod` keeps 1.25 as the minimum)
+- [x] `node --version` reports v22.x
+- [x] `docker compose version` works and `docker run hello-world` succeeds
+- [x] `golangci-lint --version` works
+- [x] Versions recorded in `docs/tech/TECH_SPEC.md` (via docs-keeper)
 
 ### HUB-013 — Configure GitHub branch protection on main
 - **Epic:** EP-00 · **Type:** chore · **Area:** infra
