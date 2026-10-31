@@ -4,7 +4,7 @@
 Tenants register callback endpoints once (registrar); integration versions subscribe event types to them; the Hub delivers HMAC-signed callbacks with its own retry schedule and DLQ, behind an SSRF guard (DESIGN §12.1, §3.1).
 
 ## Status
-`in-progress` — 2026-10-31 (HUB-119 SSRF guard and registrar secrets).
+`in-progress` — 2026-10-31 (HUB-119 SSRF guard and registrar secrets; HUB-120 signed payloads and transactional enqueue).
 
 ## Owner
 `backend-engineer`; `contract-steward` for event schemas.
@@ -72,6 +72,19 @@ go run ./cmd/hubctl creds set reg_orders_cb signing_secret=dev-callback-secret-n
 go run ./cmd/hubctl creds list   # keys only, never values
 ```
 
+## Implementation (HUB-120)
+**Payloads** (`events.go`): `callbacks.Event{EventID, OccurredAt, TenantID, IntegrationID, IntegrationVersion, Operation, RequestID, IdempotencyKey, Data}` with `Data` one of `*Completed{Result, Attempts, CompletedAt, Timings}`, `*Failed{Error, Attempts, FailedAt}`, `*Expired{Error, Attempts, ExpiresAt, LastState}` (code `EXPIRED`, reason `ttl_elapsed` by default), `*DeliveryStatus{State, PreviousState, Sequence, Attempt, NextAttemptAt, Reason, LastError}`. `Event.Marshal` produces the exact body: the `envelope.json` members (`spec_version` `"1"`, `operation` default `default`, `idempotency_key` always present, `null` when absent) plus the per-type `data`; errors are `core.CanonicalError` with `request_id` filled in. Ids: `evt_` + ULID (stable across retries, receivers dedupe on it), `dlv_` + ULID per delivery (header `X-Hub-Delivery-Id`). `SchemaValidator` compiles `contracts/schemas/events/*.json` (draft 2020-12, formats asserted); every payload shape is tested against it.
+
+**Signing** (`sign.go`): `Sign(secrets, t, body)` → `t=<unix>,v1=<hex HMAC-SHA256(secret, t + "." + body)>`, one `v1=` per secret (active first, then next during rotation). `Verify(header, body, secrets, now, tolerance)` is the receiver side (and the test receiver's): timestamp within ±5 min (`DefaultTolerance`), any `v1=` matching any secret (constant time), unknown `vN=` ignored; errors `ErrSignatureMalformed`, `ErrSignatureExpired`, `ErrSignatureMismatch`.
+
+**Enqueue** (`enqueue.go`): `NewEnqueuer(snapshots, metrics, EnqueueOptions{Validator, Log, Now})`, then `(*Enqueuer).Enqueue(ctx, tx pgx.Tx, ev *Event) (int, error)`:
+- Called by the request state machine **inside its own transaction**, after the winning guarded transition (DESIGN §10.9): the deliveries exist if and only if the transition commits, once.
+- Subscriptions come from the snapshot: `Integrations[ev.IntegrationID].Versions[ev.IntegrationVersion].Webhooks` entries whose `event` equals the type, one row per distinct registrar endpoint. Only endpoints of `ev.TenantID` are used: a granted tenant's result never goes to the owner tenant's endpoint (counted as `tenant_mismatch`).
+- No matching subscription → returns 0 without touching `tx` (so `delivery.status` can be offered on every transition cheaply). Unknown version/endpoint → skipped with a WARN and a counter. No snapshot → `ErrNoSnapshot`; invalid event, contract violation (when a `Validator` is set) or a database error → error, and the caller rolls back.
+- `ev.EventID`/`OccurredAt` are filled when empty; pass a stable `EventID` if the same transition may be enqueued twice: `(event_id, endpoint_id)` is unique and the insert is `ON CONFLICT DO NOTHING`.
+
+**Table** `hub.callback_deliveries` (`migrations/00005_callbacks.sql`, owned by callbacks): pk `delivery_id`; `event_id`, `event_type`, `request_id`, `tenant_id`, `integration_id`, `integration_version`, `endpoint_id`, `subscription` (index in the version's webhooks list), `payload bytea` (the exact signed bytes, identical on every attempt), `status` (`pending → in_flight → delivered | retry_scheduled | dead_lettered`), `attempts`, `next_attempt_at`, `claimed_by`, `claimed_until`, `last_http_status`, `last_error` (error class only), timestamps; unique `(event_id, endpoint_id)`. Indexes: partial `(next_attempt_at) WHERE status IN ('pending','retry_scheduled')` (claim), partial `(claimed_until) WHERE status='in_flight'` (reclaim), `(request_id)`, partial `(created_at) WHERE status='dead_lettered'` (the callback DLQ). `fillfactor=80`, `autovacuum_vacuum_scale_factor=0.01`.
+
 ## Data model impact
 `registrar_endpoints(endpoint_id, tenant_id, url, secret_ref)`, `callback_deliveries(delivery_id, request_id, endpoint_id, status, attempts, next_attempt_at)` (DESIGN §18.2).
 
@@ -82,6 +95,9 @@ Integration version `webhooks: [{event, endpoint}]`; tenant YAML registrar entri
 | Kind | Name | Notes |
 | --- | --- | --- |
 | Metric | `callback_deliveries_total{tenant,endpoint,result}` | |
+| Metric | `callback_enqueued_total{event}` | rows written by Enqueue (counted at write; a rolled-back transaction still counts) |
+| Metric | `callback_enqueue_skipped_total{reason}` | `unknown_version`, `unknown_endpoint`, `tenant_mismatch` |
+| Log | `callback.enqueue_skipped` (WARN) | reason, request_id, integration_id, integration_version, endpoint_id, event |
 | Metric | `callback_queue_oldest_age_s`, `callback_dlq_count` | |
 | Log | `ssrf_blocked` | endpoint_id, resolved IP class |
 | Trace | span `callback` | |
@@ -117,3 +133,4 @@ HUB-110 – HUB-139 (EP-05, filter `feature: F-11`).
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-10-31 | HUB-119: SSRF guard, registrar signing secrets via creds, dev recipe | backend-engineer |
+| 2026-10-31 | HUB-120: event payloads, signing, transactional enqueue, callback_deliveries | backend-engineer |

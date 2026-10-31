@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **87** · todo: **107** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **87** · todo: **106** · other (in-progress/in-review/blocked): **2**
 
 ## Epics
 
@@ -1046,7 +1046,7 @@ Store registrar endpoints (URL on allowlisted host, signing secret ref) and impl
 
 ### HUB-120 — Subscriptions and signed callback delivery
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-119, HUB-111 · **Feature:** F-11 · **Stories:** US-11xx
+- **Status:** in-progress · **Depends on:** HUB-119, HUB-111 · **Feature:** F-11 · **Stories:** US-11xx
 - **Branch:** `feat/HUB-120-signed-callbacks`
 
 On terminal states, enqueue `callback_deliveries` for each subscription and POST with `X-Hub-Signature: t=<unix>,v1=HMAC-SHA256(secret, t + "." + body)`; payload carries `request_id` and `idempotency_key`; own retry schedule and DLQ (DESIGN §12.1).

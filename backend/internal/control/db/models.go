@@ -39,6 +39,29 @@ type HubApiKey struct {
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
 }
 
+type HubCallbackDelivery struct {
+	DeliveryID         string             `json:"delivery_id"`
+	EventID            string             `json:"event_id"`
+	EventType          string             `json:"event_type"`
+	RequestID          string             `json:"request_id"`
+	TenantID           string             `json:"tenant_id"`
+	IntegrationID      string             `json:"integration_id"`
+	IntegrationVersion int32              `json:"integration_version"`
+	EndpointID         string             `json:"endpoint_id"`
+	Subscription       int32              `json:"subscription"`
+	Payload            []byte             `json:"payload"`
+	Status             string             `json:"status"`
+	Attempts           int32              `json:"attempts"`
+	NextAttemptAt      pgtype.Timestamptz `json:"next_attempt_at"`
+	ClaimedBy          pgtype.Text        `json:"claimed_by"`
+	ClaimedUntil       pgtype.Timestamptz `json:"claimed_until"`
+	LastHttpStatus     pgtype.Int4        `json:"last_http_status"`
+	LastError          pgtype.Text        `json:"last_error"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	DeliveredAt        pgtype.Timestamptz `json:"delivered_at"`
+}
+
 type HubCapability struct {
 	Capability     string             `json:"capability"`
 	Major          int32              `json:"major"`

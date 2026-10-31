@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(callbacks)` · sign callback payloads and enqueue them in the caller's transaction · HUB-120 · F-11
+  - request.completed, request.failed, request.expired and delivery.status bodies are built to contracts/schemas/events (request_id and idempotency_key always present) and checked against the schemas
+  - X-Hub-Signature is t=<unix>,v1=<hex HMAC-SHA256(secret, t.body)>, with one v1 per secret during a rotation overlap; a Verify helper implements the receiver side (5-minute tolerance)
+  - Terminal transitions can write one callback delivery per matching subscription in the same transaction (new table hub.callback_deliveries, migration 00005), so a callback exists only if the transition commits; endpoints of other tenants are never used
 - 2026-10-31 · `feat(callbacks)` · add the SSRF-guarded sender and registrar signing secrets · HUB-119 · F-11
   - Callbacks go through an SSRF guard: https only, no redirects followed, no environment proxy, 5 s per attempt, optional host allowlist
   - The guard resolves the host in the dialer and connects to the checked IP, refusing private, loopback, link-local (incl. cloud metadata), CGNAT, multicast, unspecified, documentation, NAT64/6to4/Teredo and IPv4-mapped equivalents, so DNS rebinding after registration cannot reach an internal address

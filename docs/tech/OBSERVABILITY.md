@@ -107,6 +107,8 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `upstream_egress_denied_total` | counter | calls | `vendor` | `upstream` | calls refused before dialing: host not declared in the vendor's regions (HUB-086); any increase is a config or security problem |
 | `callback_deliveries_total` | counter | deliveries | `tenant, outcome` | `callbacks` | outbound webhook health |
 | `callback_latency_seconds` | histogram | s | `tenant` | `callbacks` | |
+| `callback_enqueued_total` | counter | deliveries | `event` | `callbacks` | deliveries written by `Enqueue` inside the state-change transaction (HUB-120) |
+| `callback_enqueue_skipped_total` | counter | subscriptions | `reason` (`unknown_version`, `unknown_endpoint`, `tenant_mismatch`) | `callbacks` | subscriptions that could not be honoured; any increase is a config problem |
 | `webhook_inbound_total` | counter | webhooks | `vendor, account, outcome` (`accepted`, `bad_signature`, `replay`, `uncorrelated`) | `webhooks` | |
 | `transform_duration_ms` | histogram | ms | `kind` (`request`,`response`,`error`,`stream`) | `transform` | M2 budget in prod |
 | `transform_budget_exceeded_total` | counter | events | `transformer, limit` (`nodes`,`output_size`,`time`) | `transform` | |
