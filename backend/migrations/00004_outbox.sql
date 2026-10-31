@@ -50,6 +50,27 @@ CREATE INDEX dead_letters_reason_idx ON hub.dead_letters (reason, created_at);
 CREATE INDEX dead_letters_account_idx ON hub.dead_letters (account_id, created_at);
 CREATE INDEX dead_letters_integration_idx ON hub.dead_letters (tenant_id, integration_id, created_at);
 
+-- Ledger additions for queued requests (owned by internal/audit; 00003 is already applied):
+-- the version each attempt used, when the request row last changed, and the final result kept
+-- for status polling.
+ALTER TABLE hub.request_attempts ADD COLUMN integration_version integer;
+ALTER TABLE hub.requests ADD COLUMN updated_at timestamptz;
+
+-- Final canonical result or error of a queued request, for GET /v1/requests/{id}. Kept 7 days
+-- (scheduler prunes), separate from the audit payloads so the audit policy stays authoritative
+-- for history while polling still gets the result it is owed.
+CREATE TABLE hub.request_results (
+    request_id text PRIMARY KEY,
+    tenant_id  text NOT NULL,
+    result     jsonb,
+    error      jsonb,
+    expires_at timestamptz NOT NULL
+);
+CREATE INDEX request_results_expiry_idx ON hub.request_results (expires_at);
+
 -- +goose Down
+DROP TABLE IF EXISTS hub.request_results;
+ALTER TABLE hub.requests DROP COLUMN IF EXISTS updated_at;
+ALTER TABLE hub.request_attempts DROP COLUMN IF EXISTS integration_version;
 DROP TABLE IF EXISTS hub.dead_letters;
 DROP TABLE IF EXISTS hub.outbox;

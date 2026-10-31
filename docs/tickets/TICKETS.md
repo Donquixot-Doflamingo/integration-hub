@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **88** · todo: **106** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **88** · todo: **105** · other (in-progress/in-review/blocked): **2**
 
 ## Epics
 
@@ -948,7 +948,7 @@ Implement states `accepted → in_flight → succeeded | retry_scheduled | parke
 
 ### HUB-112 — Worker loop with re-resolve and poison detector
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-111, HUB-083, HUB-085, HUB-087 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** in-progress · **Depends on:** HUB-111, HUB-083, HUB-085, HUB-087 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-112-worker-loop`
 
 Implement the §18.4 worker loop: claim, TTL check, re-resolve (active unless pinned/session), paused → nack, transform, upstream, classify → Ack/Nack/DeadLetter, record attempt. An envelope that crashes a worker twice is dead-lettered (DESIGN §10.6).

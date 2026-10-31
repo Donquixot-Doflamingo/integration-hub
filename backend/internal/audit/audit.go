@@ -78,10 +78,12 @@ type Attempt struct {
 	AttemptNo  int
 	AccountID  string
 	EndpointID string
-	Host       string
-	DurationMS float64
-	HTTPStatus int
-	ErrorClass string
+	// IntegrationVersion is the version this attempt used (re-resolved per attempt, DESIGN §6.3).
+	IntegrationVersion int
+	Host               string
+	DurationMS         float64
+	HTTPStatus         int
+	ErrorClass         string
 }
 
 // Sink receives audit rows. Emit must never block the request path (DESIGN §18.5 rule 3).

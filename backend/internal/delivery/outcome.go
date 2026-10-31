@@ -1,4 +1,4 @@
-package edge
+package delivery
 
 import (
 	"errors"
@@ -13,12 +13,13 @@ import (
 
 // Outcome classification (DESIGN §4.4, §10.2). Vendor answers are classified by the response
 // transformer (error rules first, then status); this file covers transport failures, the sync
-// retry rule and the caller-facing details added to a classified vendor error.
+// retry rule and the caller-facing details added to a classified vendor error. Shared by the
+// sync, wait and worker paths.
 
-// transportError maps a failed attempt to the canonical error: timeouts (endpoint or caller
+// TransportError maps a failed attempt to the canonical error: timeouts (endpoint or caller
 // deadline) → 504 UPSTREAM_TIMEOUT; refused, DNS, TLS, reset, protocol and egress failures →
 // 503 UPSTREAM_UNAVAILABLE. The message never names the vendor or the host.
-func transportError(err error) *core.CanonicalError {
+func TransportError(err error) *core.CanonicalError {
 	var te *upstream.TransportError
 	if errors.As(err, &te) && te.Kind == upstream.KindTimeout {
 		ce := &core.CanonicalError{Code: core.CodeUpstreamTimeout, Message: "The upstream did not answer in time", Retryable: true, Upstream: &core.Upstream{}}
@@ -34,10 +35,10 @@ func transportError(err error) *core.CanonicalError {
 	return &core.CanonicalError{Code: core.CodeUpstreamUnavailable, Message: "The upstream is unavailable", Retryable: true, Upstream: &core.Upstream{}}
 }
 
-// retrySync reports whether a failed sync attempt gets its one immediate retry: only after a
+// RetrySync reports whether a failed sync attempt gets its one immediate retry: only after a
 // timeout or reset, and only if the endpoint is idempotent or the caller sent an
 // Idempotency-Key (DESIGN §10.2). A caller deadline or cancellation is never retried.
-func retrySync(err error, endpointIdempotent bool, idempotencyKey string) bool {
+func RetrySync(err error, endpointIdempotent bool, idempotencyKey string) bool {
 	var te *upstream.TransportError
 	if !errors.As(err, &te) || te.CallerDeadline {
 		return false
@@ -48,10 +49,10 @@ func retrySync(err error, endpointIdempotent bool, idempotencyKey string) bool {
 	return endpointIdempotent || idempotencyKey != ""
 }
 
-// enrichVendorError adds what the transformer's classification cannot know: retry_after_ms
+// EnrichVendorError adds what the transformer's classification cannot know: retry_after_ms
 // from Retry-After on a 429, and the vendor's own message on UPSTREAM_REJECTED (the caller needs
 // it to fix the request) when no error rule set one.
-func enrichVendorError(ce *core.CanonicalError, resp core.VendorResponse, now time.Time) {
+func EnrichVendorError(ce *core.CanonicalError, resp core.VendorResponse, now time.Time) {
 	if ce.Code == core.CodeUpstreamRateLimited && ce.RetryAfterMS == nil {
 		if ms, ok := retryAfterMS(resp.Headers.Get("Retry-After"), now); ok {
 			ce.RetryAfterMS = &ms

@@ -132,6 +132,17 @@ func (t *Trail) masked(typ string, payload []byte) []byte {
 	return b
 }
 
+// Stored returns the stored (policy-applied) payload of the latest event of type typ, or nil.
+// Dead letters keep it as the last vendor exchange: never the clear bytes.
+func (t *Trail) Stored(typ string) []byte {
+	for i := len(t.events) - 1; i >= 0; i-- {
+		if t.events[i].Type == typ {
+			return t.events[i].Payload
+		}
+	}
+	return nil
+}
+
 // Events returns the events recorded so far.
 func (t *Trail) Events() []Event { return t.events }
 

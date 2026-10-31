@@ -151,18 +151,20 @@ type HubRequest struct {
 	VendorMs           pgtype.Float8      `json:"vendor_ms"`
 	QueueWaitMs        pgtype.Float8      `json:"queue_wait_ms"`
 	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type HubRequestAttempt struct {
-	StartedAt  pgtype.Timestamptz `json:"started_at"`
-	RequestID  string             `json:"request_id"`
-	AttemptNo  int32              `json:"attempt_no"`
-	AccountID  string             `json:"account_id"`
-	EndpointID string             `json:"endpoint_id"`
-	Host       pgtype.Text        `json:"host"`
-	DurationMs float64            `json:"duration_ms"`
-	HttpStatus pgtype.Int4        `json:"http_status"`
-	ErrorClass pgtype.Text        `json:"error_class"`
+	StartedAt          pgtype.Timestamptz `json:"started_at"`
+	RequestID          string             `json:"request_id"`
+	AttemptNo          int32              `json:"attempt_no"`
+	AccountID          string             `json:"account_id"`
+	EndpointID         string             `json:"endpoint_id"`
+	Host               pgtype.Text        `json:"host"`
+	DurationMs         float64            `json:"duration_ms"`
+	HttpStatus         pgtype.Int4        `json:"http_status"`
+	ErrorClass         pgtype.Text        `json:"error_class"`
+	IntegrationVersion pgtype.Int4        `json:"integration_version"`
 }
 
 type HubRequestEvent struct {
@@ -177,6 +179,14 @@ type HubRequestEvent struct {
 	PayloadState  string             `json:"payload_state"`
 	PayloadRef    pgtype.Text        `json:"payload_ref"`
 	Meta          []byte             `json:"meta"`
+}
+
+type HubRequestResult struct {
+	RequestID string             `json:"request_id"`
+	TenantID  string             `json:"tenant_id"`
+	Result    []byte             `json:"result"`
+	Error     []byte             `json:"error"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
 type HubTenant struct {

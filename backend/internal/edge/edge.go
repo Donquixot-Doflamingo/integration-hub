@@ -10,6 +10,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/delivery"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
@@ -37,16 +38,15 @@ type Deps struct {
 }
 
 // Upstream sends one attempt to a vendor (upstream.Client).
-type Upstream interface {
-	Attempt(ctx context.Context, t upstream.Target, req core.VendorRequest) (upstream.Attempt, error)
-}
+type Upstream = delivery.Upstream
 
 // Server is the gateway's public HTTP surface: /v1 caller API (DESIGN §4).
 type Server struct {
-	mux     *http.ServeMux
-	deps    Deps
-	log     *slog.Logger
-	metrics *telemetry.Metrics
+	mux       *http.ServeMux
+	deps      Deps
+	attempter *delivery.Attempter
+	log       *slog.Logger
+	metrics   *telemetry.Metrics
 }
 
 // New builds the gateway server and registers its routes.
@@ -70,6 +70,7 @@ func New(d Deps) *Server {
 		d.Metrics = telemetry.NewMetrics("gateway", "test")
 	}
 	s := &Server{mux: http.NewServeMux(), deps: d, log: d.Log.With(slog.String("component", "edge")), metrics: d.Metrics}
+	s.attempter = &delivery.Attempter{Creds: d.Creds, Upstream: d.Upstream, Log: s.log, Now: d.Now}
 	s.routes()
 	return s
 }

@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `refactor(delivery)` · share one attempter across the sync, wait and worker paths · HUB-112 · F-09
+  - No behaviour change for callers: the sync path now runs through delivery.Attempter (transform, credentials, upstream, classification, response map), which the wait path and the worker reuse in M4
+  - Attempt rows record the integration version used; migration 00004 also adds requests.updated_at and hub.request_results (final result kept 7 days for status polling)
 - 2026-10-31 · `feat(queue)` · add the Postgres outbox queue and the guarded request states · HUB-110 · F-09
   - Migration 00004 adds hub.outbox (claim, parked, reclaim, TTL and ordering indexes; fillfactor 70) and hub.dead_letters (14-day DLQ with the last vendor exchange)
   - queue.Outbox: Enqueue (durable on commit; in_flight for wait-mode immediate attempts), Claim with SKIP LOCKED and a 30 s visibility (expired claims are reclaimed and counted as crashes), Ack, Nack, Park, Release in arrival order, DeadLetter, Expire, Replay; every method runs on the caller's transaction
