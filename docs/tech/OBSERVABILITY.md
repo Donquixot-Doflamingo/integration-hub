@@ -70,7 +70,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | --- | --- | --- | --- | --- | --- |
 | `hub_requests_total` | counter | requests | `tenant, integration, vendor, account, version, mode, code` | ~500 × 1.5 versions × 1 mode × 6 codes seen ≈ 4,500 | `edge` (sync/wait final), `delivery` (async final) |
 | `hub_overhead_ms` | histogram | ms | `integration, mode` | 500 × 2 × buckets ≈ 17,000 (classic) | `edge` |
-| `vendor_latency_ms` | histogram | ms | `vendor, account, endpoint, code` | 200 × 2 × 4 × 17 ≈ 27,000 (classic; native ≈ 1,600) | `upstream` |
+| `vendor_latency_ms` | histogram | ms | `vendor, account, endpoint, outcome` (HUB-086: `upstream` only knows transport facts, so `outcome` is the status class `1xx`–`5xx` or the transport kind `timeout`, `connect`, `reset`, `canceled`, `protocol`; canonical codes live on `vendor_attempts_total`) | 200 × 2 × 4 × 17 ≈ 27,000 (classic; native ≈ 1,600) | `upstream` |
 | `breaker_state` | gauge (0 closed, 1 half_open, 2 open) | enum | `vendor, account, endpoint` | ≤ 1,000 | `upstream` (every node reports its local view) |
 | `breaker_transitions_total` | counter | transitions | `vendor, account, endpoint, from, to` | ≤ 4,000 | `upstream` |
 | `queue_depth` | gauge | envelopes | `pool, status` (`accepted`, `retry_scheduled`, `in_flight`) | ≤ 6 | `delivery` (scheduler samples every 10 s) |
@@ -104,6 +104,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `outbox_reclaimed_total` | counter | envelopes | `pool` | `delivery` | visibility-timeout reclaims (crashed workers / gateways) |
 | `worker_inflight` | gauge | attempts | `pool` | `delivery` | saturation |
 | `bulkhead_inflight` | gauge | calls | `account` | `upstream` | DESIGN §10.8 |
+| `upstream_egress_denied_total` | counter | calls | `vendor` | `upstream` | calls refused before dialing: host not declared in the vendor's regions (HUB-086); any increase is a config or security problem |
 | `callback_deliveries_total` | counter | deliveries | `tenant, outcome` | `callbacks` | outbound webhook health |
 | `callback_latency_seconds` | histogram | s | `tenant` | `callbacks` | |
 | `webhook_inbound_total` | counter | webhooks | `vendor, account, outcome` (`accepted`, `bad_signature`, `replay`, `uncorrelated`) | `webhooks` | |

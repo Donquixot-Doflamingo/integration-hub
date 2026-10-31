@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(upstream)` · add per-account upstream client with deadlines and egress allowlist · HUB-086 · F-06
+  - Vendor calls use one connection pool per account (64 connections by default), the endpoint's `timeout_ms` and `connect_timeout_ms`, and a caller deadline that is lower than the endpoint timeout wins
+  - Only hosts declared in the vendor's regions are reachable, refused before any connection is opened; TLS 1.2+ with verification, plain http only to loopback
+  - Timeouts, refused connections, resets and egress refusals come back as typed errors for the error classifier; vendor answers of any status come back as responses, with JSON parsed and bodies capped at 4 MiB
+  - `vendor_latency_ms`, `upstream_egress_denied_total` and an `upstream {vendor}.{endpoint}` client span; trace context goes to vendors only when they opt in
+
 - 2026-10-31 · `feat(creds)` · add static_headers, bearer and basic auth schemes · HUB-085 · F-07
   - The vendor definition's `auth:` picks the scheme: bearer sets `Authorization: Bearer <token>`, basic sets `Authorization: Basic base64(username:password)`, static_headers checks the transformer mapped every credential into a header
   - Unknown schemes and missing credential values fail with errors that name the key, never the value

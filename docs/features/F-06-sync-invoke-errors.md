@@ -53,6 +53,19 @@ Callers need one contract, one error vocabulary and predictable timeouts across 
 6. Dry-run (`dryRunIntegration`, PRD DV-6): full pipeline up to transform; nothing sent, no queue entry, no idempotency record. The response is the **exact** upstream request (method, URL, headers, body) with credentials and any value marked secret replaced by `***`. This is a documented exception to the no-vendor-leak rule: it requires API-key scope `dry_run` (not granted by default; for integration developers during onboarding and debugging; otherwise 403 `FORBIDDEN`, reason `missing_scope`), it is audited with `dry_run: true`, and callers must never build logic on it because it changes at every Hub-side cutover.
 7. `GET /v1/requests/{id}` is visible only to the owning tenant (others get 404 `REQUEST_NOT_FOUND`); returns status (DESIGN §10.9 states plus `failed`, the terminal state of a sync request that returned an error) and canonical result or error.
 
+## Upstream client (HUB-086)
+Package `internal/upstream`: `Client.Do(ctx, Target, core.VendorRequest) (core.VendorResponse, error)` and `Client.Attempt` (same call plus `Latency`, `Truncated`, `MalformedBody`). `TargetFor(snap, accountID, "clevertap.upload@1")` builds the `Target` from the snapshot only.
+
+- **Pools**: one `http.Transport` per account (`MaxConnsPerHost` = bulkhead, default 64; 32 idle; 90 s idle timeout; HTTP/2 when the vendor negotiates it; no proxy). `Prune(snap)` closes pools of removed accounts; `Close()` at shutdown.
+- **Timeouts**: the attempt context is `min(endpoint timeout_ms (default 3000), caller deadline)`; the caller sets its `X-Request-Deadline` as the context deadline. `connect_timeout_ms` (default 500) bounds the TCP connect plus the TLS handshake.
+- **TLS**: 1.2 minimum, verification always on; the client dials TLS itself so the connect timeout covers the handshake.
+- **Egress**: the base URL's scheme and host:port must equal one of the vendor's `regions`, checked before any dial; every dial re-checks host:port (and refuses a dial without an allowlist). Plain `http` is allowed only to loopback hosts (dev mockvendor). Redirects are returned, never followed.
+- **Request**: body JSON-encoded with `Content-Length`; `Content-Type: application/json` unless the transformer set one; query from `VendorRequest.Query`. `traceparent`/`tracestate` from the transformer are dropped; the Hub's `traceparent` is sent only to vendors listed in `Options.ForwardTraceparent` (default none), `tracestate` never.
+- **Response**: a vendor answer of any status is a response, not an error. A JSON (or untyped) body is parsed into `Body`; anything else stays a string; a body declared JSON that does not parse sets `MalformedBody`. The read is bounded at 4 MiB (`Truncated`).
+- **Transport errors**: `*TransportError{Kind, Phase, CallerDeadline}`, matching `ErrTimeout`, `ErrConnect`, `ErrReset`, `ErrEgressDenied`, `ErrCanceled`, `ErrProtocol` with `errors.Is`. Classifier mapping: timeout (connect, endpoint or caller deadline) → `UPSTREAM_TIMEOUT`; connect (refused, DNS, TLS), reset, protocol, egress → `UPSTREAM_UNAVAILABLE`; canceled → the caller left. Error text never includes the URL query or header values.
+- **Telemetry**: `vendor_latency_ms{vendor, account, endpoint, outcome}` (outcome = status class `2xx`… or the transport kind), `upstream_egress_denied_total{vendor}`, client span `upstream {vendor}.{endpoint}` with `hub.vendor`, `hub.account`, `hub.endpoint`, `server.address`, `http.request.method`, `http.response.status_code` (never header values or bodies).
+- Not here yet: breaker, account limiter, bulkhead semaphore and `bulkhead_inflight` (later EP-04 tickets).
+
 ## Data model impact
 `requests` row per request (status, `final_version`, timings) — written via the audit path (F-08).
 
@@ -98,3 +111,4 @@ HUB-080 – HUB-109 (EP-04, filter `feature: F-06`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-10-31 | HUB-086: upstream client section | backend-engineer |
