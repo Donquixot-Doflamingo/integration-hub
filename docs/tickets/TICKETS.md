@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **87** · todo: **106** · other (in-progress/in-review/blocked): **2**
+Total tickets: **195** · done: **88** · todo: **106** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -13,7 +13,7 @@ Total tickets: **195** · done: **87** · todo: **106** · other (in-progress/in
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
-| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 1 |
+| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 2 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
@@ -1046,15 +1046,15 @@ Store registrar endpoints (URL on allowlisted host, signing secret ref) and impl
 
 ### HUB-120 — Subscriptions and signed callback delivery
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-119, HUB-111 · **Feature:** F-11 · **Stories:** US-11xx
+- **Status:** done · **Depends on:** HUB-119, HUB-111 · **Feature:** F-11 · **Stories:** US-11xx
 - **Branch:** `feat/HUB-120-signed-callbacks`
 
 On terminal states, enqueue `callback_deliveries` for each subscription and POST with `X-Hub-Signature: t=<unix>,v1=HMAC-SHA256(secret, t + "." + body)`; payload carries `request_id` and `idempotency_key`; own retry schedule and DLQ (DESIGN §12.1).
 
 **Acceptance criteria**
-- [ ] Event types `request.completed|failed|expired` delivered per subscription
-- [ ] Failed callback retries independently of vendor delivery and dead-letters after the schedule
-- [ ] Payload validates against `contracts/schemas/events/`
+- [x] Event types `request.completed|failed|expired` delivered per subscription
+- [x] Failed callback retries independently of vendor delivery and dead-letters after the schedule
+- [x] Payload validates against `contracts/schemas/events/`
 
 ### HUB-121 — async_callback mode end-to-end
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend

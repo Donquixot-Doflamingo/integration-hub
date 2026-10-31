@@ -16,6 +16,9 @@ const (
 	ResponseTransformFailed = "response.transform_failed"
 	RequestCompleted        = "request.completed"
 	RequestFailed           = "request.failed"
+	// CallbackDelivered records one outbound callback attempt (internal/callbacks, HUB-120):
+	// outcome and status in meta, payload hash and size only, never the signature or secret.
+	CallbackDelivered = "callback.delivered"
 )
 
 // PayloadState says what request_events.payload holds.

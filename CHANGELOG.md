@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(callbacks)` · dispatch signed callbacks with retries and a callback DLQ · HUB-120 · F-11
+  - A callback dispatcher claims due deliveries (FOR UPDATE SKIP LOCKED, never more than its free senders), signs and POSTs them through the SSRF guard and records each outcome with a guarded transition, so concurrent dispatchers never double-send
+  - Failed callbacks retry on their own schedule (5 s, 30 s, 2 min, 10 min, 30 min, 1 h, 2 h, 4 h, 6 h, 6 h, ±20 % jitter; 11 attempts over about 20 h), independent of vendor delivery, then move to the callback DLQ; unknown endpoints and refused URLs dead-letter at once
+  - Every attempt is audited as callback.delivered (hash and size of the body only, never the signature or secret) and counted in callback_deliveries_total, callback_latency_seconds and callback_ssrf_blocked_total; callback_queue_oldest_age_s and callback_dlq_count are sampled every 15 s
+  - Abandoned claims of a crashed dispatcher are retried after 30 s; Run stops cleanly after finishing the attempts it started
 - 2026-10-31 · `feat(callbacks)` · sign callback payloads and enqueue them in the caller's transaction · HUB-120 · F-11
   - request.completed, request.failed, request.expired and delivery.status bodies are built to contracts/schemas/events (request_id and idempotency_key always present) and checked against the schemas
   - X-Hub-Signature is t=<unix>,v1=<hex HMAC-SHA256(secret, t.body)>, with one v1 per secret during a rotation overlap; a Verify helper implements the receiver side (5-minute tolerance)

@@ -4,7 +4,7 @@
 Tenants register callback endpoints once (registrar); integration versions subscribe event types to them; the Hub delivers HMAC-signed callbacks with its own retry schedule and DLQ, behind an SSRF guard (DESIGN §12.1, §3.1).
 
 ## Status
-`in-progress` — 2026-10-31 (HUB-119 SSRF guard and registrar secrets; HUB-120 signed payloads and transactional enqueue).
+`in-progress` — 2026-10-31. HUB-119 (SSRF guard, registrar secrets) and HUB-120 (signed payloads, transactional enqueue, dispatcher with retries and DLQ) are done in `internal/callbacks`; wiring into the M4 state machine and the worker role (lead) and `async_callback` end to end (HUB-121) remain.
 
 ## Owner
 `backend-engineer`; `contract-steward` for event schemas.
@@ -85,6 +85,15 @@ go run ./cmd/hubctl creds list   # keys only, never values
 
 **Table** `hub.callback_deliveries` (`migrations/00005_callbacks.sql`, owned by callbacks): pk `delivery_id`; `event_id`, `event_type`, `request_id`, `tenant_id`, `integration_id`, `integration_version`, `endpoint_id`, `subscription` (index in the version's webhooks list), `payload bytea` (the exact signed bytes, identical on every attempt), `status` (`pending → in_flight → delivered | retry_scheduled | dead_lettered`), `attempts`, `next_attempt_at`, `claimed_by`, `claimed_until`, `last_http_status`, `last_error` (error class only), timestamps; unique `(event_id, endpoint_id)`. Indexes: partial `(next_attempt_at) WHERE status IN ('pending','retry_scheduled')` (claim), partial `(claimed_until) WHERE status='in_flight'` (reclaim), `(request_id)`, partial `(created_at) WHERE status='dead_lettered'` (the callback DLQ). `fillfactor=80`, `autovacuum_vacuum_scale_factor=0.01`.
 
+**Dispatcher** (`dispatcher.go`, `store.go`): `NewDispatcher(DispatcherDeps{Pool, Snapshots, Secrets, Audit, Metrics, Log, TracerProvider}, DispatcherOptions{ID, Senders, ClaimBatch, PollInterval, Visibility, Schedule, SampleEvery, Guard, Now})`, then `Run(ctx) error`:
+- One claim loop plus at most `Senders` (32) concurrent attempts. It claims only as many rows as there are free senders (`FOR UPDATE SKIP LOCKED`, due rows by `next_attempt_at` plus `in_flight` rows whose `claimed_until` passed), sets `in_flight`, `claimed_by`, `claimed_until = now() + Visibility` (30 s, must exceed the 5 s send timeout) and counts the attempt. No claimed row waits in memory.
+- Each attempt reads the registrar endpoint from the **current** snapshot (URL and `secret_ref`; latest config wins), gets the signing secrets from the warm cache, signs the stored body with a fresh `t`, and POSTs it through the SSRF guard with `Content-Type: application/json`, `X-Hub-Signature`, `X-Hub-Event`, `X-Hub-Delivery-Id`. 2xx is delivered; anything else (3xx included) is a failed attempt. The response body is drained (≤ 4 KB) and discarded.
+- The outcome is a guarded transition (`WHERE status='in_flight' AND claimed_by=<me>`); losing it (the row was reclaimed) has no side effects: no metric, no audit, no log beyond `callback.claim_lost`.
+- **Retry schedule** (own, independent of vendor delivery; `DefaultSchedule`): after failed attempt n wait 5 s, 30 s, 2 min, 10 min, 30 min, 1 h, 2 h, 4 h, 6 h, 6 h, each ±20 % jitter. 11 attempts over ≈ 19.7 h (15.8–23.7 h); the 11th failure dead-letters (`status='dead_lettered'`, the callback DLQ; replay is `UPDATE … SET status='pending', attempts=0, next_attempt_at=now()`, admin action pending F-16).
+- Dead-letter at once (retrying cannot help): endpoint no longer in the snapshot (`endpoint_unknown`), endpoint of another tenant (`tenant_mismatch`), URL refused by policy (`url_refused`: not https, not on the allowlist, userinfo). Retried: `http_4xx`, `http_5xx`, `redirect`, `timeout`, `connect`, `ssrf_blocked` (DNS may change back), `secret_unavailable` (cache not warm yet).
+- `Run` stops claiming when ctx ends, lets started attempts finish (≤ 5 s each) and record, then returns; a row whose outcome could not be recorded is reclaimed after the visibility timeout (at-least-once; receivers dedupe on `event_id` / `X-Hub-Delivery-Id`).
+- Audit: every recorded attempt emits `callback.delivered` through `audit.Sink` (DESIGN §13.1): `seq = 1 000 000 + subscription×100 + attempt` (never collides with the request trail's 1…n), payload sha256 and size only (`payload_state=omitted`), meta `delivery_id, event_id, event, endpoint_id, attempt, outcome, http_status, error, duration_ms, retry_in_ms`. Never the body, the signature, a header or the secret.
+
 ## Data model impact
 `registrar_endpoints(endpoint_id, tenant_id, url, secret_ref)`, `callback_deliveries(delivery_id, request_id, endpoint_id, status, attempts, next_attempt_at)` (DESIGN §18.2).
 
@@ -94,14 +103,18 @@ Integration version `webhooks: [{event, endpoint}]`; tenant YAML registrar entri
 ## Observability
 | Kind | Name | Notes |
 | --- | --- | --- |
-| Metric | `callback_deliveries_total{tenant,endpoint,result}` | |
+| Metric | `callback_deliveries_total{tenant,outcome}` | per recorded attempt; outcome `delivered`, `retry_scheduled`, `dead_lettered` |
+| Metric | `callback_latency_seconds{tenant}` | duration of attempts that sent a request |
+| Metric | `callback_ssrf_blocked_total{class}` | attempts refused by the guard by address class |
 | Metric | `callback_enqueued_total{event}` | rows written by Enqueue (counted at write; a rolled-back transaction still counts) |
 | Metric | `callback_enqueue_skipped_total{reason}` | `unknown_version`, `unknown_endpoint`, `tenant_mismatch` |
 | Log | `callback.enqueue_skipped` (WARN) | reason, request_id, integration_id, integration_version, endpoint_id, event |
-| Metric | `callback_queue_oldest_age_s`, `callback_dlq_count` | |
-| Log | `ssrf_blocked` | endpoint_id, resolved IP class |
-| Trace | span `callback` | |
-| Audit | `callback.delivered` event | |
+| Metric | `callback_queue_oldest_age_s`, `callback_dlq_count` | gauges sampled by every dispatcher every 15 s |
+| Log | `callback.ssrf_blocked` (WARN) | endpoint_id, tenant, class, delivery_id (never the resolved IP or URL path) |
+| Log | `callback.dead_lettered` (WARN), `callback.retry_scheduled` (DEBUG) | delivery_id, request_id, tenant, endpoint_id, event, attempt, http_status, error (+ retry_in) |
+| Log | `callback.claim_lost` (INFO), `callback.record_failed`, `callback.claim_failed`, `callback.sample_failed` (WARN) | |
+| Trace | span `hub.callback.deliver` (client) | `hub.endpoint_id`, `hub.callback.attempt`, `hub.callback.event`, `hub.request_id`, `http.response.status_code`, `hub.outcome`; error status on failure |
+| Audit | `callback.delivered` event | one per recorded attempt, hash and size only |
 
 ## Security & PII
 Signing secret never logged or returned after creation. SSRF guard is mandatory. Payload follows the integration's audit policy for what is retained, but the callback itself carries the full canonical result to the tenant.
@@ -114,7 +127,7 @@ Signing secret never logged or returned after creation. SSRF guard is mandatory.
 | Redirect | Not followed, counted as failure | — |
 
 ## Testing
-- **Integration**: test receiver verifies signature (DESIGN §19 M4 accept); stale timestamp rejected.
+- **Integration** (`//go:build integration`, real Postgres): enqueue inside the caller's transaction (rollback leaves nothing), every event type dispatched to a test receiver that verifies the signature, retry then dead-letter and recovery, three concurrent dispatchers never double-send (SKIP LOCKED, `-race`), abandoned claims reclaimed, claim plan uses the partial indexes. Stale timestamps rejected by `Verify` (unit).
 - **Unit**: SSRF table (IPv4/IPv6 ranges, DNS rebinding).
 - **Contract**: callback payloads validated against event schemas; signature test vectors are not in `contracts/` yet (to be added via CCR).
 
@@ -122,8 +135,11 @@ Signing secret never logged or returned after creation. SSRF guard is mandatory.
 Tenants register endpoints before publishing `async_callback` versions (publish validates).
 
 ## Open questions
-- Callback retry schedule and max age are not specified in DESIGN.
-- Host allowlist ownership: per tenant or global?
+- Callback retry schedule and max age are not specified in DESIGN. **Decision (HUB-120):** `DefaultSchedule` above (≈ 19.7 h, 11 attempts); revisit with the lead.
+- Host allowlist ownership: per tenant or global? `GuardOptions.AllowedHosts` is one process-wide list today (empty = any public host).
+- Granted tenants: subscriptions point at owner-tenant endpoints (registry validation), and Enqueue only delivers to endpoints of the requesting tenant, so a grantee's requests get no callback. A per-grantee subscription model needs a design decision.
+- Registration-time check: `Guard.CheckURL` exists; the admin registrar CRUD (HUB-201) must call it. Registry validation still accepts `http://` URLs (dev registrar).
+- `payload` is stored in clear in `callback_deliveries` for retries (it is the canonical result the tenant receives). A purge job for delivered rows (and DLQ retention, 14 days like `dead_letters`) belongs to the scheduler.
 
 ## Tickets
 HUB-110 – HUB-139 (EP-05, filter `feature: F-11`).
@@ -134,3 +150,4 @@ HUB-110 – HUB-139 (EP-05, filter `feature: F-11`).
 | 2026-10-31 | Created | docs agent |
 | 2026-10-31 | HUB-119: SSRF guard, registrar signing secrets via creds, dev recipe | backend-engineer |
 | 2026-10-31 | HUB-120: event payloads, signing, transactional enqueue, callback_deliveries | backend-engineer |
+| 2026-10-31 | HUB-120: dispatcher, retry schedule, callback DLQ, metrics, audit | backend-engineer |
