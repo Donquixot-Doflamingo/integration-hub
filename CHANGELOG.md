@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(product)` · add PRD, personas and user stories · HUB-002 · F-01
+  - PRD with FR/NFR, success metrics, release plan, risks, deviations DV-1..DV-6 and open questions
+  - Six personas including the AI-assisted developer
+  - Five end-to-end journeys and US-FFNN stories for F-01..F-22
 - 2026-10-31 · `docs` · add agreed design, agent manual and repo skeleton · HUB-001 · F-01
   - docs/DESIGN.md saved unchanged as the behaviour source of truth
   - AGENTS.md / CLAUDE.md with language rule, working rules, decisions D1–D12, contract-first, tickets, git and changelog rules
