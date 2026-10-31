@@ -13,6 +13,12 @@ test('latest is marked; the diff summary expands by keyboard and links the objec
 	await expect(latest).toContainText('Snapshot 413');
 	const table = page.getByRole('table', { name: /Registry snapshots/ });
 	await expect(table.getByRole('rowheader').first()).toContainText('Latest');
+	// The page never scrolls sideways; wide tables scroll inside their own region.
+	expect(
+		await page.evaluate(
+			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+		)
+	).toBe(0);
 	const toggle = table.getByRole('button', { name: 'Show changes in 413' });
 	await toggle.focus();
 	await page.keyboard.press('Enter');

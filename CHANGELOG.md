@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-01 · `fix(frontend)` · keep table live regions from widening the page · HUB-273 · F-19
+  - The snapshots page no longer scrolls sideways at desktop width: copy buttons inside a table stay within the table's own scroll area
+
 - 2026-11-01 · `feat(frontend)` · add snapshots view with latest marked and diff summary · HUB-273 · F-19
   - Snapshots list, newest first with paging, shows each version's summary, author, change log entry, checksum (with copy), size and time
   - The snapshot the gateway nodes load now is marked "Latest" and summarised at the top
