@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **86** · todo: **108** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **87** · todo: **107** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -13,7 +13,7 @@ Total tickets: **195** · done: **86** · todo: **108** · other (in-progress/in
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
-| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
+| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 1 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
@@ -1034,15 +1034,15 @@ Redis-backed idempotency scoped to tenant + integration, 24 h: completed request
 
 ### HUB-119 — Registrar endpoints and SSRF guard
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-042, HUB-023 · **Feature:** F-11 · **Stories:** US-11xx
+- **Status:** done · **Depends on:** HUB-042, HUB-023 · **Feature:** F-11 · **Stories:** US-11xx
 - **Branch:** `feat/HUB-119-registrar-ssrf`
 
 Store registrar endpoints (URL on allowlisted host, signing secret ref) and implement the SSRF guard: resolve host, refuse private/link-local ranges, no redirects, 5 s timeout (DESIGN §12.1).
 
 **Acceptance criteria**
-- [ ] Callbacks to 10.0.0.0/8, 169.254.0.0/16, ::1, etc. refused (table test incl. DNS rebinding case)
-- [ ] Redirect responses are not followed
-- [ ] Signing secrets stored encrypted and registered for redaction
+- [x] Callbacks to 10.0.0.0/8, 169.254.0.0/16, ::1, etc. refused (table test incl. DNS rebinding case)
+- [x] Redirect responses are not followed
+- [x] Signing secrets stored encrypted and registered for redaction
 
 ### HUB-120 — Subscriptions and signed callback delivery
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend

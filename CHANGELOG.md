@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(callbacks)` · add the SSRF-guarded sender and registrar signing secrets · HUB-119 · F-11
+  - Callbacks go through an SSRF guard: https only, no redirects followed, no environment proxy, 5 s per attempt, optional host allowlist
+  - The guard resolves the host in the dialer and connects to the checked IP, refusing private, loopback, link-local (incl. cloud metadata), CGNAT, multicast, unspecified, documentation, NAT64/6to4/Teredo and IPv4-mapped equivalents, so DNS rebinding after registration cannot reach an internal address
+  - Registrar signing secrets live in the encrypted credential file (hubctl creds set <id> signing_secret=…, -slot next for a rotation overlap), are redacted from logs once loaded and are served from the warm cache without decrypting
+  - A dev/test-only loopback allowance lets local test receivers on 127.0.0.1 use plain http; production wiring does not set it
 - 2026-10-31 · `perf(edge)` · add the overhead benchmark and the M3 summary · HUB-097 · F-06
   - BenchmarkInvokeOverhead measures Hub overhead (handler time minus vendor time) through the real credential cache, upstream client, audit writer and metrics: p99 0.42–0.51 ms with mockvendor at 0 ms (budget 5 ms), each stage reported against DESIGN §18.6
   - docs/milestones/M3.md: acceptance evidence, what was built, deferred work and deviations; F-05 and F-07 shipped, F-06, F-08 and F-21 in progress
