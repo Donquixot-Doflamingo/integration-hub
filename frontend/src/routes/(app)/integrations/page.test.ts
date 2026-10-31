@@ -78,6 +78,44 @@ describe('integrations list', () => {
 		expect(screen.getByLabelText('Per page')).toHaveValue('25');
 	});
 
+	it('sends the active-version filters and shows them as chips (HUB-283)', async () => {
+		const seen = recordQueries();
+		await renderAt('?has_active_version=true&active_version_behind=true');
+		await screen.findByRole('table', { busy: false });
+		expect(Object.fromEntries(seen[0]!)).toEqual({
+			has_active_version: 'true',
+			active_version_behind: 'true',
+			limit: '50'
+		});
+		const chips = screen.getByRole('list', { name: 'Active filters' });
+		expect(
+			within(chips).getByRole('link', { name: 'Remove filter Active version: Published' })
+		).toHaveAttribute('href', '/integrations?active_version_behind=true');
+		expect(
+			within(chips).getByRole('link', { name: 'Remove filter Newer version or draft: Waiting' })
+		).toHaveAttribute('href', '/integrations?has_active_version=true');
+		expect(screen.getByLabelText('Active version')).toHaveValue('true');
+		expect(screen.getByLabelText(/^Newer version or draft/)).toHaveValue('true');
+		expect(screen.queryByRole('note')).toBeNull();
+	});
+
+	it('puts the active-version selects in the URL', async () => {
+		await renderAt('');
+		await screen.findByRole('table', { busy: false });
+		(screen.getByLabelText('Active version') as HTMLSelectElement).value = 'false';
+		screen.getByRole('button', { name: 'Apply' }).click();
+		expect(goto).toHaveBeenCalledWith('/integrations?has_active_version=false', {
+			keepFocus: true,
+			noScroll: true
+		});
+	});
+
+	it('explains why "no active version" plus "newer version" lists nothing', async () => {
+		server.use(mockOperation('listIntegrations', { items: [], next_cursor: null }));
+		await renderAt('?has_active_version=false&active_version_behind=true');
+		expect(await screen.findByRole('note')).toHaveTextContent(/together match nothing/);
+	});
+
 	it('applies the form as a URL without empty fields, back on the first page', async () => {
 		await renderAt('?cursor=c9&prev=');
 		await screen.findByRole('table', { busy: false });

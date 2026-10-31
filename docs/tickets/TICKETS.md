@@ -2122,7 +2122,7 @@ Filed by frontend-engineer during HUB-256. Full CCR text (before/after YAML): `f
 **Acceptance criteria**
 - [x] Both query parameters added to `listIntegrations` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
 - [ ] Backend list handler implements them, covered by contract tests (EP-08)
-- [ ] Console adds the filter (URL params, chips) after `npm run gen:api` and removes `TODO(CCR-002)`
+- [x] Console adds the filter (URL params, chips) after `npm run gen:api` and removes `TODO(CCR-002)` (frontend-engineer, console round 4: "Active version" (Published / None) and "Newer version or draft" (Waiting / None waiting) selects, `has_active_version` / `active_version_behind` in the URL, removable chips, a note when "None" is combined with the second filter, which matches nothing per the contract)
 
 Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1; notice `contracts/notices/2026-10-31-round-1.md`). `active_version_behind=true` means an active version exists and `latest_version > active_version` or `has_draft`; `false` means the active version is the latest with no draft; integrations without an active version match neither value. The backend and console criteria stay open for those sides.
 

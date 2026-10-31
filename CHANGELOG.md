@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add active-version filters to the integrations list · HUB-283 · F-19
+  - Filter integrations by "Active version" (published, or never published) and "Newer version or draft" (waiting to be published, or none waiting), across all pages
+  - Both filters live in the URL and show as removable chips; combining "never published" with the second filter explains why nothing matches
 - 2026-10-31 · `feat(frontend)` · adopt the documented X-Hub-Request-Id on every admin call · HUB-278 · F-19
   - The console treats `X-Hub-Request-Id` as declared on every hub-admin response (1.1.0): errors show the error body's request id, or the header's when the body has none
   - Success notices after a change (publish, rollback, weights, pause, breaker force) show the request id with a copy button, next to the change log id

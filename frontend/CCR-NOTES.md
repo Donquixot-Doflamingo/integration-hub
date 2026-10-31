@@ -74,8 +74,8 @@ already were in the contract.
   (optional, list tool)
 - **Error codes**: none new (`VALIDATION_FAILED` for a non-boolean value, as for `paused`)
 - **Rollout**: contract PR first
-- **Current workaround**: none in the UI; `TODO(CCR-002)` in `src/routes/(app)/integrations/filters.ts`. The list
-  shows the active and latest version per row and marks "No active version" and "Draft" so operators can scan for them.
+- **Status**: shipped in hub-admin 1.1.0 (HUB-283). The integrations list offers both filters (URL params and chips,
+  `src/routes/(app)/integrations/filters.ts`); no `TODO(CCR-002)` left.
 
 ### CCR-003: dead-letter count per account on `listAccounts`
 - **Requested by**: frontend-engineer (ticket HUB-261)

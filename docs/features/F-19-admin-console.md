@@ -119,7 +119,7 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-252 | MSW handlers for all 79 admin operations from contract examples (`contract.gen.ts`, generated); fixtures validated with Ajv 2020-12; `npm run dev:mock` with no backend |
 | HUB-253 | Auth behind an `AuthProvider` interface: dev role-picker provider (mock / `PUBLIC_AUTH_MODE=dev`), OIDC placeholder (HUB-282); signed httpOnly session cookie; `/login`, `POST /logout`; redirect to login with `next`; `/me`-based `access` and `RoleGate` for mutation controls |
 | HUB-255 | Shared states: `AsyncView` (keeps data while refetching), `ListView`, `ErrorPanel` (code, message, hint, details, retry helps, request id + copy), `EmptyState` (none vs filtered), `Skeleton`, `ErrorPage` for both error routes; a test enforces their use on every page |
-| HUB-256 | Integrations list: search, owner tenant (a select of own tenants for tenant viewers), capability, paused, vendor and account filters plus page size in the URL; removable chips and Clear all; cursor paging with Previous/Next kept in the URL; Paused / No active version / draft marked in text |
+| HUB-256 | Integrations list: search, owner tenant (a select of own tenants for tenant viewers), capability, paused, active version and newer-version filters (HUB-283), vendor and account filters plus page size in the URL; removable chips and Clear all; cursor paging with Previous/Next kept in the URL; Paused / No active version / draft marked in text |
 | HUB-257 | Integration detail `/integrations/{id}`: status, owner, capability, versions, grants, money flag, paused reason; active spec (targets + weights, failover, delivery, breaker override, webhooks, audit, shadow); full version history newest first (all pages) with Active/Draft marked; version page `/integrations/{id}/versions/{n}`; read-only note for viewer and tenant viewer via `RoleGate` |
 | HUB-258 | Version diff `/integrations/{id}/diff?from=&to=` on `diffIntegrationVersions`: side-by-side view from the unified YAML diff (old left, new right, `-`/`+` and text labels, long unchanged runs folded) and a path list from the structured ops (Added/Removed/Changed, before/after); summary line; version pickers, swap, view in the URL; default pair newest vs active; selectable from history rows |
 | HUB-259 | Publish page `/integrations/{id}/publish`: YAML/JSON spec editor with line numbers; save creates (`createIntegrationDraft`) or replaces (`updateIntegrationDraft`) the draft and runs `validateIntegrationVersion`; checks shown in text + icon; diff against the active version; publish in `ConfirmDialog` with `expected_active_version`. "Roll back to vN" on published history rows (`rollbackIntegration`). 400 pointers mapped to the reason field or spec lines, 422 checks on the editor and in the dialog, 409 reload prompt; success shows new version + change log id |
@@ -136,6 +136,7 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | CCR | Console side |
 | --- | --- |
 | CCR-001 (HUB-278) | `client.ts` reads the declared `X-Hub-Request-Id` on every response; on errors the envelope's `request_id` wins, then the header; a missing or empty header is `null`. Form actions return the request id with the change log id (`ActionSuccessData.requestId`) and `ChangeNotice` shows it with a copy button. |
+| CCR-002 (HUB-283) | Integrations list: "Active version" (`has_active_version`: Published / None) and "Newer version or draft" (`active_version_behind`: Waiting / None waiting) selects, in the URL with chips; the API filters before paging. A note explains that None plus the second filter matches nothing (contract: integrations without an active version match neither value). |
 
 ## Changelog of this doc
 | Date | Change | Author |
@@ -155,3 +156,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-10-31 | HUB-263: request explorer search | frontend-engineer |
 | 2026-10-31 | HUB-264: request timeline | frontend-engineer |
 | 2026-10-31 | Contract round 1 adoption: CCR-001 / HUB-278 (request id header) | frontend-engineer |
+| 2026-10-31 | CCR-002 / HUB-283: active-version filters on the integrations list | frontend-engineer |

@@ -66,7 +66,7 @@ when a page under `src/routes/(app)/` renders its own `{#await}` instead):
 | `ErrorPage` | Body of both `+error.svelte` pages (unknown routes, errors thrown from loads) |
 
 ## Integration screens (HUB-256 to HUB-258)
-- `/integrations`: filters and page size in the URL (`filters.ts`), chips, cursor paging (`$lib/utils/paging.ts`, `Pager`).
+- `/integrations`: filters (including the active-version filters of hub-admin 1.1.0) and page size in the URL (`filters.ts`), chips, cursor paging (`$lib/utils/paging.ts`, `Pager`).
 - `/integrations/{id}`: header, active spec (`$lib/components/integration/SpecView.svelte`), full version history
   (`collectPages` follows `next_cursor`), From/To selection for a diff; `/integrations/{id}/versions/{n}` for one version.
 - `/integrations/{id}/diff?from=&to=&view=split|paths`: `$lib/components/diff/` (`DiffSplit` from the unified YAML diff,
