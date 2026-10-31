@@ -1,11 +1,14 @@
-# Dev transformer for mockvendor, from DESIGN §7.4. The CleverTap payload shape is illustrative:
-# before production, verify field names, endpoint and auth headers against the current CleverTap
-# upload API docs and set docs_url (AGENTS §3.3). Compiled by internal/transform from M2.
+# CleverTap Upload Events API, checked against https://developer.clevertap.com/docs/upload-events-api on 2026-10-31 (AGENTS §3.3):
+# POST /1/upload, headers X-CleverTap-Account-Id + X-CleverTap-Passcode, body {"d": [records]},
+# record = identity, type "event", evtName, evtData (object), ts (epoch seconds); max 1000 records.
+# Response {"status", "processed", "unprocessed": [{"status", "code", "error", "record"}]}.
+# Dev only: regions point at mockvendor. Goldens in fixtures/ (hubctl transform test).
 # T2 = T1 + brand and campaign inside the event (shape change, DESIGN §3.3).
 transformer: T2
 version: 3
 kind: request
 capability: events.track@v1
+docs_url: https://developer.clevertap.com/docs/upload-events-api
 vendor_endpoint: clevertap.upload@1
 request:
   method: POST
@@ -13,7 +16,7 @@ request:
   headers:
     X-CleverTap-Account-Id: creds.account_id
     X-CleverTap-Passcode:   creds.passcode
-    Content-Type:           '"application/json"'
+    Content-Type:           '"application/json; charset=utf-8"'
   body:
     d:
       - identity: req.user.id

@@ -119,6 +119,7 @@ func TestR1ErrorRules(t *testing.T) {
 		{vendor(429, nil, "Retry-After", "7"), core.CodeUpstreamRateLimited, true, 7000},
 		{vendor(429, nil), core.CodeUpstreamRateLimited, true, 1000},
 		{vendor(503, "<html>"), core.CodeUpstreamUnavailable, true, -1},
+		{vendor(503, map[string]any{"status": "fail", "error": "12 digit account ID mandatory."}), core.CodeUpstreamAuthFailed, false, -1},
 		{vendor(400, map[string]any{"error": "bad"}), core.CodeUpstreamRejected, false, -1},
 	}
 	for _, tt := range tests {

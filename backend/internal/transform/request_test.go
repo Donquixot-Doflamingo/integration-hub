@@ -33,7 +33,7 @@ func TestBuildRequestT1(t *testing.T) {
 	if req.Method != "POST" || req.Path != "/1/upload" {
 		t.Fatalf("method/path %s %s", req.Method, req.Path)
 	}
-	if req.Headers["X-CleverTap-Account-Id"] != "fixture-account-id" || req.Headers["X-CleverTap-Passcode"] != "fixture-passcode-secret" || req.Headers["Content-Type"] != "application/json" {
+	if req.Headers["X-CleverTap-Account-Id"] != "fixture-account-id" || req.Headers["X-CleverTap-Passcode"] != "fixture-passcode-secret" || req.Headers["Content-Type"] != "application/json; charset=utf-8" {
 		t.Fatalf("headers %v", req.Headers)
 	}
 	want := map[string]any{"d": []any{map[string]any{

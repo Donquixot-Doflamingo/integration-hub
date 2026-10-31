@@ -1,0 +1,7 @@
+{
+  "status": 503,
+  "body": {
+    "status": "fail",
+    "error": "12 digit account ID mandatory."
+  }
+}

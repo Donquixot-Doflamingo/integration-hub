@@ -78,7 +78,7 @@ func TestParseR1(t *testing.T) {
 	if p.response == nil || len(p.response.fields) != 5 || p.response.fields[0].key != "status" {
 		t.Fatalf("response %+v", p.response)
 	}
-	if len(p.errors) != 4 || p.errors[0].code != "UPSTREAM_AUTH_FAILED" || p.errors[1].retryAfterMS == "" || p.errors[3].retryable {
+	if len(p.errors) != 5 || p.errors[0].code != "UPSTREAM_AUTH_FAILED" || p.errors[1].retryAfterMS == "" || p.errors[2].code != "UPSTREAM_AUTH_FAILED" || p.errors[4].retryable {
 		t.Fatalf("errors %+v", p.errors)
 	}
 }

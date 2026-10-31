@@ -106,7 +106,9 @@ func classify(status int) *core.CanonicalError {
 	return &core.CanonicalError{Code: code, Retryable: retryable, Message: defaultMessages[code], Upstream: &core.Upstream{Status: &s}}
 }
 
-// resEnv is the res variable: status, lower-cased headers (first value) and the parsed body.
+// resEnv is the res variable: status, lower-cased headers (first value), body and text.
+// body is the parsed JSON object or array, or nil; text is a non-JSON body (an HTML error page,
+// plain text). Keeping text out of body makes res.body.error nil, not an error, on such pages.
 func resEnv(resp core.VendorResponse) map[string]any {
 	headers := make(map[string]any, len(resp.Headers))
 	for k, v := range resp.Headers {
@@ -114,7 +116,17 @@ func resEnv(resp core.VendorResponse) map[string]any {
 			headers[strings.ToLower(k)] = v[0]
 		}
 	}
-	return map[string]any{"status": resp.Status, "headers": headers, "body": resp.Body}
+	env := map[string]any{"status": resp.Status, "headers": headers, "body": nil, "text": nil}
+	switch b := resp.Body.(type) {
+	case map[string]any, []any:
+		env["body"] = b
+	case string:
+		env["text"] = b
+	case nil:
+	default:
+		env["body"] = b // a JSON scalar
+	}
+	return env
 }
 
 // header(res, name) reads a response header case-insensitively; nil when absent.

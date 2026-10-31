@@ -18,7 +18,7 @@ const t1InputJSON = `{"user": {"id": "u_1"}, "event": {"name": "order_placed", "
  "_context": {"creds": {"account_id": "fixture-account-id", "passcode": "fixture-passcode"}}}`
 
 const t1ExpectedJSON = `{"method": "POST", "path": "/1/upload",
- "headers": {"X-CleverTap-Account-Id": "fixture-account-id", "X-CleverTap-Passcode": "fixture-passcode", "Content-Type": "application/json"},
+ "headers": {"X-CleverTap-Account-Id": "fixture-account-id", "X-CleverTap-Passcode": "fixture-passcode", "Content-Type": "application/json; charset=utf-8"},
  "body": {"d": [{"identity": "u_1", "type": "event", "evtName": "order_placed", "ts": 1793438100, "evtData": {"amount": 499}}]}}`
 
 func TestGoldensPassAndDiff(t *testing.T) {

@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(config)` · verify the CleverTap transformers against vendor docs and add goldens · HUB-068 · F-04
+  - T1, T2, R1, R2 checked against developer.clevertap.com/docs/upload-events-api (cited in each file): Content-Type adds charset=utf-8; R1 maps unprocessed records to {reason}; a 503 for a missing account ID is UPSTREAM_AUTH_FAILED, not a retryable outage
+  - 17 golden cases: T1 minimal/full (unicode, offset timestamp), T2 campaign/organic (brand from account config), R1 success/partial and 7 error cases, R2 success/partial/5xx; make goldens runs in backend CI
+  - Response mapping: res.body is parsed JSON only; non-JSON bodies (HTML error pages) are res.text
 - 2026-10-31 · `feat(transform)` · add the golden fixture runner and hubctl transform test · HUB-067 · F-04
   - transform.RunGoldens runs fixtures/<case>.input.json → .expected_request.json and .vendor_response.json → .expected_response.json, with a pinned clock and fake creds from _context
   - Mismatches print as JSON-pointer diffs ("/body/d/0/ts: expected 1, got 1793438100"); a transformer without fixtures fails

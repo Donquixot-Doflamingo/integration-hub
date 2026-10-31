@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "UPSTREAM_REJECTED",
+    "retryable": false,
+    "message": "Batch size exceeded"
+  }
+}

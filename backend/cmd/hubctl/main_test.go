@@ -31,7 +31,7 @@ func configWithT1(t *testing.T, expectedTS string) string {
 		write(t, dir, rel, string(b))
 	}
 	write(t, dir, "transformers/T1/fixtures/minimal.input.json", `{"user": {"id": "u_1"}, "event": {"name": "e", "timestamp": "2026-10-31T09:15:00Z"}, "_context": {"creds": {"account_id": "fixture-a", "passcode": "fixture-p"}}}`)
-	write(t, dir, "transformers/T1/fixtures/minimal.expected_request.json", `{"method": "POST", "path": "/1/upload", "headers": {"X-CleverTap-Account-Id": "fixture-a", "X-CleverTap-Passcode": "fixture-p", "Content-Type": "application/json"},
+	write(t, dir, "transformers/T1/fixtures/minimal.expected_request.json", `{"method": "POST", "path": "/1/upload", "headers": {"X-CleverTap-Account-Id": "fixture-a", "X-CleverTap-Passcode": "fixture-p", "Content-Type": "application/json; charset=utf-8"},
  "body": {"d": [{"identity": "u_1", "type": "event", "evtName": "e", "ts": `+expectedTS+`}]}}`)
 	return dir
 }
