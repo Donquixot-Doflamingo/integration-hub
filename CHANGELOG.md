@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `ci(contracts)` · add the contracts workflow with lint and version checks · HUB-014 · F-01
+  - New `.github/workflows/contracts.yml` job `contract-lint` on PRs and pushes to main that touch `contracts/**`, the root `Makefile` or the workflow: pinned toolchain with npm cache, then `make contracts-check`
+  - `make contracts-version-check BASE=<ref>` fails when a contract document's content changed since the merge base without a higher version and a `contracts/CHANGELOG.md` entry, or when a contract document is deleted; CI runs it against the PR base
+  - Locally both targets take about 1.5 s after the first install
+
 - 2026-10-31 · `chore(contracts)` · add make contracts-check with pinned Redocly and ajv · HUB-015 · F-01
   - `make contracts-check` lints the three OpenAPI documents with Redocly CLI (`recommended-strict` plus example and structure rules) and runs `contracts/tools/check.mjs`
   - check.mjs parses every contract file (duplicate keys, anchors, YAML 1.1 surprises such as unquoted timestamps), resolves every `$ref`, compiles every schema with ajv in 2020-12 strict mode and validates every example with real 3.1 nullability (`type: [x, 'null']`)

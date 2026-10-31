@@ -2,7 +2,7 @@
 NODE22 := /opt/homebrew/opt/node@22/bin
 export PATH := $(NODE22):$(PATH)
 
-.PHONY: doctor up down check backend-check frontend-check contracts-check contracts-tools
+.PHONY: doctor up down check backend-check frontend-check contracts-check contracts-tools contracts-version-check
 
 doctor:
 	$(MAKE) -C backend doctor
@@ -22,7 +22,7 @@ frontend-check:
 
 check: backend-check frontend-check
 
-# ---- contracts (HUB-015). Usage: contracts/README.md "Validate locally".
+# ---- contracts (HUB-015, HUB-014). Usage: contracts/README.md "Validate locally".
 # CONTRACTS_DIR lets you point the checks at a copy (e.g. to prove they fail on a broken file).
 CONTRACTS_DIR ?= contracts
 CONTRACTS_TOOLS := $(CONTRACTS_DIR)/tools
@@ -45,3 +45,9 @@ contracts-check: contracts-tools
 	echo "== check.mjs"; \
 	node check.mjs || rc=1; \
 	exit $$rc
+
+# Every contract document whose content changed since BASE has a higher version and a
+# contracts/CHANGELOG.md entry. Usage: make contracts-version-check BASE=origin/main
+BASE ?= origin/main
+contracts-version-check: contracts-tools
+	cd $(CONTRACTS_TOOLS) && node version-check.mjs --base $(BASE)

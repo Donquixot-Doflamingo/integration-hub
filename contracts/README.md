@@ -109,10 +109,11 @@ Each document has its own semver (`info.version`, or `version` in `hubmcp-tools.
 ## Validate locally
 
 ```bash
-make contracts-check   # from the repo root; Node 22 (/opt/homebrew/opt/node@22/bin)
+make contracts-check                          # from the repo root; Node 22 (/opt/homebrew/opt/node@22/bin)
+make contracts-version-check BASE=origin/main # versions + changelog vs the merge base with BASE
 ```
 
-The first run installs the pinned toolchain in `contracts/tools/` (`npm ci` from `package-lock.json`: `@redocly/cli` 2.64.1, `ajv` 8.20.0, `ajv-formats` 3.0.1, `yaml` 2.9.1); later runs reinstall only when the lockfile changes. Both steps of `contracts-check` always run, so one pass shows every problem, and the target exits non-zero if either fails.
+The first run installs the pinned toolchain in `contracts/tools/` (`npm ci` from `package-lock.json`: `@redocly/cli` 2.64.1, `ajv` 8.20.0, `ajv-formats` 3.0.1, `yaml` 2.9.1); later runs reinstall only when the lockfile changes. Both steps of `contracts-check` always run, so one pass shows every problem, and the target exits non-zero if either fails. CI runs the same two targets (`.github/workflows/contracts.yml`, HUB-014).
 
 **1. Redocly lint** of `hub-public.v1.yaml`, `hub-admin.v1.yaml` and `mockvendor.v1.yaml` with `contracts/tools/redocly.yaml`: `recommended-strict` (every recommended rule is an error) plus example, `$ref`, path, operationId, summary/description and license rules. Changes from `recommended-strict`:
 
@@ -136,6 +137,8 @@ The ignores live in `contracts/tools/.redocly.lint-ignore.yaml`, keyed by operat
 - **MCP**: every `maps_to` operationId exists in its spec, tenant tools map only to hub-public and admin tools (`hub_admin_*`) only to hub-admin, and tool names are unique.
 
 To prove a check fails, run it on a copy: `cp -R contracts /tmp/c && <break /tmp/c/...> && make contracts-check CONTRACTS_DIR=/tmp/c` (use a path without spaces). Never commit broken files.
+
+**3. `contracts/tools/version-check.mjs`** (`make contracts-version-check`): compares the working tree with the merge base of `BASE` and `HEAD`. Every contract document whose parsed content changed (formatting and comments alone do not count) needs a higher version and a line added to `contracts/CHANGELOG.md` naming it: `` `hub-public` 1.0.1 `` for the OpenAPI files (`info.version`), `` `hubmcp-tools` <version> `` for the MCP contract, a hub-public bump for `schemas/events/*`, and a higher `x-capability-minor` plus an entry naming the capability key for `schemas/capabilities/*`. Deleting a contract document fails; a new document needs an entry naming it.
 
 ## Backend: contract tests (kin-openapi)
 

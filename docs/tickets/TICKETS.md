@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **68** · todo: **126**
+Total tickets: **194** · done: **68** · todo: **125** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -184,7 +184,7 @@ Protect `main` so it changes only via PRs (AGENTS §6). Requires the repo owner 
 
 ### HUB-014 — CI: contract lint job (Redocly / Spectral)
 - **Epic:** EP-00 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-006, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** in-review · **Depends on:** HUB-006, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-014-ci-contract-lint`
 
 Add a CI job that lints every OpenAPI document in `contracts/openapi/` and validates the JSON Schemas in `contracts/schemas/`, and fails if `info.version` changed without a `contracts/CHANGELOG.md` entry (AGENTS §4.3).
@@ -193,6 +193,8 @@ Add a CI job that lints every OpenAPI document in `contracts/openapi/` and valid
 - [ ] CI fails on an intentionally broken OpenAPI document
 - [ ] CI fails when a contract file changes without a version bump + changelog entry
 - [ ] Job runs only when `contracts/**` changes and finishes in < 2 min
+
+Steward note (2026-10-31): `contract-lint` in `.github/workflows/contracts.yml` runs `make contracts-check` and `make contracts-version-check BASE=<PR base sha | push before>`. It also triggers on the root `Makefile` and the workflow file, since both define the check. Proven locally, not yet in CI: `make contracts-check` fails on broken copies (HUB-015 note); `contracts-version-check` fails on a content change without a bump, a bump without a changelog entry, a lower version, an event-schema change without a hub-public bump and a deleted document, and passes on formatting-only changes and on this branch; both targets together take about 1.5 s locally. All three criteria need a GitHub Actions run on the PR, so they stay open and the ticket stays `in-review` until that run is green.
 
 ### HUB-015 — make contracts-check: repeatable contract validation (Redocly lint, ajv for JSON Schemas, $ref + example + vendor-leak checks)
 - **Epic:** EP-00 · **Type:** chore · **Area:** contracts

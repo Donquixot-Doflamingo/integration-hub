@@ -1,0 +1,53 @@
+# Contract lint (HUB-014): runs `make contracts-check` (Redocly lint + contracts/tools/check.mjs,
+# HUB-015) and fails if a contract document changed without a version bump and a
+# contracts/CHANGELOG.md entry (AGENTS.md §4.3). Usage and rules: contracts/README.md
+# "Validate locally". Runs when contracts/, the root Makefile or this workflow changes.
+name: contracts
+
+on:
+  pull_request:
+    paths:
+      - 'contracts/**'
+      - 'Makefile'
+      - '.github/workflows/contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'Makefile'
+      - '.github/workflows/contracts.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the version check needs the merge base with the PR base
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: contracts/tools/.nvmrc
+          cache: npm
+          cache-dependency-path: contracts/tools/package-lock.json
+      - name: Install the pinned contract toolchain
+        working-directory: contracts/tools
+        run: npm ci --no-audit --no-fund
+      - name: make contracts-check (Redocly lint, $refs, schemas, examples, rules, D12, MCP)
+        run: make contracts-check
+      - name: Changed contract documents are versioned and in contracts/CHANGELOG.md
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "No base commit to compare with (new branch); skipping the version check."
+            exit 0
+          fi
+          make contracts-version-check BASE="$BASE_SHA"
