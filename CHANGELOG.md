@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tickets)` · close EP-10 CI acceptance and add a ticket counter script · HUB-250, HUB-251 · F-19
+  - HUB-250 and HUB-251 done: the frontend workflow ran green on PR #3
+  - docs/tickets/recount.py recomputes the ticket totals and epic/feature tables (--check for CI); counters fixed after the M0 merge (190 tickets, 29 done)
 - 2026-10-31 · `docs(tickets)` · file console follow-ups from the EP-10 scaffold · HUB-278, HUB-279, HUB-280 · F-19
   - HUB-278: CCR-001, X-Hub-Request-Id on admin responses (contract-steward)
   - HUB-279: SvelteKit 3 evaluation for two npm audit advisories before form actions; HUB-280: Playwright e2e in CI

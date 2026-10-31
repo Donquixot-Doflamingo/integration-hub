@@ -2,14 +2,14 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **186** · done: **15** · todo: **171**
+Total tickets: **190** · done: **29** · todo: **161**
 
 ## Epics
 
 | Epic | Name | Milestone | Features | ID range | Tickets | Done |
 | --- | --- | --- | --- | --- | --- | --- |
-| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 11 |
-| EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 13 | 0 |
+| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
+| EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 0 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 0 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
@@ -18,7 +18,7 @@ Total tickets: **186** · done: **15** · todo: **171**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 28 | 4 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 31 | 4 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1716,7 +1716,7 @@ Create `frontend/` with SvelteKit, Svelte 5 runes, TypeScript strict, ESLint/Pre
 
 **Acceptance criteria**
 - [x] `npm run check && npm test` green on the scaffold
-- [ ] CI runs check, unit and build for `frontend/**` changes
+- [x] CI runs check, unit and build for `frontend/**` changes
 - [x] Svelte 5 runes mode enforced
 
 ### HUB-251 — Generated API client (gen:api)
@@ -1727,7 +1727,7 @@ Create `frontend/` with SvelteKit, Svelte 5 runes, TypeScript strict, ESLint/Pre
 `npm run gen:api` generates types from `contracts/openapi/hub-admin.v1.yaml` with openapi-typescript and wraps openapi-fetch in a typed client with auth and error-envelope handling (AGENTS §4.5).
 
 **Acceptance criteria**
-- [ ] Generated types committed; CI fails if regeneration produces a diff
+- [x] Generated types committed; CI fails if regeneration produces a diff
 - [x] No hand-written API types in `src/` (lint rule or grep check)
 - [x] Client surfaces the error envelope as a typed error
 

@@ -100,3 +100,6 @@ todo -> in-progress -> in-review -> done
 - Coding before the ticket exists. Reusing or renumbering IDs. IDs outside the epic range.
 - A ticket spanning backend + frontend + contract. Missing fields ("Depends on" left blank).
 - Marking `done` before the PR is merged.
+
+## Keep counters true
+Never edit the totals by hand. After any ticket add, status change or merge touching `TICKETS.md`, run `python3 docs/tickets/recount.py`, and check with `--check`.
