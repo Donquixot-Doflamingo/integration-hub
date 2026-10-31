@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **75** · todo: **117** · other (in-progress/in-review/blocked): **3**
+Total tickets: **195** · done: **80** · todo: **115**
 
 ## Epics
 
@@ -12,7 +12,7 @@ Total tickets: **195** · done: **75** · todo: **117** · other (in-progress/in
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
-| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 12 |
+| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 17 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
@@ -782,26 +782,26 @@ Map vendor outcomes to canonical codes (DESIGN §4.4, §10.2) via response/error
 
 ### HUB-088 — Invoke handlers (sync pipeline)
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-081, HUB-082, HUB-083, HUB-085, HUB-087 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-081, HUB-082, HUB-083, HUB-085, HUB-087 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-088-invoke-sync`
 
 Wire `POST /v1/integrations/{id}/invoke` and `/invoke/{op}` through the §18.4 sync pipeline (resolve → transform → upstream → response map → respond) with per-stage duration metrics; debug-only `X-Hub-Integration-Version`.
 
 **Acceptance criteria**
-- [ ] Happy path returns the canonical response from mockvendor
+- [x] Happy path returns the canonical response from mockvendor
 - [x] Unknown `op` for a multi-operation capability → 404 with envelope
-- [ ] No DB or registry read on the path (test with DB stopped after warm-up)
+- [x] No DB or registry read on the path (test with DB stopped after warm-up)
 - [x] Responses validate against `contracts/openapi/hub-public.v1.yaml`
 
 ### HUB-089 — Dry-run endpoint
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-088, HUB-064 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-088, HUB-064 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `feat/HUB-089-dry-run-endpoint`
 
 Implement `dryRunIntegration` (`POST /v1/integrations/{id}/dry-run`) returning the exact upstream request (method, URL, headers, body) the Hub would send, without sending it (DESIGN §4.1, §7.6.3). This is the documented, scope-gated exception to the no-vendor-leak rule (PRD DV-6): key scope `dry_run` required, audited with `dry_run: true`.
 
 **Acceptance criteria**
-- [ ] Mockvendor records zero calls during dry-run; no queue entry or idempotency record is created
+- [x] Mockvendor records zero calls during dry-run; no queue entry or idempotency record is created
 - [x] Credentials and secret values appear only as `***` in output
 - [x] Key without scope `dry_run` → 403 `FORBIDDEN`, reason `missing_scope`
 - [x] Response validates against the public contract
@@ -832,15 +832,15 @@ Add day-partitioned `requests`, `request_events`, `request_attempts` and an `Aud
 
 ### HUB-092 — Sync audit events with hashes
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-091, HUB-088 · **Feature:** F-08 · **Stories:** US-08xx
+- **Status:** done · **Depends on:** HUB-091, HUB-088 · **Feature:** F-08 · **Stories:** US-08xx
 - **Branch:** `feat/HUB-092-audit-sync-events`
 
 Emit every §13.1 event for the sync path, each with sha256 + byte size of the payload, tenant key replaced by its hash, and secrets redacted; bodies over 64 KB spill to object storage (DESIGN §13.1, §13.3).
 
 **Acceptance criteria**
-- [ ] A sync request produces received → validated → resolved → transformed → sent → responded → response.transformed → completed
-- [ ] `integration.resolved` records version and snapshot version
-- [ ] Every event stores sha256 and bytes even when the body is not stored
+- [x] A sync request produces received → validated → resolved → transformed → sent → responded → response.transformed → completed
+- [x] `integration.resolved` records version and snapshot version
+- [x] Every event stores sha256 and bytes even when the body is not stored
 
 ### HUB-093 — Payload policies: full, masked, metadata_only
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
@@ -868,27 +868,27 @@ Ship the Go SDK core generated/written against the public contract: `Invoke` ret
 
 ### HUB-095 — E2E: every error class maps to the right canonical code
 - **Epic:** EP-04 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-088, HUB-029 · **Feature:** F-06 · **Stories:** US-06xx
+- **Status:** done · **Depends on:** HUB-088, HUB-029 · **Feature:** F-06 · **Stories:** US-06xx
 - **Branch:** `test/HUB-095-e2e-error-classes`
 
 End-to-end tests caller → hub → mockvendor for every vendor outcome class (DESIGN §19 M3 Accept).
 
 **Acceptance criteria**
-- [ ] One test case per row of §10.2 sync column plus validation/auth/not-found errors
-- [ ] Each asserts HTTP status, `code`, `retryable` and `retry_after_ms`
-- [ ] Runs in `make itest`
+- [x] One test case per row of §10.2 sync column plus validation/auth/not-found errors
+- [x] Each asserts HTTP status, `code`, `retryable` and `retry_after_ms`
+- [x] Runs in `make itest`
 
 ### HUB-096 — Audit completeness and secret grep test
 - **Epic:** EP-04 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-092, HUB-093, HUB-095 · **Feature:** F-08 · **Stories:** US-08xx
+- **Status:** done · **Depends on:** HUB-092, HUB-093, HUB-095 · **Feature:** F-08 · **Stories:** US-08xx
 - **Branch:** `test/HUB-096-audit-secret-grep`
 
 Verify the audit timeline is complete for every e2e case and that no secret value appears anywhere in stored events or logs (DESIGN §19 M3 Accept).
 
 **Acceptance criteria**
-- [ ] Timeline for each e2e case contains all expected event types in order
-- [ ] Grep of all `request_events` payloads and captured logs finds no secret value
-- [ ] Test fails if a new secret is added to dev creds and leaks
+- [x] Timeline for each e2e case contains all expected event types in order
+- [x] Grep of all `request_events` payloads and captured logs finds no secret value
+- [x] Test fails if a new secret is added to dev creds and leaks
 
 ### HUB-097 — Overhead benchmark, public contract tests and M3 summary
 - **Epic:** EP-04 · **Type:** perf · **Area:** backend

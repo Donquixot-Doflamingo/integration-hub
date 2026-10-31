@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `test(edge)` · prove every error class and the audit trail end to end · HUB-095 · F-06
+  - make itest runs caller → hub → mockvendor for every sync outcome of DESIGN §10.2 plus validation, authentication and unknown-integration errors, asserting status, code, retryable and retry_after_ms
+  - The same run checks each stored timeline (gap-free seq, first and final event, vendor stages when the vendor was called, attempt rows) and greps every stored payload, event meta and captured log line for credential values, the API key and x-pii values; a positive control proves the search works
+  - With the audit database stalled, the sync path still answers 20 requests at full speed
+  - Failed requests now log one request failed line (integration, code, status, attempts; never bodies)
 - 2026-10-31 · `feat(hub)` · wire the gateway role to the edge, credentials, upstream and audit · HUB-088 · F-06
   - hub gateway now serves the caller API: discovery, dry-run and invoke over the warm credential cache, the per-account upstream client and the audit writer
   - Credentials of every account in a snapshot are loaded before that snapshot serves traffic (at boot and on every config change); upstream pools of removed accounts are pruned after the swap

@@ -171,6 +171,9 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, p *prepared, ce *c
 	if p == nil {
 		return
 	}
+	// Codes and counts only: never bodies, credentials or vendor payloads.
+	s.log.InfoContext(r.Context(), "request failed", slog.String("integration", p.integration.Integration),
+		slog.String("code", string(ce.Code)), slog.Int("status", ce.Code.HTTPStatus()), slog.Int("attempts", p.attempts))
 	p.trail.Add(audit.RequestFailed, 0, nil, map[string]any{"code": string(ce.Code), "status": ce.Code.HTTPStatus()})
 	s.record(r, p, "failed", ce.Code.HTTPStatus(), string(ce.Code))
 }
