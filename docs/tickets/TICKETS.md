@@ -2,14 +2,14 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **63** · todo: **131**
+Total tickets: **194** · done: **64** · todo: **130**
 
 ## Epics
 
 | Epic | Name | Milestone | Features | ID range | Tickets | Done |
 | --- | --- | --- | --- | --- | --- | --- |
 | EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
-| EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
+| EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 14 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
@@ -383,7 +383,7 @@ Prove the M0 Accept line and post the milestone wrap-up (AGENTS §10).
 
 ### HUB-033 — CCR: getReadyz 503 example lacks the required request_id
 - **Epic:** EP-01 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-006 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-006 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `contract/HUB-033-readyz-example-request-id`
 
 ### CCR: getReadyz 503 example lacks the required request_id
@@ -411,9 +411,11 @@ Prove the M0 Accept line and post the milestone wrap-up (AGENTS §10).
 - **Rollout**: contract commit before the M0 PR merges, or in the next contract PR
 
 **Acceptance criteria**
-- [ ] Example includes `request_id` and a `details` entry; contract validation passes
-- [ ] `hub-public` `info.version` 1.0.1 and `contracts/CHANGELOG.md` entry
+- [x] Example includes `request_id` and a `details` entry; contract validation passes
+- [x] `hub-public` `info.version` 1.0.1 and `contracts/CHANGELOG.md` entry
 - [ ] Contract test (HUB-031) validates the live 503 body against the operation
+
+Steward note (2026-10-31): the frozen 1.0.0 example already carried `request_id`; the CCR's "before" snippet predates the freeze. 1.0.1 aligns the rest of the example with the backend (`details: [{message: redis unreachable}]`, no null `circuit`/`reason`/`upstream`) and keeps request id `...JQ`, because `...JN` is already used by the `receiveVendorWebhook` example. The contract-test criterion stays open for the backend (HUB-031).
 
 ## EP-02 — M1 Config registry
 

@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `contract(public)` · align the getReadyz 503 example with the readiness checks · HUB-033 · F-01
+  - hub-public 1.0.1 (patch): the `/readyz` 503 example shows one `details` entry per failing check with `message` only (`redis unreachable`), as the backend returns it
+  - The `getReadyz` description says each detail names a failing check and that `request_id` equals the `X-Hub-Request-Id` header
+
 - 2026-10-31 · `feat(frontend)` · add request timeline with policy-aware payload views · HUB-264 · F-19
   - Request ids in the explorer open `/requests/{id}`: status and error code, tenant, integration and version, capability, mode, vendor and account, timings (total, hub overhead, vendor, queue wait), idempotency key, audit policy, snapshot and trace id
   - The timeline lists every audit event in sequence order with its time, the gap since the previous event and since the first, size and SHA-256, and the attempt it belongs to

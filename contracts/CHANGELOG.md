@@ -5,6 +5,10 @@ Entry format: `- YYYY-MM-DD · <document> <version> · <CCR / HUB-###> · <summa
 
 ## 2026-10-31
 
+- 2026-10-31 · `hub-public` 1.0.1 · HUB-033 · `getReadyz` 503 example matches what `/readyz` returns (patch, example and description only)
+  - The example has one `details` entry with `message` only (`redis unreachable`), as the backend emits it; the old entry carried a `pointer` into a request body that `/readyz` does not have.
+  - The example drops the `circuit`/`reason`/`upstream` nulls the backend omits, and keeps its `request_id` (already present in 1.0.0; the CCR's "before" snippet predates the freeze).
+  - The description says each entry names one failing check and that `request_id` equals `X-Hub-Request-Id`. No schema change.
 - 2026-10-31 · `hub-public` 1.0.0 · Phase 1 · Initial frozen contract (Phase 1)
   - Invoke (single and multi-operation), dry-run (integration-developers, scope `dry_run`), request status, discovery (`/v1/integrations`, `/v1/capabilities/{capability}`), inbound vendor webhooks (internal), hand-off return (planned, Release 2), `/healthz`, `/readyz`.
   - Outbound callbacks `request.completed`, `request.failed`, `request.expired`, `delivery.status` with `X-Hub-Signature`.
