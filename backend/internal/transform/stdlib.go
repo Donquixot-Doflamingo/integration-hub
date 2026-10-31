@@ -32,6 +32,8 @@ var stdlib = map[string]func(params ...any) (any, error){
 	"currencyMinor":  fnCurrencyMinor,
 	"maskPAN":        fnMaskPAN,
 	"maskAadhaar":    fnMaskAadhaar,
+	// response mapping
+	"header": fnHeader,
 }
 
 func stdlibOptions() []expr.Option {

@@ -2,6 +2,7 @@ package transform
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"time"
 
@@ -32,7 +33,17 @@ type EvalError struct {
 	Path        string
 	Expr        string
 	Err         error
+	// detail is the expression engine's own message. It can quote input values (personal data,
+	// secrets), so Error() never includes it; only developer tools on fixture data print Detail().
+	detail string
 }
+
+// errEvaluation replaces engine messages in Error(), which reaches logs and the audit trail.
+var errEvaluation = errors.New("expression failed at run time")
+
+// Detail is the engine message, which may contain input values: show it only for fixture data
+// (goldens, hubctl), never in logs or audit.
+func (e *EvalError) Detail() string { return e.detail }
 
 func (e *EvalError) Error() string {
 	if e.Expr == "" {
@@ -43,7 +54,6 @@ func (e *EvalError) Error() string {
 
 func (e *EvalError) Unwrap() error { return e.Err }
 
-//nolint:unparam // response mapping (HUB-065) passes res
 func (p *Program) env(in Input, res map[string]any) map[string]any {
 	now := in.Now
 	clock := func() time.Time { return time.Now().UTC() }
@@ -84,7 +94,7 @@ func (p *Program) eval(n *cnode, env map[string]any) (any, error) {
 		m := vm.VM{MemoryBudget: p.limits.MemoryBudget}
 		v, err := m.Run(n.prog, env)
 		if err != nil {
-			return nil, &EvalError{Transformer: p.ref, Path: n.path, Expr: n.src, Err: fmt.Errorf("%s", firstLine(err.Error()))}
+			return nil, &EvalError{Transformer: p.ref, Path: n.path, Expr: n.src, Err: errEvaluation, detail: firstLine(err.Error())}
 		}
 		return v, nil
 	case nodeObject:

@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -42,8 +43,16 @@ func runCases(t *testing.T, cases []fnCase) {
 		t.Run(c.src, func(t *testing.T) {
 			got, err := run(t, c.src, Input{Req: map[string]any{"s": "Ünïcødé ✓", "n": 3.0}})
 			if c.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), c.wantErr) {
-					t.Fatalf("err %v, want %q", err, c.wantErr)
+				msg := ""
+				if err != nil {
+					msg = err.Error()
+					var ee *EvalError
+					if errors.As(err, &ee) {
+						msg += " | " + ee.Detail() // fixture data: the engine message is safe to read here
+					}
+				}
+				if !strings.Contains(msg, c.wantErr) {
+					t.Fatalf("err %q, want %q", msg, c.wantErr)
 				}
 				return
 			}

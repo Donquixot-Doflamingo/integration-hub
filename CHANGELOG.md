@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(transform)` · map vendor responses and errors to canonical results · HUB-065 · F-04
+  - Program.MapResponse: ordered error rules (first match wins) with retry_after_ms and message; unmatched 4xx/5xx are classified by status, never mapped as success
+  - Mapped responses are validated against the capability response schema; header(res, name) reads headers case-insensitively
+  - Transformer failures (EvalError → TRANSFORM_FAILED) record transformer, target and expression but never input values; Detail() holds the engine message for fixture debugging only
 - 2026-10-31 · `feat(transform)` · build vendor requests and dry-runs · HUB-064 · F-04
   - Program.BuildRequest evaluates method, path, headers, query and body into the vendor request; header/query values must be scalars, nil omits them
   - Program.DryRun returns the same request with credential-derived values masked (*** by target and by value)
