@@ -16,8 +16,8 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish.
 - Changelog (one entry per commit): `CHANGELOG.md`
 
 ## Current phase
-- **Phase 1 (done when merged):** repo foundation. Docs, contracts, skills, agents, tickets. No product code.
-- **Phase 2 (next):** code, milestone by milestone, from DESIGN.md §19 (M0 → M8), with the admin console (EP-10) and MCP server (EP-11) in parallel against the frozen contracts.
+- **Phase 1 (merged):** repo foundation. Docs, contracts, skills, agents, tickets.
+- **Phase 2 (in progress):** M0 done (`docs/milestones/M0.md`). Code, milestone by milestone, from DESIGN.md §19 (M0 → M8), with the admin console (EP-10) and MCP server (EP-11) in parallel against the frozen contracts.
 
 ## Working rules (DESIGN §0)
 - **Callers never see vendor names, account names or versions.** Caller contract = integration ID + canonical body → canonical response. If a change would leak vendor identity into the caller contract, stop and tell the user.
@@ -50,7 +50,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish.
 ## Kickoff confirmations (defaults taken, 2026-10-31)
 - Language: **Go** (backend), **SvelteKit / Svelte 5 + TypeScript** (admin console).
 - Repo: new monorepo `integration-hub`. Go module `github.com/Donquixot-Doflamingo/integration-hub/backend`.
-- Local Docker for Postgres + Redis: assumed **yes**. Not installed yet on the dev machine (ticket HUB-012).
+- Local Docker for Postgres + Redis: **yes**, via Colima (HUB-012). Use Node from `/opt/homebrew/opt/node@22/bin`.
 
 ## Commands (Phase 2, once scaffolded)
 - Backend: `cd backend && make build test itest lint bench run`

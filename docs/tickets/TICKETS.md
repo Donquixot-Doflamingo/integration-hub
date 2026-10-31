@@ -157,17 +157,17 @@ Create root `CHANGELOG.md` with `[Unreleased]`, `.github/pull_request_template.m
 
 ### HUB-012 — Install toolchain on the dev machine
 - **Epic:** EP-00 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** — · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** — · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-012-install-toolchain`
 
 Install and verify Go 1.25, Node 22 (with npm), Docker (with compose v2) and golangci-lint on the development machine so M0 and the frontend scaffold can start.
 
 **Acceptance criteria**
-- [ ] `go version` reports 1.25.x
-- [ ] `node --version` reports v22.x
-- [ ] `docker compose version` works and `docker run hello-world` succeeds
-- [ ] `golangci-lint --version` works
-- [ ] Versions recorded in `docs/tech/TECH_SPEC.md` (via docs-keeper)
+- [x] `go version` reports ≥ 1.25 (1.27.3 installed; `go.mod` minimum is 1.26, see HUB-023)
+- [x] `node --version` reports v22.x
+- [x] `docker compose version` works and `docker run hello-world` succeeds
+- [x] `golangci-lint --version` works
+- [x] Versions recorded in `docs/tech/TECH_SPEC.md` (via docs-keeper)
 
 ### HUB-013 — Configure GitHub branch protection on main
 - **Epic:** EP-00 · **Type:** chore · **Area:** infra
@@ -225,161 +225,195 @@ Walk the user through the open questions that the contracts did not settle (PRD 
 
 ### HUB-020 — Create backend Go module and package layout
 - **Epic:** EP-01 · **Type:** chore · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-012 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-012 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-020-go-module-layout`
 
 Create `backend/go.mod` (`github.com/Donquixot-Doflamingo/integration-hub/backend`) and the empty package layout from DESIGN §18.1 (`cmd/hub`, `cmd/hubctl`, `cmd/mockvendor`, `cmd/hubmcp`, `internal/*`, `pkg/hubclient`, `config/`, `migrations/`).
 
 **Acceptance criteria**
-- [ ] `go build ./...` succeeds in `backend/`
-- [ ] Every §18.1 package exists with a `doc.go` describing its responsibility
-- [ ] `go vet ./...` is clean
+- [x] `go build ./...` succeeds in `backend/`
+- [x] Every §18.1 package exists with a `doc.go` describing its responsibility
+- [x] `go vet ./...` is clean
 
 ### HUB-021 — Makefile targets and golangci-lint config
 - **Epic:** EP-01 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-021-makefile-lint`
 
 Add `backend/Makefile` with `build test itest lint bench run` (DESIGN §19 M0) and a `.golangci.yml` with a strict but practical linter set.
 
 **Acceptance criteria**
-- [ ] `make build` produces `hub`, `hubctl`, `mockvendor`, `hubmcp` binaries
-- [ ] `make test` runs `go test -race ./...`
-- [ ] `make itest` runs tests tagged `integration`
-- [ ] `make lint` passes on the scaffold
+- [x] `make build` produces `hub`, `hubctl`, `mockvendor`, `hubmcp` binaries
+- [x] `make test` runs `go test -race ./...`
+- [x] `make itest` runs tests tagged `integration`
+- [x] `make lint` passes on the scaffold
 
 ### HUB-022 — CI workflow for backend
 - **Epic:** EP-01 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-021, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-021, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-022-ci-backend`
 
 Fill the CI placeholder with backend jobs: lint, `make test` (race), `make itest` with Postgres 16 and Redis 7 service containers, and build all binaries.
 
 **Acceptance criteria**
-- [ ] CI runs lint, unit (race), integration and build jobs on every PR
-- [ ] A failing unit test makes the PR check fail
-- [ ] Go module and build caches are used; full run < 10 min
+- [x] CI runs lint, unit (race), integration and build jobs on every PR
+- [x] A failing unit test makes the PR check fail
+- [x] Go module and build caches are used; full run < 10 min
 
 ### HUB-023 — docker-compose with Postgres 16 + Redis 7 and goose migrations
 - **Epic:** EP-01 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-023-compose-migrations`
 
 Add `deploy/docker-compose.yml` (Postgres 16, Redis 7, healthchecks) and wire `goose` migrations in `backend/migrations/` with an empty baseline and `make migrate` (DESIGN §18.7).
 
 **Acceptance criteria**
-- [ ] `docker compose up -d` brings both services to healthy
-- [ ] `make migrate` applies the baseline against compose Postgres
-- [ ] `make itest` uses the compose services
+- [x] `docker compose up -d` brings both services to healthy
+- [x] `make migrate` applies the baseline against compose Postgres
+- [x] `make itest` uses the compose services
 
 ### HUB-024 — hub binary with role entrypoints and config loading
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `feat/HUB-024-hub-roles-config`
 
 Implement `hub gateway | worker | scheduler | admin` (DESIGN §17) with config from env + flags (listen addr, DB/Redis URLs, snapshot source) and graceful shutdown.
 
 **Acceptance criteria**
-- [ ] Each role starts and stops cleanly on SIGTERM within 10 s
-- [ ] Unknown role exits non-zero with usage text
-- [ ] Config precedence flag > env > default is table-tested
+- [x] Each role starts and stops cleanly on SIGTERM within 10 s
+- [x] Unknown role exits non-zero with usage text
+- [x] Config precedence flag > env > default is table-tested
 
 ### HUB-025 — /healthz and /readyz endpoints
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-024, HUB-023 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-024, HUB-023 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `feat/HUB-025-healthz-readyz`
 
 Every role serves `/healthz` (process alive) and `/readyz` (Postgres, Redis reachable and, for gateway/worker, a snapshot loaded) (DESIGN §19 M0).
 
 **Acceptance criteria**
-- [ ] `/healthz` returns 200 as soon as the process is up
-- [ ] `/readyz` returns 503 with a reason when Postgres or Redis is down
-- [ ] Integration test covers both states
+- [x] `/healthz` returns 200 as soon as the process is up
+- [x] `/readyz` returns 503 with a reason when Postgres or Redis is down
+- [x] Integration test covers both states
 
 ### HUB-026 — Redacting slog handler
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-020 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `feat/HUB-026-redacting-slog`
 
 Add an `internal/telemetry` `slog.Handler` that holds current secret values and replaces any occurrence in messages and attributes with `***` (DESIGN §9, AGENTS §3.5).
 
 **Acceptance criteria**
-- [ ] Registered secret values never appear in output, in message, attrs or nested groups (table test)
-- [ ] Secrets can be added/removed at runtime safely under `-race`
-- [ ] Handler overhead benchmarked and recorded
+- [x] Registered secret values never appear in output, in message, attrs or nested groups (table test)
+- [x] Secrets can be added/removed at runtime safely under `-race`
+- [x] Handler overhead benchmarked and recorded
 
 ### HUB-027 — OpenTelemetry and metrics skeleton
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-024 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-024 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `feat/HUB-027-otel-metrics-skeleton`
 
 Wire the OTel SDK (tracer provider, OTLP exporter optional), a Prometheus `/metrics` endpoint, and a middleware helper that publishes per-stage duration metrics (DESIGN §16.2, §18.5 rule 5).
 
 **Acceptance criteria**
-- [ ] `/metrics` exposes Go runtime metrics and a sample `hub_overhead_ms` histogram
-- [ ] Incoming `traceparent` is continued in a span
-- [ ] Tracing can be disabled by config with no exporter running
+- [x] `/metrics` exposes Go runtime metrics and a sample `hub_overhead_ms` histogram
+- [x] Incoming `traceparent` is continued in a span
+- [x] Tracing can be disabled by config with no exporter running
 
 ### HUB-028 — mockvendor server, control API and request recording
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-020, HUB-006 · **Feature:** F-02 · **Stories:** US-02xx
+- **Status:** done · **Depends on:** HUB-020, HUB-006 · **Feature:** F-02 · **Stories:** US-02xx
 - **Branch:** `feat/HUB-028-mockvendor-core`
 
 Implement `cmd/mockvendor` per the mockvendor contract: arbitrary routes, a control API to set per-route behaviour and reset, and recording of received requests for test assertions (DESIGN §19 M0).
 
 **Acceptance criteria**
-- [ ] Control API matches the frozen mockvendor OpenAPI document
-- [ ] Recorded requests (method, path, headers, body) can be listed and cleared
-- [ ] A Go test helper starts mockvendor in-process on a random port
+- [x] Control API matches the frozen mockvendor OpenAPI document
+- [x] Recorded requests (method, path, headers, body) can be listed and cleared
+- [x] A Go test helper starts mockvendor in-process on a random port
 
 ### HUB-029 — mockvendor fault behaviours
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-028 · **Feature:** F-02 · **Stories:** US-02xx
+- **Status:** done · **Depends on:** HUB-028 · **Feature:** F-02 · **Stories:** US-02xx
 - **Branch:** `feat/HUB-029-mockvendor-behaviours`
 
 Add every M0 behaviour: fixed/random latency, status codes, error ratio, 429 with `Retry-After`, hard down (connection refused), slow drip, malformed body.
 
 **Acceptance criteria**
-- [ ] Each behaviour has its own table-driven test proving the observed effect
-- [ ] Error ratio converges within ±5 % over 1 000 calls
-- [ ] Hard down yields connection refused, not an HTTP error
+- [x] Each behaviour has its own table-driven test proving the observed effect
+- [x] Error ratio converges within ±5 % over 1 000 calls
+- [x] Hard down yields connection refused, not an HTTP error
 
 ### HUB-030 — mockvendor inbound webhook sender
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-028 · **Feature:** F-02 · **Stories:** US-02xx
+- **Status:** done · **Depends on:** HUB-028 · **Feature:** F-02 · **Stories:** US-02xx
 - **Branch:** `feat/HUB-030-mockvendor-webhooks`
 
 Let mockvendor send signed or unsigned webhooks to a configured Hub URL on demand, for later inbound webhook tests (DESIGN §12.2, §19 M0).
 
 **Acceptance criteria**
-- [ ] Control API call triggers a POST with the given body and headers
-- [ ] HMAC signing option produces a verifiable signature
-- [ ] Test covers delivery to an httptest receiver
+- [x] Control API call triggers a POST with the given body and headers
+- [x] HMAC signing option produces a verifiable signature
+- [x] Test covers delivery to an httptest receiver
 
 ### HUB-031 — Contract test harness with kin-openapi
 - **Epic:** EP-01 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-006, HUB-025 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-006, HUB-025 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `test/HUB-031-contract-test-harness`
 
 Add a test helper that loads the frozen OpenAPI documents with kin-openapi and validates every request/response recorded in handler tests (AGENTS §4.6).
 
 **Acceptance criteria**
-- [ ] Helper validates status, headers and body against the operation in the contract
-- [ ] A deliberately wrong response fails the test with the JSON pointer
-- [ ] `/healthz` and `/readyz` are validated (or explicitly excluded with a reason)
+- [x] Helper validates status, headers and body against the operation in the contract
+- [x] A deliberately wrong response fails the test with the JSON pointer
+- [x] `/healthz` and `/readyz` are validated (or explicitly excluded with a reason)
 
 ### HUB-032 — M0 acceptance and milestone summary
 - **Epic:** EP-01 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-022, HUB-025, HUB-029, HUB-030, HUB-031 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-022, HUB-025, HUB-029, HUB-030, HUB-031 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `test/HUB-032-m0-acceptance`
 
 Prove the M0 Accept line and post the milestone wrap-up (AGENTS §10).
 
 **Acceptance criteria**
-- [ ] `docker compose up` + `hub gateway` serves `/healthz` (scripted smoke test in CI)
-- [ ] All mockvendor behaviours covered by tests
-- [ ] `make test` and `make itest` green
-- [ ] Milestone summary with Deviations posted; feature docs F-01, F-02 updated
+- [x] `docker compose up` + `hub gateway` serves `/healthz` (scripted smoke test in CI)
+- [x] All mockvendor behaviours covered by tests
+- [x] `make test` and `make itest` green
+- [x] Milestone summary with Deviations posted; feature docs F-01, F-02 updated
+
+### HUB-033 — CCR: getReadyz 503 example lacks the required request_id
+- **Epic:** EP-01 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-006 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `contract/HUB-033-readyz-example-request-id`
+
+### CCR: getReadyz 503 example lacks the required request_id
+- **Requested by**: backend-engineer (found while implementing HUB-025)
+- **Why**: `CanonicalError` requires `request_id` (`contracts/schemas/events/canonical-error.json`), and the 503 response declares an `X-Hub-Request-Id` header, but the `getReadyz` 503 example has no `request_id`. The backend returns one (schema wins). The example would fail strict example validation (HUB-015) and the MSW fixture the frontend builds from it would not be valid.
+- **Document**: hub-public.v1.yaml
+- **Operation / schema**: `getReadyz`, `GET /readyz`, response 503 example
+- **Before**:
+  ```yaml
+  error: { code: NOT_READY, message: Node is not ready, retryable: true, retry_after_ms: 1000, circuit: null, reason: null }
+  ```
+- **After**:
+  ```yaml
+  error:
+    code: NOT_READY
+    message: Node is not ready
+    retryable: true
+    retry_after_ms: 1000
+    details: [ { message: redis unreachable } ]
+    request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JN
+  ```
+- **Breaking?**: no (example only; patch bump 1.0.0 → 1.0.1)
+- **Consumers affected**: none at runtime; frontend MSW fixtures if generated from this example
+- **Error codes**: NOT_READY (existing)
+- **Rollout**: contract commit before the M0 PR merges, or in the next contract PR
+
+**Acceptance criteria**
+- [ ] Example includes `request_id` and a `details` entry; contract validation passes
+- [ ] `hub-public` `info.version` 1.0.1 and `contracts/CHANGELOG.md` entry
+- [ ] Contract test (HUB-031) validates the live 503 body against the operation
 
 ## EP-02 — M1 Config registry
 

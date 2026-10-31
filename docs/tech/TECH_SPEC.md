@@ -91,7 +91,9 @@ flowchart LR
 
 ## 3. Monorepo layout
 
-ADR-0001. Toolchain targets: **Go 1.25.x, Node 22 LTS, Postgres 16, Redis 7**. *None of these, nor Docker, are installed on the current dev machine; installing and pinning them is ticket work (HUB-012, EP-01).*
+ADR-0001. Toolchain targets: **Go ≥ 1.26 (`go.mod` minimum; goose v3.29 requires 1.26), Node 22 LTS, Postgres 16, Redis 7**.
+
+Installed on the dev machine (HUB-012, 2026-10-31, Homebrew on macOS 15 arm64): Go 1.27.3, Node 22.23.4 (keg-only `node@22`: put `/opt/homebrew/opt/node@22/bin` first on `PATH`; a Node 26 from Homebrew is also present and must not be used), Docker CLI 29.9.2 + Compose 5.6.1 on Colima 0.10.3 (`colima start --cpu 4 --memory 6`), golangci-lint 2.15.0. The compose plugin is found through `cliPluginsExtraDirs` in `~/.docker/config.json`.
 
 ```text
 integration-hub/
@@ -141,7 +143,7 @@ integration-hub/
 └── docs/{DESIGN.md, product/, features/, tech/, tickets/, process/}
 ```
 
-`internal/*` matches DESIGN §18.1 exactly, except the proposed `internal/core` (§4.1). Binary-private code lives under `cmd/<bin>/internal/` so it cannot be imported by other binaries and does not add top-level packages.
+`internal/*` matches DESIGN §18.1, plus `internal/core` (shared leaf types, ADR-0001) and `internal/testkit` (test-only helpers such as the in-process mockvendor). Binary-private code lives under `cmd/<bin>/internal/` so it cannot be imported by other binaries and does not add top-level packages.
 
 ---
 
@@ -153,7 +155,7 @@ Packages may import only packages in **lower** layers (or the same layer where l
 | Layer | Package | May import (internal) | Never imports |
 | --- | --- | --- | --- |
 | L0 | `telemetry` | nothing internal (stdlib, OTel, Prometheus client only) | everything else — **leaf** |
-| L0 | `core` (proposed) | nothing internal | everything else — **leaf**. Holds IDs (ULID request ids), `Envelope`, canonical error codes (DESIGN §4.4), `VendorRequest`/`VendorResponse`, `Outcome`, `Mode`, request states (DESIGN §10.9) |
+| L0 | `core` | nothing internal | everything else — **leaf**. Holds IDs (ULID request ids), `Envelope`, canonical error codes (DESIGN §4.4), `VendorRequest`/`VendorResponse`, `Outcome`, `Mode`, request states (DESIGN §10.9) |
 | L1 | `transform` | core, telemetry | registry, upstream, creds (gets `creds` as a plain map in `TransformInput`) |
 | L2 | `registry` | core, transform, telemetry | resolve, creds, upstream, queue, any app package |
 | L3 | `resolve` | core, registry, telemetry | transform execution, upstream, queue |
@@ -167,6 +169,7 @@ Packages may import only packages in **lower** layers (or the same layer where l
 | L7 | `edge` | core, registry, resolve, transform, creds, upstream, queue, sessions, audit, delivery (shared `Attempter`), telemetry | webhooks, control |
 | L7 | `webhooks` | core, registry, transform, audit, callbacks, telemetry | edge, delivery, control |
 | L7 | `control` | core, registry, transform, resolve, creds, upstream, queue, audit, sessions, telemetry | edge, delivery, webhooks |
+| test | `testkit` | nothing internal (core and telemetry allowed) | must never be imported by production code; only `cmd/mockvendor` and `_test.go` files use it |
 | bin | `cmd/*` | anything | — |
 | SDK | `pkg/hubclient` | **nothing** under `internal/` (public SDK; wire types are its own or generated) | internal/* |
 
@@ -207,7 +210,7 @@ sqlc generates per-owner query packages (`internal/<pkg>/db`). A transaction tha
 
 ### 4.4 Enforcement
 - `golangci-lint` `depguard` rules generated from the table above (`backend/.golangci.yml`).
-- A unit test `internal/archtest` (or `go list -deps` in `make lint`) fails if any edge outside the table exists.
+- `internal/archtest` (unit test, runs in `make test`) fails if any internal edge outside the table exists, if `pkg/`, `cmd/mockvendor` or `cmd/hubmcp` import `internal/` (other than `testkit` for mockvendor), or if production code imports `testkit`.
 - `telemetry` and `core` have a test asserting zero internal imports.
 
 ---
@@ -653,7 +656,7 @@ Versions are pinned in `go.mod` / `package-lock.json` at M0 (DESIGN §18.7: "con
 | CLI | `spf13/cobra` for `hubctl` | subcommands + completion |
 | MCP | `github.com/modelcontextprotocol/go-sdk` | ADR-0006; official SDK, stdio + streamable HTTP |
 | Tests | stdlib `testing` + `stretchr/testify` (require/assert only), `go.uber.org/goleak`, `testcontainers-go` | DESIGN §18.7 |
-| Contract tests | `getkin/kin-openapi` (`openapi3filter`) — **risk**: OpenAPI 3.1 support in kin-openapi is partial; fallback `pb33f/libopenapi-validator` (TESTING_STRATEGY §4) | AGENTS §4.6 |
+| Contract tests | `getkin/kin-openapi` v0.152 (`openapi3filter`, gorillamux router), wrapped by `internal/testkit/contract` (HUB-031). Spike result: all three 3.1 documents load and validate, and runtime request/response validation works (type arrays, external `$ref`s, response headers). kin applies 3.0 nullability to *examples* (false positive on `{}` schemas with `null` examples), so the harness disables example validation; examples are checked by `make contracts-check` (HUB-015). Fallback if runtime gaps appear: `pb33f/libopenapi-validator` (TESTING_STRATEGY §4) | AGENTS §4.6 |
 | Lint | `golangci-lint` (incl. depguard, errcheck, gosec, revive, bodyclose, noctx) | M0 |
 | Frontend | SvelteKit 2, Svelte 5 runes, TypeScript strict, `openapi-typescript` + `openapi-fetch`, Vitest + Testing Library, Playwright, MSW | ADR-0005 |
 | Load | k6 (scripted scenarios, thresholds) — vegeta for quick constant-rate checks | M8 |
@@ -662,13 +665,13 @@ Versions are pinned in `go.mod` / `package-lock.json` at M0 (DESIGN §18.7: "con
 
 ## 14. Local development
 
-Prerequisites (not yet installed on the dev machine — setup ticket HUB-012): Go 1.25.x, Node 22 LTS, Docker (or Colima/OrbStack) with Compose v2, `golangci-lint`, `sqlc`, `goose`, `k6`. A `make doctor` target checks versions.
+Prerequisites (installed via HUB-012; versions in §3): Go ≥ 1.26, Node 22 LTS, Docker (or Colima/OrbStack) with Compose v2, `golangci-lint`, `sqlc`, `goose`, `k6`. A `make doctor` target checks versions.
 
 ### 14.1 docker compose (`deploy/docker-compose.yml`)
 | Service | Image | Profile | Port |
 | --- | --- | --- | --- |
-| `postgres` | `postgres:16` (pinned digest) | default | 5432 |
-| `redis` | `redis:7` (pinned digest) | default | 6379 |
+| `postgres` | `postgres:16.15-alpine` (pinned digest) | default | 5432 |
+| `redis` | `redis:7.4.12-alpine` (pinned digest) | default | 6379 |
 | `mockvendor` | built from `backend/` | `apps` | 8099 / 8098 |
 | `hub-gateway`, `hub-worker`, `hub-scheduler`, `hub-admin` | built from `backend/` | `apps` | 8080 / 8081 |
 | `oidc-stub` | dev OIDC issuer (see §17.3) | `auth` | 8085 |
@@ -696,7 +699,7 @@ Root `Makefile` (delegates):
 | `benchcmp` | `benchstat main.txt bench.txt` |
 | `fuzz` | `go test -fuzz` targets for 60 s each (TESTING_STRATEGY §8) |
 | `run ROLE=gateway` | run a role against compose |
-| `migrate-up` / `migrate-down` / `migrate-new NAME=` | goose |
+| `migrate` | `hub migrate`: applies the goose migrations embedded in `backend/migrations` (no goose CLI dependency; new files are added by hand as `NNNNN_name.sql`, append-only) |
 | `dev-key` | generate the local AES key (git-ignored) |
 | `goldens` | `hubctl transform test ./config/transformers/...` |
 | `chaos` | `go test -tags=chaos ./test/chaos/...` (M5 scenarios) |

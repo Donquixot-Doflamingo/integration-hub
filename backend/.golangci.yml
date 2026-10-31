@@ -1,0 +1,76 @@
+# golangci-lint v2 (pinned in Makefile: GOLANGCI_LINT_VERSION). See the go-idioms skill, references/lint.md.
+version: "2"
+run:
+  timeout: 5m
+  build-tags: [integration]
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - contextcheck
+    - depguard
+    - errname
+    - errorlint
+    - exhaustive
+    - forbidigo
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - sloglint
+    - unconvert
+    - unparam
+  settings:
+    errcheck:
+      exclude-functions: # CLI/usage output to an io.Writer; a failed write has no recovery
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    exhaustive:
+      default-signifies-exhaustive: true
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print
+          msg: use slog (or fmt.Fprint to an explicit writer in main/CLI code)
+        - pattern: ^log\.(Print|Fatal|Panic)
+          msg: use slog; exit only in main
+        - pattern: ^time\.Sleep$
+          msg: use timers with ctx, or testing/synctest in tests
+    sloglint:
+      attr-only: true
+      context: all
+      key-naming-case: snake
+    depguard:
+      rules:
+        transform-pure:
+          files: ["**/internal/transform/**"]
+          deny:
+            - pkg: net/http
+              desc: transformers are pure (DESIGN §7.1)
+            - pkg: os
+              desc: transformers are pure (DESIGN §7.1)
+            - pkg: github.com/jackc/pgx/v5
+              desc: no DB in transform
+            - pkg: github.com/redis/go-redis/v9
+              desc: no Redis in transform
+        no-log-package:
+          deny:
+            - pkg: log$
+              desc: use log/slog
+    revive:
+      rules:
+        - name: exported
+          disabled: true # doc.go per package documents responsibilities; enable once APIs settle
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [forbidigo, gosec, unparam]
+formatters:
+  enable: [gofmt, goimports]
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes: [github.com/Donquixot-Doflamingo/integration-hub]
