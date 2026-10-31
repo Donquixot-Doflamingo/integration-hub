@@ -109,4 +109,6 @@ Every page under `src/routes/(app)/` needs a session; without one you land on `/
   answers as the identity picked at login.
 
 Runes mode is enforced in `svelte.config.js` for every project component; Svelte 4 syntax fails to compile.
-CI: [`.github/workflows/frontend.yml`](../.github/workflows/frontend.yml), runs on `frontend/**` changes.
+CI: [`.github/workflows/frontend.yml`](../.github/workflows/frontend.yml), runs on `frontend/**` changes: job `console`
+(generated files, check, lint, unit tests, build) and job `e2e` (Playwright on `build:mock`, cached Chromium headless
+shell, 8 min cap, report and traces uploaded on failure). Run the same locally with `CI=true npm run test:e2e`.

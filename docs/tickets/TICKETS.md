@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **95** · todo: **99** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **95** · todo: **98** · other (in-progress/in-review/blocked): **2**
 
 ## Epics
 
@@ -2106,15 +2106,17 @@ Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract ro
 
 ### HUB-280 — Run Playwright e2e in frontend CI
 - **Epic:** EP-10 · **Type:** test · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-250, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** in-review · **Depends on:** HUB-250, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `test/HUB-280-fe-e2e-ci`
 
 The e2e suite (axe a11y, keyboard, 768 px drawer, theme) runs only locally today. Add a CI job that builds with mocks (`build:mock`), installs the chromium headless shell with a cache, and runs `npm run test:e2e`, uploading the report on failure.
 
+Shipped (frontend-engineer, `ci(frontend): run the Playwright e2e suite in frontend CI (HUB-280)`): job `e2e` in `.github/workflows/frontend.yml`, beside the existing `console` job (unchanged) and on the same triggers (`frontend/**`, the admin contract, the workflow). It installs with `npm ci`, reads the pinned `@playwright/test` version (exact in `package.json`, which pins the browser build), restores `~/.cache/ms-playwright` keyed by OS + that version, installs only the Chromium headless shell with its system packages on a miss (`install --with-deps --only-shell chromium`) or only the system packages on a hit, then runs `npm run test:e2e` (the config builds with `build:mock` and serves the preview). `timeout-minutes: 8`. On failure it uploads `playwright-report/` (HTML reporter added for CI) and `test-results/` (traces) for 14 days. The axe helper now waits until no view is refreshing (`aria-busy`), which removed a contrast false positive seen once in a full local run right after a mutation. Not run on GitHub yet: verified locally only, so the ticket stays `in-review` until the first PR run shows the cache and the time budget (see criteria).
+
 **Acceptance criteria**
-- [ ] `frontend.yml` runs e2e on `frontend/**` PRs; a failing e2e test fails the PR
-- [ ] Browser binaries cached; job under 8 min
-- [ ] Playwright HTML report uploaded as an artifact on failure
+- [x] `frontend.yml` runs e2e on `frontend/**` PRs; a failing e2e test fails the PR (the job runs on the workflow's `pull_request` paths and `npm run test:e2e` exits 1 on a failing test, checked locally with a deliberate failure; making the check required is a branch-protection setting, not in the repo)
+- [ ] Browser binaries cached; job under 8 min (cache step and `timeout-minutes: 8` in place; locally `CI=true npm run test:e2e` runs 99 tests in about 60 s including the mock build on 10 cores, 3 runs in a row green; not yet measured on a GitHub runner, which has fewer cores)
+- [x] Playwright HTML report uploaded as an artifact on failure (`if: failure()` upload of `frontend/playwright-report/` and `frontend/test-results/`; the HTML report is produced under `CI`, checked locally)
 
 ### HUB-281 — Upgrade the console to SvelteKit 3
 - **Epic:** EP-10 · **Type:** chore · **Area:** frontend

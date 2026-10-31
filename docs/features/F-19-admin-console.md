@@ -4,7 +4,7 @@
 A SvelteKit (Svelte 5 + TypeScript) control-plane UI in `frontend/`, pulled forward from Release 2 (PRD DV-2) and built in parallel with backend milestones against the frozen admin contract. It covers cutover, health, investigation and recovery workflows.
 
 ## Status
-`in-progress` — 2026-10-31 (scaffold, client, mocks, shell, sign-in and role gating, shared states, integrations list, detail, history and diff shipped; publish, rollback, weights, pause, the health board, breaker force, request search and the request timeline shipped (HUB-259 to HUB-264); contract round 1 adopted (HUB-278, 283, 284); the DLQ list, entry, replay and purge (HUB-266, HUB-267) and the transformer viewer with goldens and dry-run (HUB-268, HUB-269) shipped; console round 5: tenants (HUB-270), API keys with show-once (HUB-271), callback endpoints (HUB-272), snapshots (HUB-273) and the change log (HUB-274);, snapshots, change log and e2e in CI follow).
+`in-progress` — 2026-10-31 (scaffold, client, mocks, shell, sign-in and role gating, shared states, integrations list, detail, history and diff shipped; publish, rollback, weights, pause, the health board, breaker force, request search and the request timeline shipped (HUB-259 to HUB-264); contract round 1 adopted (HUB-278, 283, 284); the DLQ list, entry, replay and purge (HUB-266, HUB-267) and the transformer viewer with goldens and dry-run (HUB-268, HUB-269) shipped; console round 5: tenants (HUB-270), API keys with show-once (HUB-271), callback endpoints (HUB-272), snapshots (HUB-273) and the change log (HUB-274); Playwright e2e runs in CI (HUB-280, in review until its first GitHub run);, snapshots, change log and e2e in CI follow).
 
 ## Owner
 `frontend-engineer`.
@@ -80,7 +80,7 @@ Session in an HMAC-signed httpOnly SameSite=Lax cookie set by the login action; 
 
 ## Testing
 - **Unit / component**: Vitest + Testing Library.
-- **E2E**: Playwright against the contract mock server, then against the real backend in M7.
+- **E2E**: Playwright against the contract mock server, then against the real backend in M7. In CI since HUB-280 (job `e2e` in `.github/workflows/frontend.yml`: cached Chromium headless shell pinned by the `@playwright/test` version, 8 min cap, HTML report and traces uploaded on failure).
 - **Contract**: generated client type-checks (`npm run check`).
 - **Accessibility**: axe checks in Playwright.
 
@@ -140,6 +140,7 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-272 | Callback (registrar) endpoints on `/tenants/{id}` (`listRegistrarEndpoints` per tenant, all pages): URL, state, secret version and overlap, subscribers. Admins: register (`createRegistrarEndpoint`), edit URL / description (`updateRegistrarEndpoint`, changes only, no `If-Match`: the list has no per-item ETag), disable / enable, rotate the signing secret (`rotateRegistrarSecret`, overlap) and delete (`deleteRegistrarEndpoint`, id typed, reason as query). Signing secrets are write-only: the actions drop `signing_secret` before answering the browser. SSRF refusals (`VALIDATION_FAILED` pointer `/url`) land on the URL field (mock `registrar-url-private`, CCR-004) |
 | HUB-273 | Snapshots `/snapshots` (`listSnapshots`, cursor paging in the URL): version, summary, author, change log link, checksum (short + title + copy), size, created. `getLatestSnapshot` (`wait=0`) marks the latest row ("Latest" in text) and fills a summary panel. "Show changes in N" disclosure per row reads `getSnapshot` once and lists `changed_objects` linked via `$lib/objects.ts`. No blob download (internal format) |
 | HUB-274 | Change log `/change-log` (`listChangeLog`: actor, action, object type, object id, UTC range, page size in the URL; chips; paging; reversed range refused) and `/change-log/{change_id}` (`getChangeLogEntry`: what, reason, when, actor, snapshot; before / after as `DiffPaths` from `$lib/utils/json-diff.ts`, both objects in full). Objects link to their console page (integration, transformer, tenant, request). `ChangeNotice` links the entry itself |
+| HUB-280 | CI job `e2e` in `.github/workflows/frontend.yml` beside `console`: `npm ci`, browser cache keyed by OS + pinned `@playwright/test` version, `playwright install --with-deps --only-shell chromium` on a miss (`install-deps` on a hit), `npm run test:e2e` (build:mock + preview), `timeout-minutes: 8`, report + traces uploaded `if: failure()`; HTML reporter under `CI`. Verified locally only (99 tests, about 60 s, 3 runs green); the axe helper waits for `aria-busy` to clear first |
 | HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
@@ -182,3 +183,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-11-01 | HUB-272: callback endpoints; CCR-004; open question on signing secrets | frontend-engineer |
 | 2026-11-01 | HUB-274: change log list and entry | frontend-engineer |
 | 2026-11-01 | HUB-273: snapshots view | frontend-engineer |
+| 2026-11-01 | HUB-280: e2e in CI | frontend-engineer |

@@ -7,7 +7,10 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: 0,
-	reporter: process.env.CI ? [['github'], ['list']] : 'list',
+	// CI (HUB-280): annotations on the PR, a log, and an HTML report the workflow uploads on failure.
+	reporter: process.env.CI
+		? [['github'], ['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
+		: 'list',
 	use: {
 		baseURL: `http://localhost:${PORT}`,
 		trace: 'retain-on-failure'
