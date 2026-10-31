@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(mockvendor)` · add inbound webhook sender with HMAC and basic signing · HUB-030 · F-02
+  - POST /__control/webhooks sends a webhook (POST/PUT, JSON or raw body, custom headers, delay) and reports the target's status, headers and body
+  - Optional signing: hmac_sha256 over `<ts>.<raw body>` with a header template and timestamp offset for replay tests, or basic
+  - Unreachable targets come back as 200 with the transport error in `error`, per the contract
 - 2026-10-31 · `feat(mockvendor)` · add latency, error, rate-limit, down, slow-drip and malformed behaviours · HUB-029 · F-02
   - Routes can delay (fixed/random), fail with an error ratio (seedable), answer 429 with Retry-After (every Nth or ratio, after a burst)
   - down.mode reset (TCP reset), refuse (real connection refused, recovers when the route is removed) and hang; slow_drip streams the body in timed chunks

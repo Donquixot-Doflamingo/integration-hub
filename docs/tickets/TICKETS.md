@@ -346,15 +346,15 @@ Add every M0 behaviour: fixed/random latency, status codes, error ratio, 429 wit
 
 ### HUB-030 — mockvendor inbound webhook sender
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-028 · **Feature:** F-02 · **Stories:** US-02xx
+- **Status:** done · **Depends on:** HUB-028 · **Feature:** F-02 · **Stories:** US-02xx
 - **Branch:** `feat/HUB-030-mockvendor-webhooks`
 
 Let mockvendor send signed or unsigned webhooks to a configured Hub URL on demand, for later inbound webhook tests (DESIGN §12.2, §19 M0).
 
 **Acceptance criteria**
-- [ ] Control API call triggers a POST with the given body and headers
-- [ ] HMAC signing option produces a verifiable signature
-- [ ] Test covers delivery to an httptest receiver
+- [x] Control API call triggers a POST with the given body and headers
+- [x] HMAC signing option produces a verifiable signature
+- [x] Test covers delivery to an httptest receiver
 
 ### HUB-031 — Contract test harness with kin-openapi
 - **Epic:** EP-01 · **Type:** test · **Area:** backend
