@@ -1,18 +1,29 @@
 <script lang="ts">
 	import type { HubApiError } from '$lib/api/errors';
+	import { formatDurationMs } from '$lib/utils/format';
 	import CopyButton from './CopyButton.svelte';
 	import Icon from './Icon.svelte';
 
+	/**
+	 * The one way to show a failed admin API call (HUB-255): canonical `code`, the message, a hint for
+	 * the operator, whether retrying can help, field details (`VALIDATION_FAILED`) and the request id
+	 * with a copy button, which operators paste into the request explorer.
+	 */
 	let {
 		error,
 		context,
-		onretry
+		onretry,
+		headingLevel = 2
 	}: {
 		error: HubApiError;
 		/** What failed, e.g. "Could not load integrations". */
 		context: string;
 		onretry?: () => void;
+		/** Heading level that fits where the panel sits (2 on a page, 3 inside a section). */
+		headingLevel?: 2 | 3;
 	} = $props();
+
+	const id = $props.id();
 
 	const hint = $derived.by(() => {
 		switch (error.code) {
@@ -20,22 +31,46 @@
 				return 'Your session has expired. Sign in again.';
 			case 'FORBIDDEN':
 				return 'Your role does not allow this view. Ask an admin for access.';
+			case 'NOT_FOUND':
+				return 'It may have been removed, or it is outside your tenants.';
+			case 'RATE_LIMITED':
+				return 'The admin API is rate limiting this console.';
 			case 'NETWORK_ERROR':
 				return 'The admin API did not answer. Check the connection or VPN, then retry.';
 			case 'UNEXPECTED_RESPONSE':
 				return 'Something between the console and the admin API answered instead of the Hub.';
 			default:
-				return error.retryable ? 'This is usually temporary. Retry in a moment.' : null;
+				return null;
 		}
 	});
+
+	const retryText = $derived(
+		error.retryable
+			? error.retryAfterMs
+				? `Yes, after ${formatDurationMs(error.retryAfterMs)}`
+				: 'Yes, this is usually temporary'
+			: 'No, retrying gives the same answer'
+	);
 </script>
 
-<section class="error" role="alert" aria-labelledby="error-title">
+<section class="error" role="alert" aria-labelledby="{id}-title">
 	<Icon name="alert" />
 	<div class="body">
-		<h2 id="error-title">{context}</h2>
+		<svelte:element this={`h${headingLevel}`} id="{id}-title" class="title"
+			>{context}</svelte:element
+		>
 		<p class="message">{error.message}</p>
 		{#if hint}<p class="hint">{hint}</p>{/if}
+		{#if error.details.length}
+			<ul class="details" aria-label="Details">
+				{#each error.details as d, i (i)}
+					<li>
+						{#if d.pointer}<code>{d.pointer}</code>{/if}
+						{d.message}
+					</li>
+				{/each}
+			</ul>
+		{/if}
 		<dl>
 			<div>
 				<dt>Code</dt>
@@ -54,6 +89,10 @@
 						<span class="none">None (the request did not reach the Hub)</span>
 					{/if}
 				</dd>
+			</div>
+			<div>
+				<dt>Retry helps</dt>
+				<dd>{retryText}</dd>
 			</div>
 		</dl>
 		{#if onretry}
@@ -77,18 +116,27 @@
 		max-width: 46rem;
 	}
 	.error > :global(.icon) {
+		flex: none;
 		color: var(--status-danger);
 		margin-top: 0.1rem;
 	}
-	h2 {
+	.title {
+		margin: 0;
 		font-size: var(--text-md);
+		line-height: 1.2;
 	}
 	.message {
 		margin: var(--space-1) 0 0;
+		overflow-wrap: anywhere;
 	}
 	.hint {
 		margin: var(--space-1) 0 0;
 		color: var(--ink-muted);
+		font-size: var(--text-sm);
+	}
+	.details {
+		margin: var(--space-2) 0 0;
+		padding-left: var(--space-5);
 		font-size: var(--text-sm);
 	}
 	dl {
@@ -111,6 +159,10 @@
 		gap: var(--space-2);
 		margin: 0;
 		flex-wrap: wrap;
+		min-width: 0;
+	}
+	dd code {
+		overflow-wrap: anywhere;
 	}
 	.status,
 	.none {

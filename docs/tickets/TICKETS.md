@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **192** · done: **31** · todo: **161**
+Total tickets: **192** · done: **32** · todo: **160**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **192** · done: **31** · todo: **161**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 33 | 6 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 33 | 7 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1770,15 +1770,15 @@ App shell with sidebar navigation (Integrations, Health, Requests, DLQ, Transfor
 
 ### HUB-255 — Error, empty and loading states
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-251, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-251, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `feat/HUB-255-fe-states`
 
 Shared components for loading skeletons, empty states and error envelopes (code, message, request_id, retryable) used by every page.
 
 **Acceptance criteria**
-- [ ] Every list/detail page uses the shared components (checked in review + test)
-- [ ] Error component shows `request_id` with copy action
-- [ ] Component tests for each state
+- [x] Every list/detail page uses the shared components (checked in review + test: `states.test.ts` scans every `(app)` page and both `+error.svelte`)
+- [x] Error component shows `request_id` with copy action
+- [x] Component tests for each state (`states.test.ts`, `shell.test.ts`, `sections.test.ts`)
 
 ### HUB-256 — Integrations list
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

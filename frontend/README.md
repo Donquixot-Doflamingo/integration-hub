@@ -53,6 +53,18 @@ band that names the admin API (striped in mock mode). Below 1024 px the sidebar 
 Visual direction: cool workspace, slate-navy rail, one teal accent; Atkinson Hyperlegible Next/Mono (self-hosted via
 Fontsource) because ids like `req_01J9Z...` must not confuse 0/O or 1/l. Tokens live in `src/app.css`.
 
+## Shared states (HUB-255)
+Every data view uses these, so loading, empty and error look and behave the same everywhere (a unit test fails
+when a page under `src/routes/(app)/` renders its own `{#await}` instead):
+| Component | Use it for |
+| --- | --- |
+| `AsyncView` | One `api.call(...)` from `load`: skeleton while loading, `ErrorPanel` on failure, `children(data)` on success; keeps the previous data (marked busy) while a new call runs |
+| `ListView` | A list operation: `AsyncView` + table skeleton with the real columns + `EmptyState` + accessible table (sticky first column); `footer` snippet for paging |
+| `ErrorPanel` | Any failed call: canonical `code`, HTTP status, message, operator hint, validation details (JSON pointers), whether retrying helps (with `retry_after_ms`), request id with copy, Retry |
+| `EmptyState` | "Nothing exists yet" vs `filtered` ("filters hide everything", with a Clear all filters link) |
+| `Skeleton` | Loading placeholder for detail sections |
+| `ErrorPage` | Body of both `+error.svelte` pages (unknown routes, errors thrown from loads) |
+
 ## Auth (HUB-253)
 Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.
 - Provider per deployment (`src/lib/server/auth/`): **dev** (role picker: admin, editor, viewer, tenant viewer

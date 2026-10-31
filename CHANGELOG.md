@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add shared loading, empty and error states for every page · HUB-255 · F-19
+  - Error panels show the error code, HTTP status, message, what to do, field details, whether retrying helps (with the server's delay) and the request id with a copy button
+  - Empty lists say whether nothing exists yet or the filters hide everything, with a "Clear all filters" link
+  - While a list or detail reloads, the previous data stays on screen (marked as updating) instead of flashing a skeleton
+  - Unknown pages and load errors use the same panel, inside the console shell or with a link back home
+
 - 2026-10-31 · `feat(frontend)` · add console sign-in, session cookie and role gating · HUB-253 · F-19
   - Every console page needs a session; signed-out users land on `/login` and return to the page they asked for
   - Dev sign-in (mock builds or `PUBLIC_AUTH_MODE=dev`): pick admin, editor, viewer or tenant viewer (with tenants); OIDC is a placeholder that lists missing settings until HUB-282

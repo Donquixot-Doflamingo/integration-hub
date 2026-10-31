@@ -1,12 +1,31 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 
-	let { title, children }: { title: string; children?: Snippet } = $props();
+	/**
+	 * Empty data views (HUB-255). Say why it is empty and what to do. `filtered` means "filters hide
+	 * everything" (offer `clearHref`), as opposed to "nothing exists yet" (admin-console-ux §6).
+	 */
+	let {
+		title,
+		filtered = false,
+		clearHref,
+		children
+	}: {
+		title: string;
+		filtered?: boolean;
+		/** Link that removes all filters (shown when `filtered`). */
+		clearHref?: string;
+		children?: Snippet;
+	} = $props();
 </script>
 
-<div class="empty" role="status">
+<div class="empty" class:filtered role="status">
 	<p class="title">{title}</p>
 	{#if children}<div class="detail">{@render children()}</div>{/if}
+	{#if filtered && clearHref}
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- clearHref is a resolved path from the page -->
+		<p class="action"><a href={clearHref}>Clear all filters</a></p>
+	{/if}
 </div>
 
 <style>
@@ -28,5 +47,10 @@
 	}
 	.detail :global(p) {
 		margin: 0;
+	}
+	.action {
+		margin: var(--space-2) 0 0;
+		font-size: var(--text-sm);
+		font-weight: 600;
 	}
 </style>
