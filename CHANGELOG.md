@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(hub)` · run the worker and scheduler roles and queue requests in the gateway · HUB-112 · F-09
+  - hub worker --pool=messaging|llm now delivers queued requests; hub scheduler elects a leader and expires and prunes; hub gateway accepts async and wait requests and deduplicates Idempotency-Key through Redis
+  - The Redis client fails fast when Redis is down (one dial retry, 250 ms dial, 100 ms read/write) so idempotency stays within its request-path budget
 - 2026-10-31 · `feat(delivery)` · add the leader-elected scheduler with TTL expiry and pruning · HUB-114 · F-09
   - The scheduler role elects one leader with a Postgres advisory lock held on its own session; a standby takes over within its poll interval (5 s by default) when the leader dies; scheduler_leader shows who leads
   - Envelopes waiting past their TTL (accepted, retry_scheduled or parked) become expired, with the request.expired terminal event in the same transaction; dead letters older than 14 days and kept results past 7 days are pruned hourly

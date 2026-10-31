@@ -3,6 +3,7 @@ package roles
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -24,7 +25,13 @@ func openStores(ctx context.Context, cfg Config) (*stores, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres pool: %w", err)
 	}
-	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	// The gateway's idempotency store sits on the request path: fail within its 50 ms op timeout
+	// when Redis is down instead of go-redis' default dial retries (TECH_SPEC §8.1, §12.2).
+	rdb := redis.NewClient(&redis.Options{
+		Addr: cfg.RedisAddr, ContextTimeoutEnabled: true, DialerRetries: 1,
+		DialTimeout: 250 * time.Millisecond, ReadTimeout: 100 * time.Millisecond, WriteTimeout: 100 * time.Millisecond,
+		PoolSize: 50,
+	})
 	return &stores{pg: pg, rdb: rdb}, nil
 }
 

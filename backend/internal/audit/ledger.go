@@ -187,9 +187,15 @@ func (Ledger) Status(ctx context.Context, db DB, tenant, requestID string) (Requ
 	if err != nil {
 		return RequestStatus{}, fmt.Errorf("audit: status %s: %w", requestID, err)
 	}
-	s.UpdatedAt = s.CreatedAt
+	s.CreatedAt, s.UpdatedAt = s.CreatedAt.UTC(), s.CreatedAt.UTC()
 	if updated != nil {
-		s.UpdatedAt = *updated
+		s.UpdatedAt = updated.UTC()
+	}
+	for _, t := range []**time.Time{&s.CompletedAt, &s.NextAttemptAt, &s.ExpiresAt} {
+		if *t != nil {
+			u := (*t).UTC()
+			*t = &u
+		}
 	}
 	if outboxStatus != nil { // still queued: the outbox is the live state
 		s.Status = *outboxStatus
