@@ -86,6 +86,38 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - The request path reads credentials only from a cache warmed at snapshot load (TTL 5 min, background refresh); a miss is a typed error counted in `creds_cache_miss_total`, never an inline decrypt
   - Every loaded secret, including the base64 basic-auth form, is registered with the log redactor before it can be used
   - `hubctl creds init-key | set | list` creates the dev key and file for `ct-brandA-in` and `ct-brandB-us`; `list` prints key names only
+- 2026-10-31 · `build(frontend)` · regenerate the admin API client for contract round 1 · HUB-278 · F-19
+  - The console's generated types and contract mocks now match hub-admin 1.1.0 (X-Hub-Request-Id on every response, active-version filters, per-account dead-letter count and age); no behaviour change yet
+- 2026-10-31 · `docs(contracts)` · add the round-1 contract notice for backend and frontend · HUB-278 · F-19
+  - `contracts/notices/2026-10-31-round-1.md` tells backend and frontend what changed in hub-public 1.0.1 and hub-admin 1.1.0, which operationIds are affected and what each side must do
+  - contracts/README.md lists `notices/` and `tools/`
+
+- 2026-10-31 · `ci(contracts)` · add the contracts workflow with lint and version checks · HUB-014 · F-01
+  - New `.github/workflows/contracts.yml` job `contract-lint` on PRs and pushes to main that touch `contracts/**`, the root `Makefile` or the workflow: pinned toolchain with npm cache, then `make contracts-check`
+  - `make contracts-version-check BASE=<ref>` fails when a contract document's content changed since the merge base without a higher version and a `contracts/CHANGELOG.md` entry, or when a contract document is deleted; CI runs it against the PR base
+  - Locally both targets take about 1.5 s after the first install
+
+- 2026-10-31 · `chore(contracts)` · add make contracts-check with pinned Redocly and ajv · HUB-015 · F-01
+  - `make contracts-check` lints the three OpenAPI documents with Redocly CLI (`recommended-strict` plus example and structure rules) and runs `contracts/tools/check.mjs`
+  - check.mjs parses every contract file (duplicate keys, anchors, YAML 1.1 surprises such as unquoted timestamps), resolves every `$ref`, compiles every schema with ajv in 2020-12 strict mode and validates every example with real 3.1 nullability (`type: [x, 'null']`)
+  - It also enforces the contracts/AGENTS.md rules (operationIds, tags, examples, error envelope, admin role, `reason` and `change_id`, `X-Hub-Request-Id` from hub-admin 1.1.0), the D12 caller vendor-leak check and the MCP `maps_to` check
+  - Toolchain pinned in `contracts/tools/package-lock.json` (Node 22); usage, relaxed lint rules and the reasons are in contracts/README.md "Validate locally"
+
+- 2026-10-31 · `contract(admin)` · add per-account dead-letter count and age to accounts · HUB-284 · F-19
+  - hub-admin 1.1.0 (pending, minor): `listAccounts` rows and `getAccount` carry `dead_letter_count` and `dead_letter_oldest_at`
+  - The health board can show a "Dead letters" column per account without paging through the DLQ
+
+- 2026-10-31 · `contract(admin)` · add active-version filters to listIntegrations · HUB-283 · F-19
+  - hub-admin 1.1.0 (pending, minor): `GET /admin/v1/integrations` accepts `has_active_version` and `active_version_behind`
+  - Operators can list integrations that were never published, and those with a newer version or a draft waiting, across all pages instead of scanning one page
+
+- 2026-10-31 · `contract(admin)` · declare X-Hub-Request-Id on every admin response · HUB-278 · F-19
+  - hub-admin 1.1.0 (minor): every admin response, success or error, declares the `X-Hub-Request-Id` header (`req_` + ULID), equal to `error.request_id` on errors
+  - The console can show a request id for successful calls and for failures without the error envelope (proxy 502, HTML) once it regenerates its client; backend admin contract tests can require the header
+
+- 2026-10-31 · `contract(public)` · align the getReadyz 503 example with the readiness checks · HUB-033 · F-01
+  - hub-public 1.0.1 (patch): the `/readyz` 503 example shows one `details` entry per failing check with `message` only (`redis unreachable`), as the backend returns it
+  - The `getReadyz` description says each detail names a failing check and that `request_id` equals the `X-Hub-Request-Id` header
 
 - 2026-10-31 · `feat(frontend)` · add request timeline with policy-aware payload views · HUB-264 · F-19
   - Request ids in the explorer open `/requests/{id}`: status and error code, tenant, integration and version, capability, mode, vendor and account, timings (total, hub overhead, vendor, queue wait), idempotency key, audit policy, snapshot and trace id

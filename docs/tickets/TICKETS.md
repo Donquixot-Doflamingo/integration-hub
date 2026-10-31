@@ -2,14 +2,14 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **81** · todo: **114**
+Total tickets: **195** · done: **86** · todo: **108** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
 | Epic | Name | Milestone | Features | ID range | Tickets | Done |
 | --- | --- | --- | --- | --- | --- | --- |
-| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
-| EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
+| EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 13 |
+| EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 14 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
@@ -18,7 +18,7 @@ Total tickets: **195** · done: **81** · todo: **114**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 16 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 19 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -184,7 +184,7 @@ Protect `main` so it changes only via PRs (AGENTS §6). Requires the repo owner 
 
 ### HUB-014 — CI: contract lint job (Redocly / Spectral)
 - **Epic:** EP-00 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-006, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** in-review · **Depends on:** HUB-006, HUB-011 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-014-ci-contract-lint`
 
 Add a CI job that lints every OpenAPI document in `contracts/openapi/` and validates the JSON Schemas in `contracts/schemas/`, and fails if `info.version` changed without a `contracts/CHANGELOG.md` entry (AGENTS §4.3).
@@ -194,19 +194,23 @@ Add a CI job that lints every OpenAPI document in `contracts/openapi/` and valid
 - [ ] CI fails when a contract file changes without a version bump + changelog entry
 - [ ] Job runs only when `contracts/**` changes and finishes in < 2 min
 
+Steward note (2026-10-31): `contract-lint` in `.github/workflows/contracts.yml` runs `make contracts-check` and `make contracts-version-check BASE=<PR base sha | push before>`. It also triggers on the root `Makefile` and the workflow file, since both define the check. Proven locally, not yet in CI: `make contracts-check` fails on broken copies (HUB-015 note); `contracts-version-check` fails on a content change without a bump, a bump without a changelog entry, a lower version, an event-schema change without a hub-public bump and a deleted document, and passes on formatting-only changes and on this branch; both targets together take about 1.5 s locally. All three criteria need a GitHub Actions run on the PR, so they stay open and the ticket stays `in-review` until that run is green.
+
 ### HUB-015 — make contracts-check: repeatable contract validation (Redocly lint, ajv for JSON Schemas, $ref + example + vendor-leak checks)
 - **Epic:** EP-00 · **Type:** chore · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-012 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-012 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `chore/HUB-015-contracts-check`
 
 Replace the throwaway script used for the 1.0.0 freeze with a repeatable `make contracts-check` target (`contracts/README.md` "Validate locally"). It lints the three OpenAPI documents with Redocly, compiles every JSON Schema under `contracts/schemas/` with ajv (draft 2020-12), resolves every `$ref`, validates every example against its schema, and runs the caller vendor-leak check (D12) and the MCP `maps_to` operationId check. HUB-014's CI job calls this target.
 
 **Acceptance criteria**
-- [ ] `make contracts-check` exits 0 on the frozen 1.0.0 contracts and non-zero on an intentionally broken `$ref`, example or schema
-- [ ] Redocly lint covers `hub-public.v1.yaml`, `hub-admin.v1.yaml` and `mockvendor.v1.yaml`; ajv compiles `contracts/schemas/**/*.json`
-- [ ] Vendor-leak check fails if a `hub-public` parameter, header or body field names a vendor, account or version (documented exceptions `dryRunIntegration` and `receiveVendorWebhook` allow-listed)
-- [ ] Every `maps_to` operationId in `contracts/mcp/hubmcp-tools.json` exists in its spec
-- [ ] Tool versions pinned; usage documented in `contracts/README.md` via a CCR to the contract-steward
+- [x] `make contracts-check` exits 0 on the frozen 1.0.0 contracts and non-zero on an intentionally broken `$ref`, example or schema
+- [x] Redocly lint covers `hub-public.v1.yaml`, `hub-admin.v1.yaml` and `mockvendor.v1.yaml`; ajv compiles `contracts/schemas/**/*.json`
+- [x] Vendor-leak check fails if a `hub-public` parameter, header or body field names a vendor, account or version (documented exceptions `dryRunIntegration` and `receiveVendorWebhook` allow-listed)
+- [x] Every `maps_to` operationId in `contracts/mcp/hubmcp-tools.json` exists in its spec
+- [x] Tool versions pinned; usage documented in `contracts/README.md` via a CCR to the contract-steward
+
+Steward note (2026-10-31): exit 0 checked on the frozen 1.0.0 tree (`git archive main contracts`) and on the round-1 state; non-zero proven on copies with a broken internal and external `$ref`, invalid examples (wrong type, wrong type for a nullable field, bad ULID), a bad schema type, a misspelled schema keyword, a vendor-named hub-public parameter, a vendor account id in a caller example, an unknown MCP `maps_to`, an unquoted timestamp and a missing hub-admin `X-Hub-Request-Id`. Redocly changes from `recommended-strict` and why: contracts/README.md "Validate locally".
 
 ### HUB-016 — Resolve Phase-1 design open questions with the user and record ADRs
 - **Epic:** EP-00 · **Type:** docs · **Area:** docs
@@ -383,7 +387,7 @@ Prove the M0 Accept line and post the milestone wrap-up (AGENTS §10).
 
 ### HUB-033 — CCR: getReadyz 503 example lacks the required request_id
 - **Epic:** EP-01 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-006 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-006 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `contract/HUB-033-readyz-example-request-id`
 
 ### CCR: getReadyz 503 example lacks the required request_id
@@ -411,9 +415,11 @@ Prove the M0 Accept line and post the milestone wrap-up (AGENTS §10).
 - **Rollout**: contract commit before the M0 PR merges, or in the next contract PR
 
 **Acceptance criteria**
-- [ ] Example includes `request_id` and a `details` entry; contract validation passes
-- [ ] `hub-public` `info.version` 1.0.1 and `contracts/CHANGELOG.md` entry
+- [x] Example includes `request_id` and a `details` entry; contract validation passes
+- [x] `hub-public` `info.version` 1.0.1 and `contracts/CHANGELOG.md` entry
 - [ ] Contract test (HUB-031) validates the live 503 body against the operation
+
+Steward note (2026-10-31): the frozen 1.0.0 example already carried `request_id`; the CCR's "before" snippet predates the freeze. 1.0.1 aligns the rest of the example with the backend (`details: [{message: redis unreachable}]`, no null `circuit`/`reason`/`upstream`) and keeps request id `...JQ`, because `...JN` is already used by the `receiveVendorWebhook` example. The contract-test criterion stays open for the backend (HUB-031).
 
 ## EP-02 — M1 Config registry
 
@@ -2055,16 +2061,18 @@ Run the e2e suite against a compose stack (hub admin + Postgres + Redis + mockve
 
 ### HUB-278 — CCR-001: declare X-Hub-Request-Id on every admin response
 - **Epic:** EP-10 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-006, HUB-251 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-006, HUB-251 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `contract/HUB-278-admin-request-id-header`
 
 Filed by frontend-engineer during HUB-251. Full CCR text (before/after YAML): `frontend/CCR-NOTES.md` § CCR-001. `hub-public` declares `X-Hub-Request-Id` on every response but `hub-admin` does not, so the console cannot rely on it for successful calls or non-envelope failures, and backend contract tests do not require it. Additive, `hub-admin` 1.0.0 → 1.1.0.
 
 **Acceptance criteria**
-- [ ] `components.headers.X-Hub-Request-Id` added and referenced by every `hub-admin` response; examples updated
-- [ ] `hub-admin` `info.version` 1.1.0 and `contracts/CHANGELOG.md` entry
+- [x] `components.headers.X-Hub-Request-Id` added and referenced by every `hub-admin` response; examples updated
+- [x] `hub-admin` `info.version` 1.1.0 and `contracts/CHANGELOG.md` entry
 - [ ] Console removes the `TODO(CCR-001)` fallback after `npm run gen:api`
 - [ ] Backend admin contract tests (EP-08) require the header
+
+Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1, together with HUB-283 and HUB-284; notice `contracts/notices/2026-10-31-round-1.md`). The last two criteria belong to the frontend (`npm run gen:api`, remove `TODO(CCR-001)`) and the backend (EP-08 admin contract tests) and stay open until they land.
 
 ### HUB-279 — Evaluate SvelteKit 3 before form actions land
 - **Epic:** EP-10 · **Type:** chore · **Area:** frontend
@@ -2119,27 +2127,31 @@ Filed by frontend-engineer during HUB-253. Replace the placeholder `oidcProvider
 
 ### HUB-283 — CCR-002: active-version filters on listIntegrations
 - **Epic:** EP-10 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-006, HUB-256 · **Feature:** F-19 · **Stories:** US-1902
+- **Status:** done · **Depends on:** HUB-006, HUB-256 · **Feature:** F-19 · **Stories:** US-1902
 - **Branch:** `contract/HUB-283-integrations-version-filters`
 
 Filed by frontend-engineer during HUB-256. Full CCR text (before/after YAML): `frontend/CCR-NOTES.md` § CCR-002. HUB-256 asks for an "active version" filter on the integrations list, but `listIntegrations` has no version parameter, and filtering one cursor page client-side would miss matches. Proposed additive booleans `has_active_version` and `active_version_behind`. `hub-admin` minor bump.
 
 **Acceptance criteria**
-- [ ] Both query parameters added to `listIntegrations` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
+- [x] Both query parameters added to `listIntegrations` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
 - [ ] Backend list handler implements them, covered by contract tests (EP-08)
 - [ ] Console adds the filter (URL params, chips) after `npm run gen:api` and removes `TODO(CCR-002)`
 
+Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1; notice `contracts/notices/2026-10-31-round-1.md`). `active_version_behind=true` means an active version exists and `latest_version > active_version` or `has_draft`; `false` means the active version is the latest with no draft; integrations without an active version match neither value. The backend and console criteria stay open for those sides.
+
 ### HUB-284 — CCR-003: dead-letter count per account on listAccounts
 - **Epic:** EP-10 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-006, HUB-261 · **Feature:** F-19 · **Stories:** US-1903
+- **Status:** done · **Depends on:** HUB-006, HUB-261 · **Feature:** F-19 · **Stories:** US-1903
 - **Branch:** `contract/HUB-284-account-dead-letter-count`
 
 Filed by frontend-engineer during HUB-261. Full CCR text (before/after YAML): `frontend/CCR-NOTES.md` § CCR-003. The health board must show a DLQ count per account, but no admin operation returns one (`listDeadLetters` has no totals; counting pages client-side is wrong and too slow for a 5 s refresh). Proposed additive `dead_letter_count` and `dead_letter_oldest_at` on `AccountSummary` and `Account`. `hub-admin` minor bump.
 
 **Acceptance criteria**
-- [ ] Both properties on `AccountSummary` and `Account` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
+- [x] Both properties on `AccountSummary` and `Account` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
 - [ ] Backend accounts handlers fill them from the DLQ store, covered by contract tests (EP-08)
 - [ ] Console health board adds a "Dead letters" column (count, oldest age, link to the filtered DLQ) after `npm run gen:api` and removes `TODO(CCR-003)`
+
+Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1; notice `contracts/notices/2026-10-31-round-1.md`). Both properties are optional in the schema (additive); the backend should always fill them from 1.1.0 on. The backend and console criteria stay open for those sides.
 
 ## EP-11 — MCP server + consumer skill + SDK
 
