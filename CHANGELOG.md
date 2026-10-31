@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add console app shell with navigation and section pages · HUB-254 · F-19
+  - Sidebar with Integrations, Health, Requests, DLQ, Transformers, Tenants, Snapshots and Change log; active route marked
+  - Breadcrumbs, user menu from `/me`, light/dark/system theme, band naming the admin API (mock mode is striped)
+  - Each section lists its contract operation with loading, empty and error (code + request id + Retry) states
+  - Keyboard reachable, axe-clean in light and dark, works at 1280 px and 768 px (sidebar becomes a drawer)
 - 2026-10-31 · `test(frontend)` · add MSW mocks generated from the admin contract examples · HUB-252 · F-19
   - All 79 admin operations answer with their contract example (status, ETag, `X-Hub-Request-Id`) via MSW
   - `npm run dev:mock` runs the console in the browser with no backend; e2e runs against the same mocks

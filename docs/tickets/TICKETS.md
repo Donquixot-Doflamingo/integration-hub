@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **186** · done: **14** · todo: **172**
+Total tickets: **186** · done: **15** · todo: **171**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **186** · done: **14** · todo: **172**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 28 | 3 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 28 | 4 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1723,14 +1723,14 @@ Login via the dev OIDC stub, session handling, `/me` fetch and role-aware guards
 
 ### HUB-254 — Layout and navigation
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-250 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-250 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `feat/HUB-254-fe-layout-nav`
 
 App shell with sidebar navigation (Integrations, Health, Requests, DLQ, Transformers, Tenants, Snapshots, Change log), breadcrumbs, user menu and light/dark theme.
 
 **Acceptance criteria**
-- [ ] Every section reachable by keyboard
-- [ ] Active route highlighted; layout works at 1280 px and 768 px
+- [x] Every section reachable by keyboard
+- [x] Active route highlighted; layout works at 1280 px and 768 px
 
 ### HUB-255 — Error, empty and loading states
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

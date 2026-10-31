@@ -44,5 +44,14 @@ Contract gaps go to [`CCR-NOTES.md`](CCR-NOTES.md).
 - Mock mode is the build-time flag `HUB_API_MOCKING=true` (`__API_MOCKING__`). Normal builds contain no MSW code and
   no `mockServiceWorker.js` (the `msw/vite` plugin serves/emits it only in mock mode).
 
+## App shell (HUB-254)
+`src/routes/(app)/+layout.svelte`: sidebar navigation (`src/lib/nav.ts`), breadcrumbs, user menu from `/me`, theme
+switch (system/light/dark, remembered in localStorage, applied before paint by the script in `src/app.html`), and a
+band that names the admin API (striped in mock mode). Below 1024 px the sidebar becomes a drawer. Each section page
+(`src/routes/(app)/<section>/`) loads its list operation in `+page.ts` and renders it with `ListView`
+(loading, empty, error with request id and Retry, populated).
+Visual direction: cool workspace, slate-navy rail, one teal accent; Atkinson Hyperlegible Next/Mono (self-hosted via
+Fontsource) because ids like `req_01J9Z...` must not confuse 0/O or 1/l. Tokens live in `src/app.css`.
+
 Runes mode is enforced in `svelte.config.js` for every project component; Svelte 4 syntax fails to compile.
 CI: [`.github/workflows/frontend.yml`](../.github/workflows/frontend.yml), runs on `frontend/**` changes.
