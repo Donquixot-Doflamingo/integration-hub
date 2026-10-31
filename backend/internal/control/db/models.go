@@ -60,6 +60,21 @@ type HubConfigSnapshot struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type HubDeadLetter struct {
+	RequestID          string             `json:"request_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	TenantID           string             `json:"tenant_id"`
+	IntegrationID      string             `json:"integration_id"`
+	AccountID          pgtype.Text        `json:"account_id"`
+	Reason             string             `json:"reason"`
+	LastError          pgtype.Text        `json:"last_error"`
+	Attempts           int32              `json:"attempts"`
+	Envelope           []byte             `json:"envelope"`
+	LastVendorRequest  []byte             `json:"last_vendor_request"`
+	LastVendorResponse []byte             `json:"last_vendor_response"`
+	ReplayedAt         pgtype.Timestamptz `json:"replayed_at"`
+}
+
 type HubIntegration struct {
 	IntegrationID     string             `json:"integration_id"`
 	OwnerTenant       string             `json:"owner_tenant"`
@@ -83,6 +98,27 @@ type HubIntegrationVersion struct {
 	Author        string             `json:"author"`
 	Reason        string             `json:"reason"`
 	PublishedAt   pgtype.Timestamptz `json:"published_at"`
+}
+
+type HubOutbox struct {
+	RequestID     string             `json:"request_id"`
+	Status        string             `json:"status"`
+	Pool          string             `json:"pool"`
+	TenantID      string             `json:"tenant_id"`
+	IntegrationID string             `json:"integration_id"`
+	AccountID     pgtype.Text        `json:"account_id"`
+	EndpointID    pgtype.Text        `json:"endpoint_id"`
+	Attempt       int32              `json:"attempt"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	OrderingKey   pgtype.Text        `json:"ordering_key"`
+	ClaimedBy     pgtype.Text        `json:"claimed_by"`
+	ClaimedUntil  pgtype.Timestamptz `json:"claimed_until"`
+	Crashes       int32              `json:"crashes"`
+	LastError     pgtype.Text        `json:"last_error"`
+	Envelope      []byte             `json:"envelope"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type HubRegistrarEndpoint struct {

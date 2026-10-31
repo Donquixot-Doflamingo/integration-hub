@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **86** · todo: **108** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **88** · todo: **106** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -13,7 +13,7 @@ Total tickets: **195** · done: **86** · todo: **108** · other (in-progress/in
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
-| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
+| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 2 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
@@ -925,26 +925,26 @@ Payloads over 64 KB are stored truncated in `request_events` today (`payload_sta
 
 ### HUB-110 — Postgres outbox Queue implementation
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-023 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-023 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-110-outbox-queue`
 
 Add the `outbox` and `dead_letters` tables with §18.2 indexes and implement `Queue` (DESIGN §11.2): `Enqueue` durable before return, `Claim` with `SKIP LOCKED` and 30 s visibility timeout, `Ack`, `Nack`, `Park`, `Release`, `DeadLetter`.
 
 **Acceptance criteria**
-- [ ] Two concurrent claimers never receive the same envelope (itest)
-- [ ] Expired visibility makes an envelope claimable again
-- [ ] `Release(account, endpoint, limit)` releases in arrival order
+- [x] Two concurrent claimers never receive the same envelope (itest)
+- [x] Expired visibility makes an envelope claimable again
+- [x] `Release(account, endpoint, limit)` releases in arrival order
 
 ### HUB-111 — Request state machine with guarded transitions
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-110, HUB-091 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-110, HUB-091 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-111-state-machine`
 
 Implement states `accepted → in_flight → succeeded | retry_scheduled | parked | dead_lettered | expired` (plus terminal `failed` for sync errors, contract `RequestState`) with compare-and-set transitions (DESIGN §10.9).
 
 **Acceptance criteria**
-- [ ] Every allowed transition succeeds and every other one is refused (table test)
-- [ ] Concurrent double-complete attempts result in exactly one terminal transition
+- [x] Every allowed transition succeeds and every other one is refused (table test)
+- [x] Concurrent double-complete attempts result in exactly one terminal transition
 
 ### HUB-112 — Worker loop with re-resolve and poison detector
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
