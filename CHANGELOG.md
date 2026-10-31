@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(registry)` · add config domain types · HUB-040 · F-03
+  - Typed registry objects for capabilities, vendors (+ endpoints name@n), accounts, transformers, integrations and versions, tenants with hashed API keys, registrar endpoints
+  - Durations accept Go units and days (30d); transformer refs parse T2@3
+  - The DESIGN §3.4 version record and §8.3 vendor/account examples round-trip YAML ↔ struct
 - 2026-10-31 · `docs(tickets)` · close EP-10 CI acceptance and add a ticket counter script · HUB-250, HUB-251 · F-19
   - HUB-250 and HUB-251 done: the frontend workflow ran green on PR #3
   - docs/tickets/recount.py recomputes the ticket totals and epic/feature tables (--check for CI); counters fixed after the M0 merge (190 tickets, 29 done)

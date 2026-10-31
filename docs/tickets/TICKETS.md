@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **190** · done: **29** · todo: **161**
+Total tickets: **190** · done: **30** · todo: **160**
 
 ## Epics
 
@@ -10,7 +10,7 @@ Total tickets: **190** · done: **29** · todo: **161**
 | --- | --- | --- | --- | --- | --- | --- |
 | EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
-| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 0 |
+| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 1 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 0 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
@@ -419,14 +419,14 @@ Prove the M0 Accept line and post the milestone wrap-up (AGENTS §10).
 
 ### HUB-040 — Config domain types
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-020 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-020 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-040-config-domain-types`
 
 Define Go types in `internal/registry` for capability, vendor (+ endpoints `name@n`), account, transformer reference, integration with versions and active pointer, tenant, API key, registrar endpoint (DESIGN §3.1, §3.4, §8.1).
 
 **Acceptance criteria**
-- [ ] Types round-trip YAML ↔ struct for the §3.4 and §8.3 examples
-- [ ] Integration versions are immutable values (no exported setters)
+- [x] Types round-trip YAML ↔ struct for the §3.4 and §8.3 examples
+- [x] Integration versions are immutable values (no exported setters)
 
 ### HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
