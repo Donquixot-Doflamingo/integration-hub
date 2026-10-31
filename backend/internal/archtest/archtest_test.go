@@ -25,13 +25,15 @@ var allowed = map[string][]string{
 	"creds":     {"registry"},
 	"queue":     {},
 	"sessions":  {},
-	"audit":     {"registry"},
-	"upstream":  {"registry", "creds"},
-	"callbacks": {"registry", "audit"},
-	"delivery":  {"registry", "resolve", "transform", "creds", "upstream", "queue", "sessions", "audit", "callbacks"},
-	"edge":      {"registry", "resolve", "transform", "creds", "upstream", "queue", "sessions", "audit", "delivery"},
-	"webhooks":  {"registry", "transform", "audit", "callbacks"},
-	"control":   {"registry", "transform", "resolve", "creds", "upstream", "queue", "audit", "sessions"},
+	// idempotency is the Redis Idempotency-Key store (HUB-118); the edge calls it on the request path.
+	"idempotency": {},
+	"audit":       {"registry"},
+	"upstream":    {"registry", "creds"},
+	"callbacks":   {"registry", "audit"},
+	"delivery":    {"registry", "resolve", "transform", "creds", "upstream", "queue", "sessions", "audit", "callbacks"},
+	"edge":        {"registry", "resolve", "transform", "creds", "upstream", "queue", "sessions", "idempotency", "audit", "delivery"},
+	"webhooks":    {"registry", "transform", "audit", "callbacks"},
+	"control":     {"registry", "transform", "resolve", "creds", "upstream", "queue", "audit", "sessions"},
 	// testkit holds test-only helpers (in-process mockvendor, fixtures). Production code never imports it.
 	"testkit": {},
 }

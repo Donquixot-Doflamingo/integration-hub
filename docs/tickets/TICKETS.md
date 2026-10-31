@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **86** · todo: **108** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **87** · todo: **107** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -13,7 +13,7 @@ Total tickets: **195** · done: **86** · todo: **108** · other (in-progress/in
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
-| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
+| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 1 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
@@ -1021,16 +1021,18 @@ Emit `request.persisted`, `request.accepted`, `request.parked`, `policy.applied`
 
 ### HUB-118 — Idempotency store
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-088, HUB-023 · **Feature:** F-10 · **Stories:** US-10xx
+- **Status:** done · **Depends on:** HUB-088, HUB-023 · **Feature:** F-10 · **Stories:** US-10xx
 - **Branch:** `feat/HUB-118-idempotency`
 
 Redis-backed idempotency scoped to tenant + integration, 24 h: completed requests replay the stored result with `X-Hub-Idempotent-Replay: true`; an in-progress async duplicate returns the existing request's 202, a sync one or a different body gets 409 `IDEMPOTENCY_CONFLICT`; integrations with `moves_money_or_quota: true` reject requests without a key (DESIGN §4.2, §5.1 step 4, §6.3).
 
 **Acceptance criteria**
-- [ ] Replay returns identical body and status with the replay header
-- [ ] Missing key on a `moves_money_or_quota` integration → 400 `IDEMPOTENCY_KEY_REQUIRED`
-- [ ] Same key with a different body → 409 `IDEMPOTENCY_CONFLICT`
-- [ ] Redis down → fail closed for mandatory-key capabilities, pass-through otherwise (documented)
+- [x] Replay returns identical body and status with the replay header (store: identical status, allowlisted headers, body and original request id, integration-tested on Redis; the edge sets `X-Hub-Idempotent-Replay` when wiring)
+- [ ] Missing key on a `moves_money_or_quota` integration → 400 `IDEMPOTENCY_KEY_REQUIRED` (edge behaviour; ticked by the lead when wiring)
+- [x] Same key with a different body → 409 `IDEMPOTENCY_CONFLICT` (store: `Conflict` for another body or operation; the edge maps it to 409)
+- [ ] Redis down → fail closed for mandatory-key capabilities, pass-through otherwise (documented) (store returns the typed `ErrUnavailable`, contract in `internal/idempotency/doc.go`; the policy is edge behaviour, ticked by the lead when wiring)
+
+Store commit: `feat(idempotency): add the Redis idempotency store (HUB-118)`.
 
 ### HUB-119 — Registrar endpoints and SSRF guard
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend

@@ -30,12 +30,14 @@ func TestExportedNamesArePinned(t *testing.T) {
 	tm.Add(StageValidate, 400*time.Microsecond)
 	tm.Add(StageUpstream, 2*time.Millisecond)
 	m.RecordTimings(&tm, time.Now(), "int_evt_brandA", "sync")
+	m.RedisOpDuration.WithLabelValues("idempotency_begin").Observe(0.0004)
 
 	out := scrape(t, m)
 	for _, want := range []string{
 		"hub_overhead_ms_bucket{integration=\"int_evt_brandA\",mode=\"sync\",le=\"5\"}",
 		"hub_stage_duration_ms_bucket{stage=\"validate\",le=\"0.5\"}",
 		"hub_build_info{role=\"gateway\",version=\"test\"} 1",
+		"redis_op_duration_seconds_bucket{op=\"idempotency_begin\",le=\"0.001\"}",
 		"go_goroutines",
 		"go_memstats_heap_inuse_bytes",
 		"process_cpu_seconds_total",
