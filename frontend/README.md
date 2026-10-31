@@ -72,6 +72,14 @@ when a page under `src/routes/(app)/` renders its own `{#await}` instead):
 - `/integrations/{id}/diff?from=&to=&view=split|paths`: `$lib/components/diff/` (`DiffSplit` from the unified YAML diff,
   `DiffPaths` from the structured ops), helpers in `$lib/utils/diff.ts`. Reuse these for the publish preview (HUB-259).
 
+## DLQ and transformer screens (HUB-266 to HUB-269)
+- `/dlq`: filters in the URL (`dlq/filters.ts`), cursor paging, `/dlq/{request_id}` entry (reason, attempts, payloads).
+  Replay (editor) and purge (admin) by filter: a dry-run count first, then `ConfirmDialog` with that exact count;
+  purge needs the count typed and is re-counted on the server (`dlq/+page.server.ts`, `dlq/bulk.ts`).
+- `/transformers`, `/transformers/{id}`, `/transformers/{id}/versions/{n}`: `$lib/components/transformer/`
+  (`VersionView`, `GoldensRunner`, `GoldensResult`, `DryRun`, `DryRunResult`), `CodeView` (text-only YAML highlighting,
+  `$lib/utils/yaml-highlight.ts`); form actions shared from `transformers/actions.server.ts`.
+
 ## Auth (HUB-253)
 Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.
 - Provider per deployment (`src/lib/server/auth/`): **dev** (role picker: admin, editor, viewer, tenant viewer

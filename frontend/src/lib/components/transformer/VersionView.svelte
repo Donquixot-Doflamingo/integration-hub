@@ -1,5 +1,4 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
 	import type { TransformerVersion } from '$lib/api/types';
 	import type { Access } from '$lib/auth/roles';
 	import { formatNumber, formatUtc } from '$lib/utils/format';
@@ -7,19 +6,16 @@
 	import CodeView from '../CodeView.svelte';
 	import RoleGate from '../RoleGate.svelte';
 	import StatusBadge from '../StatusBadge.svelte';
+	import DryRun from './DryRun.svelte';
 	import GoldensRunner from './GoldensRunner.svelte';
 
 	/**
 	 * One transformer version (HUB-268): who made it and why, the vendor doc it cites (link), its
 	 * stored goldens result, the DSL source with syntax colours, the golden fixtures, and for
-	 * editors a "Run goldens" control. `tools` adds the dry-run (HUB-269). Read only: editing
-	 * transformers is Release 2 (F-19 non-goals).
+	 * editors a "Run goldens" control. Read only: editing
+	 * transformers is Release 2 (F-19 non-goals). Editors also get the dry run (HUB-269).
 	 */
-	let {
-		version: v,
-		access,
-		tools
-	}: { version: TransformerVersion; access: Access; tools?: Snippet } = $props();
+	let { version: v, access }: { version: TransformerVersion; access: Access } = $props();
 
 	const uid = $props.id();
 	/** Only http(s) links are rendered as links (the contract says `format: uri`). */
@@ -102,7 +98,15 @@
 		</RoleGate>
 	</section>
 
-	{@render tools?.()}
+	<section aria-labelledby="{uid}-dry-run">
+		<h3 id="{uid}-dry-run">Dry run</h3>
+		<RoleGate {access}>
+			{#key v.ref}<DryRun version={v} />{/key}
+			{#snippet denied(role)}
+				<p class="muted">A dry run needs the {role} role.</p>
+			{/snippet}
+		</RoleGate>
+	</section>
 
 	<section aria-labelledby="{uid}-source">
 		<h3 id="{uid}-source">Source</h3>

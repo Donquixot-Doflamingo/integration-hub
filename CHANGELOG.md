@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add transformer dry-run with client-side JSON checks · HUB-269 · F-19
+  - Editors can dry-run any transformer version with a pasted canonical body (or a vendor response for response transformers), starting from one of its fixtures, optionally for a given account
+  - Invalid JSON is caught in the browser with its line and column, before anything is sent
+  - The result shows the exact vendor request as method, URL, headers and body (credentials as `***`), or the canonical response or error, plus any compile errors with their line
 - 2026-10-31 · `feat(frontend)` · add transformer viewer with highlighted source and goldens · HUB-268 · F-19
   - Filter transformers by kind, capability, vendor or id; each opens a page with its header, latest version and version history, and every version has its own page
   - A version shows its author and reason, a link to the vendor documentation it cites, its stored goldens result, the YAML source with line numbers and syntax colours, and its golden fixtures

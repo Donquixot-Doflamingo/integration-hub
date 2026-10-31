@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { expectNoSeriousA11yViolations, signIn } from './helpers';
 
-// HUB-268: transformer viewer and goldens on MSW (contract examples).
+// HUB-268: transformer viewer and goldens; HUB-269: dry-run. On MSW (contract examples).
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -57,3 +57,33 @@ for (const scheme of ['light', 'dark'] as const) {
 		await expectNoSeriousA11yViolations(page);
 	});
 }
+
+test('dry run: invalid JSON is caught in the browser, the result shows the vendor request', async ({
+	page
+}) => {
+	await signIn(page, { role: 'editor', next: '/transformers/T1' });
+	const posts: string[] = [];
+	page.on('request', (r) => {
+		if (r.method() === 'POST' && r.url().includes('?/dryRun')) posts.push(r.url());
+	});
+	const input = page.getByLabel(/^Canonical input \(JSON\)/);
+	await expect(input).toHaveValue(/"u_48213"/);
+	await input.fill('{ "user": { "id": "u_48213" }, }');
+	await page.getByRole('button', { name: 'Dry-run T1@7' }).click();
+	await expect(page.getByText(/The input is not valid JSON \(line 1, column \d+\)/)).toBeVisible();
+	await expect(input).toBeFocused();
+	expect(posts).toEqual([]);
+
+	await page.getByRole('button', { name: 'Load' }).click();
+	await page.getByRole('button', { name: 'Dry-run T1@7' }).click();
+	const result = page.getByRole('region', { name: /Dry run of T1@7/ });
+	const request = result.getByRole('group', { name: 'Vendor request' });
+	await expect(request).toContainText('POST');
+	await expect(request).toContainText('https://in1.api.clevertap.com/1/upload');
+	await expect(request.getByRole('row', { name: /X-CleverTap-Passcode/ })).toContainText('***');
+	await expect(request.getByLabel('Vendor request body')).toContainText(
+		'"evtName": "order_placed"'
+	);
+	expect(posts).toHaveLength(1);
+	await expectNoSeriousA11yViolations(page);
+});

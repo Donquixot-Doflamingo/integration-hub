@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **71** · todo: **122** · other (in-progress/in-review/blocked): **1**
+Total tickets: **194** · done: **72** · todo: **121** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **194** · done: **71** · todo: **122** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 22 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 23 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1954,14 +1954,16 @@ Shipped (frontend-engineer, `feat(frontend): add transformer viewer with highlig
 
 ### HUB-269 — Transformer dry-run
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-268 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-268 · **Feature:** F-19 · **Stories:** US-1905
 - **Branch:** `feat/HUB-269-fe-transformer-dry-run`
 
 Dry-run a transformer version with a pasted canonical body and show the resulting vendor request (secrets redacted).
 
+Shipped (frontend-engineer, `feat(frontend): add transformer dry-run with client-side JSON checks (HUB-269)`): a "Dry run" section on every transformer version (editor; viewers see why not) posting `dryRunTransformer` with `ref` through the `dryRun` form action. Request and inbound transformers take a canonical `input` (plus optional caller `headers`), response transformers a `vendor_response` (`status`, `headers`, `body`); the body starts from the first fixture that has one, any fixture can be loaded, and an optional account id injects that account's config. Results show compile errors with their line, the vendor request, or the canonical response / error. Secrets are shown exactly as the API redacted them (`***`), values under secret-looking keys that arrive unmasked are hidden, and nothing is logged or stored.
+
 **Acceptance criteria**
-- [ ] Invalid JSON input caught client-side
-- [ ] Result rendered as method, URL, headers, body
+- [x] Invalid JSON input caught client-side (`$lib/utils/dry-run.ts` + `json-input.ts` on submit: syntax errors with line and column, non-objects, empty input, non-string headers, a bad account id; the field is marked invalid and focused and no request is sent; the form action repeats the checks for the no-JS path; `dry-run.test.ts`, `json-input.test.ts`, `e2e/transformers.test.ts`)
+- [x] Result rendered as method, URL, headers, body (method and URL lines, a headers table, the body as JSON; API 400 pointers land on the field)
 
 ### HUB-270 — Tenants pages
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

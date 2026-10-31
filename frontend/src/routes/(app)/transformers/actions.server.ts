@@ -1,4 +1,5 @@
 import type { RequestEvent } from '@sveltejs/kit';
+import { DRY_RUN_FIELDS, dryRunBody } from '$lib/utils/dry-run';
 import { actionApi, finish, invalid, requireSession, text } from '$lib/server/actions';
 
 /**
@@ -32,4 +33,22 @@ export async function runGoldens(event: RequestEvent) {
 	return finish('runGoldens', res);
 }
 
-export const transformerActions = { runGoldens };
+/**
+ * `dryRunTransformer` for a stored version: canonical input -> the exact vendor request, or vendor
+ * response -> canonical response or error. Secrets come back redacted (`***`); the console shows
+ * them as returned and never logs the result.
+ */
+export async function dryRun(event: RequestEvent) {
+	requireSession(event);
+	const form = await event.request.formData();
+	const ref = readRef('dryRun', form);
+	if (!ref.ok) return ref.failure;
+	const parsed = dryRunBody(ref.ref, form);
+	if (!parsed.ok) return invalid('dryRun', parsed.fields);
+	const res = await actionApi(event).call((c) =>
+		c.POST('/transformers/dry-run', { body: parsed.body })
+	);
+	return finish('dryRun', res, DRY_RUN_FIELDS);
+}
+
+export const transformerActions = { runGoldens, dryRun };
