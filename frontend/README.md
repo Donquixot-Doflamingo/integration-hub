@@ -53,5 +53,16 @@ band that names the admin API (striped in mock mode). Below 1024 px the sidebar 
 Visual direction: cool workspace, slate-navy rail, one teal accent; Atkinson Hyperlegible Next/Mono (self-hosted via
 Fontsource) because ids like `req_01J9Z...` must not confuse 0/O or 1/l. Tokens live in `src/app.css`.
 
+## Auth (HUB-253)
+Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.
+- Provider per deployment (`src/lib/server/auth/`): **dev** (role picker: admin, editor, viewer, tenant viewer
+  with tenants) in mock builds or with `PUBLIC_AUTH_MODE=dev`; otherwise **OIDC**, a placeholder that reports
+  missing `HUB_OIDC_ISSUER` / `HUB_OIDC_CLIENT_ID` / `HUB_OIDC_REDIRECT_URI` and refuses sign-in until HUB-282.
+- Session: HMAC-signed httpOnly SameSite=Lax cookie, 8 h. Key `HUB_SESSION_SECRET` (32+ chars); dev mode
+  without it uses a random per-process key. No token or session data in web storage. Sign out: `POST /logout`.
+- Gating: `/me` (awaited in `(app)/+layout.ts`) gives `data.access`; wrap mutation controls in `RoleGate`
+  (hidden for viewer and tenant viewer, and for everyone when `/me` failed). In mock mode MSW's `/me`
+  answers as the identity picked at login.
+
 Runes mode is enforced in `svelte.config.js` for every project component; Svelte 4 syntax fails to compile.
 CI: [`.github/workflows/frontend.yml`](../.github/workflows/frontend.yml), runs on `frontend/**` changes.

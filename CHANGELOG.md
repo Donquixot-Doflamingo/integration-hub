@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add console sign-in, session cookie and role gating · HUB-253 · F-19
+  - Every console page needs a session; signed-out users land on `/login` and return to the page they asked for
+  - Dev sign-in (mock builds or `PUBLIC_AUTH_MODE=dev`): pick admin, editor, viewer or tenant viewer (with tenants); OIDC is a placeholder that lists missing settings until HUB-282
+  - The session is an HMAC-signed httpOnly cookie; no token or session data in the browser's storage; sign out from the user menu
+  - Mutation controls are gated by the role from `/me` (`RoleGate`): hidden for viewer and tenant viewer, and for everyone when `/me` fails
+
 - 2026-10-31 · `chore(frontend)` · keep SvelteKit 2 with a double-slash path guard · HUB-279 · F-19
   - Requests whose path starts with `//` get a 404 before routing (workaround for GHSA-pfhg-q3qv-9q6r, which SvelteKit fixes only in 3.0)
   - ADR-0009: why the console stays on SvelteKit 2.70.3 (Kit 3 needs TypeScript 6, which the API type generator does not support yet) and the upgrade deadline (2027-01-31, HUB-281)

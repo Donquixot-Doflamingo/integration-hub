@@ -51,13 +51,26 @@ describe('Breadcrumbs', () => {
 });
 
 describe('UserMenu', () => {
-	it('shows the user from /me and opens and closes by keyboard', async () => {
-		const user = userEvent.setup();
-		render(UserMenu, { props: { me: api().call((c) => c.GET('/me')) } });
-		expect(screen.getByRole('status')).toHaveTextContent('Loading user');
+	const session = {
+		user: {
+			subject: 'dev|ops@example.com',
+			name: 'Ops Person',
+			email: 'ops@example.com',
+			roles: ['viewer' as const],
+			tenants: []
+		},
+		provider: 'dev' as const,
+		expiresAt: '2026-10-31T18:00:00Z'
+	};
 
-		const trigger = await screen.findByRole('button', { name: /Priya Sharma/ });
+	it('shows the user from /me, opens and closes by keyboard, and offers sign out', async () => {
+		const user = userEvent.setup();
+		const me = await api().call((c) => c.GET('/me'));
+		render(UserMenu, { props: { me, ...session } });
+
+		const trigger = screen.getByRole('button', { name: /Priya Sharma/ });
 		expect(trigger).toHaveAttribute('aria-expanded', 'false');
+		expect(trigger).toHaveTextContent('Editor');
 		expect(screen.getByText('PS')).toBeInTheDocument();
 
 		trigger.focus();
@@ -65,16 +78,24 @@ describe('UserMenu', () => {
 		expect(trigger).toHaveAttribute('aria-expanded', 'true');
 		expect(screen.getByText('priya@example.com')).toBeVisible();
 		expect(screen.getByText('All tenants')).toBeVisible();
+		expect(screen.getByText('Development role picker')).toBeVisible();
+		const signOut = screen.getByRole('button', { name: 'Sign out' });
+		expect(signOut.closest('form')).toHaveAttribute('action', '/logout');
+		expect(signOut.closest('form')).toHaveAttribute('method', 'POST');
 
 		await user.keyboard('{Escape}');
 		expect(trigger).toHaveAttribute('aria-expanded', 'false');
 		expect(trigger).toHaveFocus();
 	});
 
-	it('says when /me fails, with the error code', async () => {
-		server.use(mockError('getMe', 401));
-		render(UserMenu, { props: { me: api().call((c) => c.GET('/me')) } });
-		expect(await screen.findByText(/User unavailable \(UNAUTHORIZED\)/)).toBeInTheDocument();
+	it('falls back to the session identity when /me fails, and says changes are hidden', async () => {
+		server.use(mockError('getMe', 500));
+		const me = await api().call((c) => c.GET('/me'));
+		render(UserMenu, { props: { me, ...session } });
+		expect(screen.getByRole('button', { name: /Ops Person/ })).toHaveTextContent('Viewer');
+		expect(
+			screen.getByText(/Could not load your roles .*INTERNAL_ERROR/, { selector: 'p' })
+		).toBeInTheDocument();
 	});
 });
 

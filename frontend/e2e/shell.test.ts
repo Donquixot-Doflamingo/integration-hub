@@ -1,8 +1,10 @@
-import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { expectNoSeriousA11yViolations, signIn } from './helpers';
 
 // HUB-254: app shell on MSW mocks (build:mock). Navigation, active route, keyboard reachability,
 // 1280 px and 768 px layouts, light and dark themes, axe (no serious/critical violations).
+
+test.beforeEach(async ({ page }) => signIn(page));
 
 const SECTIONS = [
 	{ label: 'Integrations', path: '/integrations', row: 'int_evt_brandA' },
@@ -14,14 +16,6 @@ const SECTIONS = [
 	{ label: 'Snapshots', path: '/snapshots', row: '413' },
 	{ label: 'Change log', path: '/change-log', row: 'chg_01J9Z4B2C3D4E5F6G7H8J9K0N5' }
 ];
-
-async function expectNoSeriousA11yViolations(page: Page) {
-	const results = await new AxeBuilder({ page }).analyze();
-	const bad = results.violations.filter((v) => ['serious', 'critical'].includes(v.impact ?? ''));
-	expect(bad.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual(
-		[]
-	);
-}
 
 for (const scheme of ['light', 'dark'] as const) {
 	test.describe(`1280 px, ${scheme}`, () => {

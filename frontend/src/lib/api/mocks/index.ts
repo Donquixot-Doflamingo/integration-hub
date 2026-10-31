@@ -3,6 +3,7 @@ export {
 	createHandlers,
 	handlers,
 	mockError,
+	mockMe,
 	mockNetworkError,
 	mockOperation,
 	mockPending,

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **191** · done: **30** · todo: **161**
+Total tickets: **192** · done: **31** · todo: **161**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **191** · done: **30** · todo: **161**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 32 | 5 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 33 | 6 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1745,15 +1745,17 @@ MSW handlers and typed fixtures for every admin operation so the console is buil
 
 ### HUB-253 — Auth: OIDC stub login and /me
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-252 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-252 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `feat/HUB-253-fe-auth`
 
 Login via the dev OIDC stub, session handling, `/me` fetch and role-aware guards for `admin | editor | viewer | tenant_viewer`.
 
+Shipped (frontend-engineer): no OIDC stub exists yet, so auth sits behind an `AuthProvider` interface with a dev provider (role picker; mock builds or `PUBLIC_AUTH_MODE=dev`) and a config-wired OIDC placeholder; real OIDC is HUB-282. Session is an HMAC-signed httpOnly cookie.
+
 **Acceptance criteria**
-- [ ] Unauthenticated users redirected to login
-- [ ] Controls for mutations hidden/disabled for `viewer`
-- [ ] Unit tests for the guard per role
+- [x] Unauthenticated users redirected to login (unit: `(app)/+layout.server.ts`; e2e: `e2e/auth.test.ts`)
+- [x] Controls for mutations hidden/disabled for `viewer` (`RoleGate` + `access`, component-tested per role; also hidden for `tenant_viewer` and when `/me` fails. No mutation control exists yet: HUB-259/260 must use `RoleGate`)
+- [x] Unit tests for the guard per role (`src/lib/auth/roles.test.ts`, `RoleGate.test.ts`)
 
 ### HUB-254 — Layout and navigation
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
@@ -2075,6 +2077,19 @@ Filed by frontend-engineer during HUB-279 (ADR-0009). Move to `@sveltejs/kit` 3 
 - [ ] `npm run check && npm run lint && npm test && npm run build` and `npm run test:e2e` green
 - [ ] `npm audit` shows neither Kit advisory (GHSA-pfhg-q3qv-9q6r, GHSA-27mw-82g8-phjj); ADR-0009 marked superseded
 - [ ] Skills, `frontend/AGENTS.md` and `frontend/README.md` say SvelteKit 3
+
+### HUB-282 — Real OIDC sign-in for the console
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-282-fe-oidc`
+
+Filed by frontend-engineer during HUB-253. Replace the placeholder `oidcProvider` (`frontend/src/lib/server/auth/oidc.ts`) with Authorization Code + PKCE against the Hub issuer (`hub admin` OIDC stub, DESIGN §19 M7; contract `securitySchemes.oidc`). Needs the issuer to exist (backend M7) and a decision on how browser-side loads reach `/admin/v1` with the token: today only server-side fetches get it (`handleFetch`); client navigations call the admin API from the browser, so either a same-origin BFF proxy route that adds the bearer token from the session, or server loads for every screen.
+
+**Acceptance criteria**
+- [ ] Discovery, PKCE (S256), `state` and `nonce` checked; callback route sets the session cookie; `/me` read after login
+- [ ] Browser-side admin API calls are authorised without exposing the token to JavaScript (BFF proxy or server loads), documented in an ADR
+- [ ] Token expiry: silent refresh or redirect to login with `expired=1`; sign-out ends the IdP session when supported
+- [ ] Tested against the dev issuer in e2e (HUB-277)
 
 ## EP-11 — MCP server + consumer skill + SDK
 

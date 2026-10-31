@@ -41,7 +41,7 @@ On-call and integration admins cannot run incidents or cutovers efficiently from
 
 ## UX / API surface
 - Typed client generated from `contracts/openapi/hub-admin.v1.yaml` (`npm run gen:api`); no hand-written API types (AGENTS.md §4.6).
-- Auth: OIDC authorization code + PKCE; role from token claims (`getMe`) drives which actions render.
+- Auth: OIDC authorization code + PKCE (HUB-282, pending the Hub issuer); until then a dev provider (role picker) in mock builds or with `PUBLIC_AUTH_MODE=dev`. `getMe` drives which actions render (`RoleGate`, fails closed when `/me` fails).
 - Mutations always show a confirmation dialog with required **reason** and a preview (diff or match count).
 
 ## Behaviour & rules
@@ -58,7 +58,8 @@ On-call and integration admins cannot run incidents or cutovers efficiently from
 None.
 
 ## Config impact
-`PUBLIC_ADMIN_API_BASE` (runtime, default `/admin/v1` on the console origin), OIDC client id/issuer (HUB-253).
+`PUBLIC_ADMIN_API_BASE` (runtime, default `/admin/v1` on the console origin).
+Auth (HUB-253): `PUBLIC_AUTH_MODE` (`dev` selects the role-picker provider; anything else OIDC), `HUB_SESSION_SECRET` (session cookie HMAC key, 32+ chars, required for OIDC), `HUB_OIDC_ISSUER`, `HUB_OIDC_CLIENT_ID`, `HUB_OIDC_REDIRECT_URI` (OIDC placeholder; wiring in HUB-282).
 Build-time `HUB_API_MOCKING=true` (`npm run dev:mock` / `build:mock`) runs the console on MSW contract mocks with client-side rendering; normal builds contain no mock code.
 
 ## Observability
@@ -68,7 +69,7 @@ Build-time `HUB_API_MOCKING=true` (`npm run dev:mock` / `build:mock`) runs the c
 | Metric | Admin API metrics cover usage (F-16) | |
 
 ## Security & PII
-Tokens in memory (no localStorage); CSP strict; no payload caching in the browser beyond the session; API key plaintext shown once.
+Session in an HMAC-signed httpOnly SameSite=Lax cookie set by the login action; tokens stay server side (never in page data or web storage); post-login `next` restricted to same-origin paths; CSP strict; no payload caching in the browser beyond the session; API key plaintext shown once.
 
 ## Failure modes
 | Failure | Behaviour | Caller sees |
@@ -110,6 +111,7 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-250 | `frontend/` scaffold: SvelteKit 2 + Svelte 5 (runes enforced) + TypeScript strict, adapter-node (SSR), ESLint/Prettier, Vitest + Testing Library, Playwright; `.github/workflows/frontend.yml` |
 | HUB-251 | `npm run gen:api` -> `src/lib/api/schema.d.ts`; `adminClient()` (openapi-fetch, bearer token, `X-Hub-Request-Id`, typed `HubApiError` from the envelope); lint guard against hand-written API types; CI freshness check |
 | HUB-252 | MSW handlers for all 79 admin operations from contract examples (`contract.gen.ts`, generated); fixtures validated with Ajv 2020-12; `npm run dev:mock` with no backend |
+| HUB-253 | Auth behind an `AuthProvider` interface: dev role-picker provider (mock / `PUBLIC_AUTH_MODE=dev`), OIDC placeholder (HUB-282); signed httpOnly session cookie; `/login`, `POST /logout`; redirect to login with `next`; `/me`-based `access` and `RoleGate` for mutation controls |
 | HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
@@ -121,3 +123,4 @@ Contract gaps found while building: CCR-001 (`X-Hub-Request-Id` not declared on 
 | 2026-10-31 | Created | docs agent |
 | 2026-10-31 | Status in-progress; shipped HUB-250, 251, 252, 254; config and CCR-001 noted | frontend-engineer |
 | 2026-10-31 | HUB-279: framework version decision and advisory assessment | frontend-engineer |
+| 2026-10-31 | HUB-253: auth design, config and security notes | frontend-engineer |

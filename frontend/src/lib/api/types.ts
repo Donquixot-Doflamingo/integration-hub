@@ -24,3 +24,7 @@ export type Me = Schemas['Me'];
 export type Role = Schemas['Role'];
 export type BreakerState = Schemas['BreakerState'];
 export type RequestState = Schemas['RequestState'];
+export type Slug = Schemas['Slug'];
+
+/** Identity a console session carries (subset of `Me`; no token, safe to send to the browser). */
+export type SessionUser = Pick<Me, 'subject' | 'email' | 'name' | 'roles' | 'tenants'>;

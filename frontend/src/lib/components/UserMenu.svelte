@@ -1,17 +1,33 @@
 <script lang="ts">
 	import type { ApiResult } from '$lib/api/client';
-	import type { Me } from '$lib/api/types';
+	import type { Me, SessionUser } from '$lib/api/types';
+	import { highestRole, roleLabels } from '$lib/auth/roles';
 	import { formatUtc } from '$lib/utils/format';
 
-	let { me }: { me: Promise<ApiResult<Me>> } = $props();
+	let {
+		me,
+		user,
+		provider,
+		expiresAt
+	}: {
+		/** `/me` answer: the API's view of roles and tenants (drives gating). */
+		me: ApiResult<Me>;
+		/** Session identity, shown when `/me` failed. */
+		user: SessionUser;
+		provider: 'dev' | 'oidc';
+		expiresAt: string;
+	} = $props();
 
 	let open = $state(false);
 	let trigger = $state<HTMLButtonElement>();
 	let root = $state<HTMLDivElement>();
 
-	function initials(u: Me): string {
-		const source = u.name || u.email || u.subject;
-		const parts = source.split(/[\s@._-]+/).filter(Boolean);
+	const who = $derived(me.ok ? me.data : user);
+	const displayName = $derived(who.name || who.email || who.subject);
+	const role = $derived(highestRole(who.roles));
+
+	function initials(source: string): string {
+		const parts = source.split(/[\s@._|-]+/).filter(Boolean);
 		return ((parts[0]?.[0] ?? '?') + (parts[1]?.[0] ?? '')).toUpperCase();
 	}
 
@@ -35,55 +51,56 @@
 <svelte:window {onkeydown} {onpointerdown} />
 
 <div class="user" bind:this={root}>
-	{#await me}
-		<span class="pending" role="status">Loading user...</span>
-	{:then res}
-		{#if res.ok}
-			{@const u = res.data}
-			<button
-				bind:this={trigger}
-				type="button"
-				class="trigger"
-				aria-expanded={open}
-				aria-controls="user-panel"
-				onclick={() => (open = !open)}
-			>
-				<span class="avatar" aria-hidden="true">{initials(u)}</span>
-				<span class="who">
-					<span class="name">{u.name || u.email || u.subject}</span>
-					<span class="role">{u.roles.join(', ') || 'no role'}</span>
-				</span>
-				<span class="visually-hidden">Account details</span>
-			</button>
-			<div id="user-panel" class="panel" hidden={!open}>
-				<dl>
-					{#if u.email}<div>
-							<dt>Email</dt>
-							<dd>{u.email}</dd>
-						</div>{/if}
-					<div>
-						<dt>Roles</dt>
-						<dd>{u.roles.join(', ') || 'None'}</dd>
-					</div>
-					<div>
-						<dt>Tenants</dt>
-						<dd>{u.tenants.length ? u.tenants.join(', ') : 'All tenants'}</dd>
-					</div>
-					{#if u.token_expires_at}
-						<div>
-							<dt>Session ends</dt>
-							<dd>{formatUtc(u.token_expires_at)}</dd>
-						</div>
-					{/if}
-				</dl>
-				<p class="note">Sign-in and sign-out arrive with OIDC login (HUB-253).</p>
+	<button
+		bind:this={trigger}
+		type="button"
+		class="trigger"
+		aria-expanded={open}
+		aria-controls="user-panel"
+		onclick={() => (open = !open)}
+	>
+		<span class="avatar" aria-hidden="true">{initials(displayName)}</span>
+		<span class="who">
+			<span class="name">{displayName}</span>
+			<span class="role">{role ? roleLabels[role] : 'No role'}</span>
+		</span>
+		<span class="visually-hidden">Account details</span>
+	</button>
+	<div id="user-panel" class="panel" hidden={!open}>
+		<dl>
+			{#if who.email}<div>
+					<dt>Email</dt>
+					<dd>{who.email}</dd>
+				</div>{/if}
+			<div>
+				<dt>Roles</dt>
+				<dd>{who.roles.map((r) => roleLabels[r]).join(', ') || 'None'}</dd>
 			</div>
-		{:else}
-			<span class="unavailable" title={`${res.error.code} ${res.error.requestId ?? ''}`}>
-				User unavailable ({res.error.code})
-			</span>
+			<div>
+				<dt>Tenants</dt>
+				<dd>{who.tenants.length ? who.tenants.join(', ') : 'All tenants'}</dd>
+			</div>
+			<div>
+				<dt>Sign-in</dt>
+				<dd>{provider === 'dev' ? 'Development role picker' : 'Single sign-on'}</dd>
+			</div>
+			<div>
+				<dt>Session ends</dt>
+				<dd>
+					{formatUtc(me.ok && me.data.token_expires_at ? me.data.token_expires_at : expiresAt)}
+				</dd>
+			</div>
+		</dl>
+		{#if !me.ok}
+			<p class="note" role="status">
+				Could not load your roles from the admin API ({me.error.code}). Changes are hidden until it
+				answers.
+			</p>
 		{/if}
-	{/await}
+		<form method="POST" action="/logout" class="signout">
+			<button type="submit">Sign out</button>
+		</form>
+	</div>
 </div>
 
 <style>
@@ -161,15 +178,26 @@
 		margin: 0;
 		overflow-wrap: anywhere;
 	}
-	.note,
-	.pending,
-	.unavailable {
+	.note {
+		margin: var(--space-3) 0 0;
 		font-size: var(--text-xs);
 		color: var(--ink-muted);
 	}
-	.note {
+	.signout {
 		margin: var(--space-3) 0 0;
-		padding-top: var(--space-2);
+		padding-top: var(--space-3);
 		border-top: 1px solid var(--rule);
+	}
+	.signout button {
+		padding: 0.3rem 0.8rem;
+		border: 1px solid var(--rule-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		font-weight: 600;
+		font-size: var(--text-sm);
+		cursor: pointer;
+	}
+	.signout button:hover {
+		border-color: var(--ink-muted);
 	}
 </style>

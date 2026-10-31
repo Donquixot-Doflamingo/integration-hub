@@ -1,4 +1,6 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
+import type { Session } from '$lib/server/auth/session';
+
 declare global {
 	namespace App {
 		interface Error {
@@ -6,7 +8,10 @@ declare global {
 			code?: string;
 			requestId?: string | null;
 		}
-		// interface Locals {}
+		interface Locals {
+			/** Verified console session (HUB-253), or null when signed out. Server only. */
+			session: Session | null;
+		}
 		// interface PageData {}
 		// interface PageState {}
 		// interface Platform {}

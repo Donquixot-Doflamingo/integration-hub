@@ -130,20 +130,26 @@ export const actions = {
 - `+error.svelte` per group renders `page.error` (`code`, `requestId`); never show stack traces.
 - Read page state with `import { page } from '$app/state'` (Svelte 5), not the `$app/stores` store.
 
-## Auth in `hooks.server.ts`
-
+## Auth (HUB-253): session hook, layout guard, role gating
+How it is wired in this repo (do not add a second mechanism):
+- `src/lib/server/auth/`: `AuthProvider` interface with `devProvider` (role picker; mock builds or
+  `PUBLIC_AUTH_MODE=dev`) and `oidcProvider` (placeholder until HUB-282). `authProvider()` picks one.
+- Session = one HMAC-signed, **httpOnly**, SameSite=Lax cookie (`hub_console_session`), set only by the
+  login form action. Never `localStorage`, never a token in page data: pages get `PublicSession`.
+- `hooks.server.ts`: `sequence(rejectDoubleSlashPaths, authenticate)` puts the verified session in
+  `event.locals.session`; `handleFetch` adds the bearer token to server-side admin API fetches.
+- The redirect to `/login?next=...` lives in `routes/(app)/+layout.server.ts` (works for SSR and for
+  client navigations, unlike a redirect thrown in `handle`). `next` always goes through `safeNext()`.
+- `routes/(app)/+layout.ts` awaits `/me` and returns `access` (`$lib/auth/roles`). Gate controls with
+  `<RoleGate access={data.access} min="editor">`; `access` fails closed when `/me` failed. The API's 403
+  stays the truth.
 ```ts
-import type { Handle } from '@sveltejs/kit';
-import { redirect } from '@sveltejs/kit';
-export const handle: Handle = async ({ event, resolve }) => {
-  event.locals.session = await readSession(event.cookies);   // OIDC (dev stub in dev)
-  if (event.route.id?.startsWith('/(app)') && !event.locals.session) redirect(303, '/login');
-  return resolve(event);
-};
+// any page under (app): data.access comes from the layout
+<RoleGate access={data.access}>
+  <button onclick={openPublish}>Publish</button>
+  {#snippet denied(role)}<p>Read only: publishing needs the {role} role.</p>{/snippet}
+</RoleGate>
 ```
-- Tokens live in an httpOnly cookie / server session, never in `localStorage`.
-- RBAC (`admin | editor | viewer | tenant_viewer`): hide or disable controls by role in the UI,
-  but treat the server's 403 as the truth.
 
 ## Environment variables
 - `$env/static/public` (`PUBLIC_*`, inlined at build) for things like `PUBLIC_HUB_ADMIN_BASE`.
