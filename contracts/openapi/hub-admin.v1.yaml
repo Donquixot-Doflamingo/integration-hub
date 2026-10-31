@@ -477,7 +477,11 @@ paths:
       tags: [accounts]
       x-required-role: viewer
       summary: List accounts
-      description: Credentialed vendor instances with lifecycle state and credential-slot summary. Secrets are never returned.
+      description: |
+        Credentialed vendor instances with lifecycle state and credential-slot summary. Secrets are
+        never returned. Since 1.1.0 each row also carries `dead_letter_count` and
+        `dead_letter_oldest_at` (dead letters whose last attempt used the account, within retention;
+        filter them with `listDeadLetters?account_id=`).
       parameters:
         - name: vendor_id
           in: query
@@ -515,6 +519,20 @@ paths:
                     credential_expires_at: null
                     integrations_using: 1
                     breaker_states: { open: 0, half_open: 0, closed: 1 }
+                    dead_letter_count: 1
+                    dead_letter_oldest_at: '2026-10-31T11:02:40Z'
+                    updated_at: '2026-10-30T12:00:00Z'
+                  - account_id: ct-brandA-in-v2
+                    vendor_id: clevertap
+                    region: in
+                    state: active
+                    active_cred_version: 1
+                    next_cred_version: null
+                    credential_expires_at: null
+                    integrations_using: 1
+                    breaker_states: { open: 0, half_open: 0, closed: 1 }
+                    dead_letter_count: 0
+                    dead_letter_oldest_at: null
                     updated_at: '2026-10-30T12:00:00Z'
                 next_cursor: null
         '400':
@@ -618,6 +636,8 @@ paths:
                   - { integration_id: int_evt_brandA, version: 7, role: target }
                 pinned_requests: 0
                 open_sessions: 0
+                dead_letter_count: 1
+                dead_letter_oldest_at: '2026-10-31T11:02:40Z'
                 created_at: '2026-06-01T10:00:00Z'
                 updated_at: '2026-10-30T12:00:00Z'
         '401':
@@ -4725,6 +4745,16 @@ components:
               role: { type: string, enum: [target, failover, shadow] }
         pinned_requests: { description: 'Queued requests pinned to this account (pending: pinned) or bound to its vendor sessions.', type: integer, minimum: 0 }
         open_sessions: { type: integer, minimum: 0 }
+        dead_letter_count:
+          description: Dead-lettered requests whose last attempt used this account, not yet replayed and still within retention (14 days). Computed from the DLQ store; may lag by up to a minute. Since 1.1.0.
+          type: integer
+          minimum: 0
+          example: 1
+        dead_letter_oldest_at:
+          description: When the oldest of those entries was dead-lettered; `null` when there are none. Since 1.1.0.
+          type: [string, 'null']
+          format: date-time
+          example: '2026-10-31T11:02:40Z'
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     AccountSummary:
@@ -4745,6 +4775,16 @@ components:
             open: { type: integer }
             half_open: { type: integer }
             closed: { type: integer }
+        dead_letter_count:
+          description: Dead-lettered requests whose last attempt used this account, not yet replayed and still within retention (14 days). Computed from the DLQ store; may lag by up to a minute. Since 1.1.0.
+          type: integer
+          minimum: 0
+          example: 1
+        dead_letter_oldest_at:
+          description: When the oldest of those entries was dead-lettered; `null` when there are none. Since 1.1.0.
+          type: [string, 'null']
+          format: date-time
+          example: '2026-10-31T11:02:40Z'
         updated_at: { type: string, format: date-time }
     AccountList:
       allOf:

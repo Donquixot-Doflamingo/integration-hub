@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **66** · todo: **128**
+Total tickets: **194** · done: **67** · todo: **127**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **194** · done: **66** · todo: **128**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 18 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 19 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -2124,15 +2124,17 @@ Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract ro
 
 ### HUB-284 — CCR-003: dead-letter count per account on listAccounts
 - **Epic:** EP-10 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-006, HUB-261 · **Feature:** F-19 · **Stories:** US-1903
+- **Status:** done · **Depends on:** HUB-006, HUB-261 · **Feature:** F-19 · **Stories:** US-1903
 - **Branch:** `contract/HUB-284-account-dead-letter-count`
 
 Filed by frontend-engineer during HUB-261. Full CCR text (before/after YAML): `frontend/CCR-NOTES.md` § CCR-003. The health board must show a DLQ count per account, but no admin operation returns one (`listDeadLetters` has no totals; counting pages client-side is wrong and too slow for a 5 s refresh). Proposed additive `dead_letter_count` and `dead_letter_oldest_at` on `AccountSummary` and `Account`. `hub-admin` minor bump.
 
 **Acceptance criteria**
-- [ ] Both properties on `AccountSummary` and `Account` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
+- [x] Both properties on `AccountSummary` and `Account` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
 - [ ] Backend accounts handlers fill them from the DLQ store, covered by contract tests (EP-08)
 - [ ] Console health board adds a "Dead letters" column (count, oldest age, link to the filtered DLQ) after `npm run gen:api` and removes `TODO(CCR-003)`
+
+Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1; notice `contracts/notices/2026-10-31-round-1.md`). Both properties are optional in the schema (additive); the backend should always fill them from 1.1.0 on. The backend and console criteria stay open for those sides.
 
 ## EP-11 — MCP server + consumer skill + SDK
 

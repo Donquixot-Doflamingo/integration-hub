@@ -5,6 +5,9 @@ Entry format: `- YYYY-MM-DD · <document> <version> · <CCR / HUB-###> · <summa
 
 ## 2026-10-31
 
+- 2026-10-31 · `hub-admin` 1.1.0 · CCR-003 / HUB-284 · Per-account dead-letter count and age on `AccountSummary` and `Account` (additive, minor; extends the pending 1.1.0)
+  - New optional response properties `dead_letter_count` (integer ≥ 0) and `dead_letter_oldest_at` (date-time or null): dead letters whose last attempt used the account, not replayed, within the 14-day retention; may lag by up to a minute.
+  - Returned by `listAccounts` (`AccountSummary`) and `getAccount` (`Account`). Examples updated: `ct-brandA-in` has 1 (matching the `listDeadLetters` example), a second list row shows 0 and null.
 - 2026-10-31 · `hub-admin` 1.1.0 · CCR-002 / HUB-283 · Active-version filters on `listIntegrations` (additive, minor; extends the pending 1.1.0)
   - New optional boolean query parameters `has_active_version` (published or never published) and `active_version_behind` (a newer version or a draft waits behind the active one), with examples. `VALIDATION_FAILED` for a non-boolean value, as for `paused`.
   - The operation description says filters combine with AND and apply before pagination.
