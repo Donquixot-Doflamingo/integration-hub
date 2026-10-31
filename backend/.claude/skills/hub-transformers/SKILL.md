@@ -44,6 +44,10 @@ An expression is a YAML scalar, so YAML syntax wins:
 - Quote any expression containing `: ` (the ternary `c ? "a" : "b"`, inline maps): `status: 'len(res.body.unprocessed ?? []) == 0 ? "ok" : "partial"'`.
 - Write a multi-line expression as a block scalar (`>-`), e.g. `evtData: >-` followed by the `merge(..., { brand: ..., campaign: ... })` lines.
 - String literals inside expressions keep their double quotes inside single-quoted YAML: `type: '"event"'`.
+- Quote any expression that uses expr's `#` placeholder: YAML reads ` #` as a comment, so `tags: map(xs, # * 2)` silently becomes `map(xs,`. Write `tags: 'map(xs, # * 2)'`.
+
+### Field access is nil-safe
+The compiler makes every `a.b` behave like `a?.b`: if a parent object is absent, the access yields nil instead of failing, so `req.context.campaign ?? "organic"` works when `context` is omitted. Object fields whose value evaluates to nil are left out of the vendor body (no `null` is sent). Use `??` for defaults; a genuinely required value should be `required` in the capability schema, so validation rejects the request before the transformer runs.
 The registry loader rejects invalid YAML with `file: line N: ...` (found in M1 on the dev config).
 
 ## Expression context (§7.2)

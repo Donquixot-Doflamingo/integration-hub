@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(transform)` · compile expressions once against a typed environment · HUB-061 · F-04
+  - Every transformer expression is compiled once (expr-lang 1.17.8); req.* paths are checked against the capability schema, so req.user.idd fails at compile with transformer and target path
+  - Request mappings see req, hdr, account, creds, session, now; response mappings res, account, now; creds only in headers/query unless allow_creds_in_body; only the DESIGN §7.3 builtins (no reduce, sortBy, ...)
+  - Field access is nil-safe and nil object fields are not sent; expressions using # must be quoted in YAML
 - 2026-10-31 · `feat(transform)` · parse transformer YAML into target trees · HUB-060 · F-04
   - Request sections (method, path, headers, query, body), response mappings, ordered error rules and batch become target trees with paths like request.body.d[0].evtName
   - Unknown keys, duplicate or case-conflicting targets, non-expression headers, mapped TRANSFORM_FAILED and invalid batch paths fail with their target path
