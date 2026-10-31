@@ -77,7 +77,7 @@ export interface Crumb {
  */
 const PREFIXED: Record<string, (next: string) => string> = { versions: (v) => `v${v}` };
 /** Readable labels for fixed sub-page segments. */
-const LABELS: Record<string, string> = { diff: 'Compare' };
+const LABELS: Record<string, string> = { diff: 'Compare', publish: 'Publish' };
 
 /** Breadcrumb trail for a pathname: Console > Section > deeper segments (decoded). */
 export function breadcrumbsFor(pathname: string): Crumb[] {

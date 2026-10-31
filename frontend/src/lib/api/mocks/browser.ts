@@ -1,6 +1,7 @@
 import { setupWorker, type SetupWorker } from 'msw/browser';
 import type { SessionUser } from '../types';
 import { createHandlers, mockMe, mockOperation } from './handlers';
+import { scenarioFromCookieString, scenarioHandlers } from './scenarios';
 
 const LATENCY_MS = 300;
 let worker: SetupWorker | undefined;
@@ -11,7 +12,9 @@ let identityKey: string | undefined;
  * `msw/vite` plugin (worker-only mode), which vite.config.ts only installs when mocking is on.
  */
 export async function startMockWorker(): Promise<void> {
-	worker = setupWorker(...createHandlers({ latencyMs: LATENCY_MS }));
+	// A mock scenario (cookie, see scenarios.ts) goes before the contract-example defaults.
+	const scenario = scenarioHandlers(scenarioFromCookieString(document.cookie));
+	worker = setupWorker(...scenario, ...createHandlers({ latencyMs: LATENCY_MS }));
 	await worker.start({
 		serviceWorker: { url: '/mockServiceWorker.js' },
 		// Every admin operation has a handler; assets, Vite HMR and anything else go to the network.

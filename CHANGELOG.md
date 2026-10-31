@@ -6,6 +6,13 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add publish and rollback flows with mandatory reason · HUB-259 · F-19
+  - Editors get "Review draft vN and publish" on the integration page: a YAML/JSON spec editor with line numbers, "Save draft" (creates or replaces the draft and runs the publish checks), the checks in text and icon, and the diff against the active version
+  - Publish and "Roll back to vN" (history rows) open one confirm dialog: exact title, the consequence in numbers, a required reason (10+ characters), Cancel focused first, Escape and Tab stay inside, no double submit
+  - Success shows the new active version and the change log id with a copy button; a 409 says someone else published first and offers Reload; other errors show code, message and request id with the reason kept
+  - API validation errors land on their field: the reason, or the spec line of each JSON pointer with "Go to line"; YAML syntax errors show their line
+  - Viewers and tenant viewers see no publish or rollback controls; mutations run as server-side form actions, so the admin token never reaches the browser
+
 - 2026-10-31 · `docs(frontend)` · accept ADR-0009 and require encrypted OIDC sessions · HUB-279, HUB-282 · F-19
   - ADR-0009 (stay on SvelteKit 2.70.3 with the // path guard until HUB-281) accepted by the lead
   - HUB-282 now requires the OIDC token to be unreadable from the session cookie (encrypt the payload or use a server-side store)

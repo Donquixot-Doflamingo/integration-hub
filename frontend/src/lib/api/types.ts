@@ -40,3 +40,10 @@ export type DiffOp = Schemas['DiffOp'];
 export type ListIntegrationsQuery = NonNullable<
 	Operations['listIntegrations']['parameters']['query']
 >;
+
+// Mutations (HUB-259+).
+export type PublishResult = Schemas['PublishResult'];
+export type ValidationReport = Schemas['ValidationReport'];
+export type ValidationCheck = Schemas['ValidationCheck'];
+export type IntegrationVersionChange = Schemas['IntegrationVersionChange'];
+export type IntegrationChange = Schemas['IntegrationChange'];

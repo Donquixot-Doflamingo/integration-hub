@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **193** · done: **45** · todo: **148**
+Total tickets: **193** · done: **46** · todo: **147**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **193** · done: **45** · todo: **148**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 34 | 10 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 34 | 11 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1817,15 +1817,17 @@ Compare any two versions using the admin diff endpoint, with side-by-side and pa
 
 ### HUB-259 — Publish and rollback flows with mandatory reason
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-257 · **Feature:** F-19 · **Stories:** US-1902
 - **Branch:** `feat/HUB-259-fe-publish-rollback`
 
 Publish a new version (spec editor with validation) and rollback-as-new-version, both requiring a reason and confirming in a dialog; path-qualified validation errors shown inline.
 
+Shipped (frontend-engineer): publish page `/integrations/{id}/publish` (YAML/JSON spec editor; save creates or replaces the draft and runs `validateIntegrationVersion`; diff against the active version; publish in `ConfirmDialog` with `expected_active_version`) and "Roll back to vN" on published history rows (`expected_active_version`, 409 shows a reload prompt). Mutations are SvelteKit form actions with `use:enhance`; mock builds answer them server side (`hooks.server.ts` `handleFetch`, `hub_mock_scenario` cookie).
+
 **Acceptance criteria**
-- [ ] Submit disabled until a reason is entered
-- [ ] Validation errors mapped to fields
-- [ ] Success shows the new version number
+- [x] Submit disabled until a reason is entered (`ConfirmDialog`: at least 10 characters, typed confirmation optional; the action re-checks it before calling the API; `ConfirmDialog.test.ts`, `e2e/publish-rollback.test.ts`)
+- [x] Validation errors mapped to fields (400 `/reason` to the reason field, `/spec/...` and 422 `PUBLISH_VALIDATION_FAILED` pointers to spec editor lines with "Go to line", YAML syntax errors with their line; `publish/page.test.ts`)
+- [x] Success shows the new version number ("Published v8 ... (was v7)", "Rolled back: v9 is now active, a copy of v7", with the change log id; unit + e2e)
 
 ### HUB-260 — Weights and pause flows with mandatory reason
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

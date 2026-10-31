@@ -4,7 +4,7 @@
 A SvelteKit (Svelte 5 + TypeScript) control-plane UI in `frontend/`, pulled forward from Release 2 (PRD DV-2) and built in parallel with backend milestones against the frozen admin contract. It covers cutover, health, investigation and recovery workflows.
 
 ## Status
-`in-progress` — 2026-10-31 (scaffold, client, mocks, shell, sign-in and role gating, shared states, integrations list, detail, history and diff shipped; mutations follow with HUB-259+).
+`in-progress` — 2026-10-31 (scaffold, client, mocks, shell, sign-in and role gating, shared states, integrations list, detail, history and diff shipped; publish and rollback shipped (HUB-259); weights, pause, health board, breaker force and request explorer follow).
 
 ## Owner
 `frontend-engineer`.
@@ -99,11 +99,17 @@ Decision: **stay on SvelteKit 2.70.3** for now ([ADR-0009](../tech/adr/0009-cons
 
 | Advisory (fixed only in Kit 3.0.0) | Needs | This console | Status |
 | --- | --- | --- | --- |
-| GHSA-pfhg-q3qv-9q6r, open redirect via `use:enhance` (Low) | a route accepting `//`-prefixed paths + enhanced form actions | No form actions yet; HUB-259+ will add `use:enhance` | Mitigated: `src/hooks.server.ts` answers 404 for every `//` path before routing (advisory workaround) |
+| GHSA-pfhg-q3qv-9q6r, open redirect via `use:enhance` (Low) | a route accepting `//`-prefixed paths + enhanced form actions | Enhanced form actions since HUB-259 (publish, rollback, ...); no catch-all routes | Mitigated: `src/hooks.server.ts` answers 404 for every `//` path before routing (advisory workaround), still first in `handle` and unit-tested |
 | GHSA-27mw-82g8-phjj, XSS in prerendered pages via untrusted `cache-control` (Low) | prerendering + `setHeaders` with untrusted `cache-control` | Nothing is prerendered; no request-derived `setHeaders` | Not applicable; rule: never enable `prerender` on 2.x |
 
 Other `npm audit` findings (minimatch under ESLint/typescript-eslint/openapi-typescript, deepmerge under the build, `cookie <0.7.0` under Kit) are dev/build-time only or not reachable (fixed cookie names). `npm audit --omit=dev`: 0 findings.
 Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (our API type generator) only supports TypeScript 5, so the install needs an override; Kit 3 also moves config out of `svelte.config.js`, removes `$lib` and changes `$env`, and its 3.0.0 is one month old.
+
+## Mutations (HUB-259+)
+- Every mutation is a SvelteKit **form action** in the route's `+page.server.ts` (`src/lib/server/actions.ts`: session check, reason check, `finish()` maps the API answer). The admin bearer token is added server side by `handleFetch`; the browser never holds it. Pages submit with `use:enhance` (ADR-0009 guard in place); nothing is prerendered.
+- One `ConfirmDialog` for every dangerous action: title with the object, consequence, required reason (console minimum **10 characters**, contract minimum 3), optional typed confirmation, Cancel focused first, focus trapped, Escape closes, focus returns to the trigger. Success closes and shows a `ChangeNotice` with the change log id; failure keeps the reason and shows code, message and request id; `CONFLICT` / `PRECONDITION_FAILED` show "Someone else changed ..." with Reload.
+- Concurrency: publish and rollback send `expected_active_version` (409 on mismatch). No mutation added so far takes `If-Match` in the contract.
+- Mock builds: the browser's MSW worker cannot answer server-side form actions, so `hooks.server.ts` answers admin calls from the same handlers (`src/lib/api/mocks/server-fetch.ts`, mock builds only; production bundles contain no mock code). The cookie `hub_mock_scenario` selects contract-derived states (`v8-active`, `paused`, `breaker-forced`) or contract error examples (`<operationId>:<status>`) for both the worker and the server; e2e uses it.
 
 ## Shipped so far
 | Ticket | What shipped |
@@ -116,6 +122,7 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-256 | Integrations list: search, owner tenant (a select of own tenants for tenant viewers), capability, paused, vendor and account filters plus page size in the URL; removable chips and Clear all; cursor paging with Previous/Next kept in the URL; Paused / No active version / draft marked in text |
 | HUB-257 | Integration detail `/integrations/{id}`: status, owner, capability, versions, grants, money flag, paused reason; active spec (targets + weights, failover, delivery, breaker override, webhooks, audit, shadow); full version history newest first (all pages) with Active/Draft marked; version page `/integrations/{id}/versions/{n}`; read-only note for viewer and tenant viewer via `RoleGate` |
 | HUB-258 | Version diff `/integrations/{id}/diff?from=&to=` on `diffIntegrationVersions`: side-by-side view from the unified YAML diff (old left, new right, `-`/`+` and text labels, long unchanged runs folded) and a path list from the structured ops (Added/Removed/Changed, before/after); summary line; version pickers, swap, view in the URL; default pair newest vs active; selectable from history rows |
+| HUB-259 | Publish page `/integrations/{id}/publish`: YAML/JSON spec editor with line numbers; save creates (`createIntegrationDraft`) or replaces (`updateIntegrationDraft`) the draft and runs `validateIntegrationVersion`; checks shown in text + icon; diff against the active version; publish in `ConfirmDialog` with `expected_active_version`. "Roll back to vN" on published history rows (`rollbackIntegration`). 400 pointers mapped to the reason field or spec lines, 422 checks on the editor and in the dialog, 409 reload prompt; success shows new version + change log id |
 | HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
@@ -132,3 +139,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-10-31 | HUB-256: integrations list; CCR-002 | frontend-engineer |
 | 2026-10-31 | HUB-257: integration detail and version history | frontend-engineer |
 | 2026-10-31 | HUB-258: version diff view | frontend-engineer |
+| 2026-10-31 | HUB-259: publish and rollback; mutation pattern (form actions, ConfirmDialog, mock scenarios) | frontend-engineer |

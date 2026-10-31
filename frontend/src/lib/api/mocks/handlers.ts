@@ -109,11 +109,27 @@ export function mockNetworkError(op: OperationId): HttpHandler {
 	return http[m.method](mswPath(m.path), () => HttpResponse.error());
 }
 
+/**
+ * Answers that keep the examples consistent with each other: the integration example has a draft
+ * v8 (`has_draft`, `latest_version: 8`), and the contract's draft example IS that v8, so
+ * `getIntegrationVersion` for v8 answers the draft rather than the v7 example.
+ */
+function coherentBody<Op extends OperationId>(op: Op) {
+	if (op !== 'getIntegrationVersion') return undefined;
+	const draft = contractMocks.createIntegrationDraft.example.integration_version;
+	return ((params: Record<string, string>) =>
+		params.version === String(draft.version)
+			? draft
+			: contractMocks.getIntegrationVersion.example) as unknown as (
+		params: Record<string, string>
+	) => OperationResponse<Op>;
+}
+
 /** One contract-example handler per admin operation, most specific paths first. */
 export function createHandlers(opts: HandlerOptions = {}): HttpHandler[] {
 	return [...operationIds]
 		.sort(byPathSpecificity)
-		.map((op) => mockOperation(op, undefined, { latencyMs: opts.latencyMs }));
+		.map((op) => mockOperation(op, coherentBody(op), { latencyMs: opts.latencyMs }));
 }
 
 export const handlers = createHandlers();
