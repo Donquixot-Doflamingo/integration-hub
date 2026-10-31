@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `contract` · freeze v1 public, admin, mockvendor and MCP contracts · HUB-006 · F-05, F-06, F-16, F-20
+  - hub-public 1.0.0: invoke, dry-run, request status, discovery endpoints, outbound webhooks
+  - hub-admin 1.0.0: 79 control-plane operations with RBAC and change_id
+  - mockvendor 1.0.0 control API; MCP tool contract 1.0.0
+  - events.track@v1 and callback event JSON Schemas
 - 2026-10-31 · `docs(process)` · add git workflow, contract change and release process · HUB-005 · F-01
   - Branching, Conventional Commits, merge-commit PRs
   - Contract change request (CCR) flow between backend, frontend and contract-steward

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RequestFailedEvent",
+  "description": "Sent once when a wait/async/async_callback request reaches `dead_lettered` (non-retryable error, or retries exhausted). If an operator later replays it from the DLQ, a new request.completed or request.failed event may follow for the same request_id (with a new event_id).",
+  "allOf": [
+    { "$ref": "envelope.json" },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "request.failed" },
+        "data": {
+          "type": "object",
+          "required": ["status", "error", "attempts", "failed_at"],
+          "properties": {
+            "status": { "type": "string", "const": "dead_lettered" },
+            "error": { "$ref": "canonical-error.json" },
+            "attempts": { "type": "integer", "minimum": 1 },
+            "failed_at": { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    }
+  ],
+  "examples": [
+    {
+      "event_id": "evt_01J9Z5C3D4E5F6G7H8J9K0M1NQ",
+      "type": "request.failed",
+      "spec_version": "1",
+      "occurred_at": "2026-10-31T11:02:40Z",
+      "tenant_id": "orders-service",
+      "integration_id": "int_evt_brandA",
+      "operation": "default",
+      "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JK",
+      "idempotency_key": "order-8822-created",
+      "data": {
+        "status": "dead_lettered",
+        "error": {
+          "code": "UPSTREAM_REJECTED",
+          "message": "event name must not contain spaces",
+          "retryable": false,
+          "retry_after_ms": null,
+          "circuit": null,
+          "reason": null,
+          "upstream": { "status": 400, "code": "E_INVALID_EVENT" },
+          "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JK"
+        },
+        "attempts": 1,
+        "failed_at": "2026-10-31T11:02:40Z"
+      }
+    }
+  ]
+}

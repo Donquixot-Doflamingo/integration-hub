@@ -1,0 +1,447 @@
+{
+  "$comment": "MCP tool contract for hubmcp (backend/cmd/hubmcp). Frozen; edit only via a CCR to contract-steward. JSON Schemas are 2020-12. See README.md in this folder.",
+  "contract": "hubmcp-tools",
+  "version": "1.0.0",
+  "server": {
+    "name": "hubmcp",
+    "title": "Integration Hub",
+    "description": "Lets an AI assistant discover and call Integration Hub integrations as a tenant, and (optionally) read operational state as an admin viewer.",
+    "transport": ["stdio", "streamable-http"]
+  },
+  "config": {
+    "env": [
+      { "name": "HUB_BASE_URL", "required": true, "description": "Base URL of the Hub gateway, e.g. http://localhost:8080. The admin API is reached at HUB_ADMIN_BASE_URL or, if unset, HUB_BASE_URL with /admin/v1." },
+      { "name": "HUB_API_KEY", "required": true, "secret": true, "description": "Tenant API key (scope `invoke`; add `dry_run` to enable hub_dry_run). Sent as `Authorization: Bearer`. Never logged or echoed." },
+      { "name": "HUB_ADMIN_TOKEN", "required": false, "secret": true, "description": "OIDC access token with role viewer (or tenant_viewer). When unset, the hub_admin_* tools are not registered at all." },
+      { "name": "HUB_ADMIN_BASE_URL", "required": false, "description": "Override for the control-plane base URL, e.g. http://localhost:8081/admin/v1." }
+    ]
+  },
+  "rules": [
+    "Tenant tools (no `hub_admin_` prefix) MUST NOT reveal vendor names, account names, integration versions or transformer versions. The server strips the X-Hub-Integration-Version header and never puts it in tool output.",
+    "The only exception is hub_dry_run, which returns the upstream request shape (secrets redacted) by design. Its description says so.",
+    "hub_invoke MUST refuse (without calling the Hub) when the integration has moves_money_or_quota=true and the input lacks confirm=true or idempotency_key. The server checks the flag via getIntegration before every such invoke (cached ≤ 60 s).",
+    "Admin tools are read-only and never call mutating admin operations (no unseal, replay, purge, pause or force).",
+    "Errors from the Hub are returned as tool results with isError=true and the canonical error object, not as protocol errors.",
+    "A 202 is reported as outcome=queued, never as success."
+  ],
+  "tools": [
+    {
+      "name": "hub_list_integrations",
+      "title": "List integrations",
+      "audience": "tenant",
+      "description": "List the integrations this API key's tenant can invoke. Each item gives the integration_id (use it in other hub_* tools), its capability (the shape of the request body, e.g. events.track@v1), the operations it supports, its delivery mode (sync returns a result immediately; wait/async may return 'queued'), whether it is interactive, whether it is paused, and whether it moves money or quota (then hub_invoke needs confirm=true and an idempotency_key). Use this first when the user mentions a third-party action and you don't know the integration id.",
+      "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "listIntegrations" } ],
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "capability": { "type": "string", "description": "Optional filter, e.g. events.track@v1.", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" },
+          "cursor": { "type": "string", "description": "next_cursor from a previous call." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["integration_id", "capability", "operations", "delivery_mode", "interactive", "paused", "moves_money_or_quota"],
+              "properties": {
+                "integration_id": { "type": "string" },
+                "capability": { "type": "string" },
+                "operations": { "type": "array", "items": { "type": "string" } },
+                "delivery_mode": { "type": "string", "enum": ["sync", "wait", "async", "async_callback"] },
+                "interactive": { "type": "boolean" },
+                "paused": { "type": "boolean" },
+                "moves_money_or_quota": { "type": "boolean" },
+                "idempotency_key_required": { "type": "boolean" },
+                "description": { "type": ["string", "null"] }
+              }
+            }
+          },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "safety": [
+        "Read-only.",
+        "Output is the caller-facing IntegrationSummary only; no vendor/account/version fields exist in it."
+      ],
+      "examples": [
+        {
+          "input": { "capability": "events.track@v1" },
+          "output": {
+            "items": [
+              { "integration_id": "int_evt_brandA", "capability": "events.track@v1", "operations": ["default"], "delivery_mode": "wait", "interactive": false, "paused": false, "moves_money_or_quota": false, "idempotency_key_required": false, "description": "Brand A product analytics events" }
+            ],
+            "next_cursor": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "hub_describe_integration",
+      "title": "Describe an integration",
+      "audience": "tenant",
+      "description": "Get everything needed to call one integration correctly: its delivery policy (mode, wait window, TTL, what happens when the upstream is down) and, for each operation, the canonical request and response JSON Schemas. Always call this before hub_invoke or hub_dry_run so you build a body that matches request_schema exactly — unknown fields are rejected. Fields tagged x-pii hold personal data: only send values the user actually provided.",
+      "maps_to": [
+        { "spec": "hub-public.v1.yaml", "operationId": "getIntegration" },
+        { "spec": "hub-public.v1.yaml", "operationId": "getCapability" }
+      ],
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["integration", "capability"],
+        "properties": {
+          "integration": {
+            "type": "object",
+            "description": "hub-public IntegrationDetail.",
+            "required": ["integration_id", "capability", "operations", "delivery_mode", "interactive", "paused", "moves_money_or_quota"],
+            "properties": {
+              "integration_id": { "type": "string" },
+              "capability": { "type": "string" },
+              "operations": { "type": "array", "items": { "type": "string" } },
+              "delivery_mode": { "type": "string" },
+              "interactive": { "type": "boolean" },
+              "paused": { "type": "boolean" },
+              "moves_money_or_quota": { "type": "boolean" },
+              "idempotency_key_required": { "type": "boolean" },
+              "wait_ms": { "type": ["integer", "null"] },
+              "ttl_ms": { "type": ["integer", "null"] },
+              "on_circuit_open": { "type": "string" },
+              "callback_events": { "type": "array", "items": { "type": "string" } },
+              "description": { "type": ["string", "null"] }
+            }
+          },
+          "capability": {
+            "type": "object",
+            "description": "hub-public CapabilityDescriptor (operations[].request_schema / response_schema are JSON Schema documents).",
+            "required": ["capability", "interactive", "operations"],
+            "properties": {
+              "capability": { "type": "string" },
+              "interactive": { "type": "boolean" },
+              "operations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "request_schema", "response_schema"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "idempotent": { "type": "boolean" },
+                    "request_schema": { "type": "object" },
+                    "response_schema": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "safety": [
+        "Read-only.",
+        "Composes two caller-API reads; neither exposes vendor/account/version."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA" },
+          "output": {
+            "integration": { "integration_id": "int_evt_brandA", "capability": "events.track@v1", "operations": ["default"], "delivery_mode": "wait", "interactive": false, "paused": false, "moves_money_or_quota": false, "idempotency_key_required": false, "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "callback_events": ["delivery.status"], "description": "Brand A product analytics events" },
+            "capability": { "capability": "events.track@v1", "interactive": false, "operations": [ { "name": "default", "idempotent": true, "request_schema": { "type": "object", "required": ["user", "event"] }, "response_schema": { "type": "object", "required": ["status"] } } ] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "hub_dry_run",
+      "title": "Dry-run an integration (developer tool)",
+      "audience": "tenant",
+      "description": "Show the exact upstream HTTP request the Hub WOULD send for a canonical body, without sending anything (no side effects, no quota used). Use it to check a body before a real call, or when the user is developing an integration. IMPORTANT: unlike every other tenant tool, the result reveals the upstream request shape (URL, headers, body) with secrets replaced by ***; do not present it to end users as the integration's contract, and never build logic on it — it changes whenever the Hub cuts over. Requires an API key with the dry_run scope; otherwise you get FORBIDDEN.",
+      "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "dryRunIntegration" } ],
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id", "body"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "operation": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "default": "default" },
+          "body": { "type": "object", "description": "Canonical request body matching the operation's request_schema (see hub_describe_integration)." },
+          "session": { "type": "string", "description": "X-Hub-Session from step 1 of a multi-step flow.", "pattern": "^ses_[0-9A-HJKMNP-TV-Z]{26}$" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["request_id", "upstream_request", "redacted", "warnings"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "upstream_request": {
+            "type": "object",
+            "required": ["method", "url", "headers"],
+            "properties": {
+              "method": { "type": "string" },
+              "url": { "type": "string" },
+              "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+              "body": {}
+            }
+          },
+          "redacted": { "type": "array", "items": { "type": "string" } },
+          "warnings": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "safety": [
+        "Documented exception to the no-vendor-leak rule (x-audience: integration-developers).",
+        "No upstream call, no queue entry, no idempotency record.",
+        "Secrets are redacted by the Hub; hubmcp additionally refuses to output any header value not equal to *** for headers listed in `redacted`."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "body": { "user": { "id": "u_48213" }, "event": { "name": "order_placed" } } },
+          "output": {
+            "request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T7",
+            "upstream_request": { "method": "POST", "url": "https://in1.api.clevertap.com/1/upload", "headers": { "X-CleverTap-Passcode": "***" }, "body": { "d": [ { "identity": "u_48213", "type": "event", "evtName": "order_placed" } ] } },
+            "redacted": ["headers.X-CleverTap-Passcode"],
+            "warnings": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "hub_invoke",
+      "title": "Invoke an integration",
+      "audience": "tenant",
+      "description": "Call an integration for real with a canonical body. This has real-world effects (events sent, messages delivered, money or quota possibly consumed). Steps: 1) hub_describe_integration to get the request_schema; 2) build the body; 3) call hub_invoke. Always pass an idempotency_key (a stable string per logical action, e.g. 'order-8821-created') so a retry cannot double-send. If the integration has moves_money_or_quota=true you MUST first show the user what will be sent and get explicit approval, then call with confirm=true. Results: outcome=completed gives the canonical result; outcome=queued means accepted but NOT done yet — tell the user and use hub_get_request with the request_id to follow up; outcome=error gives a canonical error (if retryable is true you may retry with the same idempotency_key after retry_after_ms). For multi-step operations, pass the session returned by step 1.",
+      "maps_to": [
+        { "spec": "hub-public.v1.yaml", "operationId": "invokeIntegration" },
+        { "spec": "hub-public.v1.yaml", "operationId": "invokeIntegrationOperation" },
+        { "spec": "hub-public.v1.yaml", "operationId": "getIntegration" }
+      ],
+      "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id", "body"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "operation": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "default": "default", "description": "Omit for single-operation capabilities." },
+          "body": { "type": "object", "description": "Canonical request body matching request_schema." },
+          "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 255, "description": "Strongly recommended; mandatory when moves_money_or_quota is true." },
+          "prefer_async": { "type": "boolean", "default": false, "description": "Send Prefer: respond-async (accept a queued answer if the upstream is down)." },
+          "deadline_ms": { "type": "integer", "minimum": 1, "maximum": 600000, "description": "X-Request-Deadline." },
+          "session": { "type": "string", "pattern": "^ses_[0-9A-HJKMNP-TV-Z]{26}$", "description": "X-Hub-Session for step 2+ of a multi-step flow." },
+          "confirm": { "type": "boolean", "default": false, "description": "Must be true for integrations with moves_money_or_quota=true, after the user explicitly approved this exact call." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["outcome", "http_status", "request_id"],
+        "properties": {
+          "outcome": { "type": "string", "enum": ["completed", "queued", "error", "refused"] },
+          "http_status": { "type": ["integer", "null"], "description": "null when refused locally." },
+          "request_id": { "type": ["string", "null"] },
+          "idempotent_replay": { "type": "boolean" },
+          "result": { "type": ["object", "null"], "description": "Canonical response when completed." },
+          "accepted": {
+            "type": ["object", "null"],
+            "description": "202 body when queued.",
+            "properties": {
+              "status": { "type": "string", "enum": ["accepted", "queued", "in_flight"] },
+              "reason": { "type": "string" },
+              "poll": { "type": "string" }
+            }
+          },
+          "session": { "type": ["string", "null"], "description": "X-Hub-Session returned by step 1." },
+          "error": { "type": ["object", "null"], "description": "Canonical error object (code, message, retryable, retry_after_ms, ...), or a local refusal with code CONFIRMATION_REQUIRED / IDEMPOTENCY_KEY_REQUIRED." }
+        }
+      },
+      "safety": [
+        "Side-effecting. destructiveHint=true so clients prompt the user.",
+        "Pre-check: GET integration; if paused, return the error without invoking; if moves_money_or_quota and (confirm != true or no idempotency_key) return outcome=refused, code CONFIRMATION_REQUIRED or IDEMPOTENCY_KEY_REQUIRED, without calling the Hub.",
+        "Never forwards any header that could select a vendor/account/version (none exist in the contract; hubmcp sends only Authorization, Idempotency-Key, Prefer, X-Request-Deadline, X-Hub-Session, traceparent).",
+        "Strips X-Hub-Integration-Version and X-Hub-Served-By from output.",
+        "Never auto-retries a non-retryable error; retries a retryable one at most once and only when idempotency_key is set."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "body": { "user": { "id": "u_48213" }, "event": { "name": "order_placed", "timestamp": "2026-10-31T09:15:00Z" } }, "idempotency_key": "order-8821-created" },
+          "output": { "outcome": "completed", "http_status": 200, "request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T6", "idempotent_replay": false, "result": { "status": "ok", "accepted": 1, "rejected": [], "vendor_ref": "a1b2c3d4e5" }, "accepted": null, "session": null, "error": null }
+        },
+        {
+          "input": { "integration_id": "int_evt_brandB", "body": { "user": { "id": "u_1" }, "event": { "name": "signup" } } },
+          "output": { "outcome": "queued", "http_status": 202, "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JM", "idempotent_replay": false, "result": null, "accepted": { "status": "queued", "reason": "circuit_open", "poll": "/v1/requests/req_01J9Z3M1A5B7C9D1E3F5G7H9JM" }, "session": null, "error": null }
+        }
+      ]
+    },
+    {
+      "name": "hub_get_request",
+      "title": "Get request status",
+      "audience": "tenant",
+      "description": "Check the status of an earlier hub_invoke by request_id — use it after an outcome=queued. status is one of accepted, in_flight, retry_scheduled, parked (waiting for the upstream to recover), succeeded (result holds the canonical response), failed or dead_lettered (error holds why), expired (it was not delivered before its TTL). Do not poll in a tight loop: wait at least a few seconds between calls and tell the user it is still pending.",
+      "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "getRequestStatus" } ],
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["request_id"],
+        "properties": {
+          "request_id": { "type": "string", "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-public RequestStatus.",
+        "required": ["request_id", "integration_id", "status", "attempts"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "integration_id": { "type": "string" },
+          "capability": { "type": "string" },
+          "operation": { "type": "string" },
+          "mode": { "type": "string" },
+          "status": { "type": "string", "enum": ["accepted", "in_flight", "succeeded", "retry_scheduled", "parked", "dead_lettered", "expired", "failed"] },
+          "attempts": { "type": "integer" },
+          "next_attempt_at": { "type": ["string", "null"] },
+          "expires_at": { "type": ["string", "null"] },
+          "completed_at": { "type": ["string", "null"] },
+          "result": { "type": ["object", "null"] },
+          "error": { "type": ["object", "null"] }
+        }
+      },
+      "safety": [ "Read-only.", "Only the calling tenant's requests are visible (others give REQUEST_NOT_FOUND)." ],
+      "examples": [
+        {
+          "input": { "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JM" },
+          "output": { "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JM", "integration_id": "int_evt_brandB", "capability": "events.track@v1", "operation": "default", "mode": "async", "status": "parked", "attempts": 1, "next_attempt_at": null, "expires_at": "2026-10-31T15:15:00Z", "completed_at": null, "result": null, "error": null }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_search_requests",
+      "title": "Search requests (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: search the Hub's request ledger across tenants (or within your tenant scope) by integration, status, error code, vendor, account and time range. Unlike tenant tools, results include vendor_id, account_id and integration version, because this is the control plane. Use it to investigate incidents ('which requests to int_evt_brandA timed out in the last hour?'). The time range must be ≤ 31 days; default to the last hour if the user gives none. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [ { "spec": "hub-admin.v1.yaml", "operationId": "searchRequests" } ],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tenant_id": { "type": "string" },
+          "integration_id": { "type": "string" },
+          "status": { "type": "array", "items": { "type": "string", "enum": ["accepted", "in_flight", "succeeded", "retry_scheduled", "parked", "dead_lettered", "expired", "failed"] } },
+          "code": { "type": "array", "items": { "type": "string" } },
+          "vendor_id": { "type": "string" },
+          "account_id": { "type": "string" },
+          "idempotency_key": { "type": "string" },
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" },
+          "cursor": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin RequestSummaryList.",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "type": "object" } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "safety": [
+        "Read-only; registered only when HUB_ADMIN_TOKEN is set.",
+        "Returns no payload bodies (summary rows only); use the console for bodies. Never calls unsealRequest."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "code": ["UPSTREAM_TIMEOUT"], "from": "2026-10-31T09:00:00Z", "to": "2026-10-31T10:00:00Z" },
+          "output": { "items": [ { "request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T6", "integration_id": "int_evt_brandA", "status": "retry_scheduled", "code": "UPSTREAM_TIMEOUT", "vendor_id": "clevertap", "account_id": "ct-brandA-in", "final_version": 7 } ], "next_cursor": null }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_request_timeline",
+      "title": "Request audit timeline (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: get the full audit timeline of one request — received, validated, resolved (which integration version, vendor, account and transformers were used), transformed, each upstream attempt and response, and the final outcome — plus the attempt list. Payloads follow the integration's audit policy: masked values are hashes, sealed payloads are null (this tool cannot unseal). Use it to explain why a specific request failed. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [
+        { "spec": "hub-admin.v1.yaml", "operationId": "getRequestTimeline" },
+        { "spec": "hub-admin.v1.yaml", "operationId": "listRequestAttempts" }
+      ],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["request_id"],
+        "properties": {
+          "request_id": { "type": "string", "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "include_payloads": { "type": "boolean", "default": false, "description": "Include (masked) event payloads; default returns metadata, sha256 and sizes only to save context." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["request_id", "events", "attempts"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "payload_policy": { "type": "string" },
+          "events": { "type": "array", "items": { "type": "object", "required": ["seq", "type", "at"], "properties": { "seq": { "type": "integer" }, "type": { "type": "string" }, "at": { "type": "string" }, "payload": { "type": ["object", "null"] }, "sha256": { "type": "string" }, "bytes": { "type": "integer" }, "sealed": { "type": "boolean" } } } },
+          "attempts": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "safety": [ "Read-only; registered only when HUB_ADMIN_TOKEN is set.", "Never unseals. Masked/sealed policy is enforced by the Hub, not by hubmcp." ],
+      "examples": [
+        {
+          "input": { "request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T6" },
+          "output": { "request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T6", "payload_policy": "masked", "events": [ { "seq": 1, "type": "request.received", "at": "2026-10-31T09:15:00.001Z", "payload": null, "sha256": "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b", "bytes": 214, "sealed": false } ], "attempts": [ { "attempt_no": 1, "integration_version": 7, "vendor_id": "clevertap", "account_id": "ct-brandA-in", "vendor_status": 200 } ] }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_breaker_states",
+      "title": "Circuit breaker states (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: list circuit breakers per (account, endpoint) with state (closed / open / half_open), whether an operator forced it, failure ratio, when it reopens, and how many requests are parked behind it. Use it to answer 'is vendor X down?' or 'why are requests queued?'. Filter by vendor_id, account_id or state. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [ { "spec": "hub-admin.v1.yaml", "operationId": "listBreakers" } ],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "vendor_id": { "type": "string" },
+          "account_id": { "type": "string" },
+          "state": { "type": "string", "enum": ["closed", "open", "half_open"] },
+          "cursor": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin BreakerList.",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "type": "object", "required": ["account_id", "endpoint_ref", "state"], "properties": { "account_id": { "type": "string" }, "endpoint_ref": { "type": "string" }, "vendor_id": { "type": "string" }, "state": { "type": "string", "enum": ["closed", "open", "half_open"] }, "forced": { "type": "string" }, "open_until": { "type": ["string", "null"] }, "parked_count": { "type": "integer" } } } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "safety": [ "Read-only; registered only when HUB_ADMIN_TOKEN is set.", "Never calls force-open / force-close / clear-force." ],
+      "examples": [
+        {
+          "input": { "state": "open" },
+          "output": { "items": [ { "account_id": "ct-brandA-in", "endpoint_ref": "upload@1", "vendor_id": "clevertap", "state": "open", "forced": "none", "open_until": "2026-10-31T09:41:00Z", "parked_count": 1290 } ], "next_cursor": null }
+        }
+      ]
+    }
+  ]
+}

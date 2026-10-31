@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HubEventEnvelope",
+  "description": "Shared envelope of every outbound callback (Hub -> tenant registrar endpoint, DESIGN §12.1). The body is signed: `X-Hub-Signature: t=<unix>,v1=<hex hmac-sha256(secret, t + \".\" + raw_body)>`. Receivers MUST verify the signature over the raw bytes, reject timestamps older than 5 minutes, and de-duplicate on `event_id` (delivery is at-least-once). Never carries vendor names, account names or versions.",
+  "type": "object",
+  "required": ["event_id", "type", "spec_version", "occurred_at", "tenant_id", "integration_id", "request_id", "idempotency_key", "data"],
+  "properties": {
+    "event_id": {
+      "description": "Unique event id (`evt_` + ULID). Stable across delivery retries of the same event; use it to de-duplicate.",
+      "type": "string",
+      "pattern": "^evt_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "type": {
+      "description": "Event type. Also sent as the `X-Hub-Event` header.",
+      "type": "string",
+      "enum": ["request.completed", "request.failed", "request.expired", "delivery.status"]
+    },
+    "spec_version": {
+      "description": "Envelope major version. Additive changes keep \"1\".",
+      "type": "string",
+      "const": "1"
+    },
+    "occurred_at": {
+      "description": "When the state change happened (RFC 3339, UTC).",
+      "type": "string",
+      "format": "date-time"
+    },
+    "tenant_id": {
+      "description": "The tenant that made the request (the receiver's own tenant).",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$"
+    },
+    "integration_id": {
+      "description": "Integration id the request was invoked on.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$"
+    },
+    "operation": {
+      "description": "Capability operation; `default` for single-operation capabilities.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,31}$"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "idempotency_key": {
+      "description": "The caller's Idempotency-Key, or null if none was sent.",
+      "type": ["string", "null"],
+      "maxLength": 255
+    },
+    "data": {
+      "description": "Event-specific payload; see the per-type schema.",
+      "type": "object"
+    }
+  }
+}

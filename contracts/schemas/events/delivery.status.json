@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeliveryStatusEvent",
+  "description": "Sent on each non-terminal delivery state transition of a wait/async/async_callback request (DESIGN §10.9): accepted -> in_flight, in_flight -> retry_scheduled, in_flight -> parked, parked -> retry_scheduled (drain), dead_lettered -> accepted (manual replay). Terminal outcomes are sent as request.completed / request.failed / request.expired instead. Events for one request are delivered in `sequence` order on a best-effort basis; receivers must tolerate gaps and reordering and use `sequence` to discard stale ones. Canonical inbound vendor events (e.g. `message.delivered@v1`) are a separate, Phase 2 event family.",
+  "allOf": [
+    { "$ref": "envelope.json" },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "delivery.status" },
+        "data": {
+          "type": "object",
+          "required": ["state", "previous_state", "sequence", "attempt"],
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": ["accepted", "in_flight", "retry_scheduled", "parked"]
+            },
+            "previous_state": {
+              "type": ["string", "null"],
+              "enum": ["accepted", "in_flight", "retry_scheduled", "parked", "dead_lettered", null]
+            },
+            "sequence": { "description": "Monotonic per-request transition counter.", "type": "integer", "minimum": 1 },
+            "attempt": { "description": "Attempt number the transition relates to (0 before the first attempt).", "type": "integer", "minimum": 0 },
+            "next_attempt_at": { "type": ["string", "null"], "format": "date-time" },
+            "reason": {
+              "description": "Known values: `circuit_open`, `retryable_error`, `drain`, `manual_replay`, `wait_window_elapsed`.",
+              "type": ["string", "null"]
+            },
+            "last_error": {
+              "description": "The retryable error that caused a retry_scheduled transition, if any.",
+              "oneOf": [ { "$ref": "canonical-error.json" }, { "type": "null" } ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "examples": [
+    {
+      "event_id": "evt_01J9Z5C3D4E5F6G7H8J9K0M1NS",
+      "type": "delivery.status",
+      "spec_version": "1",
+      "occurred_at": "2026-10-31T09:15:01Z",
+      "tenant_id": "orders-service",
+      "integration_id": "int_evt_brandA",
+      "operation": "default",
+      "request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T6",
+      "idempotency_key": "order-8821-created",
+      "data": {
+        "state": "parked",
+        "previous_state": "in_flight",
+        "sequence": 2,
+        "attempt": 1,
+        "next_attempt_at": null,
+        "reason": "circuit_open",
+        "last_error": null
+      }
+    }
+  ]
+}

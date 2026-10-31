@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RequestCompletedEvent",
+  "description": "Sent once when a wait/async/async_callback request reaches `succeeded`. `data.result` is the canonical response body (capability response schema), identical to what GET /v1/requests/{request_id} returns in `result`.",
+  "allOf": [
+    { "$ref": "envelope.json" },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "request.completed" },
+        "data": {
+          "type": "object",
+          "required": ["status", "result", "attempts", "completed_at"],
+          "properties": {
+            "status": { "type": "string", "const": "succeeded" },
+            "result": {
+              "description": "Canonical response body for the capability operation. Shape: GET /v1/capabilities/{capability} -> operations[].response_schema.",
+              "type": "object"
+            },
+            "attempts": { "description": "Number of delivery attempts made.", "type": "integer", "minimum": 1 },
+            "completed_at": { "type": "string", "format": "date-time" },
+            "timings": { "$ref": "#/$defs/Timings" }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Timings": {
+      "description": "Durations in milliseconds.",
+      "type": "object",
+      "properties": {
+        "total_ms": { "type": "integer", "minimum": 0 },
+        "hub_overhead_ms": { "type": "integer", "minimum": 0 },
+        "vendor_ms": { "description": "Time spent waiting on the upstream call(s). Name is historical; carries no vendor identity.", "type": "integer", "minimum": 0 },
+        "queue_wait_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "examples": [
+    {
+      "event_id": "evt_01J9Z5C3D4E5F6G7H8J9K0M1NP",
+      "type": "request.completed",
+      "spec_version": "1",
+      "occurred_at": "2026-10-31T09:15:02Z",
+      "tenant_id": "orders-service",
+      "integration_id": "int_evt_brandA",
+      "operation": "default",
+      "request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T6",
+      "idempotency_key": "order-8821-created",
+      "data": {
+        "status": "succeeded",
+        "result": { "status": "ok", "accepted": 1, "rejected": [], "vendor_ref": "a1b2c3d4e5" },
+        "attempts": 1,
+        "completed_at": "2026-10-31T09:15:02Z",
+        "timings": { "total_ms": 1840, "hub_overhead_ms": 3, "vendor_ms": 212, "queue_wait_ms": 1625 }
+      }
+    }
+  ]
+}
