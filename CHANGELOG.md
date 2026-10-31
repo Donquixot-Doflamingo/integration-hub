@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `chore(frontend)` · scaffold SvelteKit admin console · HUB-250 · F-19
+  - `frontend/` is a SvelteKit 2 + Svelte 5 (runes enforced) + TypeScript strict app on adapter-node
+  - ESLint flat config + Prettier, Vitest + Testing Library (jsdom), Playwright with a smoke e2e
+  - New `frontend` CI workflow runs check, lint, unit tests and build on `frontend/**` changes
 - 2026-10-31 · `ci` · add PR template, hygiene CI and per-commit changelog check · HUB-011 · F-01
   - PR template with contract and changelog checklist
   - CI validates contract YAML/JSON and fails a PR commit that does not touch CHANGELOG.md

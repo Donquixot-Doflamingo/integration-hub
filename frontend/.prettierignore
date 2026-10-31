@@ -1,0 +1,13 @@
+# Generated or vendored: never reformatted by hand.
+package-lock.json
+.svelte-kit/
+build/
+node_modules/
+test-results/
+playwright-report/
+.claude/
+src/lib/api/schema.d.ts
+static/mockServiceWorker.js
+
+# Docs owned by the repo-wide process (formatted by hand)
+*.md
