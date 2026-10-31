@@ -45,7 +45,7 @@ linters:
     depguard:
       rules:
         transform-pure:
-          files: ["**/internal/transform/**"]
+          files: ["**/internal/transform/**", "!$test"] # tests may read fixture files
           deny:
             - pkg: net/http
               desc: transformers are pure (DESIGN §7.1)

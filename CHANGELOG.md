@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(transform)` · parse transformer YAML into target trees · HUB-060 · F-04
+  - Request sections (method, path, headers, query, body), response mappings, ordered error rules and batch become target trees with paths like request.body.d[0].evtName
+  - Unknown keys, duplicate or case-conflicting targets, non-expression headers, mapped TRANSFORM_FAILED and invalid batch paths fail with their target path
+  - core gains VendorRequest/VendorResponse
 - 2026-10-31 · `docs(frontend)` · accept ADR-0009 and require encrypted OIDC sessions · HUB-279, HUB-282 · F-19
   - ADR-0009 (stay on SvelteKit 2.70.3 with the // path guard until HUB-281) accepted by the lead
   - HUB-282 now requires the OIDC token to be unreadable from the session cookie (encrypt the payload or use a server-side store)
