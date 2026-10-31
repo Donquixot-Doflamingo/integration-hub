@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **95** · todo: **98** · other (in-progress/in-review/blocked): **2**
+Total tickets: **196** · done: **95** · todo: **99** · other (in-progress/in-review/blocked): **2**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **195** · done: **95** · todo: **98** · other (in-progress/in-
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 28 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 28 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -2172,6 +2172,17 @@ Filed by frontend-engineer during HUB-261. Full CCR text (before/after YAML): `f
 - [x] Console health board adds a "Dead letters" column (count, oldest age, link to the filtered DLQ) after `npm run gen:api` and removes `TODO(CCR-003)` (frontend-engineer, console round 4: the account's figure on each of its endpoint rows, linked to `/dlq?account_id=`, "oldest N min ago" with the UTC time in a tooltip, 0 without a link, Unknown when the account or the figure is missing; the summary line adds the total, each account counted once)
 
 Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1; notice `contracts/notices/2026-10-31-round-1.md`). Both properties are optional in the schema (additive); the backend should always fill them from 1.1.0 on. The backend and console criteria stay open for those sides.
+
+### HUB-285 — ConfirmDialog keeps focus inside after a failed submit
+- **Epic:** EP-10 · **Type:** fix · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-259 · **Feature:** F-19 · **Stories:** US-1902
+- **Branch:** `fix/HUB-285-fe-dialog-focus-after-failure`
+
+Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits, its buttons are `disabled`, so the focused confirm button drops focus to `<body>`. When the action fails (e.g. 412, 409, 403) the dialog stays open but focus is outside it: Escape no longer closes it (the key handler is on the dialog) and Tab starts from the page. Seen with `updateTenant:412`; affects every dialog.
+
+**Acceptance criteria**
+- [ ] After a failed submit, focus moves into the dialog (the error panel's heading or the reason field) and Escape closes it
+- [ ] Component test and one e2e keyboard check
 
 ## EP-11 — MCP server + consumer skill + SDK
 

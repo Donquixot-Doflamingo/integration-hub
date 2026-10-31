@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-01 · `docs(tickets)` · file the dialog focus loss after a failed submit · HUB-285 · F-19
+  - New backlog ticket: after a failed confirm, the dialog should keep keyboard focus so Escape and Tab work
+
 - 2026-11-01 · `ci(frontend)` · run the Playwright e2e suite in frontend CI · HUB-280 · F-19
   - Every console pull request now runs the full Playwright suite (flows, axe in light and dark, keyboard, narrow layout) on the contract mocks, next to the existing checks; a failing test fails the run
   - The Chromium headless shell is cached per Playwright version, the job is capped at 8 minutes, and a failed run uploads the HTML report and traces
