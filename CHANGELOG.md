@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `perf(edge)` · add the overhead benchmark and the M3 summary · HUB-097 · F-06
+  - BenchmarkInvokeOverhead measures Hub overhead (handler time minus vendor time) through the real credential cache, upstream client, audit writer and metrics: p99 0.42–0.51 ms with mockvendor at 0 ms (budget 5 ms), each stage reported against DESIGN §18.6
+  - docs/milestones/M3.md: acceptance evidence, what was built, deferred work and deviations; F-05 and F-07 shipped, F-06, F-08 and F-21 in progress
 - 2026-10-31 · `test(edge)` · prove every error class and the audit trail end to end · HUB-095 · F-06
   - make itest runs caller → hub → mockvendor for every sync outcome of DESIGN §10.2 plus validation, authentication and unknown-integration errors, asserting status, code, retryable and retry_after_ms
   - The same run checks each stored timeline (gap-free seq, first and final event, vendor stages when the vendor was called, attempt rows) and greps every stored payload, event meta and captured log line for credential values, the API key and x-pii values; a positive control proves the search works

@@ -4,7 +4,7 @@
 The end-to-end sync pipeline: resolve the active integration version from the snapshot, transform, inject credentials, call the vendor through the per-account upstream client, map the response, and answer with a canonical body or the single error envelope. Includes `GET /v1/requests/{id}` and caller dry-run (DESIGN §4, §5.1, §10.1–10.2, §18.4).
 
 ## Status
-`proposed` — 2026-10-31.
+`in-progress` — 2026-10-31. Sync path shipped in M3 (`docs/milestones/M3.md`); failover and the 202 paths arrive with M4/M5.
 
 ## Owner
 `backend-engineer`.
@@ -65,6 +65,13 @@ Package `internal/upstream`: `Client.Do(ctx, Target, core.VendorRequest) (core.V
 - **Transport errors**: `*TransportError{Kind, Phase, CallerDeadline}`, matching `ErrTimeout`, `ErrConnect`, `ErrReset`, `ErrEgressDenied`, `ErrCanceled`, `ErrProtocol` with `errors.Is`. Classifier mapping: timeout (connect, endpoint or caller deadline) → `UPSTREAM_TIMEOUT`; connect (refused, DNS, TLS), reset, protocol, egress → `UPSTREAM_UNAVAILABLE`; canceled → the caller left. Error text never includes the URL query or header values.
 - **Telemetry**: `vendor_latency_ms{vendor, account, endpoint, outcome}` (outcome = status class `2xx`… or the transport kind), `upstream_egress_denied_total{vendor}`, client span `upstream {vendor}.{endpoint}` with `hub.vendor`, `hub.account`, `hub.endpoint`, `server.address`, `http.request.method`, `http.response.status_code` (never header values or bodies).
 - Not here yet: breaker, account limiter, bulkhead semaphore and `bulkhead_inflight` (later EP-04 tickets).
+
+## Implementation notes (M3)
+- `internal/edge/invoke.go`: prepare (auth → body → validate → resolve → credentials) → deliver (paused, Idempotency-Key requirement, `X-Request-Deadline`, transform, `request.transformed` audit, auth scheme, attempt + one sync retry, response map, enrichment) → 200 with `X-Hub-Served-By: primary`.
+- `internal/edge/outcome.go`: transport errors → 504 `UPSTREAM_TIMEOUT` (reason `request_deadline` / `caller_canceled`) or 503 `UPSTREAM_UNAVAILABLE`; retry once after timeout/reset if the endpoint is idempotent or keyed; Retry-After and vendor message/code enrichment.
+- Credential cache miss → 503 `UPSTREAM_UNAVAILABLE`, reason `credentials_unavailable`, `retry_after_ms` 5000.
+- M3 delivers every mode synchronously (deviation 1 in `docs/milestones/M3.md`).
+- Benchmarks: `BenchmarkInvokeOverhead` (p99 0.42–0.51 ms), e2e table `TestE2EErrorClasses`.
 
 ## Data model impact
 `requests` row per request (status, `final_version`, timings) — written via the audit path (F-08).

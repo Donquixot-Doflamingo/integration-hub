@@ -51,7 +51,7 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-01 | M0 Scaffold | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
 | EP-02 | M1 Config registry | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | F-04 | HUB-060–HUB-079 | 12 | 12 |
-| EP-04 | M3 Gateway sync path + audit | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 17 |
+| EP-04 | M3 Gateway sync path + audit | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
 | EP-06 | M5 Resilience | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
@@ -60,7 +60,7 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-10 | Admin console (SvelteKit) | F-19 | HUB-250–HUB-299 | 35 | 16 |
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 11 | 0 |
-| **Total** | | | | **195** | **80** |
+| **Total** | | | | **195** | **81** |
 
 ## Sizing
 

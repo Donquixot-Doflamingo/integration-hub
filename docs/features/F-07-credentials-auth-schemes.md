@@ -4,7 +4,7 @@
 The `CredentialSource` abstraction, a decrypted credential cache warmed on snapshot load, the local AES-GCM file source for dev, value-based log redaction, and the v1 auth-scheme plugins: static headers, bearer, basic (and query param, discouraged) (DESIGN §9).
 
 ## Status
-`in-progress` — 2026-10-31 (HUB-084 local source + cache shipped).
+`shipped` — 2026-10-31 (M3: local source + cache, auth schemes, upstream client; wired into the gateway, `docs/milestones/M3.md`). KMS/Vault sources and rotation are F-15.
 
 ## Owner
 `backend-engineer`.
