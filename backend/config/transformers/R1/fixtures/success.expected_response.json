@@ -1,0 +1,12 @@
+{
+  "response": {
+    "status": "ok",
+    "accepted": 1,
+    "rejected": [],
+    "raw": {
+      "status": "success",
+      "processed": 1,
+      "unprocessed": []
+    }
+  }
+}

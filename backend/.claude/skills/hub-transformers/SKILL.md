@@ -44,6 +44,11 @@ An expression is a YAML scalar, so YAML syntax wins:
 - Quote any expression containing `: ` (the ternary `c ? "a" : "b"`, inline maps): `status: 'len(res.body.unprocessed ?? []) == 0 ? "ok" : "partial"'`.
 - Write a multi-line expression as a block scalar (`>-`), e.g. `evtData: >-` followed by the `merge(..., { brand: ..., campaign: ... })` lines.
 - String literals inside expressions keep their double quotes inside single-quoted YAML: `type: '"event"'`.
+- In `map`/`filter`, an object literal right after the comma is read as a predicate block: write `map(xs, ({reason: #.error}))`, not `map(xs, {reason: #.error})`.
+- Quote any expression that uses expr's `#` placeholder: YAML reads ` #` as a comment, so `tags: map(xs, # * 2)` silently becomes `map(xs,`. Write `tags: 'map(xs, # * 2)'`.
+
+### Field access is nil-safe
+The compiler makes every `a.b` behave like `a?.b`: if a parent object is absent, the access yields nil instead of failing, so `req.context.campaign ?? "organic"` works when `context` is omitted. Object fields whose value evaluates to nil are left out of the vendor body (no `null` is sent). Use `??` for defaults; a genuinely required value should be `required` in the capability schema, so validation rejects the request before the transformer runs.
 The registry loader rejects invalid YAML with `file: line N: ...` (found in M1 on the dev config).
 
 ## Expression context (§7.2)
@@ -54,7 +59,7 @@ The registry loader rejects invalid YAML with `file: line N: ...` (found in M1 o
 | `account` | request, response | non-secret config (`account.config.brand_code`, region) |
 | `creds` | request **header/query/auth targets only** | secret values; body use requires `allow_creds_in_body: true` + review |
 | `session` | multi-step ops | vendor session data (e.g. txn id from step 1) |
-| `res` | response/error mapping | `res.status`, `res.body`, headers via `header(res, "X")` |
+| `res` | response/error mapping | `res.status`, `res.body` (parsed JSON object/array, else nil), `res.text` (non-JSON body, e.g. an HTML error page), headers via `header(res, "X")` |
 | `now()` | all | pinned in goldens for determinism |
 
 Stdlib (§7.3) only — extended by platform code releases, not per transformer: strings `lower upper trim split join replace format truncate`; time `now epochSeconds epochMillis parseTime formatTime addDuration`; data `?? merge pick omit flatten map filter len toJSON fromJSON`; encoding `uuid sha256 hmacSHA256 base64 urlEncode`; domain `phoneE164 emailNormalize currencyMinor maskPAN maskAadhaar`. No loops beyond `map`/`filter`, no network, no disk; depth, output size and time budgets are enforced at compile/run.

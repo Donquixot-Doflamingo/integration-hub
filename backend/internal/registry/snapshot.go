@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/transform"
 )
 
 // Snapshot is an immutable, fully validated view of the registry (DESIGN §8, §18.3). The hot
@@ -29,6 +31,9 @@ type Snapshot struct {
 	Integrations map[string]*Integration
 	Tenants      map[string]*Tenant
 	Registrar    map[string]*RegistrarEndpoint
+	// Programs are the compiled transformers, one per ID@version, shared by every integration
+	// version that references them. The hot path only runs them (DESIGN §7.1).
+	Programs map[TransformerRef]*transform.Program
 
 	keys map[string]KeyEntry // API key hash → tenant + key (edge auth, M3)
 }
@@ -57,6 +62,10 @@ func Build(src Sources, now time.Time) (*Snapshot, error) {
 	if err := Validate(c); err != nil {
 		return nil, err
 	}
+	programs, err := c.compileAll(src.Config)
+	if err != nil {
+		return nil, err
+	}
 	sum, err := checksum(src.Config, c)
 	if err != nil {
 		return nil, err
@@ -64,7 +73,7 @@ func Build(src Sources, now time.Time) (*Snapshot, error) {
 	s := &Snapshot{
 		Checksum: sum, BuiltAt: now.UTC(),
 		Capabilities: c.Capabilities, Vendors: c.Vendors, Accounts: c.Accounts, Transformers: c.Transformers,
-		Integrations: c.Integrations, Tenants: c.Tenants, Registrar: c.Registrar,
+		Integrations: c.Integrations, Tenants: c.Tenants, Registrar: c.Registrar, Programs: programs,
 		keys: map[string]KeyEntry{},
 	}
 	for _, t := range c.Tenants {

@@ -1,0 +1,22 @@
+{
+  "user": {
+    "id": "u_48213"
+  },
+  "event": {
+    "name": "app_opened"
+  },
+  "_context": {
+    "creds": {
+      "account_id": "fixture-account-id",
+      "passcode": "fixture-passcode"
+    },
+    "account": {
+      "id": "ct-brandA-in",
+      "region": "in",
+      "config": {
+        "project_id": "DEV-PROJECT-A",
+        "brand_code": "A"
+      }
+    }
+  }
+}

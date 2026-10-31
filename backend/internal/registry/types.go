@@ -157,10 +157,14 @@ type TransformerFile struct {
 	Capability     string          `yaml:"capability"`
 	VendorEndpoint string          `yaml:"vendor_endpoint,omitempty"` // "clevertap.upload@1" (request transformers)
 	DocsURL        string          `yaml:"docs_url,omitempty"`        // vendor doc the mapping was checked against (AGENTS §3.3)
-	Request        yaml.Node       `yaml:"request,omitempty"`
-	Response       yaml.Node       `yaml:"response,omitempty"`
-	Errors         yaml.Node       `yaml:"errors,omitempty"`
-	Batch          yaml.Node       `yaml:"batch,omitempty"`
+	// Operation of a multi-operation capability this transformer maps; empty = the only operation.
+	Operation string `yaml:"operation,omitempty"`
+	// AllowCredsInBody lets creds.* appear in body targets (vendor requires it; platform review).
+	AllowCredsInBody bool      `yaml:"allow_creds_in_body,omitempty"`
+	Request          yaml.Node `yaml:"request,omitempty"`
+	Response         yaml.Node `yaml:"response,omitempty"`
+	Errors           yaml.Node `yaml:"errors,omitempty"`
+	Batch            yaml.Node `yaml:"batch,omitempty"`
 }
 
 // TransformerRef is "T2@3".

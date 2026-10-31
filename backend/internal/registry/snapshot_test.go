@@ -130,3 +130,37 @@ func TestConcurrentReadersDuringSwaps(t *testing.T) {
 		t.Fatalf("only %d swaps happened; the test did not exercise concurrency", swaps.Load())
 	}
 }
+
+func TestBuildCompilesTransformersOnceAndShares(t *testing.T) {
+	s := build(t, validFiles)
+	p1 := s.Programs[TransformerRef{"T1", 7}]
+	if p1 == nil || s.Programs[TransformerRef{"R2", 1}] == nil {
+		t.Fatalf("programs %v", s.Programs)
+	}
+	if p1.Ref() != "T1@7" || p1.Kind() != "request" {
+		t.Fatalf("program %s %s", p1.Ref(), p1.Kind())
+	}
+}
+
+func TestBuildRefusesFailingGoldensAndTypeErrors(t *testing.T) {
+	tests := []struct {
+		name      string
+		overrides map[string]string
+		want      string
+	}{
+		{"failing golden", map[string]string{"transformers/T1/fixtures/basic.expected_request.json": `{"method": "PUT", "path": "/1/upload"}`},
+			`transformers/T1/fixtures/basic: T1@7: golden mismatch: /method: expected "PUT", got "POST"`},
+		{"missing goldens", map[string]string{"transformers/R2/fixtures/ok.vendor_response.json": "", "transformers/R2/fixtures/ok.expected_response.json": ""},
+			"transformers/R2/fixtures: R2@1: no golden fixtures"},
+		{"type error", map[string]string{"transformers/T1/7.yaml": validFiles["transformers/T1/7.yaml"] + "  body:\n    id: req.user.idd\n"},
+			`transformers/T1/7.yaml: request.body.id: req.user.idd: field "user.idd" is not in the capability schema`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Build(sources(t, files(tt.overrides)), time.Now())
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err %v\nwant %q", err, tt.want)
+			}
+		})
+	}
+}

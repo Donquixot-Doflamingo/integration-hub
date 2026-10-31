@@ -1,0 +1,26 @@
+{
+  "response": {
+    "status": "partial",
+    "accepted": 1,
+    "rejected": [
+      {
+        "reason": "Event name is mandatory"
+      }
+    ],
+    "raw": {
+      "status": "partial",
+      "processed": 1,
+      "unprocessed": [
+        {
+          "status": "fail",
+          "code": 509,
+          "error": "Event name is mandatory",
+          "record": {
+            "identity": "u_9",
+            "type": "event"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,11 +1,14 @@
-# Dev transformer for mockvendor, from DESIGN §7.4. The CleverTap payload shape is illustrative:
-# before production, verify field names, endpoint and auth headers against the current CleverTap
-# upload API docs and set docs_url (AGENTS §3.3). Compiled by internal/transform from M2.
+# CleverTap Upload Events API, checked against https://developer.clevertap.com/docs/upload-events-api on 2026-10-31 (AGENTS §3.3):
+# POST /1/upload, headers X-CleverTap-Account-Id + X-CleverTap-Passcode, body {"d": [records]},
+# record = identity, type "event", evtName, evtData (object), ts (epoch seconds); max 1000 records.
+# Response {"status", "processed", "unprocessed": [{"status", "code", "error", "record"}]}.
+# Dev only: regions point at mockvendor. Goldens in fixtures/ (hubctl transform test).
 # Minimal response: the caller only wants status and vendor_ref.
 transformer: R2
 version: 1
 kind: response
 capability: events.track@v1
+docs_url: https://developer.clevertap.com/docs/upload-events-api
 response:
   # Expressions containing ": " (the ternary) must be quoted to be valid YAML.
   status:     'len(res.body.unprocessed ?? []) == 0 ? "ok" : "partial"'

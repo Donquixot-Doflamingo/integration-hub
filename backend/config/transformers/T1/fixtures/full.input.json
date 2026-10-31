@@ -1,0 +1,31 @@
+{
+  "user": {
+    "id": "u_48213"
+  },
+  "event": {
+    "name": "order_placed",
+    "timestamp": "2026-10-30T18:30:00+05:30",
+    "properties": {
+      "order_id": "ord_8821",
+      "amount": 1499.5,
+      "currency": "INR",
+      "items": 3,
+      "first_order": true,
+      "city": "Bengaluru — ಬೆಂಗಳೂರು"
+    }
+  },
+  "_context": {
+    "creds": {
+      "account_id": "fixture-account-id",
+      "passcode": "fixture-passcode"
+    },
+    "account": {
+      "id": "ct-brandA-in",
+      "region": "in",
+      "config": {
+        "project_id": "DEV-PROJECT-A",
+        "brand_code": "A"
+      }
+    }
+  }
+}

@@ -57,6 +57,8 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
       - run: make test
+      - name: Transformer goldens (hubctl transform test)
+        run: make goldens
 
   itest:
     runs-on: ubuntu-latest
