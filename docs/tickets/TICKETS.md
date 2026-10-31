@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **190** · done: **38** · todo: **151** · other (in-progress/in-review/blocked): **1**
+Total tickets: **190** · done: **39** · todo: **151**
 
 ## Epics
 
@@ -10,7 +10,7 @@ Total tickets: **190** · done: **38** · todo: **151** · other (in-progress/in
 | --- | --- | --- | --- | --- | --- | --- |
 | EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
-| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 9 |
+| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 0 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
@@ -502,7 +502,7 @@ Add `config/` with `events.track@v1`, vendor `clevertap` pointing at mockvendor,
 
 ### HUB-047 — Postgres registry tables and sqlc queries
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-023, HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-023, HUB-040 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-047-registry-tables`
 
 Add migrations for registry tables of DESIGN §18.2 (tenants, api_keys, vendors, vendor_endpoints, accounts, account_credentials, capabilities, transformers, integrations, integration_versions, integration_grants, registrar_endpoints, config_snapshots) with sqlc queries.
@@ -510,7 +510,7 @@ Add migrations for registry tables of DESIGN §18.2 (tenants, api_keys, vendors,
 **Acceptance criteria**
 - [x] `make migrate` creates all tables; down migration reverses cleanly
 - [x] `integration_versions` and `transformers` reject UPDATE (trigger or permissions) to enforce immutability
-- [ ] sqlc code generated and compiled in CI
+- [x] sqlc code generated and compiled in CI
 
 ### HUB-048 — Snapshot persistence and boot from last good
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend

@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tickets)` · close HUB-047 after the sqlc CI job ran green · HUB-047 · F-03
+  - All backend jobs green on PR #4, including the new sqlc freshness job
 - 2026-10-31 · `test(registry)` · record M1 acceptance and milestone summary · HUB-049 · F-03
   - docs/milestones/M1.md: acceptance evidence, what was built, nine deviations, deferred items
   - F-03 shipped; README and CLAUDE.md show M1 done
