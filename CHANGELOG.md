@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tickets)` · file console follow-ups from the EP-10 scaffold · HUB-278, HUB-279, HUB-280 · F-19
+  - HUB-278: CCR-001, X-Hub-Request-Id on admin responses (contract-steward)
+  - HUB-279: SvelteKit 3 evaluation for two npm audit advisories before form actions; HUB-280: Playwright e2e in CI
 - 2026-10-31 · `feat(frontend)` · add console app shell with navigation and section pages · HUB-254 · F-19
   - Sidebar with Integrations, Health, Requests, DLQ, Transformers, Tenants, Snapshots and Change log; active route marked
   - Breadcrumbs, user menu from `/me`, light/dark/system theme, band naming the admin API (mock mode is striped)
