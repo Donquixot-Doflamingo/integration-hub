@@ -9,7 +9,7 @@ COMPOSE := docker compose -f ../deploy/docker-compose.yml
 export HUB_PG_DSN ?= postgres://hub:hub@localhost:5432/hub?sslmode=disable
 export HUB_REDIS_ADDR ?= localhost:6379
 
-.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check
+.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check goldens
 
 all: lint test build
 
@@ -33,6 +33,9 @@ lint: ## golangci-lint (pinned) + gofmt check
 
 fmt: ## Format code
 	golangci-lint fmt ./...
+
+goldens: ## Run every transformer's golden fixtures (hubctl transform test)
+	$(GO) run ./cmd/hubctl transform test -config-dir config -contracts-dir ../contracts
 
 bench: ## Benchmarks with allocations
 	$(GO) test -run '^$$' -bench . -benchmem ./...

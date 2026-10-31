@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(transform)` · add the golden fixture runner and hubctl transform test · HUB-067 · F-04
+  - transform.RunGoldens runs fixtures/<case>.input.json → .expected_request.json and .vendor_response.json → .expected_response.json, with a pinned clock and fake creds from _context
+  - Mismatches print as JSON-pointer diffs ("/body/d/0/ts: expected 1, got 1793438100"); a transformer without fixtures fails
+  - hubctl transform test [-config-dir] [-contracts-dir] [-v] [T1|T1@7...]: exit 0 all pass, 1 any failure, 2 usage/config error; make goldens
 - 2026-10-31 · `feat(transform)` · enforce transformer depth, size, memory and time budgets · HUB-066 · F-04
   - Expressions over 24 levels of nesting or 500 AST nodes fail at compile; built bodies and mapped responses over 1 MB fail with TRANSFORM_FAILED
   - Pathological map/filter loops abort on the VM memory budget (100 k) within the 5 ms time budget + 1 ms; the time budget is also checked after every transform

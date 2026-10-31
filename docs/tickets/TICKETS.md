@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **193** · done: **52** · todo: **141**
+Total tickets: **193** · done: **52** · todo: **140** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -623,14 +623,14 @@ Enforce max expression depth, max output size and a per-transform time budget; n
 
 ### HUB-067 — Golden fixture runner and `hubctl transform test`
 - **Epic:** EP-03 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-064, HUB-065 · **Feature:** F-04 · **Stories:** US-04xx
+- **Status:** in-review · **Depends on:** HUB-064, HUB-065 · **Feature:** F-04 · **Stories:** US-04xx
 - **Branch:** `feat/HUB-067-golden-runner`
 
 Run `fixtures/<name>.input.json` → `.expected_request.json` and `.vendor_response.json` → `.expected_response.json` for each transformer, as a library and as `hubctl transform test` (DESIGN §7.6).
 
 **Acceptance criteria**
-- [ ] Mismatch prints a readable JSON diff with paths
-- [ ] Exit code non-zero on any failing golden
+- [x] Mismatch prints a readable JSON diff with paths
+- [x] Exit code non-zero on any failing golden
 - [ ] Runs in CI on every PR touching `config/transformers/`
 
 ### HUB-068 — Transformers T1, T2, R1, R2 with fixtures
