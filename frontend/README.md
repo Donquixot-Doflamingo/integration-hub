@@ -91,6 +91,10 @@ when a page under `src/routes/(app)/` renders its own `{#await}` instead):
 - Callback endpoints (`CallbackEndpoints.svelte`, `endpoints.ts`): signing secrets are write-only; the actions drop
   `signing_secret` (`withoutSigningSecret`). Mock scenario `registrar-url-private` answers the SSRF refusal.
 
+## Change log and snapshots (HUB-273, HUB-274)
+- `/change-log`: filters in the URL (`change-log/filters.ts`), `/change-log/{change_id}` with before / after as a
+  path diff (`$lib/utils/json-diff.ts` -> `DiffPaths`). `ChangeNotice` links every change id to its entry.
+
 ## Auth (HUB-253)
 Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.
 - Provider per deployment (`src/lib/server/auth/`): **dev** (role picker: admin, editor, viewer, tenant viewer

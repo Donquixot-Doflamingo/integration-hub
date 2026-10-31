@@ -112,3 +112,12 @@ export type RegistrarEndpoint = Schemas['RegistrarEndpoint'];
 export type RegistrarEndpointCreate = Schemas['RegistrarEndpointCreate'];
 export type RegistrarEndpointUpdate = Schemas['RegistrarEndpointUpdate'];
 export type RegistrarEndpointChange = Schemas['RegistrarEndpointChange'];
+
+// Change log (HUB-274) and snapshots (HUB-273).
+export type ChangeLogSummary = Schemas['ChangeLogSummary'];
+export type ChangeLogEntry = Schemas['ChangeLogEntry'];
+export type ObjectType = Schemas['ObjectType'];
+/** Query parameters of `listChangeLog`. */
+export type ListChangeLogQuery = NonNullable<Operations['listChangeLog']['parameters']['query']>;
+export type Snapshot = Schemas['Snapshot'];
+export type SnapshotDetail = Schemas['SnapshotDetail'];

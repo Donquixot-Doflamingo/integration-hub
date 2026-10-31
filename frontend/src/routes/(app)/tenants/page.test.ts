@@ -183,6 +183,11 @@ describe('create tenant', () => {
 		await user.click(confirm);
 		const notice = await screen.findByText(/Created tenant orders-service \(Orders service\)/);
 		expect(notice.closest('[role="status"]')).toHaveTextContent('chg_01J9Z4B2C3D4E5F6G7H8J9K0NA');
+		// HUB-274: the notice links the change log entry itself.
+		expect(screen.getByRole('link', { name: 'Open the change log entry' })).toHaveAttribute(
+			'href',
+			'/change-log/chg_01J9Z4B2C3D4E5F6G7H8J9K0NA'
+		);
 		expect(screen.getByRole('link', { name: 'Open orders-service' })).toHaveAttribute(
 			'href',
 			'/tenants/orders-service'

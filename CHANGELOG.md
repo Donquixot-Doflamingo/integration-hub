@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-01 · `feat(frontend)` · add filterable change log with before/after diff · HUB-274 · F-19
+  - Filter the change log by actor, action, object type, object id and a UTC time range; filters live in the URL as removable chips, with paging
+  - Each entry opens a page with who changed what, when and why, and the before and after as a list of changed fields (added, removed, changed), plus both versions in full
+  - The notice after any change links straight to its change log entry
+
 - 2026-11-01 · `feat(frontend)` · add tenant callback endpoints with write-only secrets · HUB-272 · F-19
   - Each tenant page lists its callback endpoints with URL, state, signing secret version (and until when the previous secret still signs) and how many integration versions use them
   - Admins register, edit, disable or enable, rotate the signing secret with an overlap, and delete an endpoint (id typed), each with a reason and the change log id

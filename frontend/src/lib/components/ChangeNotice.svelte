@@ -38,8 +38,9 @@
 			<p class="change">
 				Change log id <code class="id">{changeId}</code>
 				<CopyButton value={changeId} label="Copy change log id" />
-				<!-- TODO(HUB-274): link the entry itself once the change log has a detail view. -->
-				<a href={resolve('/change-log')}>Open the change log</a>
+				<a href={resolve('/(app)/change-log/[change_id]', { change_id: changeId })}
+					>Open the change log entry</a
+				>
 			</p>
 		{/if}
 		{#if requestId}

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **93** · todo: **101** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **94** · todo: **100** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **195** · done: **93** · todo: **101** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 26 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 27 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -2030,14 +2030,16 @@ List snapshots with version, checksum, author, diff summary and time.
 
 ### HUB-274 — Change log view
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1906
 - **Branch:** `feat/HUB-274-fe-change-log`
 
 Filterable change log (actor, action, object, time) with before/after diff and reason.
 
+Shipped (frontend-engineer, `feat(frontend): add filterable change log with before/after diff (HUB-274)`): `/change-log` (`listChangeLog`: actor, action (operationId, with suggestions), object type, object id, UTC From/To with quick ranges, page size; chips, Clear all, cursor paging; reversed range refused before calling): change id linked to its entry, time, actor with roles, action, object (linked to its console page for integrations, transformers, tenants and requests), reason, snapshot. `/change-log/{change_id}` (`getChangeLogEntry`): what, reason, when, actor (linked to their changes), snapshot, "every change to this object", and the before / after as a path diff (`$lib/utils/json-diff.ts` -> `DiffPaths`: Added / Removed / Changed with Before / After values; creates and deletes say so) plus both objects in full. Every change notice now links its own entry.
+
 **Acceptance criteria**
-- [ ] Before/after rendered as a diff
-- [ ] Filters in URL
+- [x] Before/after rendered as a diff (`jsonDiff` of `before` / `after` -> DiffOps -> `DiffPaths`; table-driven `json-diff.test.ts`, `[change_id]/page.test.ts` on the contract example, `e2e/change-log.test.ts`)
+- [x] Filters in URL (`change-log/filters.ts`: names as in `listChangeLog`, validated, chips, survives reload; `filters.test.ts`, `page.test.ts`, e2e)
 
 ### HUB-275 — Accessibility pass
 - **Epic:** EP-10 · **Type:** test · **Area:** frontend
