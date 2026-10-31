@@ -48,6 +48,8 @@ Use `-- +goose StatementBegin/StatementEnd` around functions/`DO` blocks; `-- +g
 - Online-safe changes: add nullable columns, then backfill in batches, then add constraints `NOT VALID` + `VALIDATE CONSTRAINT`; `CREATE INDEX CONCURRENTLY` on big tables; never rewrite `requests`/`request_events` in one statement.
 - Migrations run as a separate step (`hubctl migrate` or a k8s job), never implicitly at gateway start.
 
+**Schema-qualify everything.** Migrations live in `backend/migrations` (embedded, applied by `hub migrate`). The dev/CI role is named `hub`, and the default `search_path` is `"$user", public`, so once schema `hub` exists an unqualified name silently resolves to `hub.<name>`. This made goose re-run migrations on fresh databases (fixed in HUB-023: the version table is pinned to `public.goose_db_version`). Write `hub.outbox`, never `outbox`, in DDL and in sqlc queries. Test migrations on a **fresh** volume (`docker compose down -v`), not only on an already-migrated one.
+
 ## Partitioning (requests, request_events, request_attempts)
 - `PARTITION BY RANGE (created_at)` by day. The partition key must be part of every PK/unique constraint: `PRIMARY KEY (request_id, created_at)`.
 - Put the **request's** `created_at` on its events and attempts too (column `request_created_at`), so a request's whole timeline lives in one day partition even if events arrive days later (AA flows). Request ids are ULIDs (`req_01J9…`): the timestamp in the id gives the partition bound, enabling pruning on lookups by id.

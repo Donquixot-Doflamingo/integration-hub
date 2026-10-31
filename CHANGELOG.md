@@ -6,6 +6,64 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tickets)` · close M0 CI acceptance after the first green PR run · HUB-022, HUB-032 · F-01
+  - backend workflow green on PR #2: lint, test, itest, build, smoke-m0 in about 4 min; its first run caught the migration bug, proving failures fail the check
+- 2026-10-31 · `fix(migrations)` · pin the goose version table to the public schema · HUB-023 · F-01
+  - Migrations no longer re-run on a fresh database (caught by the itest CI job)
+  - Rule recorded: always schema-qualify objects (hub.<name>); the hub role makes "$user" resolve to schema hub
+- 2026-10-31 · `test(backend)` · record M0 acceptance and milestone summary · HUB-032 · F-01, F-02
+  - docs/milestones/M0.md: acceptance evidence, what was built, eight deviations, deferred items
+  - F-02 shipped, F-01 updated; README and CLAUDE.md show the current phase and quick-start commands
+- 2026-10-31 · `ci(backend)` · add backend CI workflow and M0 smoke test · HUB-022 · F-01
+  - PRs touching backend/, contracts/ or deploy/ run lint (golangci-lint v2.15.0), unit tests with -race, integration tests on compose Postgres + Redis, build, and the M0 smoke test
+  - deploy/smoke/m0.sh: compose up, migrate, hub gateway, asserts /healthz, /readyz (postgres+redis ok), /metrics, clean SIGTERM stop; runs locally and in CI
+- 2026-10-31 · `test(contract)` · add contract test harness with kin-openapi · HUB-031 · F-01
+  - internal/testkit/contract validates live requests and responses (status, headers, body) against contracts/openapi/*.yaml and reports JSON pointers
+  - /healthz and /readyz (200 and 503) and every mockvendor control operation are contract-tested; HUB-028 acceptance closed
+  - Fixed: mockvendor reset rejected an empty chunked body
+- 2026-10-31 · `feat(mockvendor)` · add inbound webhook sender with HMAC and basic signing · HUB-030 · F-02
+  - POST /__control/webhooks sends a webhook (POST/PUT, JSON or raw body, custom headers, delay) and reports the target's status, headers and body
+  - Optional signing: hmac_sha256 over `<ts>.<raw body>` with a header template and timestamp offset for replay tests, or basic
+  - Unreachable targets come back as 200 with the transport error in `error`, per the contract
+- 2026-10-31 · `feat(mockvendor)` · add latency, error, rate-limit, down, slow-drip and malformed behaviours · HUB-029 · F-02
+  - Routes can delay (fixed/random), fail with an error ratio (seedable), answer 429 with Retry-After (every Nth or ratio, after a burst)
+  - down.mode reset (TCP reset), refuse (real connection refused, recovers when the route is removed) and hang; slow_drip streams the body in timed chunks
+  - malformed: truncated_json, invalid_json, wrong_content_type, empty_body, html_error_page; evaluation order follows the contract
+- 2026-10-31 · `feat(mockvendor)` · add mock vendor server, control API and request recording · HUB-028 · F-02
+  - `mockvendor` serves the vendor surface on :8099 and the control API on :8098 (also on the vendor port), per contracts/openapi/mockvendor.v1.yaml
+  - Routes with method/path-glob/header matching, priority and recency tie-break, `times`, configurable default behaviour, reset, health
+  - Every vendor request recorded (filters, cursor pagination, clear); Go tests start it in-process with mockvendor.Start(t)
+- 2026-10-31 · `feat(hub)` · add healthz and readyz with Postgres and Redis checks · HUB-025 · F-01
+  - Every role serves /healthz (always 200 while up) and /readyz on the ops port, shaped per getHealthz/getReadyz
+  - /readyz returns 503 NOT_READY with a request id and one detail per failing check (postgres, redis, or shutting down); dependency addresses never leak into the body
+  - core package gains request ids (req_ + ULID) and canonical error codes/envelope; CCR HUB-033 filed for the contract's 503 example
+- 2026-10-31 · `feat(telemetry)` · add Prometheus metrics, OTel tracing and per-stage timing · HUB-027 · F-01, F-18
+  - Ops port serves /metrics: Go runtime, process, hub_build_info, hub_overhead_ms{integration,mode}, hub_stage_duration_ms{stage}
+  - Gateway and admin requests run in a server span that continues the caller's traceparent; no exporter runs unless HUB_OTLP_ENDPOINT is set
+  - Timings and TimedMiddleware helpers record each stage's own time; vendor time is excluded from overhead; trace and span ids added to logs
+- 2026-10-31 · `feat(telemetry)` · add redacting slog handler and request-field logger · HUB-026 · F-01
+  - Registered secret values never appear in logs: message, attrs, nested groups, errors, bytes, With-attached values
+  - Secret set supports Add/Remove/Replace at runtime, lock-free reads; denied keys (authorization, token, ...) always ***
+  - hub logs JSON via telemetry.NewLogger; the HUB_PG_DSN password is registered at start
+- 2026-10-31 · `feat(hub)` · add role entrypoints, config loading and graceful shutdown · HUB-024 · F-01
+  - `hub gateway|worker|scheduler|admin` with config from flags > HUB_* env > defaults; secrets (HUB_PG_DSN) from env only and never logged
+  - Graceful shutdown: readiness off, drain delay, public then ops listener closed within HUB_SHUTDOWN_GRACE
+  - Unknown role or invalid config exits 2 with usage and every problem listed
+- 2026-10-31 · `chore(infra)` · add compose Postgres and Redis with embedded goose migrations · HUB-023 · F-01
+  - deploy/docker-compose.yml: Postgres 16.15 and Redis 7.4.12, digest-pinned, with healthchecks
+  - backend/migrations embeds goose SQL; `hub migrate` / `make migrate` apply it; baseline creates schema hub
+  - `make itest` starts compose and runs integration-tagged tests; go.mod minimum is now Go 1.26 (goose v3.29)
+- 2026-10-31 · `chore(backend)` · add Makefile targets and golangci-lint config · HUB-021 · F-01
+  - backend/Makefile: build test itest lint fmt bench run mockvendor up down migrate doctor
+  - backend/.golangci.yml (v2, pinned 2.15.0) with depguard keeping transform pure and forbidigo banning fmt.Print/log/time.Sleep
+  - Root Makefile delegating to backend/ and frontend/
+- 2026-10-31 · `chore(backend)` · create Go module and package layout · HUB-020 · F-01
+  - backend/go.mod (module github.com/Donquixot-Doflamingo/integration-hub/backend, go 1.25 minimum)
+  - Every DESIGN §18.1 package with doc.go, plus internal/core and internal/testkit (ADR-0001 accepted)
+  - internal/archtest enforces the TECH_SPEC §4.1 import table
+- 2026-10-31 · `chore(infra)` · install and record the dev toolchain · HUB-012 · F-01
+  - Go 1.27.3, Node 22.23.4, Docker 29.9.2 + Compose 5.6.1 on Colima, golangci-lint 2.15.0 installed via Homebrew
+  - Versions and PATH notes recorded in TECH_SPEC §3
 - 2026-10-31 · `ci` · add PR template, hygiene CI and per-commit changelog check · HUB-011 · F-01
   - PR template with contract and changelog checklist
   - CI validates contract YAML/JSON and fails a PR commit that does not touch CHANGELOG.md

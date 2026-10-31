@@ -1,0 +1,126 @@
+package roles
+
+import (
+	"io"
+	"log/slog"
+	"strings"
+	"testing"
+	"time"
+)
+
+func envMap(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+
+func TestLoadPrecedence(t *testing.T) {
+	base := map[string]string{"HUB_PG_DSN": "postgres://x"}
+	with := func(kv ...string) map[string]string {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i]] = kv[i+1]
+		}
+		return m
+	}
+	tests := []struct {
+		name  string
+		role  Role
+		env   map[string]string
+		args  []string
+		check func(t *testing.T, c Config)
+	}{
+		{"defaults gateway", Gateway, base, nil, func(t *testing.T, c Config) {
+			eq(t, c.HTTPAddr, ":8080")
+			eq(t, c.OpsAddr, "127.0.0.1:9090")
+			eq(t, c.RedisAddr, "localhost:6379")
+			eq(t, c.ShutdownGrace, 25*time.Second)
+			eq(t, c.ReadyDrain, 5*time.Second)
+			eq(t, c.LogLevel, slog.LevelInfo)
+			eq(t, c.TraceSampleRatio, 0.05)
+		}},
+		{"admin default port", Admin, base, nil, func(t *testing.T, c Config) { eq(t, c.HTTPAddr, ":8081") }},
+		{"env over default", Gateway, with("HUB_HTTP_ADDR", ":7000", "HUB_LOG_LEVEL", "debug"), nil, func(t *testing.T, c Config) {
+			eq(t, c.HTTPAddr, ":7000")
+			eq(t, c.LogLevel, slog.LevelDebug)
+		}},
+		{"flag over env", Gateway, with("HUB_HTTP_ADDR", ":7000", "HUB_SHUTDOWN_GRACE", "40s"), []string{"-http-addr", ":7001", "-shutdown-grace=10s"}, func(t *testing.T, c Config) {
+			eq(t, c.HTTPAddr, ":7001")
+			eq(t, c.ShutdownGrace, 10*time.Second)
+		}},
+		{"flag over default", Worker, base, []string{"-pool", "llm", "-ready-drain", "0s"}, func(t *testing.T, c Config) {
+			eq(t, c.WorkerPool, "llm")
+			eq(t, c.ReadyDrain, time.Duration(0))
+		}},
+		{"dsn only from env", Gateway, base, nil, func(t *testing.T, c Config) { eq(t, string(c.PGDSN), "postgres://x") }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, err := Load(tt.role, tt.args, envMap(tt.env), io.Discard)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			eq(t, c.Role, tt.role)
+			tt.check(t, c)
+		})
+	}
+}
+
+func TestLoadRejectsInvalidConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		role    Role
+		env     map[string]string
+		args    []string
+		wantErr []string
+	}{
+		{"missing dsn", Gateway, nil, nil, []string{"HUB_PG_DSN is required"}},
+		{"bad durations and level reported together", Gateway, map[string]string{"HUB_PG_DSN": "x"},
+			[]string{"-shutdown-grace=abc", "-log-level=loud"}, []string{"shutdown-grace", "log-level"}},
+		{"drain not shorter than grace", Gateway, map[string]string{"HUB_PG_DSN": "x"},
+			[]string{"-shutdown-grace=5s", "-ready-drain=5s"}, []string{"must be shorter"}},
+		{"sample ratio out of range", Gateway, map[string]string{"HUB_PG_DSN": "x", "HUB_TRACE_SAMPLE_RATIO": "1.5"}, nil, []string{"trace-sample-ratio"}},
+		{"unknown worker pool", Worker, map[string]string{"HUB_PG_DSN": "x"}, []string{"-pool=gpu"}, []string{"pool"}},
+		{"unknown flag", Gateway, map[string]string{"HUB_PG_DSN": "x"}, []string{"-nope"}, []string{"parse flags"}},
+		{"stray argument", Gateway, map[string]string{"HUB_PG_DSN": "x"}, []string{"extra"}, []string{"unexpected arguments"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Load(tt.role, tt.args, envMap(tt.env), io.Discard)
+			if err == nil {
+				t.Fatal("Load succeeded, want error")
+			}
+			for _, w := range tt.wantErr {
+				if !strings.Contains(err.Error(), w) {
+					t.Errorf("error %q does not mention %q", err, w)
+				}
+			}
+		})
+	}
+}
+
+func TestSecretNeverPrints(t *testing.T) {
+	s := Secret("postgres://user:pw@db")
+	var b strings.Builder
+	slog.New(slog.NewTextHandler(&b, nil)).InfoContext(t.Context(), "cfg", slog.Any("dsn", s))
+	if strings.Contains(b.String(), "pw@db") || strings.Contains(s.String(), "pw") {
+		t.Fatalf("secret leaked: %q", b.String())
+	}
+}
+
+func TestParseRole(t *testing.T) {
+	for _, r := range Roles {
+		if got, err := ParseRole(string(r)); err != nil || got != r {
+			t.Errorf("ParseRole(%q) = %q, %v", r, got, err)
+		}
+	}
+	if _, err := ParseRole("proxy"); err == nil {
+		t.Error("ParseRole(proxy) succeeded")
+	}
+}
+
+func eq[T comparable](t *testing.T, got, want T) {
+	t.Helper()
+	if got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

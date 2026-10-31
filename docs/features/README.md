@@ -7,7 +7,7 @@ Several features share one epic and therefore one ticket range; the feature fiel
 | ID | Name | Milestone / Epic | Status | Doc | Stories | Tickets |
 | --- | --- | --- | --- | --- | --- | --- |
 | F-01 | Repo foundation, dev environment & CI | Phase 1 + M0 · EP-00/EP-01 | in-progress | [F-01](F-01-repo-foundation.md) | US-0101–0104 | HUB-001–016, HUB-020–039 |
-| F-02 | Mock vendor (programmable fake vendor) | M0 · EP-01 | proposed | [F-02](F-02-mock-vendor.md) | US-0201–0203 | HUB-020–039 |
+| F-02 | Mock vendor (programmable fake vendor) | M0 · EP-01 | shipped (M0) | [F-02](F-02-mock-vendor.md) | US-0201–0203 | HUB-020–039 |
 | F-03 | Config registry & snapshots | M1 · EP-02 | proposed | [F-03](F-03-config-registry.md) | US-0301–0304 | HUB-040–059 |
 | F-04 | Transformation engine & golden fixtures | M2 · EP-03 | proposed | [F-04](F-04-transformation-engine.md) | US-0401–0405 | HUB-060–079 |
 | F-05 | Tenant auth, grants & edge validation | M3 · EP-04 | proposed | [F-05](F-05-tenant-auth-edge.md) | US-0501–0504 | HUB-080–109 |
