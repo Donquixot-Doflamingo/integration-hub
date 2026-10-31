@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 )
@@ -37,8 +38,9 @@ func (s *Server) dryRun(w http.ResponseWriter, r *http.Request) {
 	if op == "" {
 		op = "default"
 	}
-	p, ok := s.prepare(w, r, ScopeDryRun, op)
-	if !ok {
+	p, ce := s.prepare(r, ScopeDryRun, op)
+	if ce != nil {
+		s.fail(w, r, p, ce)
 		return
 	}
 	in := p.input
@@ -46,13 +48,13 @@ func (s *Server) dryRun(w http.ResponseWriter, r *http.Request) {
 	start := s.deps.Now()
 	plain, err := p.request.BuildRequest(in)
 	if err != nil {
-		WriteError(w, r, s.transformError(r, p, err))
+		s.fail(w, r, p, s.transformError(r, p, err))
 		return
 	}
 	masked, err := p.request.DryRun(in)
 	p.timings.Observe(telemetry.StageTransform, start)
 	if err != nil {
-		WriteError(w, r, s.transformError(r, p, err))
+		s.fail(w, r, p, s.transformError(r, p, err))
 		return
 	}
 
@@ -70,7 +72,9 @@ func (s *Server) dryRun(w http.ResponseWriter, r *http.Request) {
 	if p.res.Integration.Paused {
 		out.Warnings = append(out.Warnings, "integration is paused: invocations currently return 503 INTEGRATION_PAUSED")
 	}
+	p.trail.AddJSON(audit.RequestTransformed, 0, out.UpstreamRequest, map[string]any{"dry_run": true, "transformer": p.request.Ref()})
 	writeJSON(w, http.StatusOK, out)
+	s.finish(r, p, http.StatusOK)
 }
 
 // upstreamURL joins the account's regional base URL, the path and the sorted query.

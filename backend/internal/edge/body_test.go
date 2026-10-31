@@ -21,13 +21,13 @@ func TestBodyLimits(t *testing.T) {
 	big := `{"x":"` + strings.Repeat("a", 2048) + `"}`
 	// Declared too large: refused before reading.
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(big))
-	if _, _, ce := readJSONBody(httptest.NewRecorder(), req, 1024); ce == nil || ce.Code != core.CodePayloadTooLarge {
+	if _, _, ce := readJSONBody(req, 1024); ce == nil || ce.Code != core.CodePayloadTooLarge {
 		t.Fatalf("declared length: %+v", ce)
 	}
 	// Unknown length (chunked): capped while reading.
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", unknownLengthReader{strings.NewReader(big)})
 	req.ContentLength = -1
-	if _, _, ce := readJSONBody(httptest.NewRecorder(), req, 1024); ce == nil || ce.Code != core.CodePayloadTooLarge {
+	if _, _, ce := readJSONBody(req, 1024); ce == nil || ce.Code != core.CodePayloadTooLarge {
 		t.Fatalf("streamed: %+v", ce)
 	}
 	if bodyLimit("llm.chat@v1") != LLMBodyLimit || bodyLimit("events.track@v1") != DefaultBodyLimit {
@@ -38,12 +38,12 @@ func TestBodyLimits(t *testing.T) {
 func TestBodyMustBeOneJSONObject(t *testing.T) {
 	for _, b := range []string{`[1,2]`, `{"a":1}{"b":2}`, `nope`, `null`, ``} {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(b))
-		if _, _, ce := readJSONBody(httptest.NewRecorder(), req, 1024); ce == nil || ce.Code != core.CodeValidationFailed {
+		if _, _, ce := readJSONBody(req, 1024); ce == nil || ce.Code != core.CodeValidationFailed {
 			t.Errorf("%q accepted: %+v", b, ce)
 		}
 	}
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"a": 1.5}`))
-	body, raw, ce := readJSONBody(httptest.NewRecorder(), req, bodyLimit("events.track@v1"))
+	body, raw, ce := readJSONBody(req, bodyLimit("events.track@v1"))
 	if ce != nil || body["a"] != 1.5 || string(raw) != `{"a": 1.5}` {
 		t.Fatalf("decoded %v %q %+v", body, raw, ce)
 	}

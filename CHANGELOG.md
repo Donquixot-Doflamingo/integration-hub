@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(edge)` · audit every authorized request through the shared pipeline · HUB-092 · F-08
+  - Every request past authorization records request.received (tenant key as id and hash), request.validated, integration.resolved (version, vendor, account, transformers, policy, snapshot version) and a final request.completed or request.failed with its requests record
+  - Dry-run calls are audited with dry_run on the record and the masked upstream request as request.transformed
+  - Validation, operation, session and credential failures are audited; unauthenticated and unauthorized calls are not
 - 2026-10-31 · `feat(audit)` · apply the audit payload policies per request · HUB-093 · F-08
   - audit.Trail records each §13.1 event with sequence number, sha256 and byte size of the exact bytes seen, under every policy
   - full stores raw bytes; masked (default) masks x-pii fields by pointer in canonical stages and by value in vendor stages (identifiers HMAC'd per tenant, free_text replaced by hash and size); metadata_only and, until HUB-208, sealed store no bodies

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **71** · todo: **123** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **71** · todo: **122** · other (in-progress/in-review/blocked): **2**
 
 ## Epics
 
@@ -831,7 +831,7 @@ Add day-partitioned `requests`, `request_events`, `request_attempts` and an `Aud
 
 ### HUB-092 — Sync audit events with hashes
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-091, HUB-088 · **Feature:** F-08 · **Stories:** US-08xx
+- **Status:** in-progress · **Depends on:** HUB-091, HUB-088 · **Feature:** F-08 · **Stories:** US-08xx
 - **Branch:** `feat/HUB-092-audit-sync-events`
 
 Emit every §13.1 event for the sync path, each with sha256 + byte size of the payload, tenant key replaced by its hash, and secrets redacted; bodies over 64 KB spill to object storage (DESIGN §13.1, §13.3).

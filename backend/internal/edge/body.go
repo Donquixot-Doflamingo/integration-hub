@@ -33,12 +33,12 @@ func bodyLimit(capability string) int64 {
 
 // readJSONBody reads and decodes the request body as a JSON object. An oversized body is refused
 // from Content-Length before reading, and capped while reading otherwise (PAYLOAD_TOO_LARGE).
-func readJSONBody(w http.ResponseWriter, r *http.Request, limit int64) (map[string]any, []byte, *core.CanonicalError) {
+func readJSONBody(r *http.Request, limit int64) (map[string]any, []byte, *core.CanonicalError) {
 	tooLarge := &core.CanonicalError{Code: core.CodePayloadTooLarge, Message: fmt.Sprintf("Body is larger than %d bytes", limit)}
 	if r.ContentLength > limit {
 		return nil, nil, tooLarge
 	}
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
+	raw, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, limit))
 	if err != nil {
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {

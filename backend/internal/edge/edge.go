@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 )
@@ -19,6 +20,8 @@ type Snapshots interface {
 type Deps struct {
 	Snapshots Snapshots
 	Creds     CredsFunc
+	Audit     audit.Sink    // default audit.Discard
+	Masker    *audit.Masker // x-pii masking key for the masked policy
 	Metrics   *telemetry.Metrics
 	Log       *slog.Logger
 	Now       func() time.Time
@@ -36,6 +39,9 @@ type Server struct {
 func New(d Deps) *Server {
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)
+	}
+	if d.Audit == nil {
+		d.Audit = audit.Discard{}
 	}
 	if d.Now == nil {
 		d.Now = time.Now

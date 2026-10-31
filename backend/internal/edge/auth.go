@@ -93,21 +93,28 @@ func hasScope(k registry.APIKey, scope, integrationID string) bool {
 	return slices.Contains(k.Scopes, scope) || (integrationID != "" && slices.Contains(k.Scopes, scope+":"+integrationID))
 }
 
-// authorize resolves the integration's visibility for the caller: unknown → 404, not owner or
-// grantee → 403 not_granted, missing scope → 403 missing_scope ("" = any key may). It writes the error and returns
-// false when the request must stop.
-func authorize(w http.ResponseWriter, r *http.Request, c Caller, integrationID, scope string) (*registry.Integration, bool) {
+// authorizeIntegration resolves the integration's visibility for the caller: unknown → 404, not
+// owner or grantee → 403 not_granted, missing scope → 403 missing_scope ("" = any key may).
+func authorizeIntegration(c Caller, integrationID, scope string) (*registry.Integration, *core.CanonicalError) {
 	in, ok := c.Snap.Integrations[integrationID]
 	if !ok {
-		WriteError(w, r, &core.CanonicalError{Code: core.CodeIntegrationNotFound, Message: "Unknown integration"})
-		return nil, false
+		return nil, &core.CanonicalError{Code: core.CodeIntegrationNotFound, Message: "Unknown integration"}
 	}
 	if !resolve.Granted(in, c.Tenant.Tenant) {
-		WriteError(w, r, &core.CanonicalError{Code: core.CodeForbidden, Message: "The tenant may not use this integration", Reason: core.Ptr("not_granted")})
-		return nil, false
+		return nil, &core.CanonicalError{Code: core.CodeForbidden, Message: "The tenant may not use this integration", Reason: core.Ptr("not_granted")}
 	}
 	if scope != "" && !hasScope(c.Key, scope, integrationID) {
-		WriteError(w, r, &core.CanonicalError{Code: core.CodeForbidden, Message: "The API key lacks scope " + scope, Reason: core.Ptr("missing_scope")})
+		return nil, &core.CanonicalError{Code: core.CodeForbidden, Message: "The API key lacks scope " + scope, Reason: core.Ptr("missing_scope")}
+	}
+	return in, nil
+}
+
+// authorize is authorizeIntegration that writes the error; it returns false when the request
+// must stop.
+func authorize(w http.ResponseWriter, r *http.Request, c Caller, integrationID, scope string) (*registry.Integration, bool) {
+	in, ce := authorizeIntegration(c, integrationID, scope)
+	if ce != nil {
+		WriteError(w, r, ce)
 		return nil, false
 	}
 	return in, true
