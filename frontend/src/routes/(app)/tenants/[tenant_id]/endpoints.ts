@@ -1,8 +1,6 @@
 import type { FieldErrors } from '$lib/api/actions';
-import type { ApiResult } from '$lib/api/client';
 import type {
 	RegistrarEndpoint,
-	RegistrarEndpointChange,
 	RegistrarEndpointCreate,
 	RegistrarEndpointUpdate
 } from '$lib/api/types';
@@ -15,8 +13,9 @@ import { SLUG } from '../tenant-form';
  * guard (host allowlist, no private or link-local ranges) runs only on the server; its 400
  * `VALIDATION_FAILED` pointer `/url` lands on the URL field.
  *
- * Signing secrets are never displayed (write-only in the UI): create and rotate answer with
- * `signing_secret`, and the form action drops it before anything reaches the browser.
+ * Signing secrets are write-only: no read returns them. Create and rotate answer with the new
+ * `signing_secret` once; the console shows it once in `SecretOnce` (like an API key) and never
+ * again: the list shows only the secret version.
  */
 export interface EndpointValues {
 	endpoint_id: string;
@@ -104,18 +103,6 @@ export function valuesFromEndpoint(e: RegistrarEndpoint): EndpointValues {
 	return { endpoint_id: e.endpoint_id, url: e.url, description: e.description ?? '' };
 }
 
-/**
- * The create / rotate answer without `signing_secret`: the console never displays signing
- * secrets, so it never sends one to the browser either.
- */
-export function withoutSigningSecret<T extends { signing_secret?: string }>(
-	res: ApiResult<T>
-): ApiResult<RegistrarEndpointChange> {
-	if (!res.ok) return res;
-	const { change_id, endpoint } = res.data as unknown as RegistrarEndpointChange;
-	return { ...res, data: { change_id, endpoint } };
-}
-
 /** "Version 2; version 1 is also accepted until 2026-11-01 10:00 UTC". */
 export function secretText(e: RegistrarEndpoint): string {
 	const base = `Version ${e.secret_version}`;
@@ -131,3 +118,7 @@ export const SECRET_OVERLAPS = [
 	{ ms: 7 * 86_400_000, label: '7 days' },
 	{ ms: 30 * 86_400_000, label: '30 days (maximum)' }
 ] as const;
+
+/** `SecretOnce` text for a signing secret (HUB-272): what it is for and that it cannot come back. */
+export const SIGNING_SECRET_WARNING =
+	'The Hub never returns it again: nobody can show it again, not even an admin. Give it to the tenant over a secure channel now: their receiver uses it to verify the X-Hub-Signature header of every callback. If it is lost, rotate the secret.';

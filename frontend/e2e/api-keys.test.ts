@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { expectNoSeriousA11yViolations, signIn } from './helpers';
+import { expect, test } from '@playwright/test';
+import { expectNoSeriousA11yViolations, lingering, NOWHERE, signIn } from './helpers';
 
 // HUB-271: API keys on the tenant page; the full key is shown exactly once. On MSW: the secrets
 // are the contract examples (createApiKey / rotateApiKey).
@@ -9,26 +9,6 @@ test.use({ viewport: { width: 1280, height: 900 } });
 const CREATED = 'hk_live_7Qm2EXAMPLEexampleEXAMPLE0000';
 const ROTATED = 'hk_live_Z9a1EXAMPLEexampleEXAMPLE0000';
 const PAGE = '/tenants/orders-service';
-
-/** Every place in the browser the secret could still be after the reveal closed. */
-async function lingering(page: Page, secret: string) {
-	return page.evaluate((s) => {
-		const values = [...document.querySelectorAll('input, textarea')].map(
-			(e) => (e as HTMLInputElement).value
-		);
-		const storage = [localStorage, sessionStorage].flatMap((st) =>
-			Object.keys(st).map((k) => `${k}=${st.getItem(k)}`)
-		);
-		return {
-			html: document.documentElement.outerHTML.includes(s),
-			inputs: values.some((v) => v.includes(s)),
-			storage: storage.some((v) => v.includes(s)),
-			url: location.href.includes(s),
-			history: JSON.stringify(history.state ?? null).includes(s)
-		};
-	}, secret);
-}
-const NOWHERE = { html: false, inputs: false, storage: false, url: false, history: false };
 
 test('create: the key is shown once with copy and a warning, then never again', async ({
 	page,

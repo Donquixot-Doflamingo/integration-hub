@@ -3,12 +3,17 @@
 	import type { ActionSuccessData, FieldErrors } from '$lib/api/actions';
 	import type { ApiResult } from '$lib/api/client';
 	import type { ListPage } from '$lib/api/list';
-	import type { RegistrarEndpoint, RegistrarEndpointChange } from '$lib/api/types';
+	import type {
+		RegistrarEndpoint,
+		RegistrarEndpointChange,
+		RegistrarEndpointSecretChange
+	} from '$lib/api/types';
 	import type { Access } from '$lib/auth/roles';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import ListView from '$lib/components/ListView.svelte';
 	import RoleGate from '$lib/components/RoleGate.svelte';
+	import SecretOnce from '$lib/components/SecretOnce.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatDurationMs, formatNumber, formatUtc } from '$lib/utils/format';
 	import { BEFORE_PREFIX } from '../tenant-form';
@@ -16,6 +21,7 @@
 		endpointProblems,
 		SECRET_OVERLAPS,
 		secretText,
+		SIGNING_SECRET_WARNING,
 		updateEndpointBody,
 		valuesFromEndpoint,
 		type EndpointValues
@@ -24,10 +30,11 @@
 
 	/**
 	 * Registrar (callback) endpoints of one tenant (HUB-272): where the Hub delivers async results
-	 * and webhooks. Signing secrets are write-only here: the list shows only the secret version (and
-	 * the overlap while two secrets sign), and the create / rotate actions drop the minted secret on
-	 * the server, so it never reaches the browser. Admins register, edit, disable / enable, rotate
-	 * the secret and delete; the SSRF guard's error lands on the URL field.
+	 * and webhooks. Signing secrets are write-only: the list shows only the secret version (and the
+	 * overlap while two secrets sign). A new secret (register, rotate) is shown exactly once in
+	 * `SecretOnce`, with the same rules as API keys (HUB-271): `oneTimeSecret` dialogs, enhanced-only
+	 * actions, dropped on Done, never stored or logged. Admins register, edit, disable / enable,
+	 * rotate the secret and delete; the SSRF guard's error lands on the URL field.
 	 */
 	let {
 		tenantId,
@@ -43,7 +50,23 @@
 
 	const id = $props.id();
 	const EMPTY: EndpointValues = { endpoint_id: '', url: '', description: '' };
-	const NOT_SHOWN = 'The console never shows signing secrets.';
+	// The one place a new signing secret lives, between the action answer and Done.
+	let reveal = $state.raw<{
+		title: string;
+		label: string;
+		secret: string;
+		notes: string[];
+	} | null>(null);
+
+	function revealSecret(d: ActionSuccessData, title: string, notes: string[] = []) {
+		const r = d.result as RegistrarEndpointSecretChange;
+		reveal = {
+			title,
+			label: `Signing secret version ${r.endpoint.secret_version} of ${r.endpoint.endpoint_id}`,
+			secret: r.signing_secret,
+			notes
+		};
+	}
 
 	// Register.
 	let createOpen = $state(false);
@@ -91,24 +114,34 @@
 			onnotice({ message: message(e), changeId: d.changeId, requestId: d.requestId });
 		};
 	}
-	const onCreated = changed(
+	const onCreatedNotice = changed(
 		(e) =>
-			`Registered callback endpoint ${e.endpoint_id} (${e.url}) with signing secret version ${e.secret_version}. ${NOT_SHOWN}`
+			`Registered callback endpoint ${e.endpoint_id} (${e.url}) with signing secret version ${e.secret_version}.`
 	);
+	function onCreated(d: ActionSuccessData) {
+		const e = (d.result as RegistrarEndpointSecretChange).endpoint;
+		revealSecret(d, `Copy the callback signing secret of ${e.endpoint_id}`);
+		onCreatedNotice(d);
+	}
 	const onUpdated = changed((e) => `Saved ${e.endpoint_id}: ${e.url}.`);
 	const onSwitched = changed((e) =>
 		e.disabled
 			? `Disabled ${e.endpoint_id}. The Hub stops delivering callbacks to it.`
 			: `Enabled ${e.endpoint_id}. Callbacks are delivered to it again.`
 	);
-	const onRotated = changed(
+	const overlapText = (e: RegistrarEndpoint) =>
+		e.secret_overlap_until
+			? `Until ${formatUtc(e.secret_overlap_until)}, callbacks carry both signatures (version ${e.secret_version} and ${e.secret_version - 1}); after that only version ${e.secret_version} signs.`
+			: `Only version ${e.secret_version} signs from now on.`;
+	const onRotatedNotice = changed(
 		(e) =>
-			`Rotated the signing secret of ${e.endpoint_id} to version ${e.secret_version}.${
-				e.secret_overlap_until
-					? ` Until ${formatUtc(e.secret_overlap_until)}, callbacks carry both signatures.`
-					: ''
-			} ${NOT_SHOWN}`
+			`Rotated the signing secret of ${e.endpoint_id} to version ${e.secret_version}. ${overlapText(e)}`
 	);
+	function onRotated(d: ActionSuccessData) {
+		const e = (d.result as RegistrarEndpointSecretChange).endpoint;
+		revealSecret(d, `Copy the new callback signing secret of ${e.endpoint_id}`, [overlapText(e)]);
+		onRotatedNotice(d);
+	}
 	function onDeleted(d: ActionSuccessData) {
 		onnotice({
 			message: `Deleted callback endpoint ${target?.endpoint_id ?? ''}. Pending deliveries to it are dead-lettered.`,
@@ -177,7 +210,8 @@
 	</div>
 	<p class="meta">
 		Where the Hub delivers this tenant's async results and webhooks (registrar). Each delivery is
-		signed; signing secrets are never shown here, only their version.
+		signed with the endpoint's signing secret (<code>X-Hub-Signature</code>); a new secret is shown
+		once, when it is created or rotated, and only its version afterwards.
 	</p>
 	<ListView
 		result={endpoints}
@@ -244,11 +278,12 @@
 	tone="primary"
 	subject={tenantId}
 	ready={Object.keys(createProblems).length === 0}
+	oneTimeSecret
 	onsuccess={onCreated}
 >
 	<p>
-		The Hub mints a signing secret for it. The console does not show that secret. Integrations of {tenantId}
-		can then subscribe to the endpoint.
+		The Hub mints a signing secret for it, shown once right after: the tenant's receiver needs it to
+		verify <code>X-Hub-Signature</code>. Integrations of {tenantId} can then subscribe to the endpoint.
 	</p>
 	{#snippet fields(errors)}
 		{@const idError = fieldError(
@@ -346,12 +381,13 @@
 		action="?/rotateSecret"
 		tone="primary"
 		subject={e.endpoint_id}
+		oneTimeSecret
 		onsuccess={onRotated}
 	>
 		<p>
-			Mints signing secret version {e.secret_version + 1}. During the overlap, callbacks carry two
-			<code>v1=</code> signatures (new and old), so the receiver can switch without dropping any. The
-			console does not show the new secret.
+			Mints signing secret version {e.secret_version + 1}, shown once right after. During the
+			overlap, callbacks carry two <code>v1=</code> signatures (new and old), so the receiver can switch
+			without dropping any.
 		</p>
 		{#snippet fields()}
 			<input type="hidden" name="endpoint_id" value={e.endpoint_id} />
@@ -393,6 +429,17 @@
 			<input type="hidden" name="endpoint_id" value={e.endpoint_id} />
 		{/snippet}
 	</ConfirmDialog>
+{/if}
+
+{#if reveal}
+	<SecretOnce
+		title={reveal.title}
+		label={reveal.label}
+		secret={reveal.secret}
+		notes={reveal.notes}
+		warning={SIGNING_SECRET_WARNING}
+		ondone={() => (reveal = null)}
+	/>
 {/if}
 
 <style>

@@ -8,25 +8,31 @@ import { presets } from '$lib/api/mocks/scenarios';
 import { server } from '$lib/api/mocks/server';
 import { accessFromRoles, type Access } from '$lib/auth/roles';
 import type { Role } from '$lib/api/types';
-import { runAction, useActions } from '$lib/testing/forms';
+import { invalidations, runAction, useActions } from '$lib/testing/forms';
+import { captureConsole, NOWHERE, secretTraces } from '$lib/testing/secrets';
 import Page from './+page.svelte';
 import { load } from './+page';
 import { actions } from './+page.server';
 
-// HUB-272: callback (registrar) endpoints; signing secrets never displayed.
+// HUB-272: callback (registrar) endpoints; a new signing secret is shown exactly once.
 
-vi.mock('$app/navigation', () => ({ invalidateAll: vi.fn(), goto: vi.fn() }));
+const invalidateAll = vi.fn();
+vi.mock('$app/navigation', () => ({ invalidateAll: () => invalidateAll(), goto: vi.fn() }));
 
 const ID = 'orders-service';
 const EP = 'reg_orders_cb';
 const REASON = 'Callbacks for async integrations';
-const SECRETS = [
-	contractMocks.createRegistrarEndpoint.example.signing_secret,
-	contractMocks.rotateRegistrarSecret.example.signing_secret
-];
+const CREATED = contractMocks.createRegistrarEndpoint.example.signing_secret;
+const ROTATED = contractMocks.rotateRegistrarSecret.example.signing_secret;
 
+let logged: unknown[][];
 beforeEach(() => {
 	useActions(actions, { params: { tenant_id: ID } });
+	invalidateAll.mockReset();
+	invalidations.count = 0;
+	logged = captureConsole();
+	localStorage.clear();
+	sessionStorage.clear();
 });
 
 async function renderPage(access: Access = accessFromRoles(['admin'])) {
@@ -40,14 +46,18 @@ async function renderPage(access: Access = accessFromRoles(['admin'])) {
 	return screen.findByRole('table', { name: `Callback endpoints of ${ID}`, busy: false });
 }
 
+/** No signing secret anywhere in the page (the list never carries one). */
 function noSecretAnywhere() {
-	const html = document.documentElement.outerHTML;
-	const values = [...document.querySelectorAll('input')].map((i) => i.value).join(' ');
-	for (const s of SECRETS) {
-		expect(html).not.toContain(s);
-		expect(values).not.toContain(s);
-	}
-	expect(html).not.toContain('whsec_');
+	for (const secret of [CREATED, ROTATED]) expect(secretTraces(secret, logged)).toEqual(NOWHERE);
+	expect(document.documentElement.outerHTML).not.toContain('whsec_');
+}
+
+/** Ticks "I have stored it" and closes the reveal. */
+async function done(user: ReturnType<typeof userEvent.setup>, reveal: HTMLElement) {
+	const button = within(reveal).getByRole('button', { name: 'Done' });
+	expect(button).toBeDisabled();
+	await user.click(within(reveal).getByLabelText('I have stored it somewhere safe'));
+	await user.click(button);
 }
 
 describe('list', () => {
@@ -81,7 +91,7 @@ describe('register', () => {
 		};
 	}
 
-	it('sends RegistrarEndpointCreate and never shows the minted signing secret', async () => {
+	it('sends RegistrarEndpointCreate and shows the signing secret exactly once', async () => {
 		let sent: unknown;
 		server.use(
 			http.post(mswPath('/registrar-endpoints'), async ({ request }) => {
@@ -107,10 +117,30 @@ describe('register', () => {
 		await user.type(within(dialog).getByLabelText('Description'), 'Orders callbacks');
 		await user.type(within(dialog).getByLabelText(/Reason/), REASON);
 		await user.click(within(dialog).getByRole('button', { name: 'Register' }));
-		const notice = await screen.findByText(/Registered callback endpoint reg_orders_cb/);
+		const reveal = await screen.findByRole('dialog', {
+			name: 'Copy the callback signing secret of reg_orders_cb'
+		});
+		const field = within(reveal).getByLabelText('Signing secret version 1 of reg_orders_cb');
+		expect(field).toHaveValue(CREATED);
+		expect(field).toHaveAttribute('readonly');
+		expect(field).toHaveFocus();
+		expect(reveal).toHaveTextContent('This is the only time it is shown.');
+		expect(reveal).toHaveTextContent('verify the X-Hub-Signature header of every callback');
+		await user.click(within(reveal).getByRole('button', { name: 'Copy' }));
+		expect(await navigator.clipboard.readText()).toBe(CREATED);
+		const notice = screen.getByText(/Registered callback endpoint reg_orders_cb/);
 		expect(notice).toHaveTextContent('signing secret version 1');
-		expect(notice).toHaveTextContent('The console never shows signing secrets.');
-		expect(notice.closest('[role="status"]')).toHaveTextContent('chg_01J9Z4B2C3D4E5F6G7H8J9K0NF');
+		const status = notice.closest('[role="status"]')!;
+		expect(status).toHaveTextContent('chg_01J9Z4B2C3D4E5F6G7H8J9K0NF');
+		expect(status.textContent).not.toContain(CREATED);
+		await user.keyboard('{Escape}');
+		expect(reveal).toBeInTheDocument();
+		await done(user, reveal);
+		expect(screen.queryByRole('dialog')).toBeNull();
+		expect(screen.getByRole('button', { name: 'Register endpoint' })).toHaveFocus();
+		// Never applied as the page form (update() not called); only invalidateAll reloaded.
+		expect(invalidations.count).toBe(0);
+		expect(invalidateAll).toHaveBeenCalled();
 		expect(sent).toEqual({
 			endpoint_id: EP,
 			tenant_id: ID,
@@ -169,7 +199,7 @@ describe('row actions', () => {
 		});
 	});
 
-	it('rotate sends the overlap and says when both signatures stop, without the secret', async () => {
+	it('rotate sends the overlap, shows the new secret once and says when both signatures stop', async () => {
 		let sent: unknown;
 		server.use(
 			http.post(mswPath('/registrar-endpoints/:endpoint_id/rotate-secret'), async ({ request }) => {
@@ -182,14 +212,21 @@ describe('row actions', () => {
 		await user.selectOptions(within(dialog).getByLabelText('Overlap'), '1 hour');
 		await user.type(within(dialog).getByLabelText(/Reason/), 'Scheduled rotation');
 		await user.click(within(dialog).getByRole('button', { name: 'Rotate secret' }));
-		const notice = await screen.findByText(
-			/Rotated the signing secret of reg_orders_cb to version 2/
+		const reveal = await screen.findByRole('dialog', {
+			name: 'Copy the new callback signing secret of reg_orders_cb'
+		});
+		expect(within(reveal).getByLabelText('Signing secret version 2 of reg_orders_cb')).toHaveValue(
+			ROTATED
 		);
-		expect(notice).toHaveTextContent(
-			'Until 2026-11-01 10:00 UTC, callbacks carry both signatures.'
+		expect(reveal).toHaveTextContent(
+			'Until 2026-11-01 10:00 UTC, callbacks carry both signatures (version 2 and 1)'
 		);
+		const notice = screen.getByText(/Rotated the signing secret of reg_orders_cb to version 2/);
+		expect(notice).toHaveTextContent('Until 2026-11-01 10:00 UTC, callbacks carry both signatures');
 		expect(sent).toEqual({ overlap_ms: 3_600_000, reason: 'Scheduled rotation' });
+		await done(user, reveal);
 		noSecretAnywhere();
+		expect(invalidations.count).toBe(0);
 	});
 
 	it('disable sends disabled: true', async () => {
@@ -243,23 +280,37 @@ describe('endpoint actions', () => {
 		return d;
 	};
 
+	const fields = {
+		reason: REASON,
+		endpoint_id: EP,
+		url: 'https://orders.internal/hub/callbacks',
+		overlap_ms: '86400000'
+	};
+
+	it.each([
+		['createEndpoint', CREATED],
+		['rotateSecret', ROTATED]
+	])('%s passes the new secret through once, logging nothing', async (name, secret) => {
+		const r = await runAction(actions, name, form(fields), {
+			params: { tenant_id: ID },
+			enhanced: true
+		});
+		expect(r).toMatchObject({
+			type: 'success',
+			data: { result: { signing_secret: secret, endpoint: { endpoint_id: EP } } }
+		});
+		expect(logged).toEqual([]);
+	});
+
 	it.each(['createEndpoint', 'rotateSecret'])(
-		'%s never returns the signing secret to the browser',
+		'%s refuses a plain (no-JS) post before calling the API',
 		async (name) => {
-			const r = await runAction(
-				actions,
-				name,
-				form({
-					reason: REASON,
-					endpoint_id: EP,
-					url: 'https://orders.internal/hub/callbacks',
-					overlap_ms: '86400000'
-				}),
-				{ params: { tenant_id: ID } }
-			);
-			expect(r.type).toBe('success');
-			expect(JSON.stringify(r)).not.toContain('whsec_');
-			expect(r).toMatchObject({ data: { result: { endpoint: { endpoint_id: EP } } } });
+			const calls: string[] = [];
+			server.events.on('request:start', ({ request }) => calls.push(request.url));
+			const r = await runAction(actions, name, form(fields), { params: { tenant_id: ID } });
+			expect(r).toMatchObject({ type: 'failure', status: 400 });
+			expect(calls).toEqual([]);
+			server.events.removeAllListeners();
 		}
 	);
 
@@ -270,7 +321,7 @@ describe('endpoint actions', () => {
 			actions,
 			'createEndpoint',
 			form({ reason: REASON, endpoint_id: EP, url: 'http://orders.internal/cb' }),
-			{ params: { tenant_id: ID } }
+			{ params: { tenant_id: ID }, enhanced: true }
 		);
 		expect(r).toMatchObject({ type: 'failure', data: { fields: { url: 'Use an https:// URL.' } } });
 		expect(calls).toEqual([]);

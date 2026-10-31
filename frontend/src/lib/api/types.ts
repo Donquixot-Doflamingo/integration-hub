@@ -112,6 +112,7 @@ export type RegistrarEndpoint = Schemas['RegistrarEndpoint'];
 export type RegistrarEndpointCreate = Schemas['RegistrarEndpointCreate'];
 export type RegistrarEndpointUpdate = Schemas['RegistrarEndpointUpdate'];
 export type RegistrarEndpointChange = Schemas['RegistrarEndpointChange'];
+export type RegistrarEndpointSecretChange = Schemas['RegistrarEndpointSecretChange'];
 
 // Change log (HUB-274) and snapshots (HUB-273).
 export type ChangeLogSummary = Schemas['ChangeLogSummary'];

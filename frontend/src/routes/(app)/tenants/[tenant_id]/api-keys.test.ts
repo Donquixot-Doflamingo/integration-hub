@@ -8,6 +8,7 @@ import { server } from '$lib/api/mocks/server';
 import { accessFromRoles, type Access } from '$lib/auth/roles';
 import type { Role } from '$lib/api/types';
 import { invalidations, runAction, useActions } from '$lib/testing/forms';
+import { captureConsole, NOWHERE, secretTraces } from '$lib/testing/secrets';
 import Page from './+page.svelte';
 import { load } from './+page';
 import { actions } from './+page.server';
@@ -21,7 +22,6 @@ const ID = 'orders-service';
 const REASON = 'Initial production key, OPS-201';
 const CREATED = contractMocks.createApiKey.example.secret;
 const ROTATED = contractMocks.rotateApiKey.example.secret;
-const LOG_METHODS = ['log', 'info', 'warn', 'error', 'debug', 'trace'] as const;
 
 let logged: unknown[][];
 
@@ -29,12 +29,7 @@ beforeEach(() => {
 	useActions(actions, { params: { tenant_id: ID } });
 	invalidateAll.mockReset();
 	invalidations.count = 0;
-	logged = [];
-	for (const m of LOG_METHODS) {
-		vi.spyOn(console, m).mockImplementation((...args: unknown[]) => {
-			logged.push(args);
-		});
-	}
+	logged = captureConsole();
 	localStorage.clear();
 	sessionStorage.clear();
 });
@@ -54,33 +49,8 @@ async function renderPage(access: Access = accessFromRoles(['admin']), search = 
 	return screen.findByRole('table', { name: `API keys of ${ID}`, busy: false });
 }
 
-/** Everything a secret could linger in after the reveal closed. */
-function traces(secret: string) {
-	const inputs = [...document.querySelectorAll('input, textarea')].map(
-		(e) => (e as HTMLInputElement).value
-	);
-	const storage = [localStorage, sessionStorage].flatMap((s) =>
-		Object.keys(s).map((k) => `${k}=${s.getItem(k)}`)
-	);
-	return {
-		dom: document.documentElement.outerHTML.includes(secret),
-		text: document.body.textContent?.includes(secret) ?? false,
-		inputs: inputs.some((v) => v.includes(secret)),
-		storage: storage.some((v) => v.includes(secret)),
-		url: location.href.includes(secret),
-		history: JSON.stringify(history.state ?? null).includes(secret),
-		logs: logged.some((args) => args.some((a) => String(a).includes(secret)))
-	};
-}
-const NONE = {
-	dom: false,
-	text: false,
-	inputs: false,
-	storage: false,
-	url: false,
-	history: false,
-	logs: false
-};
+const traces = (secret: string) => secretTraces(secret, logged);
+const NONE = NOWHERE;
 
 async function createKey(user = userEvent.setup()) {
 	const table = await renderPage();

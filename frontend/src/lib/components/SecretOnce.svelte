@@ -1,9 +1,16 @@
+<script lang="ts" module>
+	/** API keys (HUB-271): the Hub stores only a hash. */
+	export const KEY_WARNING =
+		'The Hub keeps only a hash: nobody can show it again, not even an admin. Store it in your secret manager now. If it is lost, rotate the key.';
+</script>
+
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
 	import Icon from './Icon.svelte';
 
 	/**
-	 * Shows a newly minted secret exactly once (admin-console-ux §3, HUB-271): a modal with the
+	 * Shows a newly minted secret exactly once (admin-console-ux §3): API keys (HUB-271) and
+	 * callback signing secrets (HUB-272): a modal with the
 	 * value in a read-only field, a Copy button and a plain warning that it cannot be shown again.
 	 * The page passes the secret straight from the action answer and drops it in `ondone`; this
 	 * component keeps no other copy (no store, no storage, no URL, no logging). Escape does not
@@ -14,6 +21,7 @@
 		title,
 		label,
 		notes = [],
+		warning = KEY_WARNING,
 		ondone
 	}: {
 		secret: string;
@@ -23,6 +31,8 @@
 		label: string;
 		/** Extra facts, e.g. how long the replaced key keeps working. */
 		notes?: string[];
+		/** After "This is the only time it is shown.": why, and what to do now. */
+		warning?: string;
 		/** Close: the page must forget the secret here. */
 		ondone: () => void;
 	} = $props();
@@ -94,10 +104,7 @@
 		<h2 id="{id}-title">{title}</h2>
 		<p id="{id}-warning" class="warning">
 			<Icon name="alert" size={18} />
-			<span
-				><strong>This is the only time it is shown.</strong> The Hub keeps only a hash: nobody can show
-				it again, not even an admin. Store it in your secret manager now. If it is lost, rotate the key.</span
-			>
+			<span><strong>This is the only time it is shown.</strong> {warning}</span>
 		</p>
 		<div class="field">
 			<label for="{id}-secret">{label}</label>

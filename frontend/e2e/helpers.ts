@@ -42,3 +42,26 @@ export async function useScenario(page: Page, scenario: string) {
 		.context()
 		.addCookies([{ name: 'hub_mock_scenario', value: scenario, domain: 'localhost', path: '/' }]);
 }
+
+/**
+ * Every place in the browser a secret shown once could still be after its reveal closed
+ * (API keys HUB-271, callback signing secrets HUB-272).
+ */
+export async function lingering(page: Page, secret: string) {
+	return page.evaluate((s) => {
+		const values = [...document.querySelectorAll('input, textarea')].map(
+			(e) => (e as HTMLInputElement).value
+		);
+		const storage = [localStorage, sessionStorage].flatMap((st) =>
+			Object.keys(st).map((k) => `${k}=${st.getItem(k)}`)
+		);
+		return {
+			html: document.documentElement.outerHTML.includes(s),
+			inputs: values.some((v) => v.includes(s)),
+			storage: storage.some((v) => v.includes(s)),
+			url: location.href.includes(s),
+			history: JSON.stringify(history.state ?? null).includes(s)
+		};
+	}, secret);
+}
+export const NOWHERE = { html: false, inputs: false, storage: false, url: false, history: false };

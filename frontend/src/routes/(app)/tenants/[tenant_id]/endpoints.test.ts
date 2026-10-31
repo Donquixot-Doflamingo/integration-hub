@@ -6,11 +6,10 @@ import {
 	secretText,
 	updateEndpointBody,
 	urlProblem,
-	valuesFromEndpoint,
-	withoutSigningSecret
+	valuesFromEndpoint
 } from './endpoints';
 
-// HUB-272: registrar endpoint input against RegistrarEndpointCreate / Update; secrets dropped.
+// HUB-272: registrar endpoint input against RegistrarEndpointCreate / Update.
 
 const ep = contractMocks.getRegistrarEndpoint.example;
 
@@ -85,25 +84,6 @@ describe('updateEndpointBody', () => {
 	it('refuses an edit without changes', () => {
 		expect(updateEndpointBody(before, before, 'r')).toMatchObject({ ok: false });
 	});
-});
-
-it('withoutSigningSecret drops the secret and keeps the change and endpoint', () => {
-	const ok = {
-		ok: true as const,
-		status: 201,
-		requestId: 'req_x',
-		etag: null,
-		data: contractMocks.createRegistrarEndpoint.example
-	};
-	const out = withoutSigningSecret(ok);
-	expect(out).toEqual({
-		...ok,
-		data: {
-			change_id: ok.data.change_id,
-			endpoint: ok.data.endpoint
-		}
-	});
-	expect(JSON.stringify(out)).not.toContain('whsec_');
 });
 
 it('secretText: version, and the overlap while two secrets sign', () => {

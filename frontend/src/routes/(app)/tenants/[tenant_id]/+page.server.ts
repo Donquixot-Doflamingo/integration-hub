@@ -14,8 +14,7 @@ import {
 	API_FIELDS as ENDPOINT_FIELDS,
 	createEndpointBody,
 	endpointValuesFromForm,
-	updateEndpointBody,
-	withoutSigningSecret
+	updateEndpointBody
 } from './endpoints';
 import { SLUG } from '../tenant-form';
 
@@ -123,10 +122,12 @@ export const actions = {
 	},
 
 	// HUB-272: registrar (callback) endpoints (admin). Create and rotate answer with the new
-	// signing secret; it is dropped here (`withoutSigningSecret`): the console never displays it.
-	// The SSRF guard's 400 pointer `/url` lands on the URL field.
+	// signing secret, shown once like an API key (same rules: enhanced submissions only, passed
+	// through untouched, never logged). The SSRF guard's 400 pointer `/url` lands on the URL field.
 	createEndpoint: async (event) => {
 		requireSession(event);
+		const notEnhanced = requireEnhanced('createEndpoint', event);
+		if (notEnhanced) return notEnhanced;
 		const form = await event.request.formData();
 		const reason = readReason('createEndpoint', form);
 		if (!reason.ok) return reason.failure;
@@ -139,7 +140,7 @@ export const actions = {
 		const res = await actionApi(event).call((c) =>
 			c.POST('/registrar-endpoints', { body: built.body })
 		);
-		return finish('createEndpoint', withoutSigningSecret(res), ENDPOINT_FIELDS);
+		return finish('createEndpoint', res, ENDPOINT_FIELDS);
 	},
 
 	updateEndpoint: async (event) => {
@@ -185,6 +186,8 @@ export const actions = {
 
 	rotateSecret: async (event) => {
 		requireSession(event);
+		const notEnhanced = requireEnhanced('rotateSecret', event);
+		if (notEnhanced) return notEnhanced;
 		const form = await event.request.formData();
 		const reason = readReason('rotateSecret', form);
 		if (!reason.ok) return reason.failure;
@@ -199,7 +202,7 @@ export const actions = {
 				body: { overlap_ms: overlap, reason: reason.reason }
 			})
 		);
-		return finish('rotateSecret', withoutSigningSecret(res), ['reason', 'overlap_ms']);
+		return finish('rotateSecret', res, ['reason', 'overlap_ms']);
 	},
 
 	deleteEndpoint: async (event) => {

@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-01 · `feat(frontend)` · show the callback signing secret once on create and rotate · HUB-272 · F-19
+  - Registering a callback endpoint or rotating its secret now shows the new signing secret once, with a Copy button and a warning that it verifies the X-Hub-Signature header and cannot be shown again
+  - After a rotation it says until when callbacks carry both signatures; after Done the secret is gone from the page and only its version is listed
+
 - 2026-11-01 · `docs(tickets)` · file the dialog focus loss after a failed submit · HUB-285 · F-19
   - New backlog ticket: after a failed confirm, the dialog should keep keyboard focus so Escape and Tab work
 
