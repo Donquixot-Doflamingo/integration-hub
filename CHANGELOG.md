@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(hub)` · add healthz and readyz with Postgres and Redis checks · HUB-025 · F-01
+  - Every role serves /healthz (always 200 while up) and /readyz on the ops port, shaped per getHealthz/getReadyz
+  - /readyz returns 503 NOT_READY with a request id and one detail per failing check (postgres, redis, or shutting down); dependency addresses never leak into the body
+  - core package gains request ids (req_ + ULID) and canonical error codes/envelope; CCR HUB-033 filed for the contract's 503 example
 - 2026-10-31 · `feat(telemetry)` · add Prometheus metrics, OTel tracing and per-stage timing · HUB-027 · F-01, F-18
   - Ops port serves /metrics: Go runtime, process, hub_build_info, hub_overhead_ms{integration,mode}, hub_stage_duration_ms{stage}
   - Gateway and admin requests run in a server span that continues the caller's traceparent; no exporter runs unless HUB_OTLP_ENDPOINT is set

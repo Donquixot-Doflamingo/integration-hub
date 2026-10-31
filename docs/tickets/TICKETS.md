@@ -286,15 +286,15 @@ Implement `hub gateway | worker | scheduler | admin` (DESIGN §17) with config f
 
 ### HUB-025 — /healthz and /readyz endpoints
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-024, HUB-023 · **Feature:** F-01 · **Stories:** US-01xx
+- **Status:** done · **Depends on:** HUB-024, HUB-023 · **Feature:** F-01 · **Stories:** US-01xx
 - **Branch:** `feat/HUB-025-healthz-readyz`
 
 Every role serves `/healthz` (process alive) and `/readyz` (Postgres, Redis reachable and, for gateway/worker, a snapshot loaded) (DESIGN §19 M0).
 
 **Acceptance criteria**
-- [ ] `/healthz` returns 200 as soon as the process is up
-- [ ] `/readyz` returns 503 with a reason when Postgres or Redis is down
-- [ ] Integration test covers both states
+- [x] `/healthz` returns 200 as soon as the process is up
+- [x] `/readyz` returns 503 with a reason when Postgres or Redis is down
+- [x] Integration test covers both states
 
 ### HUB-026 — Redacting slog handler
 - **Epic:** EP-01 · **Type:** feat · **Area:** backend
@@ -380,6 +380,40 @@ Prove the M0 Accept line and post the milestone wrap-up (AGENTS §10).
 - [ ] All mockvendor behaviours covered by tests
 - [ ] `make test` and `make itest` green
 - [ ] Milestone summary with Deviations posted; feature docs F-01, F-02 updated
+
+### HUB-033 — CCR: getReadyz 503 example lacks the required request_id
+- **Epic:** EP-01 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-006 · **Feature:** F-01 · **Stories:** US-01xx
+- **Branch:** `contract/HUB-033-readyz-example-request-id`
+
+### CCR: getReadyz 503 example lacks the required request_id
+- **Requested by**: backend-engineer (found while implementing HUB-025)
+- **Why**: `CanonicalError` requires `request_id` (`contracts/schemas/events/canonical-error.json`), and the 503 response declares an `X-Hub-Request-Id` header, but the `getReadyz` 503 example has no `request_id`. The backend returns one (schema wins). The example would fail strict example validation (HUB-015) and the MSW fixture the frontend builds from it would not be valid.
+- **Document**: hub-public.v1.yaml
+- **Operation / schema**: `getReadyz`, `GET /readyz`, response 503 example
+- **Before**:
+  ```yaml
+  error: { code: NOT_READY, message: Node is not ready, retryable: true, retry_after_ms: 1000, circuit: null, reason: null }
+  ```
+- **After**:
+  ```yaml
+  error:
+    code: NOT_READY
+    message: Node is not ready
+    retryable: true
+    retry_after_ms: 1000
+    details: [ { message: redis unreachable } ]
+    request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9JN
+  ```
+- **Breaking?**: no (example only; patch bump 1.0.0 → 1.0.1)
+- **Consumers affected**: none at runtime; frontend MSW fixtures if generated from this example
+- **Error codes**: NOT_READY (existing)
+- **Rollout**: contract commit before the M0 PR merges, or in the next contract PR
+
+**Acceptance criteria**
+- [ ] Example includes `request_id` and a `details` entry; contract validation passes
+- [ ] `hub-public` `info.version` 1.0.1 and `contracts/CHANGELOG.md` entry
+- [ ] Contract test (HUB-031) validates the live 503 body against the operation
 
 ## EP-02 — M1 Config registry
 

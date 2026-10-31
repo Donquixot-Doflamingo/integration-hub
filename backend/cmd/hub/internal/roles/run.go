@@ -27,6 +27,8 @@ type Options struct {
 	SpanProcessor sdktrace.SpanProcessor
 	// Metrics, when set, is used instead of a fresh registry (tests scrape it).
 	Metrics *telemetry.Metrics
+	// ExtraChecks are added to the readiness checks (later milestones: snapshot loaded).
+	ExtraChecks []Check
 }
 
 type endpoint struct {
@@ -59,8 +61,16 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 		return err
 	}
 
+	st, err := openStores(ctx, cfg)
+	if err != nil {
+		_ = tp.Shutdown(ctx)
+		return err
+	}
+	defer st.close() // last: everything above may still use them while shutting down
+	checks := append(st.checks(), opts.ExtraChecks...)
+
 	// ops is last so it is closed last: /readyz answers 503 while the public listener drains.
-	endpoints := []endpoint{{"ops", cfg.OpsAddr, opsHandler(&ready, metrics)}}
+	endpoints := []endpoint{{"ops", cfg.OpsAddr, opsHandler(cfg.Role, &ready, checks, metrics, log)}}
 	if cfg.Role.servesPublicHTTP() {
 		pub := telemetry.HTTPHandler(publicHandler(cfg.Role), tp, string(cfg.Role))
 		endpoints = append([]endpoint{{"http", cfg.HTTPAddr, pub}}, endpoints...)
@@ -133,10 +143,3 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 // publicHandler is the role's public surface. Edge (gateway) and control (admin) handlers are
 // mounted here by later tickets; until then every path is 404.
 func publicHandler(Role) http.Handler { return http.NotFoundHandler() }
-
-// opsHandler serves the ops port: /metrics now, /healthz and /readyz in HUB-025.
-func opsHandler(_ *atomic.Bool, m *telemetry.Metrics) http.Handler {
-	mux := http.NewServeMux()
-	mux.Handle("GET /metrics", m.Handler())
-	return mux
-}

@@ -105,8 +105,14 @@ func TestRunFailsWhenPortTaken(t *testing.T) {
 	}
 }
 
-// startRole runs role until the test ends and returns its bound addresses.
+// startRole runs role with the unit-test config until the test ends.
 func startRole(t *testing.T, role Role, opts Options) map[string]string {
+	t.Helper()
+	return startRoleWith(t, testConfig(role), opts)
+}
+
+// startRoleWith runs a role with cfg until the test ends and returns its bound addresses.
+func startRoleWith(t *testing.T, cfg Config, opts Options) map[string]string {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	addrs := map[string]string{}
@@ -121,7 +127,7 @@ func startRole(t *testing.T, role Role, opts Options) map[string]string {
 		}
 	}
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, testConfig(role), slog.New(slog.DiscardHandler), opts) }()
+	go func() { done <- Run(ctx, cfg, slog.New(slog.DiscardHandler), opts) }()
 	select {
 	case <-started:
 	case err := <-done:
