@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(edge)` · validate bodies against the capability schema with size limits · HUB-082 · F-05
+  - Bodies over 1 MB (4 MB for llm.* capabilities) get 413 PAYLOAD_TOO_LARGE, refused from Content-Length before reading
+  - Schema violations return 400 VALIDATION_FAILED, reason schema, one detail per violation with its JSON pointer and keyword
 - 2026-10-31 · `feat(edge)` · authenticate tenant keys and check grants · HUB-081 · F-05
   - Bearer keys are hashed and matched against the snapshot's key index (no DB), hashes compared in constant time; revoked keys 401, suspended tenants 403
   - Unknown integration 404 INTEGRATION_NOT_FOUND; not owner or grantee 403 not_granted; missing scope (invoke, dry_run, or <scope>:<integration>) 403 missing_scope; no snapshot 503 NOT_READY
