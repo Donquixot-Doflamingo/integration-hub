@@ -20,7 +20,8 @@
 		onretry,
 		loading,
 		children,
-		headingLevel = 2
+		headingLevel = 2,
+		quiet = false
 	}: {
 		result: Promise<ApiResult<T>>;
 		/** What is loading, for status text: "integration int_evt_brandA". */
@@ -29,6 +30,8 @@
 		loading?: Snippet;
 		children: Snippet<[T]>;
 		headingLevel?: 2 | 3;
+		/** Background refreshes (auto-refresh): no dimming and no "Updating..." announcement. */
+		quiet?: boolean;
 	} = $props();
 
 	type View =
@@ -70,10 +73,10 @@
 {:else if view.status === 'error'}
 	<ErrorPanel error={view.error} context="Could not load {noun}" {onretry} {headingLevel} />
 {:else}
-	<div class="data" aria-busy={refreshing}>
+	<div class="data" aria-busy={refreshing && !quiet}>
 		{@render children(view.data)}
 	</div>
-	{#if refreshing}<p class="refreshing" role="status">Updating {noun}...</p>{/if}
+	{#if refreshing && !quiet}<p class="refreshing" role="status">Updating {noun}...</p>{/if}
 {/if}
 
 <style>

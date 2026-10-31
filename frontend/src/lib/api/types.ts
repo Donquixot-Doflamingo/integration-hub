@@ -47,3 +47,10 @@ export type ValidationReport = Schemas['ValidationReport'];
 export type ValidationCheck = Schemas['ValidationCheck'];
 export type IntegrationVersionChange = Schemas['IntegrationVersionChange'];
 export type IntegrationChange = Schemas['IntegrationChange'];
+
+// Health board (HUB-261, HUB-262).
+export type Breaker = Schemas['Breaker'];
+export type BreakerDetail = Schemas['BreakerDetail'];
+export type BreakerChange = Schemas['BreakerChange'];
+export type AccountSummary = Schemas['AccountSummary'];
+export type AccountState = Schemas['AccountState'];

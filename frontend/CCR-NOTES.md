@@ -76,3 +76,42 @@ already were in the contract.
 - **Rollout**: contract PR first
 - **Current workaround**: none in the UI; `TODO(CCR-002)` in `src/routes/(app)/integrations/filters.ts`. The list
   shows the active and latest version per row and marks "No active version" and "Draft" so operators can scan for them.
+
+### CCR-003: dead-letter count per account on `listAccounts`
+- **Requested by**: frontend-engineer (ticket HUB-261)
+- **Why**: HUB-261 (F-19, US-1903) asks the vendor and account health board to show, per account, the breaker
+  state, error rate, parked count/age, **DLQ count** and lifecycle state. Every other figure is in `listBreakers`
+  or `listAccounts`, but nothing returns a dead-letter count: `listDeadLetters` is cursor-paged without totals, and
+  `replayDeadLetters` / `purgeDeadLetters` with `dry_run` return `matched` only for editors/admins and are POSTs
+  that need a reason. Counting DLQ pages in the browser would be wrong (14 days of entries, many pages) and slow
+  on a board that refreshes every 5 s. The board therefore shows no DLQ column yet.
+- **Document**: `hub-admin.v1.yaml`
+- **Operation / schema**: `listAccounts` (`AccountSummary`), optionally `getAccount` (`Account`)
+- **Before**:
+  ```yaml
+  AccountSummary:
+    required: [account_id, vendor_id, region, state, active_cred_version, integrations_using, updated_at]
+    # no dead-letter figure
+  ```
+- **After**:
+  ```yaml
+  AccountSummary:
+    properties:
+      dead_letter_count:
+        description: Dead-lettered requests whose last attempt used this account, not yet replayed and still within retention (14 days). May lag by up to a minute.
+        type: integer
+        minimum: 0
+        example: 12
+      dead_letter_oldest_at:
+        description: When the oldest of those entries was dead-lettered; null when there are none.
+        type: [string, 'null']
+        format: date-time
+        example: '2026-10-31T11:02:40Z'
+  # and the same two properties on Account (getAccount); examples updated (ct-brandA-in: 1, matching the DLQ example)
+  ```
+- **Breaking?**: no (additive optional properties) -> minor bump
+- **Consumers affected**: backend accounts list/detail (count from the DLQ store), frontend `routes/(app)/health`
+  (column "Dead letters" linking to `/dlq?account_id=`), hubmcp (optional)
+- **Error codes**: none new
+- **Rollout**: contract PR first
+- **Current workaround**: none in the UI; `TODO(CCR-003)` in `src/routes/(app)/health/board.ts`.

@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add vendor and account health board with auto-refresh · HUB-261 · F-19
+  - The Health page groups every breaker by vendor, worst first: open, then half-open, then closed, then most parked; open rows carry an "Open" badge, a thick left rule and a bold id, not just colour
+  - Each row shows state with "retry in N s", "probe due" or the forced hold, failure rate and calls in the window, parked count and oldest age, the account's lifecycle state (Active, Draining, Retired) and when it was last updated
+  - Auto-refresh every 5 s by default, configurable (5, 10, 30, 60 s), pausable, with "Refresh now" and "Updated N s ago"; a failed refresh keeps the last board on screen marked stale with the error code and request id
+  - Tenant viewers see a note instead of vendor internals; a dead-letter count per account waits for CCR-003 (HUB-284)
+
 - 2026-10-31 · `feat(frontend)` · add weights and pause/resume flows with mandatory reason · HUB-260 · F-19
   - "Set weights" on an integration with two or more targets: the current weights, a live total that must reach 100 (confirm stays disabled otherwise), and "Publish vN now" (on by default; off saves the new version as a draft)
   - "Pause integration" sits in a separate kill-switch group; its dialog spells out the impact (503 INTEGRATION_PAUSED within about 10 s, nothing new parked, queued requests held, other integrations unaffected) and needs a reason

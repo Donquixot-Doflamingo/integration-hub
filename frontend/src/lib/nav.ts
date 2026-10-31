@@ -20,7 +20,8 @@ export const sections: readonly NavSection[] = [
 	{
 		href: '/health',
 		label: 'Health',
-		summary: 'Circuit breakers per account endpoint, open ones first.',
+		summary:
+			'Circuit breakers per vendor and account endpoint with parked requests and account lifecycle, open ones first.',
 		icon: 'health'
 	},
 	{

@@ -4,7 +4,7 @@
 A SvelteKit (Svelte 5 + TypeScript) control-plane UI in `frontend/`, pulled forward from Release 2 (PRD DV-2) and built in parallel with backend milestones against the frozen admin contract. It covers cutover, health, investigation and recovery workflows.
 
 ## Status
-`in-progress` — 2026-10-31 (scaffold, client, mocks, shell, sign-in and role gating, shared states, integrations list, detail, history and diff shipped; publish, rollback, weights and pause shipped (HUB-259, HUB-260); health board, breaker force and request explorer follow).
+`in-progress` — 2026-10-31 (scaffold, client, mocks, shell, sign-in and role gating, shared states, integrations list, detail, history and diff shipped; publish, rollback, weights, pause and the health board shipped (HUB-259 to HUB-261); breaker force and the request explorer follow).
 
 ## Owner
 `frontend-engineer`.
@@ -124,10 +124,11 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-258 | Version diff `/integrations/{id}/diff?from=&to=` on `diffIntegrationVersions`: side-by-side view from the unified YAML diff (old left, new right, `-`/`+` and text labels, long unchanged runs folded) and a path list from the structured ops (Added/Removed/Changed, before/after); summary line; version pickers, swap, view in the URL; default pair newest vs active; selectable from history rows |
 | HUB-259 | Publish page `/integrations/{id}/publish`: YAML/JSON spec editor with line numbers; save creates (`createIntegrationDraft`) or replaces (`updateIntegrationDraft`) the draft and runs `validateIntegrationVersion`; checks shown in text + icon; diff against the active version; publish in `ConfirmDialog` with `expected_active_version`. "Roll back to vN" on published history rows (`rollbackIntegration`). 400 pointers mapped to the reason field or spec lines, 422 checks on the editor and in the dialog, 409 reload prompt; success shows new version + change log id |
 | HUB-260 | "Set weights" dialog (two or more targets; live total must be 100; publish now or keep as draft; `updateIntegrationWeights` with `expected_active_version`); Pause / Resume in a separate kill-switch group with impact text (`pauseIntegration`, `resumeIntegration`); all with reason and change log id |
+| HUB-261 | Health board `/health`: `listBreakers` + `listAccounts` (all pages) grouped by vendor, worst first; state (text + icon, retry/probe/forced/open since), failure rate, window calls, parked count and age, account lifecycle, updated; auto-refresh 5/10/30/60 s with pause and refresh now (`invalidate('hub:health')`, skipped while hidden); stale notice on a failed refresh; note for tenant viewers. No DLQ count (CCR-003, HUB-284) |
 | HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
-Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hub-Request-Id` not declared on admin responses, HUB-278), CCR-002 (no active-version filter on `listIntegrations`, HUB-283).
+Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hub-Request-Id` not declared on admin responses, HUB-278), CCR-002 (no active-version filter on `listIntegrations`, HUB-283), CCR-003 (no dead-letter count per account for the health board, HUB-284).
 
 ## Changelog of this doc
 | Date | Change | Author |
@@ -142,3 +143,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-10-31 | HUB-258: version diff view | frontend-engineer |
 | 2026-10-31 | HUB-259: publish and rollback; mutation pattern (form actions, ConfirmDialog, mock scenarios) | frontend-engineer |
 | 2026-10-31 | HUB-260: weights and pause/resume | frontend-engineer |
+| 2026-10-31 | HUB-261: health board; CCR-003 | frontend-engineer |

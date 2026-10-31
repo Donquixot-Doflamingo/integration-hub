@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **193** · done: **47** · todo: **146**
+Total tickets: **194** · done: **48** · todo: **146**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **193** · done: **47** · todo: **146**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 34 | 12 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 13 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1845,14 +1845,16 @@ Shipped (frontend-engineer): "Set weights" on the integration page (shown when t
 
 ### HUB-261 — Vendor and account health board
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1903
 - **Branch:** `feat/HUB-261-fe-health-board`
 
 Board of vendors/accounts with breaker state, error rate, parked count/age, DLQ count and lifecycle state, auto-refreshing.
 
+Shipped (frontend-engineer): `/health` is a board of every breaker (`listBreakers`, all pages) joined with the account lifecycle state (`listAccounts`, all pages), grouped by vendor, worst first; state with "retry in N s" / "probe due" / forced hold / open since, failure rate, calls in window, parked count and oldest age, lifecycle, last update. Summary line announced politely; a failed refresh keeps the last board marked stale; tenant viewers get a note instead. **DLQ count is not shown**: no admin operation returns one (CCR-003, HUB-284).
+
 **Acceptance criteria**
-- [ ] Open breakers sorted first and visually distinct (not color only)
-- [ ] Auto-refresh interval configurable and pausable
+- [x] Open breakers sorted first and visually distinct (not color only): "Open" text badge with icon, a thick left rule and bold id on open rows, dashed rule on half-open; groups and rows ordered open, half-open, closed, then parked count and age (`board.test.ts`, `health/page.test.ts`, `e2e/health.test.ts`)
+- [x] Auto-refresh interval configurable and pausable (5/10/30/60 s, default 5 s per F-19; Pause / Resume, Refresh now, "Updated N s ago"; skips ticks while the tab is hidden; fake-timer unit test and `page.clock` e2e)
 
 ### HUB-262 — Breaker force controls
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
@@ -2107,6 +2109,18 @@ Filed by frontend-engineer during HUB-256. Full CCR text (before/after YAML): `f
 - [ ] Both query parameters added to `listIntegrations` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
 - [ ] Backend list handler implements them, covered by contract tests (EP-08)
 - [ ] Console adds the filter (URL params, chips) after `npm run gen:api` and removes `TODO(CCR-002)`
+
+### HUB-284 — CCR-003: dead-letter count per account on listAccounts
+- **Epic:** EP-10 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-006, HUB-261 · **Feature:** F-19 · **Stories:** US-1903
+- **Branch:** `contract/HUB-284-account-dead-letter-count`
+
+Filed by frontend-engineer during HUB-261. Full CCR text (before/after YAML): `frontend/CCR-NOTES.md` § CCR-003. The health board must show a DLQ count per account, but no admin operation returns one (`listDeadLetters` has no totals; counting pages client-side is wrong and too slow for a 5 s refresh). Proposed additive `dead_letter_count` and `dead_letter_oldest_at` on `AccountSummary` and `Account`. `hub-admin` minor bump.
+
+**Acceptance criteria**
+- [ ] Both properties on `AccountSummary` and `Account` with examples; `info.version` minor bump and `contracts/CHANGELOG.md` entry
+- [ ] Backend accounts handlers fill them from the DLQ store, covered by contract tests (EP-08)
+- [ ] Console health board adds a "Dead letters" column (count, oldest age, link to the filtered DLQ) after `npm run gen:api` and removes `TODO(CCR-003)`
 
 ## EP-11 — MCP server + consumer skill + SDK
 
