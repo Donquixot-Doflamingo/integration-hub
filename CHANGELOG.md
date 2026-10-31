@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(contracts)` · add the round-1 contract notice for backend and frontend · HUB-278 · F-19
+  - `contracts/notices/2026-10-31-round-1.md` tells backend and frontend what changed in hub-public 1.0.1 and hub-admin 1.1.0, which operationIds are affected and what each side must do
+  - contracts/README.md lists `notices/` and `tools/`
+
 - 2026-10-31 · `ci(contracts)` · add the contracts workflow with lint and version checks · HUB-014 · F-01
   - New `.github/workflows/contracts.yml` job `contract-lint` on PRs and pushes to main that touch `contracts/**`, the root `Makefile` or the workflow: pinned toolchain with npm cache, then `make contracts-check`
   - `make contracts-version-check BASE=<ref>` fails when a contract document's content changed since the merge base without a higher version and a `contracts/CHANGELOG.md` entry, or when a contract document is deleted; CI runs it against the PR base

@@ -13,9 +13,11 @@ The documents here are the **only** interface between the backend (Go), the admi
 | `schemas/events/` | Outbound callback payloads (`envelope.json`, `request.completed.json`, `request.failed.json`, `request.expired.json`, `delivery.status.json`) and `canonical-error.json`, the canonical error object shared with the public spec | with hub-public |
 | `mcp/hubmcp-tools.json`, `mcp/README.md` | MCP tool contract for `hubmcp` | 1.0.0 |
 | `CHANGELOG.md` | Contract version history | |
+| `notices/` | Contract notices to backend and frontend, one file per round (`docs/process/CONTRACT_CHANGES.md` §6) | |
+| `tools/` | `make contracts-check` toolchain (pinned Redocly CLI + ajv, `check.mjs`, `version-check.mjs`), see "Validate locally" | |
 | `AGENTS.md` | Rules for editing this folder | |
 
-Operation counts in 1.0.0: hub-public **15** (11 paths + 4 webhooks), hub-admin **79**, mockvendor **10**, MCP **8 tools**.
+Operation counts (unchanged since 1.0.0): hub-public **15** (11 paths + 4 webhooks), hub-admin **79**, mockvendor **10**, MCP **8 tools**.
 
 ## Freeze policy
 
