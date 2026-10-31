@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `test(transform)` · record M2 acceptance and milestone summary · HUB-071 · F-04
+  - docs/milestones/M2.md: accept-line evidence, what was built, nine deviations, deferred items
+  - F-04 shipped; README and CLAUDE.md show M2 done
 - 2026-10-31 · `perf(transform)` · benchmark a 4 KB request and response transform · HUB-070 · F-04
   - BenchmarkTransform4KB (T1 build + R1 map on a 4 KB events.track body) reports p99: 17–18 µs vs the 0.5 ms budget, 119 allocs/op; it fails if p99 exceeds 0.5 ms
   - Result recorded in TECH_SPEC next to the latency budget

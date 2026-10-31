@@ -4,7 +4,7 @@
 A declarative YAML mapping DSL with `expr-lang/expr` expressions, compiled and type-checked at snapshot build, that converts canonical requests to vendor requests and vendor responses/errors back to canonical form. Every transformer ships with golden fixtures that gate CI and publish (DESIGN §7, D8).
 
 ## Status
-`proposed` — 2026-10-31.
+`shipped` — 2026-10-31 (M2, HUB-060–071 on `phase-2/m2-transformers`; [M2 summary](../milestones/M2.md)). Notable: nil-safe field access, `res.text` for non-JSON bodies, budgets enforced by construction + post-run check.
 
 ## Owner
 `backend-engineer` (engine) · platform engineers (transformer authors, D7).
