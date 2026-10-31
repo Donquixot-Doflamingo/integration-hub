@@ -68,7 +68,11 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	}
 	defer st.close() // last: everything above may still use them while shutting down
 
-	reg := newRegistry(cfg, metrics, log)
+	reg, err := newRegistry(cfg, metrics, log, st.pg)
+	if err != nil {
+		_ = tp.Shutdown(ctx)
+		return err
+	}
 	reg.load(ctx)
 	checks := append(append(st.checks(), reg.check()), opts.ExtraChecks...)
 
@@ -107,6 +111,9 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	var wg sync.WaitGroup
 	if cfg.ConfigWatch {
 		wg.Go(func() { reg.watch(ctx) })
+	}
+	if cfg.Role == Scheduler {
+		wg.Go(func() { reg.pruneLoop(ctx) })
 	}
 	for _, l := range lns {
 		wg.Go(func() {

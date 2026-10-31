@@ -62,6 +62,8 @@ type Capability struct {
 	DefaultTTL  time.Duration
 	Operations  map[string]*Operation
 	File        string
+	SchemaRef   string // contracts-relative path of the root request schema
+	SchemaDir   string // contracts-relative directory of every schema file of this capability
 }
 
 // Operation is one operation of a capability.
@@ -72,6 +74,8 @@ type Operation struct {
 	Request        *jsonschema.Schema
 	Response       *jsonschema.Schema
 	RequestID      string // schema $id, recorded by the request.validated audit event
+	RequestFile    string // file names relative to Capability.SchemaDir
+	ResponseFile   string
 	RequestSchema  json.RawMessage
 	ResponseSchema json.RawMessage
 	// PII lists the x-pii tagged locations of the request (JSON pointer; "*" = any array item).
@@ -324,8 +328,11 @@ func compileCapability(compiler *jsonschema.Compiler, contracts fs.FS, cf Capabi
 	if ttl <= 0 {
 		ttl = 6 * time.Hour
 	}
-	capability := &Capability{Key: cf.Capability, Minor: hdr.Minor, Interactive: hdr.Interactive, DefaultTTL: ttl, Operations: map[string]*Operation{}}
 	dir := path.Dir(cf.SchemaRef)
+	capability := &Capability{
+		Key: cf.Capability, Minor: hdr.Minor, Interactive: hdr.Interactive, DefaultTTL: ttl,
+		Operations: map[string]*Operation{}, SchemaRef: cf.SchemaRef, SchemaDir: dir,
+	}
 	names := make([]string, 0, len(hdr.Operations))
 	for name := range hdr.Operations {
 		names = append(names, name)
@@ -352,7 +359,7 @@ func compileCapability(compiler *jsonschema.Compiler, contracts fs.FS, cf Capabi
 		_ = json.Unmarshal(reqRaw, &tree)
 		capability.Operations[name] = &Operation{
 			Name: name, Description: op.Description, Idempotent: op.Idempotent,
-			Request: req, Response: resp, RequestID: id.ID,
+			Request: req, Response: resp, RequestID: id.ID, RequestFile: op.RequestSchema, ResponseFile: op.ResponseSchema,
 			RequestSchema: reqRaw, ResponseSchema: respRaw, PII: piiPaths(tree, "", nil),
 		}
 	}

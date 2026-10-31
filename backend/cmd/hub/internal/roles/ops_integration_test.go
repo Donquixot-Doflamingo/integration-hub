@@ -3,15 +3,18 @@
 package roles
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"os"
 	"testing"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func composeConfig(t *testing.T, role Role) Config {
 	t.Helper()
-	cfg := testConfig(role)
+	cfg := testConfig(t, role)
 	cfg.PGDSN = Secret(os.Getenv("HUB_PG_DSN"))
 	cfg.RedisAddr = os.Getenv("HUB_REDIS_ADDR")
 	if cfg.PGDSN == "" || cfg.RedisAddr == "" {
@@ -58,4 +61,14 @@ func TestReadyzAgainstComposeServices(t *testing.T) {
 			t.Fatalf("body %s", body)
 		}
 	})
+}
+
+func mustSQL(t *testing.T) *sql.DB {
+	t.Helper()
+	sdb, err := sql.Open("pgx", os.Getenv("HUB_PG_DSN"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sdb.Close() })
+	return sdb
 }

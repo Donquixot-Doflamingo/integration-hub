@@ -14,8 +14,9 @@ SELECT version, checksum, blob_ref, author, reason, created_at
 FROM hub.config_snapshots
 WHERE version = $1;
 
--- name: PruneSnapshots :execrows
--- Keeps the newest snapshot even when it is older than the cut-off.
+-- name: PruneSnapshots :many
+-- Keeps the newest snapshot even when it is older than the cut-off. Returns the blobs to delete.
 DELETE FROM hub.config_snapshots AS s
 WHERE s.created_at < @older_than::timestamptz
-  AND s.version < (SELECT max(n.version) FROM hub.config_snapshots AS n);
+  AND s.version < (SELECT max(n.version) FROM hub.config_snapshots AS n)
+RETURNING s.version, s.blob_ref;

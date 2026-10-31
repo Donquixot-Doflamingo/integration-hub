@@ -139,9 +139,9 @@ func TestPruneSnapshotsKeepsNewest(t *testing.T) {
 	if _, err := tx.Exec(ctx, `UPDATE hub.config_snapshots SET created_at = now() - interval '100 days'`); err != nil {
 		t.Fatal(err)
 	}
-	n, err := q.PruneSnapshots(ctx, pgtype.Timestamptz{Time: time.Now().Add(-90 * 24 * time.Hour), Valid: true})
-	if err != nil || n != 2 {
-		t.Fatalf("pruned %d (%v), want 2", n, err)
+	pruned, err := q.PruneSnapshots(ctx, pgtype.Timestamptz{Time: time.Now().Add(-90 * 24 * time.Hour), Valid: true})
+	if err != nil || len(pruned) != 2 {
+		t.Fatalf("pruned %d (%v), want 2", len(pruned), err)
 	}
 	latest, err := q.LatestSnapshot(ctx)
 	if err != nil || latest.Version != 3 {

@@ -21,8 +21,8 @@ build: ## Build every binary into bin/
 test: ## Unit tests with the race detector
 	$(GO) test -race -count=1 ./...
 
-itest: up ## Integration tests (tag integration) against compose Postgres + Redis
-	$(GO) test -race -count=1 -tags integration ./...
+itest: up ## Integration tests (tag integration) against compose Postgres + Redis; -p 1: packages share tables
+	$(GO) test -race -count=1 -p 1 -tags integration ./...
 
 lint: ## golangci-lint (pinned) + gofmt check
 	@v=$$(golangci-lint version --short 2>/dev/null || golangci-lint --version | sed -E 's/.*version ([0-9.]+).*/\1/'); \

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **190** · done: **36** · todo: **153** · other (in-progress/in-review/blocked): **1**
+Total tickets: **190** · done: **37** · todo: **152** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -10,7 +10,7 @@ Total tickets: **190** · done: **36** · todo: **153** · other (in-progress/in
 | --- | --- | --- | --- | --- | --- | --- |
 | EP-00 | Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup) | Phase 1 | F-01 | HUB-001–HUB-019 | 16 | 12 |
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
-| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 7 |
+| EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 8 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 0 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 0 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
@@ -514,15 +514,15 @@ Add migrations for registry tables of DESIGN §18.2 (tenants, api_keys, vendors,
 
 ### HUB-048 — Snapshot persistence and boot from last good
 - **Epic:** EP-02 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-044, HUB-047 · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Depends on:** HUB-044, HUB-047 · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `feat/HUB-048-snapshot-persistence`
 
 Persist each snapshot (checksum, author, diff, blob in object storage; local directory in dev) to `config_snapshots`, and let nodes boot from the last stored snapshot when the control plane is down (DESIGN §8.2, §17).
 
 **Acceptance criteria**
-- [ ] Snapshot blob checksum verified on load; corrupted blob is refused
-- [ ] Gateway boots with the control plane unavailable using the last blob
-- [ ] Snapshots older than 90 days are pruned by a job
+- [x] Snapshot blob checksum verified on load; corrupted blob is refused
+- [x] Gateway boots with the control plane unavailable using the last blob
+- [x] Snapshots older than 90 days are pruned by a job
 
 ### HUB-049 — M1 acceptance and milestone summary
 - **Epic:** EP-02 · **Type:** test · **Area:** backend

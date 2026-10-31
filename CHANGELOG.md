@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(registry)` · persist snapshots and boot from the last good one · HUB-048 · F-03
+  - The admin role archives every new snapshot (hub.config_snapshots + gzip blob of its sources), deduplicated by checksum
+  - Data-plane roles that cannot build their config boot from the archive, then from the local cache (HUB_DATA_DIR/snapshot.json.gz); corrupted or tampered blobs are refused
+  - The scheduler prunes archived snapshots older than 90 days hourly (newest always kept); gauge snapshot_origin{origin}
 - 2026-10-31 · `feat(control)` · add registry tables with immutable versions and sqlc queries · HUB-047 · F-03
   - Migration 00002 creates the 13 DESIGN §18.2 registry tables in schema hub; down migration removes them cleanly
   - integration_versions and transformers reject UPDATE (trigger, SQLSTATE 23001); the active-version pointer still moves

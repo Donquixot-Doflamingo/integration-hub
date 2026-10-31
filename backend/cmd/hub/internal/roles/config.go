@@ -73,6 +73,8 @@ type Config struct {
 	ConfigDir        string // dev registry (backend/config); production nodes fetch snapshots instead (M7)
 	ContractsDir     string // repo-root contracts/, for capability schemas
 	ConfigWatch      bool   // dev only: rebuild and swap the snapshot when ConfigDir changes
+	DataDir          string // local cache of the last good snapshot (boot fallback)
+	BlobURL          string // snapshot blob store (file:// in phase 1)
 }
 
 // Load builds the config for role from flags (highest precedence), then HUB_* environment
@@ -109,6 +111,8 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	fs.StringVar(&rate, "trace-sample-ratio", env("HUB_TRACE_SAMPLE_RATIO", "0.05"), "head sampling ratio 0..1")
 	fs.StringVar(&c.ConfigDir, "config-dir", env("HUB_CONFIG_DIR", "config"), "registry config directory (dev)")
 	fs.StringVar(&c.ContractsDir, "contracts-dir", env("HUB_CONTRACTS_DIR", "../contracts"), "contracts directory (capability schemas)")
+	fs.StringVar(&c.DataDir, "data-dir", env("HUB_DATA_DIR", ".data"), "local data directory (snapshot cache)")
+	fs.StringVar(&c.BlobURL, "blob-url", env("HUB_BLOB_URL", "file://.data/blobs"), "snapshot blob store URL (file:// in phase 1)")
 	fs.BoolVar(&watch, "config-watch", env("HUB_CONFIG_WATCH", "false") == "true", "dev only: watch config-dir and swap snapshots")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)

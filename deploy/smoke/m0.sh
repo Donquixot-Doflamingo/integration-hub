@@ -12,6 +12,7 @@ export HUB_REDIS_ADDR="${HUB_REDIS_ADDR:-localhost:6379}"
 ops="127.0.0.1:${SMOKE_OPS_PORT:-19090}"
 http_addr="127.0.0.1:${SMOKE_HTTP_PORT:-18080}"
 log="$(mktemp)"
+data="$(mktemp -d)"
 
 if [ "${SMOKE_SKIP_COMPOSE:-}" != "1" ]; then
   docker compose -f deploy/docker-compose.yml up -d --wait
@@ -19,9 +20,9 @@ fi
 make -C backend build migrate >/dev/null
 
 backend/bin/hub gateway -ops-addr "$ops" -http-addr "$http_addr" -ready-drain 200ms \
-  -config-dir backend/config -contracts-dir contracts 2>"$log" &
+  -config-dir backend/config -contracts-dir contracts -data-dir "$data" -blob-url "file://$data/blobs" 2>"$log" &
 pid=$!
-cleanup() { kill "$pid" 2>/dev/null || true; rm -f "$log"; }
+cleanup() { kill "$pid" 2>/dev/null || true; rm -rf "$log" "$data"; }
 trap cleanup EXIT
 
 for _ in $(seq 1 50); do

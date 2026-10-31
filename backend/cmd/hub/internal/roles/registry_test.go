@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
+
 	"strings"
 	"testing"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
 
 func readyDetails(t *testing.T, opsAddr string) (int, []string, map[string]string) {
@@ -42,7 +46,7 @@ func TestRoleLoadsDevConfigSnapshot(t *testing.T) {
 }
 
 func TestRoleWithInvalidConfigIsNotReady(t *testing.T) {
-	cfg := testConfig(Worker)
+	cfg := testConfig(t, Worker)
 	cfg.ConfigDir = t.TempDir()
 	if err := writeFile(cfg.ConfigDir+"/accounts/x-bad.yaml", "account: x-bad\nvendor: nowhere\nregion: in\nstate: active\n"); err != nil {
 		t.Fatal(err)
@@ -72,4 +76,74 @@ func writeFile(path, content string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte(content), 0o600)
+}
+
+// writeDevCache packs the dev config into dir/snapshot.json.gz, as a role would after a load.
+func writeDevCache(t *testing.T, dir string) {
+	t.Helper()
+	cfg := testConfig(t, Gateway)
+	src := registry.Sources{Config: os.DirFS(cfg.ConfigDir), Contracts: os.DirFS(cfg.ContractsDir)}
+	snap, err := registry.Build(src, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := registry.Pack(src, snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFile(filepath.Join(dir, "snapshot.json.gz"), string(data)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func brokenConfigDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := writeFile(dir+"/accounts/x-bad.yaml", "account: x-bad\nvendor: nowhere\nregion: in\nstate: active\n"); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestDataPlaneBootsFromLocalCacheWhenConfigIsBroken(t *testing.T) {
+	cfg := testConfig(t, Gateway)
+	cfg.ConfigDir = brokenConfigDir(t)
+	writeDevCache(t, cfg.DataDir)
+	addrs := startRoleWith(t, cfg, Options{})
+	_, details, _ := readyDetails(t, addrs["ops"]) // postgres/redis are down in unit tests
+	if contains(details, "snapshot not loaded") {
+		t.Fatalf("gateway did not boot from the cache: %v", details)
+	}
+	_, metrics := get(t, "http://"+addrs["ops"]+"/metrics", nil)
+	if !strings.Contains(metrics, `snapshot_origin{origin="cache"} 1`) {
+		t.Fatal("snapshot origin not reported as cache")
+	}
+}
+
+func TestCorruptCacheIsRefused(t *testing.T) {
+	cfg := testConfig(t, Worker)
+	cfg.ConfigDir = brokenConfigDir(t)
+	if err := writeFile(filepath.Join(cfg.DataDir, "snapshot.json.gz"), "not a snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	addrs := startRoleWith(t, cfg, Options{})
+	_, details, _ := readyDetails(t, addrs["ops"])
+	if !contains(details, "snapshot not loaded") {
+		t.Fatalf("corrupt cache was accepted: %v", details)
+	}
+	_, metrics := get(t, "http://"+addrs["ops"]+"/metrics", nil)
+	if !strings.Contains(metrics, `snapshot_apply_failures_total{reason="cache_corrupt"} 1`) {
+		t.Fatal("corrupt cache not counted")
+	}
+}
+
+func TestAdminNeverBootsFromACopy(t *testing.T) {
+	cfg := testConfig(t, Admin)
+	cfg.ConfigDir = brokenConfigDir(t)
+	writeDevCache(t, cfg.DataDir)
+	addrs := startRoleWith(t, cfg, Options{})
+	_, details, _ := readyDetails(t, addrs["ops"])
+	if !contains(details, "snapshot not loaded") {
+		t.Fatalf("admin booted from a cached copy: %v", details)
+	}
 }

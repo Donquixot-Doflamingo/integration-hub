@@ -115,17 +115,35 @@ func (q *Queries) LatestSnapshot(ctx context.Context) (LatestSnapshotRow, error)
 	return i, err
 }
 
-const pruneSnapshots = `-- name: PruneSnapshots :execrows
+const pruneSnapshots = `-- name: PruneSnapshots :many
 DELETE FROM hub.config_snapshots AS s
 WHERE s.created_at < $1::timestamptz
   AND s.version < (SELECT max(n.version) FROM hub.config_snapshots AS n)
+RETURNING s.version, s.blob_ref
 `
 
-// Keeps the newest snapshot even when it is older than the cut-off.
-func (q *Queries) PruneSnapshots(ctx context.Context, olderThan pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, pruneSnapshots, olderThan)
+type PruneSnapshotsRow struct {
+	Version int64  `json:"version"`
+	BlobRef string `json:"blob_ref"`
+}
+
+// Keeps the newest snapshot even when it is older than the cut-off. Returns the blobs to delete.
+func (q *Queries) PruneSnapshots(ctx context.Context, olderThan pgtype.Timestamptz) ([]PruneSnapshotsRow, error) {
+	rows, err := q.db.Query(ctx, pruneSnapshots, olderThan)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	items := []PruneSnapshotsRow{}
+	for rows.Next() {
+		var i PruneSnapshotsRow
+		if err := rows.Scan(&i.Version, &i.BlobRef); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
