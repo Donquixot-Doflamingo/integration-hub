@@ -205,31 +205,13 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 	}
 	w.Audit.Emit(audit.Batch{Events: trail.Events(), Attempts: out.Attempts})
 
-	switch {
-	case out.Err == nil:
-		final.HTTPStatus = 200
-		report(w.Transitions.Succeed(ctx, env, w.Name, Outcome{Final: final, Result: out.Body}), "succeeded")
-	case Retryable(out.Err):
-		var retryAfter time.Duration
-		if out.Err.RetryAfterMS != nil {
-			retryAfter = time.Duration(*out.Err.RetryAfterMS) * time.Millisecond
-		}
-		delay, more := w.Backoff.Delay(c.Attempt, retryAfter)
-		if more {
-			if !w.Budget.AllowRetry(account) {
-				delay = max(delay, 30*time.Second) // deferred: live traffic first
-			}
-			report(w.Transitions.Retry(ctx, env, w.Name, w.now().Add(delay), string(out.Err.Code), c.Attempt), "retry")
-			return
-		}
-		fallthrough
-	default:
-		final.ErrorCode, final.HTTPStatus = string(out.Err.Code), out.Err.Code.HTTPStatus()
-		report(w.Transitions.DeadLetter(ctx, env, w.Name, Outcome{Final: final, Err: out.Err, DL: queue.DeadLetter{
-			Reason: string(out.Err.Code), LastError: out.Err.Message, AccountID: account,
-			LastVendorRequest: out.LastRequest, LastVendorResponse: out.LastResponse,
-		}}), "dead-lettered")
-	}
+	_, err = w.Settler().Settle(ctx, env, w.Name, c.Attempt, account, out, final)
+	report(err, "settle")
+}
+
+// Settler returns the worker's settle policy.
+func (w *Worker) Settler() Settler {
+	return Settler{Transitions: w.Transitions, Backoff: w.Backoff, Budget: w.Budget, Now: w.Now}
 }
 
 // trail starts the audit block of one attempt (SeqBase attempt×100).

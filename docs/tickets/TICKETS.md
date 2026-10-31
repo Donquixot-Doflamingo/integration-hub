@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **195** · done: **91** · todo: **103** · other (in-progress/in-review/blocked): **1**
+Total tickets: **195** · done: **93** · todo: **101** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -13,7 +13,7 @@ Total tickets: **195** · done: **91** · todo: **103** · other (in-progress/in
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
-| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 5 |
+| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 7 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
@@ -985,27 +985,27 @@ Implement the `scheduler` role as a leader-elected singleton (Postgres advisory 
 
 ### HUB-115 — Async mode and request status endpoint
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-088, HUB-110, HUB-111 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-088, HUB-110, HUB-111 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-115-async-mode-status`
 
 `async` mode persists the envelope and returns 202 with `request_id`, `status`, `poll`; `GET /v1/requests/{request_id}` returns status and final canonical result (DESIGN §4.3, §5.2).
 
 **Acceptance criteria**
-- [ ] 202 is returned only after the outbox insert committed
-- [ ] Async accept p99 ≤ 10 ms (benchmark)
-- [ ] Status endpoint is tenant-scoped (other tenants get 404)
-- [ ] Responses validate against the public contract
+- [x] 202 is returned only after the outbox insert committed
+- [x] Async accept p99 ≤ 10 ms (benchmark)
+- [x] Status endpoint is tenant-scoped (other tenants get 404)
+- [x] Responses validate against the public contract
 
 ### HUB-116 — Wait mode
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-115, HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-115, HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-116-wait-mode`
 
 `wait` persists first, attempts immediately in the gateway, returns 200 within `wait_ms` or 202 `in_flight` and lets the worker finish (DESIGN §5.2, D3).
 
 **Acceptance criteria**
-- [ ] Vendor at 100 ms → 200 with result; vendor at 5 s with `wait_ms` 3000 → 202 `in_flight` then `succeeded` via worker
-- [ ] Gateway attempt and worker never both deliver (guarded transition test)
+- [x] Vendor at 100 ms → 200 with result; vendor at 5 s with `wait_ms` 3000 → 202 `in_flight` then `succeeded` via worker
+- [x] Gateway attempt and worker never both deliver (guarded transition test)
 
 ### HUB-117 — Async audit events and attempt records
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
@@ -1028,9 +1028,9 @@ Redis-backed idempotency scoped to tenant + integration, 24 h: completed request
 
 **Acceptance criteria**
 - [x] Replay returns identical body and status with the replay header (store: identical status, allowlisted headers, body and original request id, integration-tested on Redis; the edge sets `X-Hub-Idempotent-Replay` when wiring)
-- [ ] Missing key on a `moves_money_or_quota` integration → 400 `IDEMPOTENCY_KEY_REQUIRED` (edge behaviour; ticked by the lead when wiring)
+- [x] Missing key on a `moves_money_or_quota` integration → 400 `IDEMPOTENCY_KEY_REQUIRED` (edge behaviour; ticked by the lead when wiring)
 - [x] Same key with a different body → 409 `IDEMPOTENCY_CONFLICT` (store: `Conflict` for another body or operation; the edge maps it to 409)
-- [ ] Redis down → fail closed for mandatory-key capabilities, pass-through otherwise (documented) (store returns the typed `ErrUnavailable`, contract in `internal/idempotency/doc.go`; the policy is edge behaviour, ticked by the lead when wiring)
+- [x] Redis down → fail closed for mandatory-key capabilities, pass-through otherwise (documented) (store returns the typed `ErrUnavailable`, contract in `internal/idempotency/doc.go`; the policy is edge behaviour, ticked by the lead when wiring)
 
 Store commit: `feat(idempotency): add the Redis idempotency store (HUB-118)`.
 

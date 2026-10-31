@@ -32,9 +32,14 @@ type Deps struct {
 	DebugHeaders bool
 	Audit        audit.Sink    // default audit.Discard
 	Masker       *audit.Masker // x-pii masking key for the masked policy
-	Metrics      *telemetry.Metrics
-	Log          *slog.Logger
-	Now          func() time.Time
+	// Queueing enables wait and async delivery (nil: every mode is delivered synchronously).
+	Queueing *Queueing
+	// Idempotency enables Idempotency-Key deduplication (nil: keys are required where the
+	// integration says so, but not deduplicated).
+	Idempotency Idempotency
+	Metrics     *telemetry.Metrics
+	Log         *slog.Logger
+	Now         func() time.Time
 }
 
 // Upstream sends one attempt to a vendor (upstream.Client).
@@ -87,6 +92,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/integrations/{integration_id}/dry-run", s.authenticate(http.HandlerFunc(s.dryRun)))
 	s.mux.Handle("POST /v1/integrations/{integration_id}/invoke", s.authenticate(http.HandlerFunc(s.invoke)))
 	s.mux.Handle("POST /v1/integrations/{integration_id}/invoke/{operation}", s.authenticate(http.HandlerFunc(s.invoke)))
+	s.mux.Handle("GET /v1/requests/{request_id}", s.authenticate(http.HandlerFunc(s.getRequestStatus)))
 }
 
 // noCreds serves empty credentials (discovery-only servers and tests without vendor calls).

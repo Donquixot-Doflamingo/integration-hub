@@ -185,7 +185,7 @@ func (r *rig) enqueue(integration string, ttl time.Duration) core.Envelope {
 			IntegrationID: integration, Capability: env.Capability, Operation: "default", Mode: "async", Status: "accepted", PayloadPolicy: "masked"}); err != nil {
 			return err
 		}
-		return r.w.Queue.Enqueue(r.t.Context(), tx, env, "")
+		return r.w.Queue.Enqueue(r.t.Context(), tx, env)
 	})
 	if err != nil {
 		r.t.Fatal(err)

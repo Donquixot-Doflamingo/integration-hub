@@ -73,16 +73,27 @@ func (o *Outbox) now() time.Time {
 	return time.Now().UTC()
 }
 
-// Enqueue inserts env as accepted (or in_flight, claimed by worker, for a wait-mode immediate
-// attempt). It is durable when db commits; "accepted" means committed.
-func (o *Outbox) Enqueue(ctx context.Context, db DB, env core.Envelope, claimBy string) error {
+// Enqueue inserts env as accepted. It is durable when db commits; "accepted" means committed.
+func (o *Outbox) Enqueue(ctx context.Context, db DB, env core.Envelope) error {
+	return o.enqueue(ctx, db, env, "", 0)
+}
+
+// EnqueueClaimed inserts env as in_flight, claimed by worker for claimFor: the wait-mode
+// gateway attempt (TECH_SPEC: claimed_until = now + wait + timeout + 5 s). If the gateway dies,
+// the claim expires and a worker reclaims the envelope.
+func (o *Outbox) EnqueueClaimed(ctx context.Context, db DB, env core.Envelope, worker string, claimFor time.Duration) error {
+	return o.enqueue(ctx, db, env, worker, claimFor)
+}
+
+func (o *Outbox) enqueue(ctx context.Context, db DB, env core.Envelope, claimBy string, claimFor time.Duration) error {
 	body, err := json.Marshal(env)
 	if err != nil {
 		return fmt.Errorf("queue: encode envelope: %w", err)
 	}
 	status, claimedBy, claimedUntil := core.StateAccepted, any(nil), any(nil)
 	if claimBy != "" {
-		status, claimedBy, claimedUntil = core.StateInFlight, claimBy, o.now().Add(o.visibility())
+		status, claimedBy, claimedUntil = core.StateInFlight, claimBy, o.now().Add(claimFor)
+		env.Attempt = 1 // the gateway's immediate attempt
 	}
 	_, err = db.Exec(ctx, `INSERT INTO hub.outbox (request_id, status, pool, tenant_id, integration_id, attempt, next_attempt_at,
 			expires_at, ordering_key, claimed_by, claimed_until, envelope, created_at)

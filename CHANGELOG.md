@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(edge)` · add async and wait delivery, request status and idempotency · HUB-115 · F-09
+  - async and async_callback integrations answer 202 (request_id, status accepted, poll, Location) only after the requests row and the outbox envelope committed; a worker delivers
+  - wait integrations persist, attempt at once in the gateway and answer 200 (or the canonical error) within wait_ms, else 202 in_flight while the gateway finishes; its claim keeps workers away so the request is never delivered twice
+  - GET /v1/requests/{id} returns the live state, attempts, timestamps and the final result or error, for the calling tenant only (others get 404 REQUEST_NOT_FOUND)
+  - Idempotency-Key: a completed request is replayed with X-Hub-Idempotent-Replay (original request id), a different body gets 409 IDEMPOTENCY_CONFLICT, a queued duplicate gets the original 202; failures release the key; with Redis down, money/quota integrations fail closed and others pass through
 - 2026-10-31 · `feat(delivery)` · add the delivery worker with backoff, retry budget and DLQ policy · HUB-112 · F-09
   - Workers claim due envelopes per pool, check the TTL, re-resolve the active version (unless pinned or session-bound), re-transform the canonical body and deliver through the shared attempter
   - Retryable failures (timeout, unavailable, rate limited) follow DESIGN §10.3 (+1 s … +1 h, 8 attempts, full jitter, never sooner than Retry-After); rejections, auth failures and transformer errors dead-letter at once with the last request and response; an envelope that crashed a worker twice is dead-lettered as poison

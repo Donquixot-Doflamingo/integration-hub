@@ -79,7 +79,7 @@ func TestConcurrentClaimersNeverShare(t *testing.T) {
 	for range 200 {
 		e := env("llm.chat@v1", now)
 		ids = append(ids, e.RequestID)
-		if err := q.Enqueue(t.Context(), p, e, ""); err != nil {
+		if err := q.Enqueue(t.Context(), p, e); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -123,7 +123,7 @@ func TestExpiredVisibilityIsClaimableAgain(t *testing.T) {
 	q := &queue.Outbox{Visibility: 30 * time.Second, Now: func() time.Time { return clock }}
 	e := env("llm.chat@v1", clock.Add(-time.Second))
 	cleanup(t, p, e.RequestID)
-	if err := q.Enqueue(t.Context(), p, e, ""); err != nil {
+	if err := q.Enqueue(t.Context(), p, e); err != nil {
 		t.Fatal(err)
 	}
 	first, err := q.Claim(t.Context(), p, "crashy", queue.PoolLLM, 10)
@@ -157,7 +157,7 @@ func TestReleaseInArrivalOrder(t *testing.T) {
 		e := env("llm.chat@v1", base.Add(time.Duration(i)*time.Minute))
 		e.NextAttemptAt = time.Now().Add(-time.Second)
 		ids = append(ids, e.RequestID)
-		if err := q.Enqueue(t.Context(), p, e, ""); err != nil {
+		if err := q.Enqueue(t.Context(), p, e); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -192,10 +192,10 @@ func TestGuardedTransitionsAndDeadLetter(t *testing.T) {
 	e := env("llm.chat@v1", time.Now().Add(-time.Second))
 	cleanup(t, p, e.RequestID)
 	ctx := t.Context()
-	if err := q.Enqueue(ctx, p, e, ""); err != nil {
+	if err := q.Enqueue(ctx, p, e); err != nil {
 		t.Fatal(err)
 	}
-	if err := q.Enqueue(ctx, p, e, ""); !errors.Is(err, queue.ErrDuplicate) {
+	if err := q.Enqueue(ctx, p, e); !errors.Is(err, queue.ErrDuplicate) {
 		t.Fatalf("duplicate enqueue: %v", err)
 	}
 	// Not claimed yet: every worker transition is refused.
@@ -251,7 +251,7 @@ func TestDoubleCompleteOnlyOnce(t *testing.T) {
 		q := &queue.Outbox{Now: func() time.Time { return clock }}
 		e := env("llm.chat@v1", clock.Add(-time.Second))
 		cleanup(t, p, e.RequestID)
-		_ = q.Enqueue(ctx, p, e, "")
+		_ = q.Enqueue(ctx, p, e)
 		_, _ = q.Claim(ctx, p, "first", queue.PoolLLM, 1)
 		late := &queue.Outbox{Now: func() time.Time { return clock.Add(time.Minute) }}
 		_, _ = late.Claim(ctx, p, "second", queue.PoolLLM, 1)
@@ -286,8 +286,8 @@ func TestExpireOnlyWaitingEnvelopes(t *testing.T) {
 	waiting.ExpiresAt, claimed.ExpiresAt = clock.Add(-time.Minute), clock.Add(-time.Minute)
 	waiting.NextAttemptAt = clock.Add(time.Hour)
 	cleanup(t, p, waiting.RequestID, claimed.RequestID)
-	_ = q.Enqueue(ctx, p, waiting, "")
-	_ = q.Enqueue(ctx, p, claimed, "worker") // wait-mode immediate attempt: in_flight at insert
+	_ = q.Enqueue(ctx, p, waiting)
+	_ = q.EnqueueClaimed(ctx, p, claimed, "worker", 30*time.Second) // wait-mode immediate attempt: in_flight at insert
 	due, err := q.DueExpiries(ctx, p, 100)
 	if err != nil || !slices.Contains(due, waiting.RequestID) || slices.Contains(due, claimed.RequestID) {
 		t.Fatalf("due %v %v", due, err)
