@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **48** · todo: **146**
+Total tickets: **194** · done: **49** · todo: **145**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **194** · done: **48** · todo: **146**
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 13 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 14 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1858,14 +1858,16 @@ Shipped (frontend-engineer): `/health` is a board of every breaker (`listBreaker
 
 ### HUB-262 — Breaker force controls
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-261 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-261 · **Feature:** F-19 · **Stories:** US-1903
 - **Branch:** `feat/HUB-262-fe-breaker-force`
 
 Force-open / force-close per `(account, endpoint)` from the health board with mandatory reason, `admin` only.
 
+Shipped (frontend-engineer): a "Force" column on the health board for admins (`RoleGate min="admin"`, contract `x-required-role: admin`): Force open, Force closed, and Clear force on forced breakers. Force open/closed need a reason, the account id typed to confirm (checked again server side) and a hold (15 min to 24 h, or until cleared; default 30 min). Auto-refresh holds while a dialog is open. The contract gives these operations no precondition (last write wins); clear-force 409 shows the reload prompt.
+
 **Acceptance criteria**
-- [ ] Controls absent for non-admin roles
-- [ ] Confirmation dialog states the affected integrations
+- [x] Controls absent for non-admin roles (editor, viewer: no Force column or buttons; tenant viewers see no board; unit per role and e2e)
+- [x] Confirmation dialog states the affected integrations (`getBreaker` `integrations` loaded when the dialog opens: "Affects 1 integration: int_evt_brandA"; a warning with code and request id if that call fails; force closed also states how many parked requests will drain)
 
 ### HUB-263 — Request explorer search
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

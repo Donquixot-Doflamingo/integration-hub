@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { invalidate, invalidateAll } from '$app/navigation';
 	import type { ApiResult } from '$lib/api/client';
+	import type { ActionSuccessData } from '$lib/api/actions';
 	import type { HubApiError } from '$lib/api/errors';
+	import type { Breaker, BreakerChange } from '$lib/api/types';
+	import ChangeNotice from '$lib/components/ChangeNotice.svelte';
+	import RoleGate from '$lib/components/RoleGate.svelte';
 	import AsyncView from '$lib/components/AsyncView.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -18,6 +22,8 @@
 	} from '$lib/utils/format';
 	import type { PageData } from './$types';
 	import type { BoardData } from './+page';
+	import ForceDialog from './ForceDialog.svelte';
+	import type { ForceKind } from './force';
 	import {
 		buildBoard,
 		DEFAULT_REFRESH_S,
@@ -53,8 +59,31 @@
 		return () => clearInterval(t);
 	});
 
+	// HUB-262: breaker force (admin only). The board holds still while a dialog is open.
+	let forceOpen = $state(false);
+	let forceKind = $state<ForceKind>('open');
+	let forceTarget = $state.raw<Breaker | null>(null);
+	let notice = $state.raw<{ message: string; changeId: string | null } | null>(null);
+	function openForce(kind: ForceKind, b: Breaker) {
+		forceKind = kind;
+		forceTarget = b;
+		forceOpen = true;
+	}
+	function onForced(d: ActionSuccessData) {
+		const b = (d.result as BreakerChange).breaker;
+		const name = `${b.account_id} ${b.endpoint_ref}`;
+		const state = breakerStatus[b.state].label.toLowerCase();
+		const held = forcedLabel(b);
+		notice = {
+			message: held
+				? `${held}: ${name} is now ${state}.`
+				: `Force cleared: ${name} is back under automatic control (${state}).`,
+			changeId: d.changeId
+		};
+	}
+
 	$effect(() => {
-		if (paused) return;
+		if (paused || forceOpen) return;
 		const t = setInterval(() => {
 			if (document.visibilityState !== 'hidden') refresh();
 		}, intervalS * 1000);
@@ -74,7 +103,7 @@
 		})
 	);
 
-	const columns = [
+	const columns = $derived([
 		{ label: 'Account endpoint' },
 		{ label: 'State' },
 		{ label: 'Failure rate', numeric: true },
@@ -82,11 +111,16 @@
 		{ label: 'Parked', numeric: true },
 		{ label: 'Oldest parked', numeric: true },
 		{ label: 'Account lifecycle' },
-		{ label: 'Updated' }
-	];
+		{ label: 'Updated' },
+		...(data.access.isAdmin ? [{ label: 'Force' }] : [])
+	]);
 </script>
 
 <PageHeader title={section.label} summary={section.summary} />
+
+{#if notice}
+	<ChangeNotice {...notice} ondismiss={() => (notice = null)} />
+{/if}
 
 {#if data.access.tenantScoped && data.access.known}
 	<p class="note" role="note">
@@ -203,6 +237,33 @@
 										<td title={formatUtc(x.updated_at)}
 											>{formatAgo(now - Date.parse(x.updated_at))}</td
 										>
+										{#if data.access.isAdmin}
+											<td>
+												<RoleGate access={data.access} min="admin">
+													<div
+														class="force"
+														role="group"
+														aria-label="Force {x.account_id} {x.endpoint_ref}"
+													>
+														{#if x.forced !== 'open'}
+															<button type="button" onclick={() => openForce('open', x)}
+																>Force open</button
+															>
+														{/if}
+														{#if x.forced !== 'closed'}
+															<button type="button" onclick={() => openForce('close', x)}
+																>Force closed</button
+															>
+														{/if}
+														{#if x.forced && x.forced !== 'none'}
+															<button type="button" onclick={() => openForce('clear', x)}
+																>Clear force</button
+															>
+														{/if}
+													</div>
+												</RoleGate>
+											</td>
+										{/if}
 									</tr>
 								{/each}
 							</tbody>
@@ -214,7 +275,27 @@
 	</AsyncView>
 {/if}
 
+{#if forceTarget}
+	<ForceDialog bind:open={forceOpen} kind={forceKind} breaker={forceTarget} onsuccess={onForced} />
+{/if}
+
 <style>
+	.force {
+		display: flex;
+		gap: var(--space-1);
+	}
+	.force button {
+		padding: 0.1rem 0.5rem;
+		border: 1px solid var(--rule-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		font-size: var(--text-xs);
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.force button:hover {
+		border-color: var(--signal);
+	}
 	.note {
 		color: var(--ink-muted);
 		max-width: 46rem;

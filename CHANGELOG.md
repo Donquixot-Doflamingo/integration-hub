@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(frontend)` · add admin breaker force-open, force-close and clear · HUB-262 · F-19
+  - Admins get Force open, Force closed and (on forced breakers) Clear force on each health board row; editors, viewers and tenant viewers do not
+  - The dialog names the integrations that use the breaker before you confirm, and force closed says how many parked requests will drain
+  - Force open and force closed need a reason, the account id typed to confirm and a hold time (15 minutes to 24 hours, or until someone clears it); clear needs a reason
+  - Success shows the new hold ("Forced open until 10:30 UTC") and the change log id; the board stops auto-refreshing while a dialog is open
+
 - 2026-10-31 · `feat(frontend)` · add vendor and account health board with auto-refresh · HUB-261 · F-19
   - The Health page groups every breaker by vendor, worst first: open, then half-open, then closed, then most parked; open rows carry an "Open" badge, a thick left rule and a bold id, not just colour
   - Each row shows state with "retry in N s", "probe due" or the forced hold, failure rate and calls in the window, parked count and oldest age, the account's lifecycle state (Active, Draining, Retired) and when it was last updated

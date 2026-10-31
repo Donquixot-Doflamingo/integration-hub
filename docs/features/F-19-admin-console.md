@@ -4,7 +4,7 @@
 A SvelteKit (Svelte 5 + TypeScript) control-plane UI in `frontend/`, pulled forward from Release 2 (PRD DV-2) and built in parallel with backend milestones against the frozen admin contract. It covers cutover, health, investigation and recovery workflows.
 
 ## Status
-`in-progress` — 2026-10-31 (scaffold, client, mocks, shell, sign-in and role gating, shared states, integrations list, detail, history and diff shipped; publish, rollback, weights, pause and the health board shipped (HUB-259 to HUB-261); breaker force and the request explorer follow).
+`in-progress` — 2026-10-31 (scaffold, client, mocks, shell, sign-in and role gating, shared states, integrations list, detail, history and diff shipped; publish, rollback, weights, pause, the health board and breaker force shipped (HUB-259 to HUB-262); the request explorer follows).
 
 ## Owner
 `frontend-engineer`.
@@ -125,6 +125,7 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-259 | Publish page `/integrations/{id}/publish`: YAML/JSON spec editor with line numbers; save creates (`createIntegrationDraft`) or replaces (`updateIntegrationDraft`) the draft and runs `validateIntegrationVersion`; checks shown in text + icon; diff against the active version; publish in `ConfirmDialog` with `expected_active_version`. "Roll back to vN" on published history rows (`rollbackIntegration`). 400 pointers mapped to the reason field or spec lines, 422 checks on the editor and in the dialog, 409 reload prompt; success shows new version + change log id |
 | HUB-260 | "Set weights" dialog (two or more targets; live total must be 100; publish now or keep as draft; `updateIntegrationWeights` with `expected_active_version`); Pause / Resume in a separate kill-switch group with impact text (`pauseIntegration`, `resumeIntegration`); all with reason and change log id |
 | HUB-261 | Health board `/health`: `listBreakers` + `listAccounts` (all pages) grouped by vendor, worst first; state (text + icon, retry/probe/forced/open since), failure rate, window calls, parked count and age, account lifecycle, updated; auto-refresh 5/10/30/60 s with pause and refresh now (`invalidate('hub:health')`, skipped while hidden); stale notice on a failed refresh; note for tenant viewers. No DLQ count (CCR-003, HUB-284) |
+| HUB-262 | Breaker force on the health board, admin only (`RoleGate min="admin"`): `forceOpenBreaker`, `forceCloseBreaker`, `clearBreakerForce` as form actions; dialog lists affected integrations from `getBreaker`, typed account id for open/close (re-checked server side), hold 15 min to 24 h or until cleared; auto-refresh holds while a dialog is open |
 | HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
@@ -144,3 +145,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-10-31 | HUB-259: publish and rollback; mutation pattern (form actions, ConfirmDialog, mock scenarios) | frontend-engineer |
 | 2026-10-31 | HUB-260: weights and pause/resume | frontend-engineer |
 | 2026-10-31 | HUB-261: health board; CCR-003 | frontend-engineer |
+| 2026-10-31 | HUB-262: breaker force controls | frontend-engineer |
