@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **194** · done: **68** · todo: **125** · other (in-progress/in-review/blocked): **1**
+Total tickets: **194** · done: **69** · todo: **124** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -12,7 +12,7 @@ Total tickets: **194** · done: **68** · todo: **125** · other (in-progress/in
 | EP-01 | M0 Scaffold | M0 | F-01, F-02 | HUB-020–HUB-039 | 14 | 13 |
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
-| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 5 |
+| EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 18 | 6 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
@@ -855,15 +855,15 @@ Apply the integration's audit policy: `full`, `masked` (default; `x-pii` fields 
 
 ### HUB-094 — pkg/hubclient: Result / Queued / Error
 - **Epic:** EP-04 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-006 · **Feature:** F-21 · **Stories:** US-21xx
-- **Branch:** `feat/HUB-094-hubclient-core`
+- **Status:** done · **Depends on:** HUB-006 · **Feature:** F-21 · **Stories:** US-21xx
+- **Branch:** `feat/HUB-094-hubclient-core` (built on `phase-2/m3-hubclient`)
 
 Ship the Go SDK core generated/written against the public contract: `Invoke` returns `Result`, `Queued` (for 202, never success) or a typed `Error` with `Retryable` and `RetryAfter` (DESIGN §4.5).
 
 **Acceptance criteria**
-- [ ] A 202 can only be observed as `Queued` (compile-time distinct type)
-- [ ] Error envelope decoded into typed codes
-- [ ] Tests run against an httptest server validated by the contract harness
+- [x] A 202 can only be observed as `Queued` (compile-time distinct type)
+- [x] Error envelope decoded into typed codes
+- [x] Tests run against an httptest server validated by the contract harness
 
 ### HUB-095 — E2E: every error class maps to the right canonical code
 - **Epic:** EP-04 · **Type:** test · **Area:** backend

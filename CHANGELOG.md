@@ -29,6 +29,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Every gateway response carries X-Hub-Request-Id (req_ + ULID), also in the logging context
   - Panics become a 500 INTERNAL_ERROR envelope; the log has the panic and stack, never the body
   - WriteError writes the canonical envelope with the status of its code and Retry-After (s) for 429/503; every code validated against the public contract
+- 2026-10-31 · `feat(hubclient)` · add Go SDK with sealed Result/Queued outcomes and typed errors · HUB-094 · F-21
+  - `hubclient.New(baseURL, apiKey, opts...)` gives a client for the caller API; every call takes a context and sends `User-Agent: hubclient-go/0.1.0`
+  - `Invoke` returns `*Result` for a 200 or `*Queued` for a 202, through a sealed `Outcome` interface, so an accepted request can never be mistaken for a completed one; options set `Idempotency-Key`, the operation (`/invoke/{op}`), `Prefer: respond-async`, `X-Request-Deadline`, `X-Hub-Session` and `traceparent`
+  - Hub errors arrive as `*hubclient.Error` with the canonical code, retryable flag, retry-after, request id, reason and field details; a non-Hub failure such as a proxy's HTML 502 still yields an `*Error` (code `INTERNAL_ERROR`); `IsRetryable(err)` helps decide on a retry
+  - `GetRequest`, `DryRun`, `ListIntegrations` (plus the `AllIntegrations` iterator), `GetIntegration`, `GetCapability` and `NewIdempotencyKey` cover polling, onboarding and discovery
+  - The API key never appears in errors, formatted clients or logs
 - 2026-10-31 · `feat(frontend)` · add request timeline with policy-aware payload views · HUB-264 · F-19
   - Request ids in the explorer open `/requests/{id}`: status and error code, tenant, integration and version, capability, mode, vendor and account, timings (total, hub overhead, vendor, queue wait), idempotency key, audit policy, snapshot and trace id
   - The timeline lists every audit event in sequence order with its time, the gap since the previous event and since the first, size and SHA-256, and the attempt it belongs to
