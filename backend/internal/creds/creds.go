@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
@@ -27,13 +28,20 @@ type Source interface {
 type Slot struct {
 	Version int               `json:"version"`
 	Values  map[string]string `json:"values"`
+	// Fingerprint identifies the slot without revealing it ("sha256:" + 6 hex); empty for slots
+	// written before rotation existed.
+	Fingerprint string     `json:"fingerprint,omitempty"`
+	CreatedAt   time.Time  `json:"created_at,omitzero"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 }
 
 // AccountSecrets holds the rotation slots of one account (DESIGN §6.6): Active serves
-// traffic, Next is staged for promotion.
+// traffic, Next is staged for promotion, Previous is the demoted active kept (never used)
+// until it is deleted.
 type AccountSecrets struct {
-	Active Slot  `json:"active"`
-	Next   *Slot `json:"next,omitempty"`
+	Active   Slot  `json:"active"`
+	Next     *Slot `json:"next,omitempty"`
+	Previous *Slot `json:"previous,omitempty"`
 }
 
 // Validate checks that the active slot (and next, when present) is usable.
@@ -47,6 +55,14 @@ func (a AccountSecrets) Validate() error {
 		}
 		if a.Next.Version == a.Active.Version {
 			return fmt.Errorf("next: version %d equals the active version", a.Next.Version)
+		}
+	}
+	if a.Previous != nil {
+		if err := a.Previous.validate(); err != nil {
+			return fmt.Errorf("previous: %w", err)
+		}
+		if a.Previous.Version == a.Active.Version {
+			return fmt.Errorf("previous: version %d equals the active version", a.Previous.Version)
 		}
 	}
 	return nil

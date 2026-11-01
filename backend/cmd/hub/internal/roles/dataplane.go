@@ -12,10 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/callbacks"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/delivery"
@@ -42,6 +44,7 @@ type dataPlane struct {
 	dispatcher  *callbacks.Dispatcher // worker: signed callbacks
 	scheduler   *delivery.Scheduler   // scheduler
 	breakers    *upstream.Breakers    // circuit breakers (gateway, worker, scheduler)
+	rdb         *redis.Client         // hub:creds pings (credential rotation)
 	wg          sync.WaitGroup
 	stop        context.CancelFunc
 }
@@ -53,7 +56,7 @@ func nodeName(role Role) string {
 }
 
 func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *slog.Logger, secrets *telemetry.SecretSet, tp trace.TracerProvider, st *stores, reg *roleRegistry) (*dataPlane, error) {
-	dp := &dataPlane{log: log, name: nodeName(cfg.Role)}
+	dp := &dataPlane{log: log, name: nodeName(cfg.Role), rdb: st.rdb}
 	q := &queue.Outbox{}
 	// Terminal callbacks are enqueued in the terminal transaction of whichever role settles the
 	// request: the worker, the gateway (wait mode) or the scheduler (expiry).
@@ -156,6 +159,9 @@ func (dp *dataPlane) start(ctx context.Context) {
 	ctx, dp.stop = context.WithCancel(context.WithoutCancel(ctx))
 	if dp.cache != nil {
 		dp.wg.Go(func() { dp.cache.Run(ctx) })
+		if dp.rdb != nil {
+			dp.wg.Go(func() { dp.followCredentials(ctx) })
+		}
 	}
 	if dp.breakers != nil {
 		dp.wg.Go(func() { dp.breakers.Run(ctx) })
@@ -175,6 +181,29 @@ func (dp *dataPlane) start(ctx context.Context) {
 	}
 	if dp.scheduler != nil {
 		dp.wg.Go(func() { dp.scheduler.Run(ctx) })
+	}
+}
+
+// followCredentials reloads the credential cache on every hub:creds ping, so a promoted
+// credential serves every later attempt (drains included) within a second (DESIGN §6.6). The
+// cache's own periodic refresh is the fallback when a ping is missed.
+func (dp *dataPlane) followCredentials(ctx context.Context) {
+	sub := dp.rdb.Subscribe(ctx, control.CredentialsChannel)
+	defer func() { _ = sub.Close() }()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg, ok := <-sub.Channel():
+			if !ok {
+				return
+			}
+			if err := dp.cache.Refresh(ctx); err != nil && ctx.Err() == nil {
+				dp.log.WarnContext(ctx, "credential reload after rotation failed", slog.String("account", msg.Payload), slog.String("error", err.Error()))
+			} else {
+				dp.log.InfoContext(ctx, "credentials reloaded after rotation", slog.String("account", msg.Payload))
+			}
+		}
 	}
 }
 

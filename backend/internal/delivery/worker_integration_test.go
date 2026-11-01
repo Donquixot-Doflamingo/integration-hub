@@ -429,3 +429,54 @@ func TestSendTimeVersion(t *testing.T) {
 		})
 	}
 }
+
+// rotatingLoader serves one account slot that a test can promote.
+type rotatingLoader struct{ s atomic.Pointer[creds.Slot] }
+
+func (l *rotatingLoader) Load(_ context.Context, ids []string) (map[string]creds.AccountSecrets, error) {
+	out := map[string]creds.AccountSecrets{}
+	for _, id := range ids {
+		out[id] = creds.AccountSecrets{Active: *l.s.Load()}
+	}
+	return out, nil
+}
+
+// TestParkedDrainUsesPromotedCredential is HUB-177: credentials are injected at send time, so
+// an envelope parked before a promotion is drained with the new active credential.
+func TestParkedDrainUsesPromotedCredential(t *testing.T) {
+	r := newRig(t)
+	r.route(mockvendor.Behaviour{Status: 200, Body: okBody})
+	l := &rotatingLoader{}
+	l.s.Store(&creds.Slot{Version: 3, Values: map[string]string{"account_id": "fake-acct-W0RK", "passcode": "fake-pass-OLD3"}})
+	cache, err := creds.NewCache(l, telemetry.NewSecretSet(), telemetry.NewMetrics("worker", "rotation"), creds.CacheOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Warm(t.Context(), creds.AccountIDs(r.snaps.Snapshot())); err != nil {
+		t.Fatal(err)
+	}
+	r.w.Attempter.Creds = cache
+
+	env := r.enqueueWith("int_evt_brandA", 6*time.Hour, nil, true)
+	// Promotion while the envelope is parked: the node reloads on the hub:creds ping.
+	l.s.Store(&creds.Slot{Version: 4, Values: map[string]string{"account_id": "fake-acct-W0RK", "passcode": "fake-pass-NEW4"}})
+	if err := cache.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.w.Queue.Release(t.Context(), r.db, "ct-brandA-in", "upload", 10); err != nil || n != 1 {
+		t.Fatalf("release %d %v", n, err)
+	}
+	if r.process() != 1 {
+		t.Fatal("not claimed")
+	}
+	if s, _ := r.status(env.RequestID); s != "succeeded" {
+		t.Fatalf("status %s", s)
+	}
+	reqs := r.mv.Requests(t, nil)
+	if len(reqs) != 1 {
+		t.Fatalf("vendor saw %d requests", len(reqs))
+	}
+	if got := reqs[0].Headers["X-Clevertap-Passcode"]; len(got) != 1 || got[0] != "fake-pass-NEW4" {
+		t.Fatalf("drain sent passcode %v, want the promoted one", got)
+	}
+}

@@ -268,6 +268,15 @@ func (c *Cache) reloadLocked(ctx context.Context) error {
 	// retired secret is still worth redacting.
 	c.secrets.Add(secrets...)
 	c.gen.Store(next)
+	// Every decrypt is audited (DESIGN §9): which accounts and versions, never values.
+	versions := make([]string, 0, len(next.active))
+	for _, id := range c.wanted {
+		if e := next.active[id]; e != nil {
+			versions = append(versions, fmt.Sprintf("%s@v%d", id, e.creds.Version))
+		}
+	}
+	c.opts.Logger.InfoContext(ctx, "credentials decrypted", slog.Int("accounts", len(versions)), slog.Any("active_versions", versions),
+		slog.Bool("complete", loadErr == nil))
 	return loadErr
 }
 

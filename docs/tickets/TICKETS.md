@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **125** · todo: **66** · other (in-progress/in-review/blocked): **6**
+Total tickets: **197** · done: **125** · todo: **65** · other (in-progress/in-review/blocked): **7**
 
 ## Epics
 
@@ -1371,15 +1371,15 @@ Worker uses the active version for `pending: re_resolve` (default) and `resolved
 
 ### HUB-177 — Credential rotation (active / next)
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-084, HUB-171 · **Feature:** F-15 · **Stories:** US-15xx
+- **Status:** in-review · **Depends on:** HUB-084, HUB-171 · **Feature:** F-15 · **Stories:** US-15xx
 - **Branch:** `feat/HUB-177-credential-rotation`
 
 Accounts hold `active` and `next` credentials: add next → connection test → promote → delete old. In-flight calls keep the injected credential; later attempts (incl. drain) use `active` at send time; cache invalidated on snapshot ping (DESIGN §6.6, §9).
 
 **Acceptance criteria**
-- [ ] Promote takes effect on all nodes within 10 s
-- [ ] A parked request drained after promotion uses the new credential
-- [ ] Every decrypt and credential change audited
+- [x] Promote takes effect on all nodes within 10 s
+- [x] A parked request drained after promotion uses the new credential
+- [x] Every decrypt and credential change audited
 
 ### HUB-178 — Cutover scenario 1: completed before publish (account, vendor, transformer)
 - **Epic:** EP-07 · **Type:** test · **Area:** backend

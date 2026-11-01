@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(creds)` · Rotate credentials through next, promote and delete-old with node pings (HUB-177) · HUB-177 · F-15
+  - Accounts gain a previous slot; add next → promote → delete old, each with an optimistic expected version
+  - Every rotation step writes a change-log row with slot metadata only, and every node reloads its credential cache within a second
+  - Each credential decrypt is logged with account ids and versions, never values
 - 2026-11-02 · `test(delivery)` · Prove send-time version choice for queued, parked, pinned and session envelopes (HUB-174) · HUB-174 · F-14
   - Queued and parked envelopes use the version active at send time (D10)
   - Pinned and session envelopes stay on their accepted version; every attempt records it

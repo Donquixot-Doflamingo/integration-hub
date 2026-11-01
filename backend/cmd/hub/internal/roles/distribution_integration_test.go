@@ -57,7 +57,7 @@ func TestPublishReachesThreeNodes(t *testing.T) {
 	blobs, _ := control.OpenBlobStore(blobURL)
 	pub := &control.Publisher{Pool: pool, Archive: control.NewArchive(pool, blobs),
 		Bootstrap: registry.Sources{Config: os.DirFS("../../../../config"), Contracts: os.DirFS("../../../../../contracts")},
-		Notify: func(ctx context.Context, v int64) { rdb.Publish(ctx, control.SnapshotChannel, v) }}
+		Notify:    func(ctx context.Context, v int64) { rdb.Publish(ctx, control.SnapshotChannel, v) }}
 	start := time.Now()
 	res, err := pub.PublishVersion(t.Context(), "int_evt_brandA", []byte(`
 targets:
