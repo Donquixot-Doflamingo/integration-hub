@@ -23,7 +23,10 @@ const (
 	StageIdempotency Stage = "idempotency"
 	StageTransform   Stage = "transform"
 	StageAdmission   Stage = "admission" // breaker, account limiter, bulkhead
-	StageUpstream    Stage = "upstream"  // vendor time: excluded from hub_overhead_ms
+	// StageWait is deliberate waiting (account limiter tokens): excluded from hub_overhead_ms
+	// like vendor time, and reported in hub_wait_ms.
+	StageWait        Stage = "wait"
+	StageUpstream    Stage = "upstream" // vendor time: excluded from hub_overhead_ms
 	StageResponseMap Stage = "response_map"
 	StageAudit       Stage = "audit"
 )
@@ -148,7 +151,7 @@ func (t *Timings) Stage(stage Stage) time.Duration {
 
 // Overhead is wall time since Start minus vendor time.
 func (t *Timings) Overhead(now time.Time) time.Duration {
-	return now.Sub(t.Start) - t.Stage(StageUpstream)
+	return now.Sub(t.Start) - t.Stage(StageUpstream) - t.Stage(StageWait)
 }
 
 // RecordTimings publishes every stage and hub_overhead_ms for one finished request.

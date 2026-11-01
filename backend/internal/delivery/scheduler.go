@@ -32,6 +32,8 @@ type Scheduler struct {
 	Tick        time.Duration // expiry sweep while leading (default 1 s)
 	Standby     time.Duration // leadership poll while standing by (default 5 s)
 	PruneEvery  time.Duration // default 1 h
+	// Resilience (probes, drain) runs every Tick while leading; nil skips it.
+	Resilience *Resilience
 
 	leader prometheus.Gauge
 }
@@ -103,6 +105,9 @@ func (s *Scheduler) lead(ctx context.Context) error {
 				return err
 			}
 			s.expire(ctx)
+			if s.Resilience != nil {
+				s.Resilience.Tick(ctx, s.DB, orDefault(s.Tick, time.Second))
+			}
 		case <-prune.C:
 			s.prune(ctx)
 		}

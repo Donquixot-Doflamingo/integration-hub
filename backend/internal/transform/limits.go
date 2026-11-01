@@ -1,9 +1,15 @@
 package transform
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
+
+// ErrTimeBudget marks a run that took longer than TimeBudget. The budget is wall-clock time, so
+// a GC pause or CPU starvation can exceed it: callers re-run once and treat a repeat as
+// retryable (a transformer that is really too slow keeps failing and is dead-lettered).
+var ErrTimeBudget = errors.New("transform time budget exceeded")
 
 // checkOutput enforces MaxOutputBytes on a built body or mapped response (DESIGN §7.1).
 func (p *Program) checkOutput(path string, v any) error {
@@ -17,7 +23,7 @@ func (p *Program) checkOutput(path string, v any) error {
 // loops are cut short by the VM memory budget and node limits; this check catches the rest.
 func (p *Program) checkTime(path string, start time.Time) error {
 	if d := time.Since(start); d > p.limits.TimeBudget {
-		return &EvalError{Transformer: p.ref, Path: path, Err: fmt.Errorf("took %s, budget %s", d.Round(time.Microsecond), p.limits.TimeBudget)}
+		return &EvalError{Transformer: p.ref, Path: path, Err: fmt.Errorf("%w: took %s, budget %s", ErrTimeBudget, d.Round(time.Microsecond), p.limits.TimeBudget)}
 	}
 	return nil
 }

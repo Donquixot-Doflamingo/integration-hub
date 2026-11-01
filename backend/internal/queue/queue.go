@@ -117,7 +117,7 @@ func (o *Outbox) enqueue(ctx context.Context, db DB, env core.Envelope, claimBy 
 func (o *Outbox) Claim(ctx context.Context, db DB, worker, pool string, n int) ([]Claimed, error) {
 	now := o.now()
 	rows, err := db.Query(ctx, `
-		WITH due AS (
+		WITH due AS MATERIALIZED (
 			SELECT request_id, status AS prev FROM hub.outbox
 			WHERE pool = $2 AND (
 				(status IN ('accepted', 'retry_scheduled') AND next_attempt_at <= $4)
@@ -186,10 +186,11 @@ func (o *Outbox) Defer(ctx context.Context, db DB, id, worker string, retryAt ti
 }
 
 // Park holds an envelope for its account + endpoint while the circuit is open
-// (in_flight → parked). Release drains parked envelopes in arrival order.
+// (in_flight → parked). Nothing was sent, so the claim does not count as an attempt. Release
+// drains parked envelopes in arrival order.
 func (o *Outbox) Park(ctx context.Context, db DB, id, worker, account, endpoint string) error {
 	tag, err := db.Exec(ctx, `UPDATE hub.outbox SET status = 'parked', account_id = $3, endpoint_id = $4,
-			claimed_by = NULL, claimed_until = NULL, updated_at = $5
+			attempt = GREATEST(attempt - 1, 0), claimed_by = NULL, claimed_until = NULL, updated_at = $5
 		WHERE request_id = $1 AND status = 'in_flight' AND claimed_by = $2`, id, worker, account, endpoint, o.now())
 	return guarded(tag, err, "park", id)
 }
@@ -198,14 +199,53 @@ func (o *Outbox) Park(ctx context.Context, db DB, id, worker, account, endpoint 
 // (parked → retry_scheduled; DESIGN §10.5 drain). It returns how many were released.
 func (o *Outbox) Release(ctx context.Context, db DB, account, endpoint string, limit int) (int, error) {
 	now := o.now()
-	tag, err := db.Exec(ctx, `UPDATE hub.outbox SET status = 'retry_scheduled', next_attempt_at = $4, updated_at = $4
-		WHERE request_id IN (
+	// MATERIALIZED: an inlined "IN (SELECT ... LIMIT n FOR UPDATE SKIP LOCKED)" may be re-run
+	// per row and release more than n (seen in CI).
+	tag, err := db.Exec(ctx, `
+		WITH picked AS MATERIALIZED (
 			SELECT request_id FROM hub.outbox WHERE status = 'parked' AND account_id = $1 AND endpoint_id = $2
-			ORDER BY created_at, request_id LIMIT $3 FOR UPDATE SKIP LOCKED)`, account, endpoint, limit, now)
+			ORDER BY created_at, request_id LIMIT $3 FOR UPDATE SKIP LOCKED)
+		UPDATE hub.outbox o SET status = 'retry_scheduled', next_attempt_at = $4, updated_at = $4
+		FROM picked WHERE o.request_id = picked.request_id`, account, endpoint, limit, now)
 	if err != nil {
 		return 0, fmt.Errorf("queue: release %s/%s: %w", account, endpoint, err)
 	}
 	return int(tag.RowsAffected()), nil
+}
+
+// EnqueueParked inserts env directly as parked (wait mode or queue_if_allowed with an open
+// circuit: nothing is attempted until the drain releases it).
+func (o *Outbox) EnqueueParked(ctx context.Context, db DB, env core.Envelope, account, endpoint string) error {
+	if err := o.enqueue(ctx, db, env, "", 0); err != nil {
+		return err
+	}
+	_, err := db.Exec(ctx, `UPDATE hub.outbox SET status = 'parked', account_id = $2, endpoint_id = $3 WHERE request_id = $1`,
+		env.RequestID, account, endpoint)
+	if err != nil {
+		return fmt.Errorf("queue: park %s: %w", env.RequestID, err)
+	}
+	return nil
+}
+
+// ParkedGroup is the parked backlog of one account + endpoint (drain, metrics).
+type ParkedGroup struct {
+	Account, Endpoint string
+	Count             int
+	Oldest            time.Time
+}
+
+// Parked lists the parked backlog per account + endpoint.
+func (o *Outbox) Parked(ctx context.Context, db DB) ([]ParkedGroup, error) {
+	rows, err := db.Query(ctx, `SELECT account_id, endpoint_id, count(*), min(created_at) FROM hub.outbox
+		WHERE status = 'parked' GROUP BY account_id, endpoint_id`)
+	if err != nil {
+		return nil, fmt.Errorf("queue: parked: %w", err)
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (ParkedGroup, error) {
+		var g ParkedGroup
+		err := r.Scan(&g.Account, &g.Endpoint, &g.Count, &g.Oldest)
+		return g, err
+	})
 }
 
 // DeadLetter is the information kept for a dead letter (DESIGN §10.6).

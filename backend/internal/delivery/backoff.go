@@ -52,10 +52,14 @@ func (b Backoff) Delay(n int, retryAfter time.Duration) (time.Duration, bool) {
 
 // Retryable reports whether a queued attempt's error is worth another attempt (DESIGN §10.2
 // async column): timeouts, unavailability, rate limits and transient Hub errors retry; vendor
-// rejections, auth failures and transformer errors dead-letter at once.
+// rejections, auth failures and transformer errors dead-letter at once, except a transformer
+// time-budget overrun (wall clock: usually a stall), which retries on the schedule.
 func Retryable(ce *core.CanonicalError) bool {
 	if ce.Code == core.CodeInternalError {
 		return ce.Retryable
+	}
+	if ce.Code == core.CodeTransformFailed { // only a time-budget overrun (a stall) retries
+		return ce.Reason != nil && *ce.Reason == "time_budget"
 	}
 	return ce.Code == core.CodeUpstreamTimeout || ce.Code == core.CodeUpstreamUnavailable || ce.Code == core.CodeUpstreamRateLimited
 }

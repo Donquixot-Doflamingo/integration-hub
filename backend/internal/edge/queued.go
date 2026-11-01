@@ -171,7 +171,7 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 		defer cancel()
 		res := s.attempter.Run(ctx, delivery.Job{
 			RequestID: env.RequestID, Snap: p.caller.Snap, Res: p.res, Body: p.body, Hdr: p.hdr,
-			IdempotencyKey: idemKey, Trail: p.trail, Timings: &timings, FirstAttempt: 1,
+			IdempotencyKey: idemKey, Trail: p.trail, Timings: &timings, FirstAttempt: 1, Live: true,
 		})
 		final := audit.Final{
 			Attempts: max(len(res.Attempts), 1), IntegrationVersion: p.res.VersionNumber,
@@ -200,12 +200,36 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 			_, _ = w.Write(append(o.res.Body, '\n'))
 		case o.state == core.StateRetryScheduled:
 			writeAccepted(w, env.RequestID, "accepted", "retry_scheduled")
+		case o.state == core.StateParked: // circuit open: nothing was sent (DESIGN §5.2)
+			writeAccepted(w, env.RequestID, "queued", "circuit_open")
 		default: // dead-lettered within the window: the caller gets the canonical error
 			WriteError(w, r, o.res.Err)
 		}
 	case <-t.C:
 		writeAccepted(w, env.RequestID, "in_flight", "wait_window_elapsed")
 	}
+}
+
+// parkNow is queue_if_allowed with an open circuit: persist the request as parked (no attempt)
+// and answer 202 queued; the drain delivers it after recovery (DESIGN §5.3).
+func (s *Server) parkNow(w http.ResponseWriter, r *http.Request, p *prepared, res delivery.Result) *core.CanonicalError {
+	q, ctx := s.deps.Queueing, r.Context()
+	env, rec := s.envelope(r, p), s.ledgerRecord(r, p, core.StateParked)
+	err := pgx.BeginFunc(ctx, q.DB, func(tx pgx.Tx) error {
+		if err := q.Ledger.Insert(ctx, tx, rec); err != nil {
+			return err
+		}
+		return q.Queue.EnqueueParked(ctx, tx, env, res.Account, res.Endpoint)
+	})
+	if err != nil {
+		s.log.ErrorContext(r.Context(), "park failed", slog.String("integration", p.integration.Integration), slog.String("error", err.Error()))
+		return persistFailed()
+	}
+	p.trail.Add(audit.RequestPersisted, 0, nil, map[string]any{"expires_at": env.ExpiresAt, "mode": env.Mode})
+	p.trail.Add(audit.RequestParked, 0, nil, map[string]any{"reason": "circuit_open", "account": res.Account, "endpoint": res.Endpoint})
+	writeAccepted(w, env.RequestID, "queued", "circuit_open")
+	s.emitEvents(p)
+	return nil
 }
 
 // targetTimeout is the endpoint timeout of the request transformer's vendor endpoint.

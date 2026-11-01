@@ -32,6 +32,9 @@ type Upstream interface {
 type Attempter struct {
 	Creds    creds.Source
 	Upstream Upstream
+	// Breakers and Limiter are admission (DESIGN §10.4, §10.8); nil disables each.
+	Breakers *upstream.Breakers
+	Limiter  *upstream.AccountLimiter
 	Log      *slog.Logger
 	Now      func() time.Time
 }
@@ -51,6 +54,11 @@ type Job struct {
 	SyncRetry bool
 	// FirstAttempt numbers this run's first vendor call (attempts already made + 1).
 	FirstAttempt int
+	// Live marks caller traffic (sync, wait, a worker's first attempt): it may use the whole
+	// account bucket; retries and drain leave a reserve for it.
+	Live bool
+	// LimiterWait caps the wait for an account token (default: 250 ms live, 5 s otherwise).
+	LimiterWait time.Duration
 }
 
 // Result is what a job produced. Exactly one of Body and Err is set.
@@ -64,6 +72,12 @@ type Result struct {
 	// kept with a dead letter (DESIGN §10.6).
 	LastRequest  json.RawMessage
 	LastResponse json.RawMessage
+	// CircuitOpen reports that admission refused the call (Err carries circuit "open" and
+	// retry_after_ms): the caller applies on_circuit_open, or parks. Account and Endpoint name
+	// the breaker for parking.
+	CircuitOpen bool
+	Account     string
+	Endpoint    string
 }
 
 // AuditRequest is the audit and dry-run view of an upstream request.
@@ -137,14 +151,6 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	reqProg := j.Snap.Programs[j.Res.Target.Transformer.Request]
 	respProg := j.Snap.Programs[j.Res.Target.Transformer.Response]
 	integration := j.Res.Integration.Integration
-
-	start := time.Now()
-	req, err := reqProg.BuildRequest(in)
-	j.Timings.Observe(telemetry.StageTransform, start)
-	if err != nil {
-		r.Err = a.transformError(ctx, integration, reqProg.Ref(), err)
-		return r
-	}
 	ref := j.Res.Target.Transformer.Request
 	tf := j.Snap.Transformers[ref]
 	target, err := upstream.TargetFor(j.Snap, c.AccountID, tf.VendorEndpoint)
@@ -153,35 +159,76 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 		r.Err = internalError()
 		return r
 	}
+	r.Account, r.Endpoint = target.AccountID, tf.VendorEndpoint
+
+	// Breakers first: a local check, so a refused call costs no transform (DESIGN §10.4).
+	start := time.Now()
+	adm, ce := a.admitBreakers(j, target, tf.VendorEndpoint)
+	j.Timings.Observe(telemetry.StageAdmission, start)
+	if ce != nil {
+		r.Err, r.CircuitOpen = ce, true
+		return r
+	}
+
+	start = time.Now()
+	req, err := reqProg.BuildRequest(in)
+	if errors.Is(err, transform.ErrTimeBudget) { // a stall, most likely: transforms are pure, run again
+		req, err = reqProg.BuildRequest(in)
+	}
+	j.Timings.Observe(telemetry.StageTransform, start)
+	if err != nil {
+		adm.record(a.now(), upstream.OutcomeIgnore)
+		r.Err = a.transformError(ctx, integration, reqProg.Ref(), err)
+		return r
+	}
 	// The audit snapshot is taken before the auth scheme injects anything; credential values
 	// that the transformer itself mapped (static headers) are redacted by value (trail secrets).
 	view := AuditRequest{Method: req.Method, URL: UpstreamURL(target.BaseURL, req), Headers: req.Headers, Body: req.Body}
 	j.Trail.AddJSON(audit.RequestTransformed, 0, view, map[string]any{"transformer": ref.String(), "endpoint": tf.VendorEndpoint})
 	r.LastRequest = j.Trail.Stored(audit.RequestTransformed)
 	if err := creds.ApplyVendor(target.Vendor, c, &req); err != nil {
+		adm.record(a.now(), upstream.OutcomeIgnore)
 		a.Log.ErrorContext(ctx, "auth scheme failed", slog.String("integration", integration), slog.String("error", err.Error()))
 		r.Err = internalError()
 		return r
 	}
-
+	// The account limiter last: its wait is the time right before the send.
+	start = time.Now()
+	ce = a.waitLimiter(ctx, j, target)
+	j.Timings.Observe(telemetry.StageAdmission, start)
+	if ce != nil {
+		adm.record(a.now(), upstream.OutcomeIgnore)
+		r.Err = ce
+		return r
+	}
 	n := max(j.FirstAttempt, 1)
 	att, err := a.attempt(ctx, j, &r, n, target, req)
-	if err != nil && j.SyncRetry && RetrySync(err, target.Endpoint.Idempotent, j.IdempotencyKey) {
+	if err != nil && j.SyncRetry && !adm.probe() && RetrySync(err, target.Endpoint.Idempotent, j.IdempotencyKey) {
+		adm.record(a.now(), transportOutcome(err)) // the retry is a fresh call for the breaker
+		adm = adm.again(a.now())
 		n++
 		att, err = a.attempt(ctx, j, &r, n, target, req)
 	}
 	if err != nil {
+		adm.record(a.now(), transportOutcome(err))
 		r.Err = TransportError(err)
 		return r
 	}
 
 	start = time.Now()
 	out, vce, err := respProg.MapResponse(att.Response, in)
+	if errors.Is(err, transform.ErrTimeBudget) {
+		out, vce, err = respProg.MapResponse(att.Response, in)
+	}
 	j.Timings.Observe(telemetry.StageResponseMap, start)
+	adm.record(a.now(), responseOutcome(att.Response.Status, vce))
 	if err != nil {
 		j.Trail.Add(audit.ResponseTransformFailed, n, nil, map[string]any{"transformer": respProg.Ref()})
 		a.Log.WarnContext(ctx, "response transform failed", slog.String("integration", integration), slog.String("transformer", respProg.Ref()))
 		r.Err = &core.CanonicalError{Code: core.CodeTransformFailed, Message: "The upstream response could not be mapped"}
+		if errors.Is(err, transform.ErrTimeBudget) {
+			r.Err.Retryable, r.Err.Reason = true, core.Ptr("time_budget")
+		}
 		return r
 	}
 	if vce != nil {
@@ -257,7 +304,11 @@ func (a *Attempter) transformError(ctx context.Context, integration, transformer
 		attrs = append(attrs, slog.String("path", ee.Path), slog.String("expr", ee.Expr))
 	}
 	a.Log.WarnContext(ctx, "transform failed", attrs...)
-	return &core.CanonicalError{Code: core.CodeTransformFailed, Message: "The request could not be transformed"}
+	ce := &core.CanonicalError{Code: core.CodeTransformFailed, Message: "The request could not be transformed"}
+	if errors.Is(err, transform.ErrTimeBudget) { // overran twice: retryable, not a broken mapping
+		ce.Retryable, ce.Reason = true, core.Ptr("time_budget")
+	}
+	return ce
 }
 
 // TransformError is the exported form for the edge's dry-run.

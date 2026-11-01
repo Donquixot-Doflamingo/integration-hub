@@ -48,15 +48,16 @@ type store interface {
 type pgStore struct{ pool *pgxpool.Pool }
 
 // claimDue takes due rows and rows whose claim expired (dispatcher died mid-attempt), each with
-// its own partial index, skipping rows other dispatchers hold.
+// its own partial index, skipping rows other dispatchers hold. The CTEs are MATERIALIZED so the
+// LIMIT holds: an inlined LIMIT ... SKIP LOCKED subquery may be re-run and update more rows.
 const claimDue = `
-WITH due AS (
+WITH due AS MATERIALIZED (
     SELECT delivery_id FROM hub.callback_deliveries
     WHERE status IN ('pending', 'retry_scheduled') AND next_attempt_at <= now()
     ORDER BY next_attempt_at
     LIMIT $2
     FOR UPDATE SKIP LOCKED
-), abandoned AS (
+), abandoned AS MATERIALIZED (
     SELECT delivery_id FROM hub.callback_deliveries
     WHERE status = 'in_flight' AND claimed_until < now()
     ORDER BY claimed_until

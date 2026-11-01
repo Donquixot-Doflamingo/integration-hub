@@ -6,6 +6,34 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `fix(delivery)` · retry transformer time-budget overruns and check breakers before transforming · HUB-149 · F-04
+  - A transform that overruns its 5 ms wall-clock budget is re-run once; a second overrun is TRANSFORM_FAILED with reason time_budget and retryable, so a GC pause or a busy node no longer dead-letters a healthy request (seen in CI)
+  - Breakers are checked before the transform (a refused call costs no transform); the account limiter waits right before the send
+- 2026-10-31 · `test(edge)` · park the chaos backlog inside the open window and name dead-letter reasons · HUB-151 · F-12
+  - The chaos suite accepts its backlog before tripping the breaker, so parking happens well inside the open window on slow runners, and a backlog envelope that is not parked fails with its dead-letter reason
+- 2026-10-31 · `docs(milestones)` · note the CI findings in the M5 summary · HUB-154 · F-12
+  - docs/milestones/M5.md lists what CI caught: the SKIP LOCKED limit bug (fixed with materialized CTEs), the tight chaos-test window and the M0 reset-test race
+- 2026-10-31 · `test(mockvendor)` · wait for mockvendor to record a reset before asserting it · HUB-029 · F-02
+  - TestDownReset no longer races the server: the client sees the reset before the recording is final, so the test waits up to 1 s for it (seen flaking in CI)
+- 2026-10-31 · `fix(queue)` · keep the LIMIT of SKIP LOCKED claims with materialized CTEs · HUB-149 · F-12
+  - Release, outbox claims and callback claims pick their rows in a MATERIALIZED CTE: an inlined IN (SELECT ... LIMIT n FOR UPDATE SKIP LOCKED) could be re-run and touch more than n rows (CI saw Release(2) release 5), which would have let the drain exceed its ramp
+- 2026-10-31 · `test(edge)` · widen the chaos tests' open window for slower runners · HUB-151 · F-12
+  - The M5 chaos suite uses a 5 s breaker window (was 1 s): on a slow CI runner the breaker reached half-open while the backlog was still being parked; the assertions scale with it
+- 2026-10-31 · `test(edge)` · prove the five resilience scenarios and add the M5 summary · HUB-150 · F-12
+  - make itest runs DESIGN's five M5 chaos scenarios against mockvendor with two gateway nodes, a worker and a scheduler: vendor down, recovery with a ramped drain, re-open mid-drain, two integrations on one account with pause isolation, and failover
+  - docs/milestones/M5.md: evidence, built, deferred, 7 deviations; F-12 and F-13 shipped
+- 2026-10-31 · `feat(delivery)` · probe open breakers and drain parked envelopes with a ramp · HUB-149 · F-12
+  - The scheduler leader probes every open breaker with the vendor's health_probe (marked X-Hub-Probe, never tenant traffic); a healthy answer runs the half-open probes at once, so recovery closes the circuit without live traffic
+  - After a close, parked envelopes are released at 20 % of the account rate, doubling every 30 s to 100 %; a re-open stops the release, and a trip soon after a recovery doubles the open window
+  - parked_count, parked_oldest_age_s, drain_released_total and health_probes_total are exported; gateway, worker and scheduler now share breaker state through Redis
+- 2026-10-31 · `feat(delivery)` · admit vendor calls through breakers and limiters and apply on_circuit_open · HUB-144 · F-12
+  - Every vendor call is admitted by its (account, endpoint) breaker, the integration's tightened view (override) and the shared account rate limiter; outcomes feed the breaker with TECH_SPEC weights
+  - Open circuit, sync: fail_fast answers 503 UPSTREAM_UNAVAILABLE with circuit open and retry_after_ms (nothing sent), failover serves from the next target with X-Hub-Served-By failover:n (idempotent endpoints or keyed requests only), queue_if_allowed parks and answers 202 queued only with Prefer respond-async or a callback subscription
+  - Open circuit, wait: 202 queued circuit_open at once; async: the worker parks the envelope (arrival order, attempt not spent)
+  - Account limiter: one Redis token bucket per account across the fleet, live traffic first; tenant limiter: per tenant + integration at the edge (429 tenant_quota); per-account bulkhead unchanged (64)
+- 2026-10-31 · `feat(upstream)` · add the circuit breaker with Redis-shared state · HUB-140 · F-12
+  - Each (account, endpoint) has a breaker: it opens on more than 50 % weighted failures over 30 s with at least 20 calls (429 counts half) or on 5 consecutive timeouts, stays open 30 s doubling per re-open up to 10 min, and lets 3 half-open probes decide
+  - Breaker states are shared through Redis (pub/sub plus a 1 s reconcile): every node sees an open or closed circuit within about a second, the request path never waits on Redis, and an outage keeps each node's last state; breaker_state and breaker_transitions_total are exported
 - 2026-10-31 · `docs(tickets)` · close HUB-280 with its first GitHub run · HUB-280 · F-19
   - HUB-280 is done: the e2e job's first run on GitHub (PR #12, cold browser cache) finished in 5 min 01 s, under its 8-minute cap
 - 2026-11-01 · `feat(frontend)` · show the callback signing secret once on create and rotate · HUB-272 · F-19

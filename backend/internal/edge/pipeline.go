@@ -50,6 +50,15 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 		return nil, ce
 	}
 	p.integration = in
+	start := time.Now()
+	ok, wait := s.tenants.allow(c.Tenant, in.Integration, s.deps.Now())
+	p.timings.Observe(telemetry.StageRateLimit, start)
+	if !ok && scope != ScopeDryRun {
+		if s.rejections != nil {
+			s.rejections.WithLabelValues("tenant").Inc()
+		}
+		return nil, tenantQuotaError(wait) // before any body is read: nothing to audit
+	}
 	capability := c.Snap.Capabilities[in.Capability]
 	p.op = capability.Operations[operation]
 	pii := []registry.PIIPath(nil)
@@ -57,7 +66,7 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 		pii = p.op.PII
 	}
 
-	start := time.Now()
+	start = time.Now()
 	body, raw, ce := readJSONBody(r, bodyLimit(in.Capability))
 	p.timings.Observe(telemetry.StageBodyLimit, start)
 	p.trail = audit.NewTrail(audit.TrailOptions{

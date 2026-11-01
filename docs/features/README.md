@@ -17,8 +17,8 @@ Several features share one epic and therefore one ticket range; the feature fiel
 | F-09 | Durable delivery: outbox, worker, wait/async/async_callback | M4 · EP-05 | in-progress | [F-09](F-09-durable-delivery.md) | US-0901–0906 | HUB-110–139 |
 | F-10 | Idempotency | M4 · EP-05 | in-progress | [F-10](F-10-idempotency.md) | US-1001–1004 | HUB-110–139 |
 | F-11 | Outbound callbacks & registrar (signed webhooks, SSRF guard) | M4 · EP-05 | in-progress | [F-11](F-11-outbound-callbacks.md) | US-1101–1103 | HUB-110–139 |
-| F-12 | Circuit breaker, parking & ramped drain | M5 · EP-06 | proposed | [F-12](F-12-circuit-breaker-drain.md) | US-1201–1206 | HUB-140–169 |
-| F-13 | Rate limits & bulkheads | M5 · EP-06 | proposed | [F-13](F-13-rate-limits-bulkheads.md) | US-1301–1304 | HUB-140–169 |
+| F-12 | Circuit breaker, parking & ramped drain | M5 · EP-06 | shipped | [F-12](F-12-circuit-breaker-drain.md) | US-1201–1206 | HUB-140–169 |
+| F-13 | Rate limits & bulkheads | M5 · EP-06 | shipped | [F-13](F-13-rate-limits-bulkheads.md) | US-1301–1304 | HUB-140–169 |
 | F-14 | Integration versioning & cutover (weights, shadow, rollback) | M6 · EP-07 | proposed | [F-14](F-14-versioning-cutover.md) | US-1401–1406 | HUB-170–199 |
 | F-15 | Account lifecycle & credential rotation | M6 · EP-07 | proposed | [F-15](F-15-account-lifecycle-rotation.md) | US-1501–1503 | HUB-170–199 |
 | F-16 | Admin API, RBAC & change log | M7 · EP-08 | proposed | [F-16](F-16-admin-api-rbac.md) | US-1601–1604 | HUB-200–229 |

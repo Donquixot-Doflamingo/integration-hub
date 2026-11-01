@@ -2,10 +2,13 @@ package edge
 
 import (
 	"context"
+
 	"errors"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
@@ -32,6 +35,9 @@ type Deps struct {
 	DebugHeaders bool
 	Audit        audit.Sink    // default audit.Discard
 	Masker       *audit.Masker // x-pii masking key for the masked policy
+	// Breakers and Limiter are admission (M5): circuit breakers and the account limiter.
+	Breakers *upstream.Breakers
+	Limiter  *upstream.AccountLimiter
 	// Queueing enables wait and async delivery (nil: every mode is delivered synchronously).
 	Queueing *Queueing
 	// Idempotency enables Idempotency-Key deduplication (nil: keys are required where the
@@ -50,8 +56,11 @@ type Server struct {
 	mux       *http.ServeMux
 	deps      Deps
 	attempter *delivery.Attempter
-	log       *slog.Logger
-	metrics   *telemetry.Metrics
+	tenants   tenantLimiter
+	// rejections is ratelimit_rejections_total (shared with the account limiter when wired).
+	rejections *prometheus.CounterVec
+	log        *slog.Logger
+	metrics    *telemetry.Metrics
 }
 
 // New builds the gateway server and registers its routes.
@@ -75,7 +84,10 @@ func New(d Deps) *Server {
 		d.Metrics = telemetry.NewMetrics("gateway", "test")
 	}
 	s := &Server{mux: http.NewServeMux(), deps: d, log: d.Log.With(slog.String("component", "edge")), metrics: d.Metrics}
-	s.attempter = &delivery.Attempter{Creds: d.Creds, Upstream: d.Upstream, Log: s.log, Now: d.Now}
+	s.attempter = &delivery.Attempter{Creds: d.Creds, Upstream: d.Upstream, Breakers: d.Breakers, Limiter: d.Limiter, Log: s.log, Now: d.Now}
+	if d.Limiter != nil {
+		s.rejections = d.Limiter.Rejections()
+	}
 	s.routes()
 	return s
 }

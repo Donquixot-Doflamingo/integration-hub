@@ -76,8 +76,9 @@ func TestTimeBudgetIsChecked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.BuildRequest(Input{}); err == nil || !strings.Contains(err.Error(), "budget 1ns") {
-		t.Fatalf("err %v", err)
+	_, err = p.BuildRequest(Input{})
+	if err == nil || !strings.Contains(err.Error(), "budget 1ns") || !errors.Is(err, ErrTimeBudget) {
+		t.Fatalf("err %v (callers detect overruns with errors.Is(err, ErrTimeBudget))", err)
 	}
 }
 

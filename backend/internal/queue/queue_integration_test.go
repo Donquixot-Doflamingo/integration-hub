@@ -303,3 +303,27 @@ func TestExpireOnlyWaitingEnvelopes(t *testing.T) {
 		t.Fatalf("expired a claimed envelope: %v", err)
 	}
 }
+
+// TestPoolsAreSeparate: an LLM backlog never fills a messaging worker's claims (HUB-148: LLM pool
+// exhaustion does not starve messaging workers).
+func TestPoolsAreSeparate(t *testing.T) {
+	p := pool(t)
+	isolate(t, p, queue.PoolLLM)
+	isolate(t, p, queue.PoolMessaging)
+	q := &queue.Outbox{}
+	now := time.Now().Add(-time.Second)
+	var ids []string
+	for range 50 {
+		e := env("llm.chat@v1", now)
+		ids = append(ids, e.RequestID)
+		_ = q.Enqueue(t.Context(), p, e)
+	}
+	msg := env("events.track@v1", now)
+	ids = append(ids, msg.RequestID)
+	_ = q.Enqueue(t.Context(), p, msg)
+	cleanup(t, p, ids...)
+	got, err := q.Claim(t.Context(), p, "messaging-worker", queue.PoolMessaging, 1)
+	if err != nil || len(got) != 1 || got[0].RequestID != msg.RequestID {
+		t.Fatalf("messaging claim behind an LLM backlog: %+v %v", got, err)
+	}
+}

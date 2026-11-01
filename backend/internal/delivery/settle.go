@@ -29,6 +29,9 @@ func (s Settler) now() time.Time {
 // Settle applies the outcome of attempt n of env and returns the state it moved to. A lost race
 // returns ErrLost (IsLost) and changes nothing.
 func (s Settler) Settle(ctx context.Context, env core.Envelope, worker string, n int, account string, out Result, final audit.Final) (core.State, error) {
+	if out.CircuitOpen { // nothing was sent: park for the drain (DESIGN §10.5)
+		return core.StateParked, s.Transitions.Park(ctx, env, worker, out.Account, out.Endpoint, max(n-1, 0))
+	}
 	if out.Err == nil {
 		final.HTTPStatus = 200
 		return core.StateSucceeded, s.Transitions.Succeed(ctx, env, worker, Outcome{Final: final, Result: out.Body})
@@ -69,6 +72,8 @@ func TerminalAudit(trail *audit.Trail, n int, state core.State, err error, ce *c
 		trail.Add(audit.RetryScheduled, n, nil, meta)
 	case core.StateDeadLettered:
 		trail.Add(audit.RequestDeadLettered, n, nil, meta)
-	case core.StateAccepted, core.StateInFlight, core.StateParked, core.StateExpired, core.StateFailed:
+	case core.StateParked:
+		trail.Add(audit.RequestParked, n, nil, meta)
+	case core.StateAccepted, core.StateInFlight, core.StateExpired, core.StateFailed:
 	}
 }
