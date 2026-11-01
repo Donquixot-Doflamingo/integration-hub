@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(milestones)` · note the CI findings in the M5 summary · HUB-154 · F-12
+  - docs/milestones/M5.md lists what CI caught: the SKIP LOCKED limit bug (fixed with materialized CTEs), the tight chaos-test window and the M0 reset-test race
 - 2026-10-31 · `test(mockvendor)` · wait for mockvendor to record a reset before asserting it · HUB-029 · F-02
   - TestDownReset no longer races the server: the client sees the reset before the recording is final, so the test waits up to 1 s for it (seen flaking in CI)
 - 2026-10-31 · `fix(queue)` · keep the LIMIT of SKIP LOCKED claims with materialized CTEs · HUB-149 · F-12
