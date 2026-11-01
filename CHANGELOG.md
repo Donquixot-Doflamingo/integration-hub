@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `test(mockvendor)` · wait for mockvendor to record a reset before asserting it · HUB-029 · F-02
+  - TestDownReset no longer races the server: the client sees the reset before the recording is final, so the test waits up to 1 s for it (seen flaking in CI)
 - 2026-10-31 · `fix(queue)` · keep the LIMIT of SKIP LOCKED claims with materialized CTEs · HUB-149 · F-12
   - Release, outbox claims and callback claims pick their rows in a MATERIALIZED CTE: an inlined IN (SELECT ... LIMIT n FOR UPDATE SKIP LOCKED) could be re-run and touch more than n rows (CI saw Release(2) release 5), which would have let the drain exceed its ramp
 - 2026-10-31 · `test(edge)` · widen the chaos tests' open window for slower runners · HUB-151 · F-12

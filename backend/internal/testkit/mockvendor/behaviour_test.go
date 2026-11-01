@@ -215,7 +215,14 @@ func TestDownReset(t *testing.T) {
 		_ = resp.Body.Close()
 		t.Fatalf("got HTTP %d, want a transport error", resp.StatusCode)
 	}
-	if got := mv.Requests(t, nil); len(got) == 0 || got[0].Outcome != "reset" || got[0].ResponseStatus != nil {
+	// The client sees the reset before the server finishes recording it: give it a moment.
+	var got []RecordedRequest
+	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if got = mv.Requests(t, nil); len(got) > 0 && got[0].Outcome == "reset" {
+			break
+		}
+	}
+	if len(got) == 0 || got[0].Outcome != "reset" || got[0].ResponseStatus != nil {
 		t.Fatalf("recording %+v", got)
 	}
 }
