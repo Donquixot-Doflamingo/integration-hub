@@ -71,7 +71,7 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	}
 	defer st.close() // last: everything above may still use them while shutting down
 
-	reg, err := newRegistry(cfg, metrics, log, st.pg)
+	reg, err := newRegistry(cfg, metrics, log, st.pg, st.rdb)
 	if err != nil {
 		_ = tp.Shutdown(ctx)
 		return err
@@ -128,6 +128,7 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	if cfg.ConfigWatch {
 		wg.Go(func() { reg.watch(ctx) })
 	}
+	wg.Go(func() { reg.follow(ctx) }) // every role follows published snapshots (HUB-171)
 	if cfg.Role == Scheduler {
 		wg.Go(func() { reg.pruneLoop(ctx) })
 	}

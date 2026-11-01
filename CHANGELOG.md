@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(roles)` · Follow the snapshot archive on every node via Redis ping and poll (HUB-171) · HUB-171 · F-14
+  - A publish reaches every node within a second (Redis hub:snapshot ping, 5 s poll fallback)
+  - A node that cannot read the archive keeps serving its last good snapshot
 - 2026-11-02 · `feat(control)` · Publish, roll back and retire through a validating publisher (HUB-170) · HUB-170 · F-14
   - Publishing an integration version runs the full registry build; any error blocks it with a path-qualified message
   - Published versions are immutable; rollback creates a new version with the old spec
