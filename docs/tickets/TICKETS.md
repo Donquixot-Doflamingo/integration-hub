@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **125** · todo: **71** · other (in-progress/in-review/blocked): **1**
+Total tickets: **197** · done: **125** · todo: **69** · other (in-progress/in-review/blocked): **3**
 
 ## Epics
 
@@ -1347,7 +1347,7 @@ Worker uses the active version for `pending: re_resolve` (default) and `resolved
 
 ### HUB-175 — Vendor session store and pinning
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-088, HUB-114 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-progress · **Depends on:** HUB-088, HUB-114 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-175-vendor-sessions`
 
 `vendor_sessions` table; step 1 of a multi-op capability returns `X-Hub-Session`; later steps route to the pinned version + account; scheduler expires sessions; unknown/expired → 404 `SESSION_NOT_FOUND` (DESIGN §3.1, §6.3, §14).
@@ -1439,7 +1439,7 @@ Add cutover fixtures (second account, second mock vendor e.g. `moengage`, transf
 
 ### HUB-183 — Cutover scenario 6: session step 2 stays on v7
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-178, HUB-175 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-progress · **Depends on:** HUB-178, HUB-175 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-183-cutover-s6-session`
 
 §6.3 row 6 for each change type.

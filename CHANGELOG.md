@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(transform)` · map vendor session data in response transformers · HUB-175 · F-04
+  - Response transformers may declare a `session:` section (expressions over res, req and account; creds, hdr and session are refused at compile) that maps what a later step of a multi-step operation needs, such as the vendor txn id
+  - `Program.MapResponseSession` returns it on success only, bounded to 16 KB and the transform time budget; goldens pin it as `"session"` in `expected_response.json` and vendor-response fixtures may set `_context.req`
+
 - 2026-10-31 · `fix(delivery)` · retry transformer time-budget overruns and check breakers before transforming · HUB-149 · F-04
   - A transform that overruns its 5 ms wall-clock budget is re-run once; a second overrun is TRANSFORM_FAILED with reason time_budget and retryable, so a GC pause or a busy node no longer dead-letters a healthy request (seen in CI)
   - Breakers are checked before the transform (a refused call costs no transform); the account limiter waits right before the send

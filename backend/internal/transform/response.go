@@ -26,6 +26,42 @@ var errNotResponse = errors.New("not a response transformer")
 // match the capability response schema. Any failure of the transformer itself is an *EvalError
 // (TRANSFORM_FAILED). The returned CanonicalError has no RequestID; the caller sets it.
 func (p *Program) MapResponse(resp core.VendorResponse, in Input) (any, *core.CanonicalError, error) {
+	out, _, ce, err := p.MapResponseSession(resp, in)
+	return out, ce, err
+}
+
+// MaxSessionBytes bounds the JSON size of the session data one response maps (it is stored per
+// session in Postgres; DESIGN §3.1 keeps only what later steps need, such as a vendor txn id).
+const MaxSessionBytes = 16 << 10
+
+// MapResponseSession is MapResponse plus the vendor session data of a multi-step operation: the
+// transformer's session: section, evaluated only on success (never for a mapped or classified
+// error). session is nil when the transformer has no session: section or every field mapped to
+// nil (nothing to keep). The session mapping is held to the same TimeBudget and to MaxSessionBytes.
+func (p *Program) MapResponseSession(resp core.VendorResponse, in Input) (out any, session map[string]any, ce *core.CanonicalError, err error) {
+	out, ce, err = p.mapResponse(resp, in)
+	if err != nil || ce != nil || p.session == nil {
+		return out, nil, ce, err
+	}
+	start := time.Now()
+	v, err := p.eval(p.session, p.env(in, resEnv(resp)))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	session, _ = v.(map[string]any) // the section is an object node (parse)
+	if n, over := estimateSize(session, MaxSessionBytes); over {
+		return nil, nil, nil, &EvalError{Transformer: p.ref, Path: "session", Err: fmt.Errorf("session data is larger than %d bytes (at least %d)", MaxSessionBytes, n)}
+	}
+	if err := p.checkTime("session", start); err != nil {
+		return nil, nil, nil, err
+	}
+	if len(session) == 0 {
+		session = nil
+	}
+	return out, session, nil, nil
+}
+
+func (p *Program) mapResponse(resp core.VendorResponse, in Input) (any, *core.CanonicalError, error) {
 	if p.kind != "response" {
 		return nil, nil, &EvalError{Transformer: p.ref, Path: "response", Err: errNotResponse}
 	}

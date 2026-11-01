@@ -18,10 +18,13 @@ import (
 //	<case>.input.json            request: canonical body, plus optional "_context"
 //	<case>.expected_request.json request: {method, path, query, headers, body}
 //	<case>.vendor_response.json  response: {status, headers, body}, plus optional "_context"
-//	<case>.expected_response.json response: {"response": ...} or {"error": {code, retryable, retry_after_ms, message}}
+//	<case>.expected_response.json response: {"response": ..., "session": {...}} or {"error": {code, retryable, retry_after_ms, message}}
 //
-// "_context" may set hdr, account, creds, session, now (RFC 3339) and uuids (list). Fixture creds
-// must be obviously fake ("fixture-..."). now defaults to GoldenNow.
+// "_context" may set hdr, account, creds, session, req (the canonical request, for a response
+// transformer's session: section), now (RFC 3339) and uuids (list). Fixture creds must be
+// obviously fake ("fixture-..."). now defaults to GoldenNow. "session" is the vendor session data
+// a response transformer maps on success; a transformer with a session: section must pin it in
+// every success case (an unpinned session is reported as unexpected).
 
 // GoldenNow is the default pinned clock of golden runs.
 var GoldenNow = time.Date(2026, 10, 31, 9, 15, 0, 0, time.UTC)
@@ -42,6 +45,7 @@ type goldenContext struct {
 	Account map[string]any    `json:"account"`
 	Creds   map[string]string `json:"creds"`
 	Session map[string]any    `json:"session"`
+	Req     map[string]any    `json:"req"`
 	Now     string            `json:"now"`
 	UUIDs   []string          `json:"uuids"`
 }
@@ -183,7 +187,7 @@ func (p *Program) goldenResponse(fixtures fs.FS, c string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	in, err := gc.input(nil)
+	in, err := gc.input(gc.Req)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +202,7 @@ func (p *Program) goldenResponse(fixtures fs.FS, c string) ([]string, error) {
 			resp.Headers[k] = []string{fmt.Sprint(v)}
 		}
 	}
-	out, ce, err := p.MapResponse(resp, in)
+	out, session, ce, err := p.MapResponseSession(resp, in)
 	if err != nil {
 		return nil, err
 	}
@@ -217,6 +221,9 @@ func (p *Program) goldenResponse(fixtures fs.FS, c string) ([]string, error) {
 		got["error"] = e
 	} else {
 		got["response"] = out
+		if session != nil {
+			got["session"] = session
+		}
 	}
 	return Diff(want, got), nil
 }
