@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(control)` · Add the append-only change log and archive-backed source-of-truth ADR (HUB-170) · HUB-170 · F-14
+  - Every control-plane write records actor, reason, before and after in hub.change_log
+  - Rows cannot be updated or deleted (trigger)
+  - ADR-0010: the snapshot archive is the registry's source of truth
 - 2026-10-31 · `fix(delivery)` · retry transformer time-budget overruns and check breakers before transforming · HUB-149 · F-04
   - A transform that overruns its 5 ms wall-clock budget is re-run once; a second overrun is TRANSFORM_FAILED with reason time_budget and retryable, so a GC pause or a busy node no longer dead-letters a healthy request (seen in CI)
   - Breakers are checked before the transform (a refused call costs no transform); the account limiter waits right before the send
