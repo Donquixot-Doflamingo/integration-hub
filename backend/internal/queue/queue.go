@@ -117,7 +117,7 @@ func (o *Outbox) enqueue(ctx context.Context, db DB, env core.Envelope, claimBy 
 func (o *Outbox) Claim(ctx context.Context, db DB, worker, pool string, n int) ([]Claimed, error) {
 	now := o.now()
 	rows, err := db.Query(ctx, `
-		WITH due AS (
+		WITH due AS MATERIALIZED (
 			SELECT request_id, status AS prev FROM hub.outbox
 			WHERE pool = $2 AND (
 				(status IN ('accepted', 'retry_scheduled') AND next_attempt_at <= $4)
@@ -199,10 +199,14 @@ func (o *Outbox) Park(ctx context.Context, db DB, id, worker, account, endpoint 
 // (parked → retry_scheduled; DESIGN §10.5 drain). It returns how many were released.
 func (o *Outbox) Release(ctx context.Context, db DB, account, endpoint string, limit int) (int, error) {
 	now := o.now()
-	tag, err := db.Exec(ctx, `UPDATE hub.outbox SET status = 'retry_scheduled', next_attempt_at = $4, updated_at = $4
-		WHERE request_id IN (
+	// MATERIALIZED: an inlined "IN (SELECT ... LIMIT n FOR UPDATE SKIP LOCKED)" may be re-run
+	// per row and release more than n (seen in CI).
+	tag, err := db.Exec(ctx, `
+		WITH picked AS MATERIALIZED (
 			SELECT request_id FROM hub.outbox WHERE status = 'parked' AND account_id = $1 AND endpoint_id = $2
-			ORDER BY created_at, request_id LIMIT $3 FOR UPDATE SKIP LOCKED)`, account, endpoint, limit, now)
+			ORDER BY created_at, request_id LIMIT $3 FOR UPDATE SKIP LOCKED)
+		UPDATE hub.outbox o SET status = 'retry_scheduled', next_attempt_at = $4, updated_at = $4
+		FROM picked WHERE o.request_id = picked.request_id`, account, endpoint, limit, now)
 	if err != nil {
 		return 0, fmt.Errorf("queue: release %s/%s: %w", account, endpoint, err)
 	}

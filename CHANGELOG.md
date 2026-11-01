@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `fix(queue)` · keep the LIMIT of SKIP LOCKED claims with materialized CTEs · HUB-149 · F-12
+  - Release, outbox claims and callback claims pick their rows in a MATERIALIZED CTE: an inlined IN (SELECT ... LIMIT n FOR UPDATE SKIP LOCKED) could be re-run and touch more than n rows (CI saw Release(2) release 5), which would have let the drain exceed its ramp
 - 2026-10-31 · `test(edge)` · widen the chaos tests' open window for slower runners · HUB-151 · F-12
   - The M5 chaos suite uses a 5 s breaker window (was 1 s): on a slow CI runner the breaker reached half-open while the backlog was still being parked; the assertions scale with it
 - 2026-10-31 · `test(edge)` · prove the five resilience scenarios and add the M5 summary · HUB-150 · F-12
