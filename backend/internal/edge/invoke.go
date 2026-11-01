@@ -121,7 +121,7 @@ func (s *Server) deliver(w http.ResponseWriter, r *http.Request, p *prepared) *c
 	rid := RequestID(ctx)
 	run := func(res resolve.Resolution) delivery.Result {
 		out := s.attempter.Run(ctx, delivery.Job{
-			RequestID: rid, Snap: p.caller.Snap, Res: res, Body: p.body, Hdr: p.hdr,
+			RequestID: rid, Snap: p.caller.Snap, Res: res, Body: p.body, Hdr: p.hdr, Session: p.sessionData(),
 			IdempotencyKey: idemKey, Trail: p.trail, Timings: &p.timings, SyncRetry: true, FirstAttempt: p.attempts + 1, Live: true,
 		})
 		p.attempts += len(out.Attempts)
@@ -154,7 +154,12 @@ func (s *Server) deliver(w http.ResponseWriter, r *http.Request, p *prepared) *c
 		return res.Err // fail_fast: 503 with circuit "open" and retry_after_ms when the circuit refused
 	}
 	body := res.Body
+	sessionID, ce := s.openSession(ctx, p, p.trail, res)
+	if ce != nil {
+		return ce
+	}
 
+	setSessionHeader(w, sessionID)
 	w.Header().Set("X-Hub-Served-By", servedBy)
 	if s.deps.DebugHeaders {
 		w.Header().Set("X-Hub-Integration-Version", strconv.Itoa(p.res.VersionNumber))

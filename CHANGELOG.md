@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(edge)` · open and pin vendor sessions in the invoke pipeline · HUB-175 · F-14
+  - A successful step 1 whose response transformer maps session data answers 200 with `X-Hub-Session: ses_…`; the session is pinned to the version and account that served it
+  - A request with `X-Hub-Session` runs on that exact version and account even after a publish, and its request transformer reads the data as `session.*`, in sync, wait and async mode and in dry-run; unknown, expired or another integration's sessions get 404 `SESSION_NOT_FOUND`
+  - Queued steps carry `session_id`: the worker pins them the same way and dead-letters them as `SESSION_NOT_FOUND` if the session expired in the queue
+  - Session open and use are in the audit trail (id, version, account; never the data); session data with an Aadhaar-like number fails the step as `TRANSFORM_FAILED` and is never stored
+
 - 2026-11-02 · `feat(sessions)` · store vendor sessions pinned to version and account · HUB-175 · F-14
   - New table hub.vendor_sessions (migration 00006): a session id (`ses_` + ULID) is pinned to the tenant, integration, version and account that opened it and expires after 10 minutes by default
   - The store and the table both refuse session data holding an Aadhaar-like number (12 digits, optionally 4-4-4): the Aadhaar number is never stored

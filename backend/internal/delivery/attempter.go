@@ -41,11 +41,14 @@ type Attempter struct {
 
 // Job is one delivery attempt (with the sync path's one immediate retry when allowed).
 type Job struct {
-	RequestID      string
-	Snap           *registry.Snapshot
-	Res            resolve.Resolution
-	Body           map[string]any // validated canonical body
-	Hdr            map[string]any // allowlisted caller headers (transformer hdr.*)
+	RequestID string
+	Snap      *registry.Snapshot
+	Res       resolve.Resolution
+	Body      map[string]any // validated canonical body
+	Hdr       map[string]any // allowlisted caller headers (transformer hdr.*)
+	// Session is the data of the vendor session a later step runs in (transformer session.*);
+	// Res must then be the session's pinned resolution (resolve.ResolveSession).
+	Session        map[string]any
 	IdempotencyKey string
 	Trail          *audit.Trail
 	Timings        *telemetry.Timings
@@ -63,7 +66,10 @@ type Job struct {
 
 // Result is what a job produced. Exactly one of Body and Err is set.
 type Result struct {
-	Body     []byte // canonical response JSON
+	Body []byte // canonical response JSON
+	// Session is the vendor session data the response transformer mapped on success (its
+	// session: section); the caller opens a session with it. nil when none.
+	Session  map[string]any
 	Err      *core.CanonicalError
 	Attempts []audit.Attempt
 	// Reached reports that a request left the Hub for the vendor (attempt records exist).
@@ -148,6 +154,7 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 		r.Err = ce
 		return r
 	}
+	in.Session = j.Session
 	reqProg := j.Snap.Programs[j.Res.Target.Transformer.Request]
 	respProg := j.Snap.Programs[j.Res.Target.Transformer.Response]
 	integration := j.Res.Integration.Integration
@@ -216,9 +223,9 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	}
 
 	start = time.Now()
-	out, vce, err := respProg.MapResponse(att.Response, in)
+	out, session, vce, err := respProg.MapResponseSession(att.Response, in)
 	if errors.Is(err, transform.ErrTimeBudget) {
-		out, vce, err = respProg.MapResponse(att.Response, in)
+		out, session, vce, err = respProg.MapResponseSession(att.Response, in)
 	}
 	j.Timings.Observe(telemetry.StageResponseMap, start)
 	adm.record(a.now(), responseOutcome(att.Response.Status, vce))
@@ -243,7 +250,7 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 		return r
 	}
 	j.Trail.Add(audit.ResponseTransformed, n, body, map[string]any{"transformer": respProg.Ref()})
-	r.Body = body
+	r.Body, r.Session = body, session
 	return r
 }
 

@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/resolve"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/sessions"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 )
 
@@ -154,15 +156,28 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 		return
 	}
 
-	version := 0 // re-resolve the active version at send time (D10) ...
-	if env.Pinned || env.SessionID != nil {
-		version = env.ResolvedVersion // ... unless pinned or bound to a vendor session
+	var session *sessions.Session
+	if env.SessionID != nil {
+		// A later step of a vendor session: the session's version and account (DESIGN §6.3).
+		s, err := sessions.Get(ctx, w.DB, env.Tenant, env.IntegrationID, *env.SessionID)
+		if err != nil {
+			if !errors.Is(err, sessions.ErrNotFound) {
+				log.ErrorContext(ctx, "session lookup failed", slog.String("error", err.Error()))
+				report(w.Transitions.Hold(ctx, env, w.Name, w.now().Add(5*time.Second), "session lookup failed"), "session lookup")
+				return
+			}
+			trail.Add(audit.IntegrationResolved, c.Attempt, nil, map[string]any{"session": map[string]any{"id": *env.SessionID, "found": false}, "attempt": c.Attempt})
+			emit()
+			report(w.Transitions.DeadLetter(ctx, env, w.Name, Outcome{
+				Final: audit.Final{ErrorCode: string(core.CodeSessionNotFound), Attempts: c.Attempt - 1},
+				Err:   &core.CanonicalError{Code: core.CodeSessionNotFound, Message: "Unknown or expired session"},
+				DL:    queue.DeadLetter{Reason: string(core.CodeSessionNotFound), LastError: "the vendor session expired before delivery"},
+			}), "session gone")
+			return
+		}
+		session = &s
 	}
-	routeKey := env.RequestID
-	if env.IdempotencyKey != nil {
-		routeKey = *env.IdempotencyKey
-	}
-	res, err := resolve.Resolve(snap, env.Tenant, env.IntegrationID, version, routeKey)
+	res, err := w.resolve(snap, env, session)
 	if err != nil {
 		emit()
 		report(w.Transitions.DeadLetter(ctx, env, w.Name, Outcome{
@@ -172,8 +187,14 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 		}), "resolve failed")
 		return
 	}
-	trail.Add(audit.IntegrationResolved, c.Attempt, nil, map[string]any{"version": res.VersionNumber, "vendor": res.Target.Vendor,
-		"account": res.Target.Account, "snapshot_version": res.SnapshotVersion, "attempt": c.Attempt})
+	resolved := map[string]any{"version": res.VersionNumber, "vendor": res.Target.Vendor,
+		"account": res.Target.Account, "snapshot_version": res.SnapshotVersion, "attempt": c.Attempt}
+	var sessionData map[string]any
+	if session != nil { // meta only: never the session data
+		resolved["session"] = SessionMeta(session.ID, "used", session.Version, session.AccountID)
+		sessionData = session.Data
+	}
+	trail.Add(audit.IntegrationResolved, c.Attempt, nil, resolved)
 	var body map[string]any
 	if err := json.Unmarshal(env.Canonical, &body); err != nil {
 		emit()
@@ -195,7 +216,7 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 	}
 	queueWait := w.now().Sub(env.CreatedAt)
 	out := w.Attempter.Run(ctx, Job{
-		RequestID: env.RequestID, Snap: snap, Res: res, Body: body, Hdr: hdr, Trail: trail, Timings: &timings,
+		RequestID: env.RequestID, Snap: snap, Res: res, Body: body, Hdr: hdr, Session: sessionData, Trail: trail, Timings: &timings,
 		FirstAttempt: c.Attempt, Live: c.Attempt == 1 && c.Status == core.StateAccepted, // drained and retried: not live
 	})
 	final := audit.Final{
@@ -207,6 +228,29 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 	report(err, "settle")
 	TerminalAudit(trail, c.Attempt, state, err, out.Err)
 	w.Audit.Emit(audit.Batch{Events: trail.Events(), Attempts: out.Attempts})
+}
+
+// resolve picks the version and target of an attempt: the active version at send time (D10),
+// resolved_version when pinned, and for a vendor session its exact version and account.
+func (w *Worker) resolve(snap *registry.Snapshot, env core.Envelope, session *sessions.Session) (resolve.Resolution, error) {
+	if session != nil {
+		return resolve.ResolveSession(snap, env.Tenant, env.IntegrationID, session.Version, session.AccountID)
+	}
+	version := 0
+	if env.Pinned {
+		version = env.ResolvedVersion
+	}
+	routeKey := env.RequestID
+	if env.IdempotencyKey != nil {
+		routeKey = *env.IdempotencyKey
+	}
+	return resolve.Resolve(snap, env.Tenant, env.IntegrationID, version, routeKey)
+}
+
+// SessionMeta is the audit view of a vendor session (DESIGN §13.1): id, what happened (opened,
+// used), version and account. Never the session data.
+func SessionMeta(id, event string, version int, account string) map[string]any {
+	return map[string]any{"id": id, "event": event, "version": version, "account": account}
 }
 
 // Settler returns the worker's settle policy.

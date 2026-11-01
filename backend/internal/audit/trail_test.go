@@ -176,3 +176,15 @@ func TestMaskingDoesNotModifyTheCanonicalBody(t *testing.T) {
 		t.Fatal("canonical body was modified")
 	}
 }
+
+func TestAnnotateSetsMetaOnTheLatestEventOfAType(t *testing.T) {
+	tr := NewTrail(TrailOptions{RequestID: "req_x"})
+	tr.Add(ResponseTransformed, 1, nil, nil)
+	tr.Add(ResponseTransformed, 2, nil, map[string]any{"transformer": "R@1"})
+	tr.Annotate(ResponseTransformed, "session", map[string]any{"id": "ses_1"})
+	tr.Annotate(VendorSent, "ignored", true) // no such event: no-op
+	ev := tr.Events()
+	if ev[0].Meta != nil || ev[1].Meta["transformer"] != "R@1" || ev[1].Meta["session"].(map[string]any)["id"] != "ses_1" || len(ev) != 2 {
+		t.Fatalf("events %+v", ev)
+	}
+}

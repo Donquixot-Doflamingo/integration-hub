@@ -86,7 +86,8 @@ func TestCreateGetScopesAndExpiry(t *testing.T) {
 	if n, _ := sessions.CountOpen(t.Context(), db, account); n != 1 {
 		t.Fatalf("an expired session counts as open: %d", n)
 	}
-	removed, err := sessions.Expire(t.Context(), db, time.Now())
+	// Expire takes the caller's clock; leave a minute for skew between this host and Postgres.
+	removed, err := sessions.Expire(t.Context(), db, time.Now().Add(time.Minute))
 	if err != nil || removed < 1 {
 		t.Fatalf("Expire %d %v", removed, err)
 	}
