@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **125** · todo: **64** · other (in-progress/in-review/blocked): **8**
+Total tickets: **198** · done: **125** · todo: **64** · other (in-progress/in-review/blocked): **9**
 
 ## Epics
 
@@ -15,7 +15,7 @@ Total tickets: **197** · done: **125** · todo: **64** · other (in-progress/in
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
-| EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
+| EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
@@ -1460,6 +1460,18 @@ Remaining M6 Accept items, mixed-version propagation, and the wrap-up.
 - [ ] Rollback restores behaviour and leaves history linear
 - [ ] During propagation one node on v7 and another on v8 both record exact versions
 - [ ] Milestone summary posted; F-14, F-15 docs updated
+
+### HUB-341 — Per-version golden fixtures for transformers
+- **Epic:** EP-07 · **Type:** feat · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-046 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `phase-2/m6-versioning`
+
+Golden fixtures live in `transformers/<ID>/fixtures/`, shared by every version of the ID, so a new version that changes its output (T1@7 → T1@8) cannot pass them without breaking the old one. Found while building the M6 cutover fixtures. Let `transformers/<ID>/fixtures/v<N>/` hold the cases of version N when it exists; otherwise the shared directory applies (DESIGN §7.6).
+
+**Acceptance criteria**
+- [x] A version with its own `fixtures/v<N>/` runs only those cases
+- [x] Versions without one keep using the shared fixtures
+- [ ] A failing per-version golden names `fixtures/v<N>/<case>`
 
 ## EP-08 — M7 Control plane & hubctl
 
