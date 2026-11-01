@@ -38,6 +38,8 @@ type Deps struct {
 	// Breakers and Limiter are admission (M5): circuit breakers and the account limiter.
 	Breakers *upstream.Breakers
 	Limiter  *upstream.AccountLimiter
+	// Shadow copies requests to shadow targets (nil: shadows are not sent).
+	Shadow *delivery.Shadower
 	// Queueing enables wait and async delivery (nil: every mode is delivered synchronously).
 	Queueing *Queueing
 	// Idempotency enables Idempotency-Key deduplication (nil: keys are required where the

@@ -45,6 +45,7 @@ type dataPlane struct {
 	scheduler   *delivery.Scheduler   // scheduler
 	breakers    *upstream.Breakers    // circuit breakers (gateway, worker, scheduler)
 	rdb         *redis.Client         // hub:creds pings (credential rotation)
+	shadow      *delivery.Shadower    // gateway: shadow copies (DESIGN §6.4)
 	wg          sync.WaitGroup
 	stop        context.CancelFunc
 }
@@ -117,13 +118,14 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 
 	switch cfg.Role {
 	case Gateway:
+		dp.shadow = delivery.NewShadower(attempter, dp.audit, log, m.Registry)
 		idem := idempotency.New(st.rdb, m, idempotency.Options{})
 		if err := idem.Warm(ctx); err != nil {
 			log.WarnContext(ctx, "idempotency scripts not preloaded (falls back to EVAL)", slog.String("error", err.Error()))
 		}
 		dp.edge = edge.New(edge.Deps{
 			Snapshots: &reg.store, Creds: cache, Upstream: client, Breakers: dp.breakers, Limiter: limiter, Audit: dp.audit, Masker: masker, Metrics: m, Log: log,
-			DebugHeaders: cfg.DebugHeaders, Idempotency: idem,
+			DebugHeaders: cfg.DebugHeaders, Idempotency: idem, Shadow: dp.shadow,
 			Queueing: &edge.Queueing{DB: st.pg, Queue: q, Settler: settler, Name: dp.name},
 		})
 	case Worker:
@@ -211,6 +213,9 @@ func (dp *dataPlane) followCredentials(ctx context.Context) {
 // in-flight attempts (unfinished claims expire and are reclaimed), late audit events are
 // written, then upstream connections close.
 func (dp *dataPlane) shutdown() {
+	if dp.shadow != nil {
+		dp.shadow.Wait() // copies in flight finish (bounded by their timeout) while audit still runs
+	}
 	if dp.stop != nil {
 		dp.stop()
 	}

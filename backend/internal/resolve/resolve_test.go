@@ -70,6 +70,43 @@ func TestWeightedChoiceIsStickyAndProportional(t *testing.T) {
 	}
 }
 
+// TestWeightChangesOnlyMoveTheShiftedBuckets is HUB-173: across a 90/10 → 50/50 → 0/100 cutover
+// a key only ever moves from A to B, never back, so callers see one switch at most.
+func TestWeightChangesOnlyMoveTheShiftedBuckets(t *testing.T) {
+	steps := []*registry.Snapshot{
+		snapshot(registry.Target{Account: "acct-a", Weight: 90}, registry.Target{Account: "acct-b", Weight: 10}),
+		snapshot(registry.Target{Account: "acct-a", Weight: 50}, registry.Target{Account: "acct-b", Weight: 50}),
+		snapshot(registry.Target{Account: "acct-a", Weight: 0}, registry.Target{Account: "acct-b", Weight: 100}),
+	}
+	const n = 20_000
+	moved := 0
+	for i := range n {
+		key := fmt.Sprintf("req_%08d", i)
+		prev := ""
+		for s, snap := range steps {
+			r, err := Resolve(snap, "orders-service", "int_x", 0, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			acct := r.Target.Account
+			if prev == "acct-b" && acct == "acct-a" {
+				t.Fatalf("key %s moved back from B to A at step %d", key, s)
+			}
+			if prev == "acct-a" && acct == "acct-b" && s == 1 {
+				moved++
+			}
+			prev = acct
+		}
+		if prev != "acct-b" {
+			t.Fatalf("key %s not on B after the cutover", key)
+		}
+	}
+	// 90/10 → 50/50 moves the 40 buckets in between, and only those.
+	if share := float64(moved) / n; math.Abs(share-0.40) > 0.02 {
+		t.Fatalf("90/10 → 50/50 moved %.3f of keys, want 0.40", share)
+	}
+}
+
 func TestZeroWeightTargetIsNeverPicked(t *testing.T) {
 	snap := snapshot(registry.Target{Account: "acct-a", Weight: 100}, registry.Target{Account: "acct-b", Weight: 0})
 	for i := range 10_000 {

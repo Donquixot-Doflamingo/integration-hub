@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(delivery)` · Copy requests to shadow targets and prove weight stickiness (HUB-173) · HUB-173 · F-14
+  - An integration version can name a shadow target: requests are copied after the caller's answer, the copy's result is audited and never returned
+  - Shadows of non-idempotent (side-effect) endpoints must be dry_run: they are transformed and audited, never sent
+  - Weight changes across versions move only the shifted buckets (90/10 → 50/50 → 0/100)
 - 2026-11-02 · `feat(creds)` · Rotate credentials through next, promote and delete-old with node pings (HUB-177) · HUB-177 · F-15
   - Accounts gain a previous slot; add next → promote → delete old, each with an optimistic expected version
   - Every rotation step writes a change-log row with slot metadata only, and every node reloads its credential cache within a second

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **125** · todo: **65** · other (in-progress/in-review/blocked): **7**
+Total tickets: **197** · done: **125** · todo: **64** · other (in-progress/in-review/blocked): **8**
 
 ## Epics
 
@@ -1323,15 +1323,15 @@ Rollback publishes a new version with the old content (v9 = v7); history stays l
 
 ### HUB-173 — Gradual cutover: weights and shadow
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-083, HUB-170, HUB-092 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-review · **Depends on:** HUB-083, HUB-170, HUB-092 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-173-weights-shadow`
 
 Support weight changes across successive versions (90/10 → 50/50 → 0/100) and `shadow` targets: serve from A, copy to B, log B's result, never return it; dry-run-only shadow for vendors with side effects (DESIGN §6.4).
 
 **Acceptance criteria**
-- [ ] Shadow result recorded in audit and never returned to the caller
-- [ ] Side-effect vendors only receive dry-run shadow (no vendor call recorded)
-- [ ] Weight changes keep stickiness for unchanged buckets
+- [x] Shadow result recorded in audit and never returned to the caller
+- [x] Side-effect vendors only receive dry-run shadow (no vendor call recorded)
+- [x] Weight changes keep stickiness for unchanged buckets
 
 ### HUB-174 — Re-resolve vs pinned at send time
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend

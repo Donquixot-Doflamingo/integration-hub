@@ -184,6 +184,7 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 		delivery.TerminalAudit(p.trail, final.Attempts, state, err, res.Err)
 		s.deps.Audit.Emit(audit.Batch{Events: p.trail.Events(), Attempts: res.Attempts})
 		done <- waitOutcome{state: state, res: res, err: err}
+		s.shadow(ctx, r, p)
 	}()
 
 	t := time.NewTimer(wait)

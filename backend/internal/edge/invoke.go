@@ -129,6 +129,7 @@ func (s *Server) deliver(w http.ResponseWriter, r *http.Request, p *prepared) *c
 		return out
 	}
 	res := run(p.res)
+	defer s.shadow(ctx, r, p) // after the answer is written
 	servedBy := "primary"
 	policy := p.res.Delivery.OnCircuitOpen
 	// failover (DESIGN §5.3): the next targets of the chain, only when a repeat is safe.

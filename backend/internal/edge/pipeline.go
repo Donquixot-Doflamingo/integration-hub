@@ -1,6 +1,7 @@
 package edge
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/delivery"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/resolve"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
@@ -33,6 +35,7 @@ type prepared struct {
 	hdr         map[string]any
 	timings     telemetry.Timings
 	trail       *audit.Trail
+	trailOpts   audit.TrailOptions // for the shadow copy's own trail
 	attempts    int
 	attemptRows []audit.Attempt
 }
@@ -69,10 +72,11 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 	start = time.Now()
 	body, raw, ce := readJSONBody(r, bodyLimit(in.Capability))
 	p.timings.Observe(telemetry.StageBodyLimit, start)
-	p.trail = audit.NewTrail(audit.TrailOptions{
+	p.trailOpts = audit.TrailOptions{
 		RequestID: RequestID(r.Context()), Tenant: c.Tenant.Tenant, Policy: in.Active().Audit.Payloads,
 		PII: pii, Canonical: body, Masker: s.deps.Masker, Now: s.deps.Now,
-	})
+	}
+	p.trail = audit.NewTrail(p.trailOpts)
 	p.trail.Add(audit.RequestReceived, 0, raw, receivedMeta(r, c))
 	if ce != nil {
 		return p, ce
@@ -155,6 +159,18 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, p *prepared, ce *c
 }
 
 // finish records request.completed and the final record of a successful request.
+// shadow starts the version's shadow copy of the request, if any (DESIGN §6.4). It never
+// delays or changes the caller's answer.
+func (s *Server) shadow(ctx context.Context, r *http.Request, p *prepared) {
+	if s.deps.Shadow == nil || p.res.Version == nil || p.res.Version.Shadow == nil {
+		return
+	}
+	s.deps.Shadow.Copy(ctx, delivery.Job{
+		RequestID: p.trailOpts.RequestID, Snap: p.caller.Snap, Res: p.res, Body: p.body, Hdr: p.hdr,
+		IdempotencyKey: r.Header.Get("Idempotency-Key"),
+	}, p.trailOpts)
+}
+
 func (s *Server) finish(r *http.Request, p *prepared, status int) {
 	p.trail.Add(audit.RequestCompleted, 0, nil, map[string]any{"status": status, "attempts": p.attempts})
 	s.record(r, p, "succeeded", status, "")

@@ -154,6 +154,24 @@ func (c *Config) validateVersion(in *Integration, v *IntegrationVersion, file st
 			ps.add(file, fmt.Sprintf("failover[%d].weight", i), "failover entries are tried in order and take no weight")
 		}
 	}
+	if sh := v.Shadow; sh != nil {
+		c.validateTarget(in, sh.Target, file, "shadow.target", active, ps)
+		if sh.Target.Weight != 0 {
+			ps.add(file, "shadow.target.weight", "a shadow target takes no weight")
+		}
+		switch sh.Mode {
+		case ShadowSend, ShadowDryRun:
+		default:
+			ps.add(file, "shadow.mode", "must be send or dry_run")
+		}
+		if r := sh.Ratio(); r < 0 || r > 1 {
+			ps.add(file, "shadow.sample_ratio", "must be 0..1")
+		}
+		// A copy must not cause a second side effect: only idempotent endpoints are sent for real.
+		if ref, ep, ok := c.requestEndpoint(sh.Target); ok && sh.Mode == ShadowSend && !ep.Idempotent {
+			ps.add(file, "shadow.mode", "%s is not idempotent (it has side effects): its shadow must be dry_run", ref)
+		}
+	}
 
 	d := &v.Delivery
 	switch d.Mode {
@@ -268,6 +286,24 @@ func (c *Config) validateTarget(in *Integration, t Target, file, at string, acti
 			ps.add(file, p, "%s targets %s, not vendor %q", slot.ref, tr.VendorEndpoint, t.Vendor)
 		}
 	}
+}
+
+// requestEndpoint is the vendor endpoint the target's request transformer calls.
+func (c *Config) requestEndpoint(t Target) (string, Endpoint, bool) {
+	tr, ok := c.Transformers[t.Transformer.Request]
+	if !ok {
+		return "", Endpoint{}, false
+	}
+	vendor, name, ok := strings.Cut(tr.VendorEndpoint, ".")
+	if !ok {
+		return "", Endpoint{}, false
+	}
+	v, ok := c.Vendors[vendor]
+	if !ok {
+		return "", Endpoint{}, false
+	}
+	ep, ok := v.Endpoints[name]
+	return tr.VendorEndpoint, ep, ok
 }
 
 func sortedKeys[K interface{ ~string | ~int }, V any](m map[K]V) []K {

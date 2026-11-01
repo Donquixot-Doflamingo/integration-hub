@@ -229,7 +229,31 @@ type IntegrationVersion struct {
 	Breaker     BreakerOverride `yaml:"breaker,omitempty"`
 	Webhooks    []Subscription  `yaml:"webhooks,omitempty"`
 	Audit       AuditPolicy     `yaml:"audit"`
+	Shadow      *Shadow         `yaml:"shadow,omitempty"`
 	Publish     PublishMeta     `yaml:"publish"`
+}
+
+// ShadowMode is how a shadow target receives its copy of the traffic (DESIGN §6.4).
+type ShadowMode string
+
+const (
+	ShadowSend   ShadowMode = "send"    // call the shadow target for real
+	ShadowDryRun ShadowMode = "dry_run" // transform only: for endpoints with side effects
+)
+
+// Shadow copies each request to a second target. Its result is audited, never returned.
+type Shadow struct {
+	Target      Target     `yaml:"target"`
+	Mode        ShadowMode `yaml:"mode"`
+	SampleRatio *float64   `yaml:"sample_ratio,omitempty"` // default 1
+}
+
+// Ratio is the share of requests copied, 0..1.
+func (s *Shadow) Ratio() float64 {
+	if s.SampleRatio == nil {
+		return 1
+	}
+	return *s.SampleRatio
 }
 
 // Target is one (vendor, account, transformers) route with a weight.
