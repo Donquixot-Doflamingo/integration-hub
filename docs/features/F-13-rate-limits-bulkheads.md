@@ -4,7 +4,7 @@
 Two budgets and one isolation layer: tenant fairness at the edge (token bucket per tenant + integration), vendor quota per account in the upstream client (shared Redis token bucket, live traffic first), per-account bulkheads (HTTP pool + 64 in-flight), separate LLM worker pool, and the retry budget (DESIGN §10.3, §10.8, §3.2).
 
 ## Status
-`proposed` — 2026-10-31.
+`shipped` — 2026-11-02 (M5, `docs/milestones/M5.md`).
 
 ## Owner
 `backend-engineer`.

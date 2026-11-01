@@ -4,7 +4,7 @@
 A circuit breaker per `(account, endpoint)` shared across nodes via Redis, with integration overrides and pause, `on_circuit_open` policies for sync, synthetic health probes, parking of async work while open, and a ramped drain on recovery (DESIGN §5.3, §10.4, §10.5, D4, D5).
 
 ## Status
-`proposed` — 2026-10-31.
+`shipped` — 2026-11-02 (M5, `docs/milestones/M5.md`). Admin force-open/close is EP-08.
 
 ## Owner
 `backend-engineer`.

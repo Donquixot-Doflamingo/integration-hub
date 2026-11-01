@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `test(edge)` · prove the five resilience scenarios and add the M5 summary · HUB-150 · F-12
+  - make itest runs DESIGN's five M5 chaos scenarios against mockvendor with two gateway nodes, a worker and a scheduler: vendor down, recovery with a ramped drain, re-open mid-drain, two integrations on one account with pause isolation, and failover
+  - docs/milestones/M5.md: evidence, built, deferred, 7 deviations; F-12 and F-13 shipped
 - 2026-10-31 · `feat(delivery)` · probe open breakers and drain parked envelopes with a ramp · HUB-149 · F-12
   - The scheduler leader probes every open breaker with the vendor's health_probe (marked X-Hub-Probe, never tenant traffic); a healthy answer runs the half-open probes at once, so recovery closes the circuit without live traffic
   - After a close, parked envelopes are released at 20 % of the account rate, doubling every 30 s to 100 %; a re-open stops the release, and a trip soon after a recovery doubles the open window

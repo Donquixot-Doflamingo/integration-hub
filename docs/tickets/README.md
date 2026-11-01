@@ -53,14 +53,14 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-03 | M2 Transformer engine | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
-| EP-06 | M5 Resilience | F-12, F-13 | HUB-140–HUB-169 | 15 | 10 |
+| EP-06 | M5 Resilience | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
 | EP-07 | M6 Versioning & cutover | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | F-18 | HUB-230–HUB-249 | 8 | 0 |
 | EP-10 | Admin console (SvelteKit) | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 11 | 0 |
-| **Total** | | | | **197** | **120** |
+| **Total** | | | | **197** | **125** |
 
 ## Sizing
 

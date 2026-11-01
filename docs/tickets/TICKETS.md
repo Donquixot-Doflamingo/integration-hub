@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **120** · todo: **76** · other (in-progress/in-review/blocked): **1**
+Total tickets: **197** · done: **125** · todo: **71** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -14,7 +14,7 @@ Total tickets: **197** · done: **120** · todo: **76** · other (in-progress/in
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
-| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 10 |
+| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
@@ -1225,64 +1225,64 @@ On breaker close release parked envelopes at 20 % of the account rate for 30 s, 
 
 ### HUB-150 — Chaos 1: vendor down
 - **Epic:** EP-06 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-144, HUB-146, HUB-029 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-144, HUB-146, HUB-029 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `test/HUB-150-chaos-1-vendor-down`
 
 DESIGN §19 M5 Accept scenario 1 with mockvendor hard down.
 
 **Acceptance criteria**
-- [ ] Breaker opens within the configured window
-- [ ] Sync gets 503 with `retry_after_ms` and `circuit: open`
-- [ ] Wait gets 202 `queued`; async envelopes park
+- [x] Breaker opens within the configured window
+- [x] Sync gets 503 with `retry_after_ms` and `circuit: open`
+- [x] Wait gets 202 `queued`; async envelopes park
 
 ### HUB-151 — Chaos 2: vendor recovers and drain ramps
 - **Epic:** EP-06 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-149, HUB-150 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-149, HUB-150 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `test/HUB-151-chaos-2-recovery-drain`
 
 Scenario 2: probes close the breaker and the parked backlog drains with a ramp.
 
 **Acceptance criteria**
-- [ ] Probes close the breaker without live traffic
-- [ ] Drain starts ≤ 60 s after recovery
-- [ ] Observed send rate ramps 20 % → 100 % (measured from mockvendor recordings)
+- [x] Probes close the breaker without live traffic
+- [x] Drain starts ≤ 60 s after recovery
+- [x] Observed send rate ramps 20 % → 100 % (measured from mockvendor recordings)
 
 ### HUB-152 — Chaos 3: re-open mid-drain
 - **Epic:** EP-06 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-151 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-151 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `test/HUB-152-chaos-3-reopen-mid-drain`
 
 Scenario 3: the vendor fails again during the drain.
 
 **Acceptance criteria**
-- [ ] Breaker re-opens with doubled open window
-- [ ] Remaining envelopes stay parked; none dead-lettered or lost
-- [ ] Drain resumes after the next recovery
+- [x] Breaker re-opens with doubled open window
+- [x] Remaining envelopes stay parked; none dead-lettered or lost
+- [x] Drain resumes after the next recovery
 
 ### HUB-153 — Chaos 4: two integrations on one account; pause isolation
 - **Epic:** EP-06 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-142, HUB-150 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-142, HUB-150 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `test/HUB-153-chaos-4-shared-account`
 
 Scenario 4: integrations sharing an account trip and recover together; pausing one does not affect the other.
 
 **Acceptance criteria**
-- [ ] Both integrations see the open circuit within 1 s of each other
-- [ ] Both recover together
-- [ ] Pausing one returns `INTEGRATION_PAUSED` for it only
+- [x] Both integrations see the open circuit within 1 s of each other
+- [x] Both recover together
+- [x] Pausing one returns `INTEGRATION_PAUSED` for it only
 
 ### HUB-154 — Chaos 5: failover target serves; M5 summary
 - **Epic:** EP-06 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-145, HUB-150, HUB-151, HUB-152, HUB-153, HUB-148 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-145, HUB-150, HUB-151, HUB-152, HUB-153, HUB-148 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `test/HUB-154-chaos-5-failover`
 
 Scenario 5 plus the milestone wrap-up.
 
 **Acceptance criteria**
-- [ ] Failover policy serves from the failover target and sets `X-Hub-Served-By`
-- [ ] Audit records the failover attempt and target
-- [ ] All five chaos tests green in `make itest`
-- [ ] Milestone summary posted; F-12, F-13 docs updated
+- [x] Failover policy serves from the failover target and sets `X-Hub-Served-By`
+- [x] Audit records the failover attempt and target
+- [x] All five chaos tests green in `make itest`
+- [x] Milestone summary posted; F-12, F-13 docs updated
 
 ## EP-07 — M6 Versioning & cutover
 
