@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `test(edge)` · widen the chaos tests' open window for slower runners · HUB-151 · F-12
+  - The M5 chaos suite uses a 5 s breaker window (was 1 s): on a slow CI runner the breaker reached half-open while the backlog was still being parked; the assertions scale with it
 - 2026-10-31 · `test(edge)` · prove the five resilience scenarios and add the M5 summary · HUB-150 · F-12
   - make itest runs DESIGN's five M5 chaos scenarios against mockvendor with two gateway nodes, a worker and a scheduler: vendor down, recovery with a ramped drain, re-open mid-drain, two integrations on one account with pause isolation, and failover
   - docs/milestones/M5.md: evidence, built, deferred, 7 deviations; F-12 and F-13 shipped

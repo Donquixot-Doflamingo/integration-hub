@@ -100,7 +100,9 @@ func newM5(t *testing.T, tune m5Tune, snapTune ...func(*registry.Snapshot)) *m5 
 	snap := queuedSnapshot(t, mv.VendorURL, tune)
 	for name, v := range snap.Vendors {
 		vc := *v
-		vc.Defaults.Breaker = registry.BreakerConfig{WindowS: 10, MinCalls: 4, FailureRatio: 0.5, ConsecutiveTimeouts: 5, OpenS: 1, OpenMaxS: 8, HalfOpenProbes: 2}
+		vc.Defaults.Breaker = registry.BreakerConfig{WindowS: 10, MinCalls: 4, FailureRatio: 0.5, ConsecutiveTimeouts: 5, OpenS: 5, OpenMaxS: 40, HalfOpenProbes: 2}
+		// 5 s: long enough that a slow CI runner parks the whole backlog before half-open;
+		// recovery does not wait for it (probes close the breaker).
 		eps := map[string]registry.Endpoint{}
 		for n, ep := range v.Endpoints {
 			ep.TimeoutMS = 400
@@ -276,7 +278,7 @@ func TestChaos1VendorDown(t *testing.T) {
 		code, body, _ := r.call(r.a, "int_evt_brandA")
 		e := body["error"].(map[string]any)
 		ra, _ := e["retry_after_ms"].(float64)
-		if code != 503 || !circuit(body) || ra <= 0 || ra > 1000 {
+		if code != 503 || !circuit(body) || ra <= 0 || ra > 5000 {
 			t.Fatalf("sync while open: %d %v", code, body)
 		}
 	}
@@ -463,8 +465,8 @@ func TestChaos3ReopenMidDrain(t *testing.T) {
 		reopened = s
 		return ok && s.State == upstream.Open
 	})
-	if window := reopened.OpenUntil.Sub(time.UnixMilli(reopened.Version)); window < 2*time.Second {
-		t.Fatalf("re-open window %s, want doubled (≥ 2 s)", window)
+	if window := reopened.OpenUntil.Sub(time.UnixMilli(reopened.Version)); window < 10*time.Second {
+		t.Fatalf("re-open window %s, want doubled (≥ 10 s)", window)
 	}
 	time.Sleep(500 * time.Millisecond)
 	counts := map[string]int{}
