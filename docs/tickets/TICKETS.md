@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **125** · todo: **71** · other (in-progress/in-review/blocked): **1**
+Total tickets: **197** · done: **125** · todo: **67** · other (in-progress/in-review/blocked): **5**
 
 ## Epics
 
@@ -1288,38 +1288,38 @@ Scenario 5 plus the milestone wrap-up.
 
 ### HUB-170 — Publish pipeline with full validation
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-069, HUB-048, HUB-043 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-review · **Depends on:** HUB-069, HUB-048, HUB-043 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-170-publish-pipeline`
 
 Publish = validate (schemas compile, expressions type-check, goldens pass, response output conforms, referenced accounts/transformers exist and not retired, interactive → sync only, `supports` matches) → immutable version row → new snapshot (DESIGN §6.4, §8.2).
 
 **Acceptance criteria**
-- [ ] Each validation failure blocks publish with a path-qualified error (table test per rule)
-- [ ] Published versions cannot be modified
-- [ ] Publish requires author and reason
+- [x] Each validation failure blocks publish with a path-qualified error (table test per rule)
+- [x] Published versions cannot be modified
+- [x] Publish requires author and reason
 
 ### HUB-171 — Snapshot distribution to nodes
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-review · **Depends on:** HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-171-snapshot-distribution`
 
 Nodes long-poll `/admin/v1/snapshots/latest` and listen to a Redis ping, download, compile in the background and swap atomically; a node that cannot fetch keeps the last good snapshot (DESIGN §6.4, §8.2).
 
 **Acceptance criteria**
-- [ ] Publish reaches 3 nodes within 10 s (itest)
-- [ ] Control plane down → nodes keep serving last good
-- [ ] `snapshot_version` gauge exported per node
+- [x] Publish reaches 3 nodes within 10 s (itest)
+- [x] Control plane down → nodes keep serving last good
+- [x] `snapshot_version` gauge exported per node
 
 ### HUB-172 — Rollback as a new version
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-review · **Depends on:** HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-172-rollback-new-version`
 
 Rollback publishes a new version with the old content (v9 = v7); history stays linear, nothing is deleted (DESIGN §6.4).
 
 **Acceptance criteria**
-- [ ] Rollback to v7 creates v9 with v7's spec and a reason
-- [ ] Version list remains strictly increasing with no gaps
+- [x] Rollback to v7 creates v9 with v7's spec and a reason
+- [x] Version list remains strictly increasing with no gaps
 
 ### HUB-173 — Gradual cutover: weights and shadow
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
@@ -1359,15 +1359,15 @@ Worker uses the active version for `pending: re_resolve` (default) and `resolved
 
 ### HUB-176 — Account lifecycle and retire guard
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-174, HUB-175, HUB-170 · **Feature:** F-15 · **Stories:** US-15xx
+- **Status:** in-progress · **Depends on:** HUB-174, HUB-175, HUB-170 · **Feature:** F-15 · **Stories:** US-15xx
 - **Branch:** `feat/HUB-176-account-lifecycle`
 
 `active → draining → retired`: draining when no active version targets the account; retire refused while pinned requests or open sessions reference it; credentials deleted only at retire (DESIGN §6.5).
 
 **Acceptance criteria**
-- [ ] Account auto-enters `draining` after the last referencing publish
+- [x] Account auto-enters `draining` after the last referencing publish
 - [ ] Retire refused with counts of pinned requests and sessions
-- [ ] Retired account cannot be referenced by a new publish
+- [x] Retired account cannot be referenced by a new publish
 
 ### HUB-177 — Credential rotation (active / next)
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend

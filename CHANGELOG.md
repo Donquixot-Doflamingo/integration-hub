@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(control)` · Publish, roll back and retire through a validating publisher (HUB-170) · HUB-170 · F-14
+  - Publishing an integration version runs the full registry build; any error blocks it with a path-qualified message
+  - Published versions are immutable; rollback creates a new version with the old spec
+  - Accounts move active → draining → retired; retire is refused while pinned work or sessions reference them
 - 2026-11-02 · `feat(control)` · Add the append-only change log and archive-backed source-of-truth ADR (HUB-170) · HUB-170 · F-14
   - Every control-plane write records actor, reason, before and after in hub.change_log
   - Rows cannot be updated or deleted (trigger)
