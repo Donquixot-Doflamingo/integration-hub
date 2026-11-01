@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tickets)` · close HUB-280 with its first GitHub run · HUB-280 · F-19
+  - HUB-280 is done: the e2e job's first run on GitHub (PR #12, cold browser cache) finished in 5 min 01 s, under its 8-minute cap
 - 2026-11-01 · `feat(frontend)` · show the callback signing secret once on create and rotate · HUB-272 · F-19
   - Registering a callback endpoint or rotating its secret now shows the new signing secret once, with a Copy button and a warning that it verifies the X-Hub-Signature header and cannot be shown again
   - After a rotation it says until when callbacks carry both signatures; after Done the secret is gone from the page and only its version is listed

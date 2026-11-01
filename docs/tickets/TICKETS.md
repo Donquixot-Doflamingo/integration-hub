@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **109** · todo: **86** · other (in-progress/in-review/blocked): **2**
+Total tickets: **197** · done: **110** · todo: **86** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **197** · done: **109** · todo: **86** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 28 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -2120,7 +2120,7 @@ Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract ro
 
 ### HUB-280 — Run Playwright e2e in frontend CI
 - **Epic:** EP-10 · **Type:** test · **Area:** infra
-- **Status:** in-review · **Depends on:** HUB-250, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-250, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `test/HUB-280-fe-e2e-ci`
 
 The e2e suite (axe a11y, keyboard, 768 px drawer, theme) runs only locally today. Add a CI job that builds with mocks (`build:mock`), installs the chromium headless shell with a cache, and runs `npm run test:e2e`, uploading the report on failure.
@@ -2129,7 +2129,7 @@ Shipped (frontend-engineer, `ci(frontend): run the Playwright e2e suite in front
 
 **Acceptance criteria**
 - [x] `frontend.yml` runs e2e on `frontend/**` PRs; a failing e2e test fails the PR (the job runs on the workflow's `pull_request` paths and `npm run test:e2e` exits 1 on a failing test, checked locally with a deliberate failure; making the check required is a branch-protection setting, not in the repo)
-- [ ] Browser binaries cached; job under 8 min (cache step and `timeout-minutes: 8` in place; locally `CI=true npm run test:e2e` runs 99 tests in about 60 s including the mock build on 10 cores, 3 runs in a row green; not yet measured on a GitHub runner, which has fewer cores)
+- [x] Browser binaries cached; job under 8 min (first GitHub run on PR #12, a cache miss that downloaded the browser: 5 min 01 s; later runs restore it from the cache; locally `CI=true npm run test:e2e` runs 99 tests in about 60 s including the mock build on 10 cores, 3 runs in a row green; not yet measured on a GitHub runner, which has fewer cores)
 - [x] Playwright HTML report uploaded as an artifact on failure (`if: failure()` upload of `frontend/playwright-report/` and `frontend/test-results/`; the HTML report is produced under `CI`, checked locally)
 
 ### HUB-281 — Upgrade the console to SvelteKit 3
