@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `test(delivery)` · Prove send-time version choice for queued, parked, pinned and session envelopes (HUB-174) · HUB-174 · F-14
+  - Queued and parked envelopes use the version active at send time (D10)
+  - Pinned and session envelopes stay on their accepted version; every attempt records it
 - 2026-11-02 · `feat(roles)` · Follow the snapshot archive on every node via Redis ping and poll (HUB-171) · HUB-171 · F-14
   - A publish reaches every node within a second (Redis hub:snapshot ping, 5 s poll fallback)
   - A node that cannot read the archive keeps serving its last good snapshot

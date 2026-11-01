@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **125** · todo: **67** · other (in-progress/in-review/blocked): **5**
+Total tickets: **197** · done: **125** · todo: **66** · other (in-progress/in-review/blocked): **6**
 
 ## Epics
 
@@ -1335,15 +1335,15 @@ Support weight changes across successive versions (90/10 → 50/50 → 0/100) an
 
 ### HUB-174 — Re-resolve vs pinned at send time
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-112, HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-review · **Depends on:** HUB-112, HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-174-reresolve-pinned`
 
 Worker uses the active version for `pending: re_resolve` (default) and `resolved_version` for `pinned` or session envelopes; every attempt records its version (DESIGN §6.3, §11.3, D10).
 
 **Acceptance criteria**
-- [ ] Parked envelope re-resolves to v8 after publish (re_resolve)
-- [ ] Pinned envelope stays on v7
-- [ ] `request_attempts.integration_version` set on every attempt
+- [x] Parked envelope re-resolves to v8 after publish (re_resolve)
+- [x] Pinned envelope stays on v7
+- [x] `request_attempts.integration_version` set on every attempt
 
 ### HUB-175 — Vendor session store and pinning
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend

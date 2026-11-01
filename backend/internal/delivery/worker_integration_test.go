@@ -173,6 +173,13 @@ var okBody = json.RawMessage(`{"status":"success","processed":1,"unprocessed":[]
 // enqueue queues an events.track request the way the edge does: requests row + outbox in one TX.
 func (r *rig) enqueue(integration string, ttl time.Duration) core.Envelope {
 	r.t.Helper()
+	return r.enqueueWith(integration, ttl, nil, false)
+}
+
+// enqueueWith is enqueue with an envelope edit and, when parked, the envelope parked on its
+// breaker key instead of due.
+func (r *rig) enqueueWith(integration string, ttl time.Duration, edit func(*core.Envelope), parked bool) core.Envelope {
+	r.t.Helper()
 	now := r.now()
 	env := core.Envelope{
 		RequestID: "req_" + core.NewULID(now), Tenant: "orders-service", IntegrationID: integration, ResolvedVersion: 2,
@@ -180,10 +187,16 @@ func (r *rig) enqueue(integration string, ttl time.Duration) core.Envelope {
 		Canonical:     json.RawMessage(`{"user":{"id":"u_48213"},"event":{"name":"order_placed","timestamp":"2026-10-31T09:15:00Z"}}`),
 		NextAttemptAt: now.Add(-time.Millisecond), ExpiresAt: now.Add(ttl), CreatedAt: now,
 	}
+	if edit != nil {
+		edit(&env)
+	}
 	err := pgx.BeginFunc(r.t.Context(), r.db, func(tx pgx.Tx) error {
 		if err := (audit.Ledger{}).Insert(r.t.Context(), tx, audit.Record{RequestID: env.RequestID, CreatedAt: now, TenantID: env.Tenant,
 			IntegrationID: integration, Capability: env.Capability, Operation: "default", Mode: "async", Status: "accepted", PayloadPolicy: "masked"}); err != nil {
 			return err
+		}
+		if parked {
+			return r.w.Queue.EnqueueParked(r.t.Context(), tx, env, "ct-brandA-in", "upload")
 		}
 		return r.w.Queue.Enqueue(r.t.Context(), tx, env)
 	})
@@ -358,5 +371,61 @@ func TestPausedIntegrationIsHeldWithoutAnAttempt(t *testing.T) {
 	_ = r.db.QueryRow(t.Context(), `SELECT status, attempt FROM hub.outbox WHERE request_id = $1`, env.RequestID).Scan(&status, &attempt)
 	if status != "accepted" || attempt != 0 || len(r.mv.Requests(t, nil)) != 0 {
 		t.Fatalf("paused: %s attempt %d", status, attempt)
+	}
+}
+
+// TestSendTimeVersion is HUB-174 (D10): an envelope accepted under v2 is sent with the version
+// active at send time unless it is pinned or bound to a vendor session, whether it waited in
+// the queue or parked behind an open breaker. Every attempt records the version it used.
+func TestSendTimeVersion(t *testing.T) {
+	sess := "ses_01JTESTSESSION0000000000000"
+	cases := []struct {
+		name   string
+		edit   func(*core.Envelope)
+		parked bool
+		want   int
+	}{
+		{"queued re_resolve", nil, false, 1},
+		{"parked re_resolve", nil, true, 1},
+		{"queued pinned", func(e *core.Envelope) { e.Pinned = true }, false, 2},
+		{"parked pinned", func(e *core.Envelope) { e.Pinned = true }, true, 2},
+		{"session", func(e *core.Envelope) { e.SessionID = &sess }, false, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRig(t)
+			r.route(mockvendor.Behaviour{Status: 200, Body: okBody})
+			env := r.enqueueWith("int_evt_brandA", 6*time.Hour, tc.edit, tc.parked)
+			// The publish lands while the envelope waits: version 1 becomes active.
+			snap := r.snaps.Snapshot()
+			cp := *snap
+			cp.Integrations = map[string]*registry.Integration{}
+			for k, v := range snap.Integrations {
+				c := *v
+				if k == "int_evt_brandA" {
+					c.ActiveVersion = 1
+				}
+				cp.Integrations[k] = &c
+			}
+			r.snaps.s.Store(&cp)
+			if tc.parked {
+				if r.process() != 0 {
+					t.Fatal("a parked envelope was claimed")
+				}
+				if n, err := r.w.Queue.Release(t.Context(), r.db, "ct-brandA-in", "upload", 10); err != nil || n != 1 {
+					t.Fatalf("release %d %v", n, err)
+				}
+			}
+			if r.process() != 1 {
+				t.Fatal("not claimed")
+			}
+			if s, _ := r.status(env.RequestID); s != "succeeded" {
+				t.Fatalf("status %s", s)
+			}
+			a := r.sink.attempts()
+			if len(a) != 1 || a[0].IntegrationVersion != tc.want {
+				t.Fatalf("want one attempt on v%d, got %+v", tc.want, a)
+			}
+		})
 	}
 }
