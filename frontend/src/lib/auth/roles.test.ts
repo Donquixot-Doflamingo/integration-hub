@@ -53,6 +53,7 @@ describe('accessFromMe', () => {
 			ok: true,
 			status: 200,
 			requestId: null,
+			etag: null,
 			data: { subject: 's', roles: ['tenant_viewer'], tenants: ['orders-service'], permissions: [] }
 		});
 		expect(a).toMatchObject({ known: true, tenants: ['orders-service'], tenantScoped: true });

@@ -34,6 +34,13 @@ const v8: Body<'getIntegrationVersion'> = {
 	snapshot_version: published.snapshot_version ?? null
 };
 
+/** `VALIDATION_FAILED` detail of the registrar SSRF guard (mock text; see `registrar-url-private`). */
+export const SSRF_DETAIL = {
+	pointer: '/url',
+	keyword: 'ssrf',
+	message: 'host resolves to a private or link-local address'
+};
+
 export const presets: Record<string, () => HttpHandler[]> = {
 	/** After publishing the draft: rollback (to v7) and weights (two targets) have something to do. */
 	'v8-active': () => [
@@ -85,6 +92,15 @@ export const presets: Record<string, () => HttpHandler[]> = {
 			})
 		];
 	},
+	/**
+	 * The registrar SSRF guard refusing a URL (contract: "rejects private or link-local ranges
+	 * (400 `VALIDATION_FAILED`)"). The contract has no example of that answer, so this is its 400
+	 * example envelope with the pointer on `/url` (CCR-004 asks for a real example).
+	 */
+	'registrar-url-private': () =>
+		(['createRegistrarEndpoint', 'updateRegistrarEndpoint'] as const).map((op) =>
+			mockError(op, 400, { details: [SSRF_DETAIL] })
+		),
 	/** After the force-open example: the board's breaker is held open by an operator. */
 	'breaker-forced': () => [
 		mockOperation('listBreakers', {

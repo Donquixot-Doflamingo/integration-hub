@@ -7,6 +7,7 @@ const page = (items: number[], next: string | null): ApiResult<ListPage<number>>
 	ok: true,
 	status: 200,
 	requestId: null,
+	etag: null,
 	data: { items, next_cursor: next }
 });
 

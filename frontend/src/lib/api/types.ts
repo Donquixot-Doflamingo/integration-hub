@@ -91,3 +91,34 @@ export type VendorRequestPreview = Schemas['VendorRequestPreview'];
 export type ListTransformersQuery = NonNullable<
 	Operations['listTransformers']['parameters']['query']
 >;
+
+// Tenants (HUB-270), API keys (HUB-271), registrar endpoints (HUB-272).
+export type TenantSummary = Schemas['TenantSummary'];
+export type Tenant = Schemas['Tenant'];
+export type TenantCreate = Schemas['TenantCreate'];
+export type TenantUpdate = Schemas['TenantUpdate'];
+export type TenantChange = Schemas['TenantChange'];
+export type RateLimit = Schemas['RateLimit'];
+/** Query parameters of `listTenants`. */
+export type ListTenantsQuery = NonNullable<Operations['listTenants']['parameters']['query']>;
+export type ApiKey = Schemas['ApiKey'];
+export type ApiKeyState = Schemas['ApiKeyState'];
+export type ApiKeyScope = Schemas['ApiKeyScope'];
+export type ApiKeyCreate = Schemas['ApiKeyCreate'];
+export type ApiKeyChange = Schemas['ApiKeyChange'];
+export type ApiKeySecretChange = Schemas['ApiKeySecretChange'];
+export type ApiKeyRotateResult = Schemas['ApiKeyRotateResult'];
+export type RegistrarEndpoint = Schemas['RegistrarEndpoint'];
+export type RegistrarEndpointCreate = Schemas['RegistrarEndpointCreate'];
+export type RegistrarEndpointUpdate = Schemas['RegistrarEndpointUpdate'];
+export type RegistrarEndpointChange = Schemas['RegistrarEndpointChange'];
+export type RegistrarEndpointSecretChange = Schemas['RegistrarEndpointSecretChange'];
+
+// Change log (HUB-274) and snapshots (HUB-273).
+export type ChangeLogSummary = Schemas['ChangeLogSummary'];
+export type ChangeLogEntry = Schemas['ChangeLogEntry'];
+export type ObjectType = Schemas['ObjectType'];
+/** Query parameters of `listChangeLog`. */
+export type ListChangeLogQuery = NonNullable<Operations['listChangeLog']['parameters']['query']>;
+export type Snapshot = Schemas['Snapshot'];
+export type SnapshotDetail = Schemas['SnapshotDetail'];

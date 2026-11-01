@@ -6,6 +6,51 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(tickets)` · close HUB-280 with its first GitHub run · HUB-280 · F-19
+  - HUB-280 is done: the e2e job's first run on GitHub (PR #12, cold browser cache) finished in 5 min 01 s, under its 8-minute cap
+- 2026-11-01 · `feat(frontend)` · show the callback signing secret once on create and rotate · HUB-272 · F-19
+  - Registering a callback endpoint or rotating its secret now shows the new signing secret once, with a Copy button and a warning that it verifies the X-Hub-Signature header and cannot be shown again
+  - After a rotation it says until when callbacks carry both signatures; after Done the secret is gone from the page and only its version is listed
+
+- 2026-11-01 · `docs(tickets)` · file the dialog focus loss after a failed submit · HUB-285 · F-19
+  - New backlog ticket: after a failed confirm, the dialog should keep keyboard focus so Escape and Tab work
+
+- 2026-11-01 · `ci(frontend)` · run the Playwright e2e suite in frontend CI · HUB-280 · F-19
+  - Every console pull request now runs the full Playwright suite (flows, axe in light and dark, keyboard, narrow layout) on the contract mocks, next to the existing checks; a failing test fails the run
+  - The Chromium headless shell is cached per Playwright version, the job is capped at 8 minutes, and a failed run uploads the HTML report and traces
+
+- 2026-11-01 · `fix(frontend)` · end the change log diff summary as its own sentence · HUB-274 · F-19
+  - On a change log entry, the summary of changed fields ends with a full stop and the note about secrets is a separate line
+
+- 2026-11-01 · `fix(frontend)` · keep table live regions from widening the page · HUB-273 · F-19
+  - The snapshots page no longer scrolls sideways at desktop width: copy buttons inside a table stay within the table's own scroll area
+
+- 2026-11-01 · `feat(frontend)` · add snapshots view with latest marked and diff summary · HUB-273 · F-19
+  - Snapshots list, newest first with paging, shows each version's summary, author, change log entry, checksum (with copy), size and time
+  - The snapshot the gateway nodes load now is marked "Latest" and summarised at the top
+  - Each snapshot can be expanded to list the registry objects it created, updated or deleted, linked to their pages
+
+- 2026-11-01 · `feat(frontend)` · add filterable change log with before/after diff · HUB-274 · F-19
+  - Filter the change log by actor, action, object type, object id and a UTC time range; filters live in the URL as removable chips, with paging
+  - Each entry opens a page with who changed what, when and why, and the before and after as a list of changed fields (added, removed, changed), plus both versions in full
+  - The notice after any change links straight to its change log entry
+
+- 2026-11-01 · `feat(frontend)` · add tenant callback endpoints with write-only secrets · HUB-272 · F-19
+  - Each tenant page lists its callback endpoints with URL, state, signing secret version (and until when the previous secret still signs) and how many integration versions use them
+  - Admins register, edit, disable or enable, rotate the signing secret with an overlap, and delete an endpoint (id typed), each with a reason and the change log id
+  - A URL the Hub refuses (not https, or a private or link-local address) is reported on the URL field; signing secrets are never shown in the console
+
+- 2026-11-01 · `feat(frontend)` · add API keys with the secret shown exactly once · HUB-271 · F-19
+  - Each tenant page lists its API keys by prefix, state, scopes, expiry and last use, filterable by state; no key is ever shown in the list
+  - Admins create keys (scopes, optionally limited to one integration, optional expiry), rotate them with an overlap and revoke them with the prefix typed, each with a reason and the change log id
+  - A new or rotated key appears once, with a Copy button and a clear warning; after Done it is gone from the page and cannot be shown again, and a rotation says until when the old key keeps working
+
+- 2026-10-31 · `feat(frontend)` · add tenant pages with create, edit and disable · HUB-270 · F-19
+  - Tenants can be searched by id or name, with paging; each opens a page with its contact, rate limit, owned integrations (linked) and active key count
+  - Admins create tenants and edit their name, description, contact and rate limit in a form checked against the contract before anything is sent; only changed fields are saved, with a reason
+  - Admins disable a tenant (its keys get 401) with the tenant id typed to confirm, or enable it again; if someone else changed the tenant first, the console says so and offers Reload
+  - Tenant viewers see only their own tenants
+
 - 2026-10-31 · `docs(milestones)` · add the M4 summary · HUB-123 · F-09
   - docs/milestones/M4.md: acceptance evidence for every M4 line, what was built, deferred work, 7 deviations and 3 open questions
   - F-09 in progress; new ticket HUB-124 for the per-integration retry schedule override

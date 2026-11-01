@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
-import { adminClient, REQUEST_ID_HEADER, resolveBaseUrl, unwrap } from './client';
+import { adminClient, ETAG_HEADER, REQUEST_ID_HEADER, resolveBaseUrl, unwrap } from './client';
 import { HubApiError } from './errors';
 import type { Me } from './types';
 
@@ -167,6 +167,21 @@ describe('adminClient', () => {
 				fetch: fakeFetch(json(me, 200, { [REQUEST_ID_HEADER]: '' })).fn
 			});
 			expect(await api.call((c) => c.GET('/me'))).toMatchObject({ ok: true, requestId: null });
+		});
+	});
+
+	describe('ETag (live objects, If-Match concurrency, HUB-270)', () => {
+		it('returns the ETag of a success', async () => {
+			const api = adminClient({
+				baseUrl: BASE,
+				fetch: fakeFetch(json(me, 200, { [ETAG_HEADER]: '"3"' })).fn
+			});
+			expect(await api.call((c) => c.GET('/me'))).toMatchObject({ ok: true, etag: '"3"' });
+		});
+
+		it('is null without the header', async () => {
+			const api = adminClient({ baseUrl: BASE, fetch: fakeFetch(json(me, 200)).fn });
+			expect(await api.call((c) => c.GET('/me'))).toMatchObject({ ok: true, etag: null });
 		});
 	});
 

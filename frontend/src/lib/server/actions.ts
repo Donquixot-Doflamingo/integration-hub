@@ -25,6 +25,21 @@ export function requireSession(event: RequestEvent): void {
 	if (!event.locals.session) redirect(303, loginUrl(page, { expired: true }));
 }
 
+/**
+ * SvelteKit's `use:enhance` marks its fetch with this header. Actions whose answer holds a secret
+ * shown once (HUB-271) refuse anything else: a plain form post would render the answer into a
+ * full HTML page, which the browser may keep in its history and show again on Back.
+ */
+export const ENHANCED_HEADER = 'x-sveltekit-action';
+
+export function requireEnhanced(op: string, event: RequestEvent) {
+	return event.request.headers.get(ENHANCED_HEADER) === 'true'
+		? null
+		: invalid(op, {
+				reason: 'This action needs JavaScript: the new secret is shown once, in a dialog.'
+			});
+}
+
 /** The admin client for an action (SvelteKit `fetch`, token attached by `handleFetch`). */
 export function actionApi(event: RequestEvent) {
 	return consoleApi(event);

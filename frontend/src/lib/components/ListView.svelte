@@ -114,6 +114,9 @@
 
 <style>
 	.table-scroll {
+		/* Containing block for absolutely positioned cell content (CopyButton's live region), so it
+		   scrolls with the table instead of widening the page (HUB-273). */
+		position: relative;
 		overflow-x: auto;
 		border: 1px solid var(--rule);
 		border-radius: var(--radius-md);

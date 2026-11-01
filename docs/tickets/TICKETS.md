@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **196** · done: **104** · todo: **91** · other (in-progress/in-review/blocked): **1**
+Total tickets: **197** · done: **110** · todo: **86** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **196** · done: **104** · todo: **91** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 35 | 23 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
@@ -1994,58 +1994,68 @@ Shipped (frontend-engineer, `feat(frontend): add transformer dry-run with client
 
 ### HUB-270 — Tenants pages
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1906
 - **Branch:** `feat/HUB-270-fe-tenants`
 
 List, create and edit tenants (rate limits, grants), with mandatory reason on mutations.
 
+Shipped (frontend-engineer, `feat(frontend): add tenant pages with create, edit and disable (HUB-270)`): `/tenants` (`listTenants`, search `q` and paging in the URL; "Create tenant" for admins, `createTenant`) and `/tenants/{id}` (`getTenant`: display name, description, contact, rate limit, disabled, integrations owned (linked to the integrations list), active keys; admins edit with `updateTenant` and disable / enable it, disable with the id typed). Edits are merge-patches with only the changed fields and send the loaded ETag as `If-Match`, so a concurrent change answers 412 with a Reload prompt (`client.ts` now returns `etag` on successes). Grants are not a tenant field in hub-admin: they live on each integration (`Integration.grants`, `updateIntegration`), so the tenant page links its integrations and says so instead of editing grants.
+
 **Acceptance criteria**
-- [ ] Create/edit forms validated per contract
-- [ ] `tenant_viewer` sees only its tenant
+- [x] Create/edit forms validated per contract (`tenants/tenant-form.ts` against `TenantCreate` / `TenantUpdate`: `Slug` id, display name required and at most 128, `rps` number >= 0, `burst` integer >= 0, empty description / contact sent as null; checked in the dialog (Confirm disabled, problem on the field) and again in the form actions; API `VALIDATION_FAILED` pointers land on their field; `tenant-form.test.ts`, `page.test.ts`, `[tenant_id]/page.test.ts`, `e2e/tenants.test.ts`)
+- [x] `tenant_viewer` sees only its tenant (`listTenants` needs viewer, so the list reads each of the viewer's own tenants with `getTenant`; another tenant's page answers 404 without a call; no create, edit or disable controls; unit and e2e tested)
 
 ### HUB-271 — API keys with show-once
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-270 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-270 · **Feature:** F-19 · **Stories:** US-1906
 - **Branch:** `feat/HUB-271-fe-api-keys`
 
 Create, rotate (with overlap) and revoke tenant API keys; plaintext shown exactly once with copy action and never stored.
 
+Shipped (frontend-engineer, `feat(frontend): add API keys with the secret shown exactly once (HUB-271)`): an "API keys" section on `/tenants/{id}` (`listApiKeys` for the tenant, all pages, state filter `key_state` in the URL): prefix, state in text, scopes, created, expires, last used, replaced by; never a secret. Admins create (`createApiKey`: scopes `invoke` / `dry_run` / `requests_read`, optionally narrowed to one integration, description, UTC expiry), rotate (`rotateApiKey`, overlap none / 1 h / 24 h / 7 d / 30 d) and revoke (`revokeApiKey`, prefix typed). The new secret is shown once in `SecretOnce` (read-only field, Copy with a polite "Copied", "This is the only time it is shown" warning; Escape does not close it, Done needs "I have stored it" ticked). Show-once is enforced by: `ConfirmDialog oneTimeSecret` (the action answer goes to the reveal only, page data reloads with `invalidateAll`, never applied as the page's `form`); `createKey` / `rotateKey` refuse non-enhanced posts (`requireEnhanced`, no full HTML page with the key in the browser history); the notice carries only the change and request ids; nothing logged, stored or put in a URL.
+
 **Acceptance criteria**
-- [ ] Key plaintext not present in any store or after dialog close (test)
-- [ ] Rotation shows overlap expiry
+- [x] Key plaintext not present in any store or after dialog close (test) (`api-keys.test.ts`: after Done the secret is in no DOM node, input value, local/session storage, URL, `history.state` or console call, `update()` was never called so it never became page `form`, nothing re-displays it; `e2e/api-keys.test.ts` repeats the checks in Chromium after Done, after reload and after Back/Forward, plus console messages and request URLs)
+- [x] Rotation shows overlap expiry (the reveal and the notice say until when the old key works, from `old_key.expires_at`, with the overlap; unit and e2e)
 
 ### HUB-272 — Registrar endpoints
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-270 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-270 · **Feature:** F-19 · **Stories:** US-1906
 - **Branch:** `feat/HUB-272-fe-registrar`
 
 Manage registrar endpoints per tenant (URL, secret rotation), surfacing SSRF validation errors.
 
+Shipped (frontend-engineer, `feat(frontend): add tenant callback endpoints with write-only secrets (HUB-272)`): a "Callback endpoints" section on `/tenants/{id}` (`listRegistrarEndpoints` for the tenant, all pages): id, enabled / disabled in text, URL and description, signing secret version (and the overlap while two secrets sign), subscribed versions, updated. Admins register (`createRegistrarEndpoint`: `Slug` id, `https://` URL checked in the browser and the action), edit URL / description (`updateRegistrarEndpoint`, only the changes), disable / enable, rotate the signing secret with an overlap (`rotateRegistrarSecret`) and delete (`deleteRegistrarEndpoint`, id typed, reason as query parameter, 409 while versions subscribe). The new signing secret from register / rotate is shown exactly once in `SecretOnce` (lead decision 2026-11-01: the API returns it only there and the tenant needs it to verify `X-Hub-Signature`, so "write-only in the UI" means never displayed again; follow-up `feat(frontend): show the callback signing secret once on create and rotate (HUB-272)`). Edits send no `If-Match`: the list returns no per-endpoint ETag (optional in the contract). Asked the steward for an SSRF error example (CCR-004).
+
 **Acceptance criteria**
-- [ ] Private-range URL error from API shown on the field
-- [ ] Secret is write-only in the UI
+- [x] Private-range URL error from API shown on the field (`VALIDATION_FAILED` pointer `/url` -> the URL field, marked invalid and described by the message, on register and edit; mock scenario `registrar-url-private` = the contract 400 envelope with pointer `/url`; `callback-endpoints.test.ts`, `e2e/registrar.test.ts`)
+- [x] Secret is write-only in the UI: never displayed again (no read returns it and the list shows only the version; the new secret from register / rotate is shown once in `SecretOnce` with the API-key guarantees: `oneTimeSecret` (never page `form`), `requireEnhanced` on both actions, dropped on Done; `callback-endpoints.test.ts` checks DOM, inputs, storage, URL, `history.state` and console after Done, `e2e/registrar.test.ts` repeats it after reload and Back/Forward, plus console messages and request URLs, axe light and dark)
 
 ### HUB-273 — Snapshots view
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1906
 - **Branch:** `feat/HUB-273-fe-snapshots`
 
 List snapshots with version, checksum, author, diff summary and time.
 
+Shipped (frontend-engineer, `feat(frontend): add snapshots view with latest marked and diff summary (HUB-273)`): `/snapshots` (`listSnapshots`, newest first, cursor paging in the URL): version, summary, author, change (linked to its change log entry), checksum (short, full value in the title and a copy button), size, created. `getLatestSnapshot` (`wait=0`, no long-poll) fills a "Latest snapshot" panel and marks its row. Each row has a "Show changes in N" disclosure that reads `getSnapshot` on first open and lists the changed objects versus the previous snapshot (created / updated / deleted, linked to their console page). The blob (`getSnapshotBlob`) is not offered: it is the nodes' internal format.
+
 **Acceptance criteria**
-- [ ] Latest snapshot highlighted
-- [ ] Diff summary expandable
+- [x] Latest snapshot highlighted (a "Latest" badge in text on its row plus a summary panel, from `getLatestSnapshot`; the list still renders when that call fails; `snapshots/page.test.ts`, `e2e/snapshots.test.ts`)
+- [x] Diff summary expandable (`aria-expanded` disclosure per row, `getSnapshot` read once on demand, error with request id inside the row, keyboard tested in e2e)
 
 ### HUB-274 — Change log view
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-255, HUB-253 · **Feature:** F-19 · **Stories:** US-1906
 - **Branch:** `feat/HUB-274-fe-change-log`
 
 Filterable change log (actor, action, object, time) with before/after diff and reason.
 
+Shipped (frontend-engineer, `feat(frontend): add filterable change log with before/after diff (HUB-274)`): `/change-log` (`listChangeLog`: actor, action (operationId, with suggestions), object type, object id, UTC From/To with quick ranges, page size; chips, Clear all, cursor paging; reversed range refused before calling): change id linked to its entry, time, actor with roles, action, object (linked to its console page for integrations, transformers, tenants and requests), reason, snapshot. `/change-log/{change_id}` (`getChangeLogEntry`): what, reason, when, actor (linked to their changes), snapshot, "every change to this object", and the before / after as a path diff (`$lib/utils/json-diff.ts` -> `DiffPaths`: Added / Removed / Changed with Before / After values; creates and deletes say so) plus both objects in full. Every change notice now links its own entry.
+
 **Acceptance criteria**
-- [ ] Before/after rendered as a diff
-- [ ] Filters in URL
+- [x] Before/after rendered as a diff (`jsonDiff` of `before` / `after` -> DiffOps -> `DiffPaths`; table-driven `json-diff.test.ts`, `[change_id]/page.test.ts` on the contract example, `e2e/change-log.test.ts`)
+- [x] Filters in URL (`change-log/filters.ts`: names as in `listChangeLog`, validated, chips, survives reload; `filters.test.ts`, `page.test.ts`, e2e)
 
 ### HUB-275 — Accessibility pass
 - **Epic:** EP-10 · **Type:** test · **Area:** frontend
@@ -2110,15 +2120,17 @@ Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract ro
 
 ### HUB-280 — Run Playwright e2e in frontend CI
 - **Epic:** EP-10 · **Type:** test · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-250, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
+- **Status:** done · **Depends on:** HUB-250, HUB-254 · **Feature:** F-19 · **Stories:** US-19xx
 - **Branch:** `test/HUB-280-fe-e2e-ci`
 
 The e2e suite (axe a11y, keyboard, 768 px drawer, theme) runs only locally today. Add a CI job that builds with mocks (`build:mock`), installs the chromium headless shell with a cache, and runs `npm run test:e2e`, uploading the report on failure.
 
+Shipped (frontend-engineer, `ci(frontend): run the Playwright e2e suite in frontend CI (HUB-280)`): job `e2e` in `.github/workflows/frontend.yml`, beside the existing `console` job (unchanged) and on the same triggers (`frontend/**`, the admin contract, the workflow). It installs with `npm ci`, reads the pinned `@playwright/test` version (exact in `package.json`, which pins the browser build), restores `~/.cache/ms-playwright` keyed by OS + that version, installs only the Chromium headless shell with its system packages on a miss (`install --with-deps --only-shell chromium`) or only the system packages on a hit, then runs `npm run test:e2e` (the config builds with `build:mock` and serves the preview). `timeout-minutes: 8`. On failure it uploads `playwright-report/` (HTML reporter added for CI) and `test-results/` (traces) for 14 days. The axe helper now waits until no view is refreshing (`aria-busy`), which removed a contrast false positive seen once in a full local run right after a mutation. Not run on GitHub yet: verified locally only, so the ticket stays `in-review` until the first PR run shows the cache and the time budget (see criteria).
+
 **Acceptance criteria**
-- [ ] `frontend.yml` runs e2e on `frontend/**` PRs; a failing e2e test fails the PR
-- [ ] Browser binaries cached; job under 8 min
-- [ ] Playwright HTML report uploaded as an artifact on failure
+- [x] `frontend.yml` runs e2e on `frontend/**` PRs; a failing e2e test fails the PR (the job runs on the workflow's `pull_request` paths and `npm run test:e2e` exits 1 on a failing test, checked locally with a deliberate failure; making the check required is a branch-protection setting, not in the repo)
+- [x] Browser binaries cached; job under 8 min (first GitHub run on PR #12, a cache miss that downloaded the browser: 5 min 01 s; later runs restore it from the cache; locally `CI=true npm run test:e2e` runs 99 tests in about 60 s including the mock build on 10 cores, 3 runs in a row green; not yet measured on a GitHub runner, which has fewer cores)
+- [x] Playwright HTML report uploaded as an artifact on failure (`if: failure()` upload of `frontend/playwright-report/` and `frontend/test-results/`; the HTML report is produced under `CI`, checked locally)
 
 ### HUB-281 — Upgrade the console to SvelteKit 3
 - **Epic:** EP-10 · **Type:** chore · **Area:** frontend
@@ -2174,6 +2186,17 @@ Filed by frontend-engineer during HUB-261. Full CCR text (before/after YAML): `f
 - [x] Console health board adds a "Dead letters" column (count, oldest age, link to the filtered DLQ) after `npm run gen:api` and removes `TODO(CCR-003)` (frontend-engineer, console round 4: the account's figure on each of its endpoint rows, linked to `/dlq?account_id=`, "oldest N min ago" with the UTC time in a tooltip, 0 without a link, Unknown when the account or the figure is missing; the summary line adds the total, each account counted once)
 
 Steward note (2026-10-31): contract side shipped in hub-admin 1.1.0 (contract round 1; notice `contracts/notices/2026-10-31-round-1.md`). Both properties are optional in the schema (additive); the backend should always fill them from 1.1.0 on. The backend and console criteria stay open for those sides.
+
+### HUB-285 — ConfirmDialog keeps focus inside after a failed submit
+- **Epic:** EP-10 · **Type:** fix · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-259 · **Feature:** F-19 · **Stories:** US-1902
+- **Branch:** `fix/HUB-285-fe-dialog-focus-after-failure`
+
+Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits, its buttons are `disabled`, so the focused confirm button drops focus to `<body>`. When the action fails (e.g. 412, 409, 403) the dialog stays open but focus is outside it: Escape no longer closes it (the key handler is on the dialog) and Tab starts from the page. Seen with `updateTenant:412`; affects every dialog.
+
+**Acceptance criteria**
+- [ ] After a failed submit, focus moves into the dialog (the error panel's heading or the reason field) and Escape closes it
+- [ ] Component test and one e2e keyboard check
 
 ## EP-11 — MCP server + consumer skill + SDK
 

@@ -1,4 +1,5 @@
-# Admin console (frontend/) CI: generated-client freshness, type check, lint, unit tests, build.
+# Admin console (frontend/) CI: generated-client freshness, type check, lint, unit tests, build,
+# and the Playwright e2e suite on the contract mocks (HUB-280).
 # Runs when the console, the admin contract or this workflow changes. See frontend/AGENTS.md.
 name: frontend
 
@@ -52,3 +53,52 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  # HUB-280: the Playwright suite (flows, axe in light and dark, keyboard, 768 px drawer, theme)
+  # against `build:mock` (MSW contract mocks, no backend). Runs beside `console`; a failing test
+  # fails the job. Budget: 8 minutes for the whole job.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        run: npm ci
+      # The browser build is pinned by the exact @playwright/test version in package.json; the cache
+      # key carries that version, so an upgrade downloads the matching browser once.
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-headless-shell
+      - name: Install Chromium headless shell and its system packages
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps --only-shell chromium
+      - name: Install system packages only (browser restored from cache)
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - name: E2E (Playwright on build:mock)
+        # playwright.config.ts builds with mocks and serves the preview itself (webServer).
+        run: npm run test:e2e
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 14
+          if-no-files-found: ignore

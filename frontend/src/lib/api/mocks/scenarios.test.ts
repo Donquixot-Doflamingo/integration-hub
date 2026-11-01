@@ -88,6 +88,22 @@ describe('presets', () => {
 		}
 	);
 
+	it('registrar-url-private answers a contract error envelope with the pointer on /url', async () => {
+		server.use(...presets['registrar-url-private']!());
+		const { error, response } = await api().raw.POST('/registrar-endpoints', {
+			body: {
+				endpoint_id: 'reg_orders_cb',
+				tenant_id: 'orders-service',
+				url: 'https://10.0.0.12/cb',
+				reason: 'Callbacks for async integrations'
+			}
+		});
+		expect(response.status).toBe(400);
+		const v = schema('AdminErrorEnvelope');
+		expect(v(error), JSON.stringify(v.errors)).toBe(true);
+		expect(error?.error.details?.[0]?.pointer).toBe('/url');
+	});
+
 	it('v8-active makes v8 the active version with the draft example spec', async () => {
 		server.use(...presets['v8-active']!());
 		const { data } = await api().raw.GET('/integrations/{integration_id}', {

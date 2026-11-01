@@ -14,7 +14,7 @@ import { accessFromRoles } from '$lib/auth/roles';
 const invalidateAll = vi.fn();
 vi.mock('$app/navigation', () => ({ invalidateAll: () => invalidateAll(), goto: vi.fn() }));
 
-type LoadFn = (event: { fetch: typeof fetch; url: URL }) => unknown;
+type LoadFn = (event: { fetch: typeof fetch; url: URL; parent: () => Promise<unknown> }) => unknown;
 interface SectionCase {
 	path: string;
 	heading: string;
@@ -86,9 +86,13 @@ const cases: SectionCase[] = [
 
 async function renderSection(c: SectionCase) {
 	const [{ default: Page }, { load }] = await Promise.all([c.page(), c.load()]);
-	const data = await load({ fetch, url: new URL(`http://console.test${c.path}`) });
 	// Layout data every (app) page receives (HUB-253).
 	const layout = { access: accessFromRoles(['editor']) };
+	const data = await load({
+		fetch,
+		url: new URL(`http://console.test${c.path}`),
+		parent: async () => layout
+	});
 	return render(Page, { props: { data: { ...layout, ...(data as object) } as never } });
 }
 
@@ -111,14 +115,18 @@ describe.each(cases)('$path', (c) => {
 		server.use(mockPending(c.op));
 		await renderSection(c);
 		expect(screen.getByRole('table')).toHaveAttribute('aria-busy', 'true');
-		expect(screen.getByText(/^Loading /)).toBeInTheDocument();
+		// Some sections load a second call beside the list (snapshots: the latest one, HUB-273).
+		expect(screen.getAllByText(/^Loading /).length).toBeGreaterThanOrEqual(1);
 	});
 
 	it('shows an empty state', async () => {
 		server.use(mockOperation(c.op, { items: [], next_cursor: null } as never));
 		await renderSection(c);
 		await waitFor(() => expect(screen.queryByRole('table')).toBeNull());
-		expect(screen.getByRole('status')).toHaveTextContent(/^(No |The dead-letter queue is empty)/);
+		const empty = screen
+			.getAllByRole('status')
+			.filter((s) => /^(No |The dead-letter queue is empty)/.test(s.textContent?.trim() ?? ''));
+		expect(empty).toHaveLength(1);
 	});
 
 	it('shows the error envelope with request id and retries', async () => {

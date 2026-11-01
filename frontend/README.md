@@ -80,6 +80,24 @@ when a page under `src/routes/(app)/` renders its own `{#await}` instead):
   (`VersionView`, `GoldensRunner`, `GoldensResult`, `DryRun`, `DryRunResult`), `CodeView` (text-only YAML highlighting,
   `$lib/utils/yaml-highlight.ts`); form actions shared from `transformers/actions.server.ts`.
 
+## Tenant screens (HUB-270 to HUB-272)
+- `/tenants` (search and paging in the URL; tenant viewers get `getTenant` per own tenant because `listTenants`
+  needs viewer) and `/tenants/{id}`. Create and edit go through `ConfirmDialog` with `TenantFields`; the checks
+  live in `tenants/tenant-form.ts` and run in the browser and in the form actions. Edits send the loaded ETag
+  (`ApiResult.etag`) as `If-Match`.
+- API keys (`tenants/[tenant_id]/ApiKeys.svelte`, `keys.ts`): a new secret only ever goes from the action answer to
+  `$lib/components/SecretOnce.svelte` and is dropped on Done. Any action that answers with a secret must use
+  `ConfirmDialog oneTimeSecret` and `requireEnhanced` (`$lib/server/actions.ts`), and must not log it.
+- Callback endpoints (`CallbackEndpoints.svelte`, `endpoints.ts`): a new signing secret (register, rotate) is shown once
+  in `SecretOnce` with the same rules as API keys; only its version afterwards. Mock scenario `registrar-url-private`
+  answers the SSRF refusal.
+
+## Change log and snapshots (HUB-273, HUB-274)
+- `/change-log`: filters in the URL (`change-log/filters.ts`), `/change-log/{change_id}` with before / after as a
+  path diff (`$lib/utils/json-diff.ts` -> `DiffPaths`). `ChangeNotice` links every change id to its entry.
+- `/snapshots`: latest marked from `getLatestSnapshot`; `SnapshotChanges` reads `getSnapshot` when a row is expanded.
+  Object links for both screens: `$lib/objects.ts`.
+
 ## Auth (HUB-253)
 Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.
 - Provider per deployment (`src/lib/server/auth/`): **dev** (role picker: admin, editor, viewer, tenant viewer
@@ -92,4 +110,6 @@ Every page under `src/routes/(app)/` needs a session; without one you land on `/
   answers as the identity picked at login.
 
 Runes mode is enforced in `svelte.config.js` for every project component; Svelte 4 syntax fails to compile.
-CI: [`.github/workflows/frontend.yml`](../.github/workflows/frontend.yml), runs on `frontend/**` changes.
+CI: [`.github/workflows/frontend.yml`](../.github/workflows/frontend.yml), runs on `frontend/**` changes: job `console`
+(generated files, check, lint, unit tests, build) and job `e2e` (Playwright on `build:mock`, cached Chromium headless
+shell, 8 min cap, report and traces uploaded on failure). Run the same locally with `CI=true npm run test:e2e`.
