@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **110** · todo: **86** · other (in-progress/in-review/blocked): **1**
+Total tickets: **197** · done: **112** · todo: **84** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -14,7 +14,7 @@ Total tickets: **197** · done: **110** · todo: **86** · other (in-progress/in
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
-| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
+| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 2 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
@@ -1108,27 +1108,27 @@ DESIGN §10.3 says the backoff schedule is overridable per integration. Add an o
 
 ### HUB-140 — Breaker state machine (account, endpoint)
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-087 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-087 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `feat/HUB-140-breaker-state-machine`
 
 Local breaker per `(account, endpoint)`: open on > 50 % failures over 30 s with ≥ 20 calls (429 half weight) or 5 consecutive timeouts; open 30 s doubling to 10 min; half-open 3 probes (DESIGN §10.4).
 
 **Acceptance criteria**
-- [ ] Table tests for every transition incl. 429 half weight and consecutive-timeout trip
-- [ ] Open window doubles on each re-open and caps at 10 min
-- [ ] Any half-open probe failure re-opens
+- [x] Table tests for every transition incl. 429 half weight and consecutive-timeout trip
+- [x] Open window doubles on each re-open and caps at 10 min
+- [x] Any half-open probe failure re-opens
 
 ### HUB-141 — Redis-shared breaker state with local cache
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-140, HUB-023 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-140, HUB-023 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `feat/HUB-141-breaker-redis-shared`
 
 Share breaker state via Redis so all nodes agree within ~1 s; the hot path reads only the local cache, sync with Redis happens off the request path (DESIGN §10.4, §18.5 rule 6).
 
 **Acceptance criteria**
-- [ ] Two gateway nodes converge on open/closed within 1 s (itest)
-- [ ] Redis outage keeps last local state and never blocks requests
-- [ ] `breaker_state` and `breaker_transitions_total` exported
+- [x] Two gateway nodes converge on open/closed within 1 s (itest)
+- [x] Redis outage keeps last local state and never blocks requests
+- [x] `breaker_state` and `breaker_transitions_total` exported
 
 ### HUB-142 — Integration breaker overrides and pause
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend

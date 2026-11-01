@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(upstream)` · add the circuit breaker with Redis-shared state · HUB-140 · F-12
+  - Each (account, endpoint) has a breaker: it opens on more than 50 % weighted failures over 30 s with at least 20 calls (429 counts half) or on 5 consecutive timeouts, stays open 30 s doubling per re-open up to 10 min, and lets 3 half-open probes decide
+  - Breaker states are shared through Redis (pub/sub plus a 1 s reconcile): every node sees an open or closed circuit within about a second, the request path never waits on Redis, and an outage keeps each node's last state; breaker_state and breaker_transitions_total are exported
 - 2026-10-31 · `docs(tickets)` · close HUB-280 with its first GitHub run · HUB-280 · F-19
   - HUB-280 is done: the e2e job's first run on GitHub (PR #12, cold browser cache) finished in 5 min 01 s, under its 8-minute cap
 - 2026-11-01 · `feat(frontend)` · show the callback signing secret once on create and rotate · HUB-272 · F-19
