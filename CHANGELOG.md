@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `fix(delivery)` · retry transformer time-budget overruns and check breakers before transforming · HUB-149 · F-04
+  - A transform that overruns its 5 ms wall-clock budget is re-run once; a second overrun is TRANSFORM_FAILED with reason time_budget and retryable, so a GC pause or a busy node no longer dead-letters a healthy request (seen in CI)
+  - Breakers are checked before the transform (a refused call costs no transform); the account limiter waits right before the send
 - 2026-10-31 · `test(edge)` · park the chaos backlog inside the open window and name dead-letter reasons · HUB-151 · F-12
   - The chaos suite accepts its backlog before tripping the breaker, so parking happens well inside the open window on slow runners, and a backlog envelope that is not parked fails with its dead-letter reason
 - 2026-10-31 · `docs(milestones)` · note the CI findings in the M5 summary · HUB-154 · F-12

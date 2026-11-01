@@ -41,53 +41,62 @@ func (a admission) again(now time.Time) admission {
 	return out
 }
 
-// admit applies DESIGN §10.4 (shared breaker and the integration's tightened view) and §10.8
-// (account limiter) before a vendor call.
-func (a *Attempter) admit(ctx context.Context, j Job, t upstream.Target, endpointRef string) (admission, *core.CanonicalError) {
+// admitBreakers applies DESIGN §10.4: the shared (account, endpoint) breaker and the
+// integration's tightened view. A refusal is a circuit-open error.
+func (a *Attempter) admitBreakers(j Job, t upstream.Target, endpointRef string) (admission, *core.CanonicalError) {
 	var adm admission
+	if a.Breakers == nil {
+		return adm, nil
+	}
 	now := a.now()
-	if a.Breakers != nil {
-		policy := upstream.PolicyFrom(t.Vendor.Defaults.Breaker)
-		adm.shared = a.Breakers.Get(upstream.BreakerKey{Account: t.AccountID, Endpoint: endpointRef}, policy)
-		ok, probe, retry := adm.shared.Allow(now)
+	policy := upstream.PolicyFrom(t.Vendor.Defaults.Breaker)
+	adm.shared = a.Breakers.Get(upstream.BreakerKey{Account: t.AccountID, Endpoint: endpointRef}, policy)
+	ok, probe, retry := adm.shared.Allow(now)
+	if !ok {
+		return admission{}, circuitOpen(retry)
+	}
+	adm.sharedProbe = probe
+	if n := j.Res.Version.Breaker.Override.OpenAfterConsecutiveTimeouts; n > 0 {
+		view := policy
+		view.ConsecutiveTimeouts, view.RatioDisabled = n, true
+		adm.view = a.Breakers.Get(upstream.BreakerKey{Account: t.AccountID, Endpoint: endpointRef, Integration: j.Res.Integration.Integration}, view)
+		ok, probe, retry := adm.view.Allow(now)
 		if !ok {
+			adm.shared.Record(now, upstream.OutcomeIgnore, adm.sharedProbe)
 			return admission{}, circuitOpen(retry)
 		}
-		adm.sharedProbe = probe
-		if n := j.Res.Version.Breaker.Override.OpenAfterConsecutiveTimeouts; n > 0 {
-			view := policy
-			view.ConsecutiveTimeouts, view.RatioDisabled = n, true
-			adm.view = a.Breakers.Get(upstream.BreakerKey{Account: t.AccountID, Endpoint: endpointRef, Integration: j.Res.Integration.Integration}, view)
-			ok, probe, retry := adm.view.Allow(now)
-			if !ok {
-				adm.shared.Record(now, upstream.OutcomeIgnore, adm.sharedProbe)
-				return admission{}, circuitOpen(retry)
-			}
-			adm.viewProbe = probe
-		}
-	}
-	if a.Limiter != nil {
-		maxWait := j.LimiterWait
-		if maxWait <= 0 {
-			maxWait = 5 * time.Second
-			if j.Live {
-				maxWait = 250 * time.Millisecond
-			}
-		}
-		acct := j.Snap.Accounts[t.AccountID]
-		rps := acct.Quota.RPS
-		if rps <= 0 {
-			rps = t.Vendor.Defaults.RateLimit.PerAccountRPS
-		}
-		ok, waited := a.Limiter.Wait(ctx, t.AccountID, rps, j.Live, maxWait)
-		j.Timings.Add(telemetry.StageWait, waited) // a deliberate wait: excluded from overhead
-		if !ok {
-			adm.record(now, upstream.OutcomeIgnore)
-			return admission{}, &core.CanonicalError{Code: core.CodeUpstreamRateLimited, Message: "The upstream account's rate limit is reached",
-				Retryable: true, RetryAfterMS: core.Ptr[int64](1000), Reason: core.Ptr("account_quota"), Upstream: &core.Upstream{}}
-		}
+		adm.viewProbe = probe
 	}
 	return adm, nil
+}
+
+// waitLimiter takes a token of the account's shared bucket (DESIGN §10.8), waiting up to the
+// job's limit; the wait is excluded from hub_overhead_ms.
+func (a *Attempter) waitLimiter(ctx context.Context, j Job, t upstream.Target) *core.CanonicalError {
+	if a.Limiter == nil {
+		return nil
+	}
+	maxWait := j.LimiterWait
+	if maxWait <= 0 {
+		maxWait = 5 * time.Second
+		if j.Live {
+			maxWait = 250 * time.Millisecond
+		}
+	}
+	rps := 0
+	if acct := j.Snap.Accounts[t.AccountID]; acct != nil {
+		rps = acct.Quota.RPS
+	}
+	if rps <= 0 {
+		rps = t.Vendor.Defaults.RateLimit.PerAccountRPS
+	}
+	ok, waited := a.Limiter.Wait(ctx, t.AccountID, rps, j.Live, maxWait)
+	j.Timings.Add(telemetry.StageWait, waited) // a deliberate wait: excluded from overhead
+	if !ok {
+		return &core.CanonicalError{Code: core.CodeUpstreamRateLimited, Message: "The upstream account's rate limit is reached",
+			Retryable: true, RetryAfterMS: core.Ptr[int64](1000), Reason: core.Ptr("account_quota"), Upstream: &core.Upstream{}}
+	}
+	return nil
 }
 
 func circuitOpen(retry time.Duration) *core.CanonicalError {

@@ -58,6 +58,9 @@ func TestRetryable(t *testing.T) {
 	if !Retryable(&core.CanonicalError{Code: core.CodeInternalError, Retryable: true}) || Retryable(&core.CanonicalError{Code: core.CodeInternalError}) {
 		t.Error("internal errors follow their retryable flag")
 	}
+	if !Retryable(&core.CanonicalError{Code: core.CodeTransformFailed, Reason: core.Ptr("time_budget")}) {
+		t.Error("a transform time-budget overrun retries")
+	}
 }
 
 func TestBudget(t *testing.T) {

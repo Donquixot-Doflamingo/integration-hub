@@ -151,14 +151,6 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	reqProg := j.Snap.Programs[j.Res.Target.Transformer.Request]
 	respProg := j.Snap.Programs[j.Res.Target.Transformer.Response]
 	integration := j.Res.Integration.Integration
-
-	start := time.Now()
-	req, err := reqProg.BuildRequest(in)
-	j.Timings.Observe(telemetry.StageTransform, start)
-	if err != nil {
-		r.Err = a.transformError(ctx, integration, reqProg.Ref(), err)
-		return r
-	}
 	ref := j.Res.Target.Transformer.Request
 	tf := j.Snap.Transformers[ref]
 	target, err := upstream.TargetFor(j.Snap, c.AccountID, tf.VendorEndpoint)
@@ -167,23 +159,46 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 		r.Err = internalError()
 		return r
 	}
+	r.Account, r.Endpoint = target.AccountID, tf.VendorEndpoint
+
+	// Breakers first: a local check, so a refused call costs no transform (DESIGN §10.4).
+	start := time.Now()
+	adm, ce := a.admitBreakers(j, target, tf.VendorEndpoint)
+	j.Timings.Observe(telemetry.StageAdmission, start)
+	if ce != nil {
+		r.Err, r.CircuitOpen = ce, true
+		return r
+	}
+
+	start = time.Now()
+	req, err := reqProg.BuildRequest(in)
+	if errors.Is(err, transform.ErrTimeBudget) { // a stall, most likely: transforms are pure, run again
+		req, err = reqProg.BuildRequest(in)
+	}
+	j.Timings.Observe(telemetry.StageTransform, start)
+	if err != nil {
+		adm.record(a.now(), upstream.OutcomeIgnore)
+		r.Err = a.transformError(ctx, integration, reqProg.Ref(), err)
+		return r
+	}
 	// The audit snapshot is taken before the auth scheme injects anything; credential values
 	// that the transformer itself mapped (static headers) are redacted by value (trail secrets).
 	view := AuditRequest{Method: req.Method, URL: UpstreamURL(target.BaseURL, req), Headers: req.Headers, Body: req.Body}
 	j.Trail.AddJSON(audit.RequestTransformed, 0, view, map[string]any{"transformer": ref.String(), "endpoint": tf.VendorEndpoint})
 	r.LastRequest = j.Trail.Stored(audit.RequestTransformed)
 	if err := creds.ApplyVendor(target.Vendor, c, &req); err != nil {
+		adm.record(a.now(), upstream.OutcomeIgnore)
 		a.Log.ErrorContext(ctx, "auth scheme failed", slog.String("integration", integration), slog.String("error", err.Error()))
 		r.Err = internalError()
 		return r
 	}
-
-	r.Account, r.Endpoint = target.AccountID, tf.VendorEndpoint
+	// The account limiter last: its wait is the time right before the send.
 	start = time.Now()
-	adm, ce := a.admit(ctx, j, target, tf.VendorEndpoint)
+	ce = a.waitLimiter(ctx, j, target)
 	j.Timings.Observe(telemetry.StageAdmission, start)
 	if ce != nil {
-		r.Err, r.CircuitOpen = ce, ce.Circuit != nil
+		adm.record(a.now(), upstream.OutcomeIgnore)
+		r.Err = ce
 		return r
 	}
 	n := max(j.FirstAttempt, 1)
@@ -202,12 +217,18 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 
 	start = time.Now()
 	out, vce, err := respProg.MapResponse(att.Response, in)
+	if errors.Is(err, transform.ErrTimeBudget) {
+		out, vce, err = respProg.MapResponse(att.Response, in)
+	}
 	j.Timings.Observe(telemetry.StageResponseMap, start)
 	adm.record(a.now(), responseOutcome(att.Response.Status, vce))
 	if err != nil {
 		j.Trail.Add(audit.ResponseTransformFailed, n, nil, map[string]any{"transformer": respProg.Ref()})
 		a.Log.WarnContext(ctx, "response transform failed", slog.String("integration", integration), slog.String("transformer", respProg.Ref()))
 		r.Err = &core.CanonicalError{Code: core.CodeTransformFailed, Message: "The upstream response could not be mapped"}
+		if errors.Is(err, transform.ErrTimeBudget) {
+			r.Err.Retryable, r.Err.Reason = true, core.Ptr("time_budget")
+		}
 		return r
 	}
 	if vce != nil {
@@ -283,7 +304,11 @@ func (a *Attempter) transformError(ctx context.Context, integration, transformer
 		attrs = append(attrs, slog.String("path", ee.Path), slog.String("expr", ee.Expr))
 	}
 	a.Log.WarnContext(ctx, "transform failed", attrs...)
-	return &core.CanonicalError{Code: core.CodeTransformFailed, Message: "The request could not be transformed"}
+	ce := &core.CanonicalError{Code: core.CodeTransformFailed, Message: "The request could not be transformed"}
+	if errors.Is(err, transform.ErrTimeBudget) { // overran twice: retryable, not a broken mapping
+		ce.Retryable, ce.Reason = true, core.Ptr("time_budget")
+	}
+	return ce
 }
 
 // TransformError is the exported form for the edge's dry-run.
