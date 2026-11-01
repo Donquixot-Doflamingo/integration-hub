@@ -309,11 +309,11 @@ func TestChaos1VendorDown(t *testing.T) {
 	}
 }
 
-// parkBacklog opens the circuit and parks n async envelopes.
+// parkBacklog accepts n async envelopes, then opens the circuit and lets the worker park them
+// (accepting first keeps the parking well inside the open window on slow runners).
 func (r *m5) parkBacklog(n int) []string {
 	r.t.Helper()
 	r.vendor(acctB, down())
-	r.tripB()
 	ids := make([]string, 0, n)
 	for range n {
 		code, body, _ := r.call(r.a, "int_evt_brandB")
@@ -322,6 +322,7 @@ func (r *m5) parkBacklog(n int) []string {
 		}
 		ids = append(ids, body["request_id"].(string))
 	}
+	r.tripB()
 	for {
 		if k, _ := r.worker.ProcessOnce(r.t.Context()); k == 0 {
 			break
@@ -329,7 +330,9 @@ func (r *m5) parkBacklog(n int) []string {
 	}
 	for _, id := range ids {
 		if s := r.statusOf(id); s != "parked" {
-			r.t.Fatalf("%s is %s, want parked", id, s)
+			var reason, lastErr string
+			_ = r.db.QueryRow(r.t.Context(), `SELECT reason, coalesce(last_error, '') FROM hub.dead_letters WHERE request_id = $1`, id).Scan(&reason, &lastErr)
+			r.t.Fatalf("%s is %s, want parked (dead letter reason %q %q)", id, s, reason, lastErr)
 		}
 	}
 	return ids
