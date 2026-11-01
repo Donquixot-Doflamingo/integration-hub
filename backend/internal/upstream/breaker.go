@@ -198,7 +198,8 @@ func (b *Breaker) Record(now time.Time, o Outcome, probe bool) {
 			b.probeSuccesses++
 			if b.probeSuccesses >= b.policy.HalfOpenProbes {
 				from := b.snap
-				b.snap = BreakerSnapshot{State: Closed, Version: now.UnixMilli()}
+				// Reopens is kept: a trip soon after this recovery is a re-open (flapping vendor).
+				b.snap = BreakerSnapshot{State: Closed, Reopens: from.Reopens, Version: now.UnixMilli()}
 				b.reset()
 				change = &[2]BreakerSnapshot{from, b.snap}
 			}
@@ -236,11 +237,13 @@ func (b *Breaker) Record(now time.Time, o Outcome, probe bool) {
 	}
 }
 
-// open trips the breaker; a re-open from half-open doubles the window (capped).
+// open trips the breaker. A re-open doubles the window (capped): a failed half-open probe, or a
+// trip within OpenMax of the last recovery (re-open mid-drain, DESIGN §10.4/§10.5).
 func (b *Breaker) open(now time.Time, reopen bool) *[2]BreakerSnapshot {
 	from := b.snap
+	recovered := from.State == Closed && from.Version > 0 && now.Sub(time.UnixMilli(from.Version)) < b.policy.OpenMax
 	reopens := 0
-	if reopen {
+	if reopen || recovered {
 		reopens = from.Reopens + 1
 	}
 	d := b.policy.Open

@@ -290,10 +290,41 @@ func (bs *Breakers) Reconcile(ctx context.Context) {
 	}
 }
 
+// SharedOpen lists every shared (account, endpoint) breaker that Redis says is open or
+// half-open (the scheduler probes them, whichever node tripped them).
+func (bs *Breakers) SharedOpen(ctx context.Context) (map[BreakerKey]BreakerSnapshot, error) {
+	out := map[BreakerKey]BreakerSnapshot{}
+	if bs.rdb == nil {
+		for _, k := range bs.Keys() {
+			if b, _ := bs.Lookup(k); b != nil && k.Integration == "" {
+				if s := b.Snapshot(); s.State != Closed {
+					out[k] = s
+				}
+			}
+		}
+		return out, nil
+	}
+	iter := bs.rdb.Scan(ctx, 0, breakerPrefix+"*", 200).Iterator()
+	for iter.Next(ctx) {
+		name := iter.Val()
+		k, ok := parseKey(strings.TrimPrefix(name, breakerPrefix))
+		if !ok || k.Integration != "" {
+			continue
+		}
+		if snap, ok := bs.SharedState(ctx, k); ok && snap.State != Closed {
+			out[k] = snap
+		}
+	}
+	return out, iter.Err()
+}
+
 // SharedState reads one breaker's shared state from Redis (the scheduler's drain and probes
 // act on breakers this node may never have used).
 func (bs *Breakers) SharedState(ctx context.Context, key BreakerKey) (BreakerSnapshot, bool) {
 	if bs.rdb == nil {
+		if b, ok := bs.Lookup(key); ok {
+			return b.Snapshot(), true
+		}
 		return BreakerSnapshot{}, false
 	}
 	v, err := bs.rdb.Get(ctx, breakerPrefix+key.String()).Result()

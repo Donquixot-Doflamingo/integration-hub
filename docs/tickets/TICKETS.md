@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **118** · todo: **78** · other (in-progress/in-review/blocked): **1**
+Total tickets: **197** · done: **120** · todo: **76** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -14,7 +14,7 @@ Total tickets: **197** · done: **118** · todo: **78** · other (in-progress/in
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
-| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 8 |
+| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 10 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
@@ -1143,15 +1143,15 @@ Apply per-integration overrides that tighten thresholds (e.g. 3 consecutive time
 
 ### HUB-143 — Synthetic health probes while open
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-141, HUB-114 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-141, HUB-114 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `feat/HUB-143-health-probes`
 
 Scheduler runs the vendor's `health_probe` (dry where possible) every 30 s while a breaker is open so recovery is detected without live traffic (DESIGN §8.3, §10.4).
 
 **Acceptance criteria**
-- [ ] Probe runs only while open/half-open
-- [ ] Successful probes move the breaker to half-open and then closed
-- [ ] Probe calls are visible in mockvendor recordings and never counted as tenant traffic
+- [x] Probe runs only while open/half-open
+- [x] Successful probes move the breaker to half-open and then closed
+- [x] Probe calls are visible in mockvendor recordings and never counted as tenant traffic
 
 ### HUB-144 — on_circuit_open: fail_fast
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
@@ -1213,15 +1213,15 @@ Token bucket per tenant + integration at the edge (→ 429 `UPSTREAM_RATE_LIMITE
 
 ### HUB-149 — Ramped drain scheduler
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-146, HUB-143, HUB-147 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-146, HUB-143, HUB-147 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `feat/HUB-149-ramped-drain`
 
 On breaker close release parked envelopes at 20 % of the account rate for 30 s, doubling every 30 s to normal; re-open mid-drain stops the release (DESIGN §10.5).
 
 **Acceptance criteria**
-- [ ] Drain starts ≤ 60 s after recovery
-- [ ] Release rate follows 20 % → 40 % → 80 % → 100 % (±10 %)
-- [ ] Drained envelopes re-resolve at send time
+- [x] Drain starts ≤ 60 s after recovery
+- [x] Release rate follows 20 % → 40 % → 80 % → 100 % (±10 %)
+- [x] Drained envelopes re-resolve at send time
 
 ### HUB-150 — Chaos 1: vendor down
 - **Epic:** EP-06 · **Type:** test · **Area:** backend

@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(delivery)` · probe open breakers and drain parked envelopes with a ramp · HUB-149 · F-12
+  - The scheduler leader probes every open breaker with the vendor's health_probe (marked X-Hub-Probe, never tenant traffic); a healthy answer runs the half-open probes at once, so recovery closes the circuit without live traffic
+  - After a close, parked envelopes are released at 20 % of the account rate, doubling every 30 s to 100 %; a re-open stops the release, and a trip soon after a recovery doubles the open window
+  - parked_count, parked_oldest_age_s, drain_released_total and health_probes_total are exported; gateway, worker and scheduler now share breaker state through Redis
 - 2026-10-31 · `feat(delivery)` · admit vendor calls through breakers and limiters and apply on_circuit_open · HUB-144 · F-12
   - Every vendor call is admitted by its (account, endpoint) breaker, the integration's tightened view (override) and the shared account rate limiter; outcomes feed the breaker with TECH_SPEC weights
   - Open circuit, sync: fail_fast answers 503 UPSTREAM_UNAVAILABLE with circuit open and retry_after_ms (nothing sent), failover serves from the next target with X-Hub-Served-By failover:n (idempotent endpoints or keyed requests only), queue_if_allowed parks and answers 202 queued only with Prefer respond-async or a callback subscription

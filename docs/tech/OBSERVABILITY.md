@@ -123,6 +123,10 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `pg_pool_acquire_duration_seconds`, `pg_pool_in_use` | histogram, gauge | s, conns | `pool` | cmd wiring (pgxpool stats) | |
 | `http_server_inflight` | gauge | requests | `server` (`public`,`admin`) | `edge`, `control` | |
 | `scheduler_leader` | gauge (0/1) | — | — | `delivery` | exactly one leader |
+| `parked_count` | gauge | envelopes | `account, endpoint` | `delivery` (scheduler, each tick) | parked backlog (HUB-146) |
+| `parked_oldest_age_s` | gauge | s | `account, endpoint` | `delivery` (scheduler) | how long the oldest parked envelope waited |
+| `drain_released_total` | counter | envelopes | `account, endpoint` | `delivery` (scheduler) | ramped drain releases (HUB-149) |
+| `health_probes_total` | counter | probes | `vendor, account, result` | `delivery` (scheduler) | synthetic probes while a breaker is open (HUB-143) |
 | `admin_mutations_total` | counter | mutations | `action, outcome` | `control` | |
 | `publish_validation_failures_total` | counter | failures | `check` | `control` | |
 | `audit_buffer_fill_ratio` | gauge | ratio | — | `audit` | early warning before drops |

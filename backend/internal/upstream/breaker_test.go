@@ -89,10 +89,23 @@ func TestOpenHalfOpenClosed(t *testing.T) {
 	for range 3 {
 		b.Record(at, OutcomeSuccess, true)
 	}
-	if s := b.Snapshot(); s.State != Closed || s.Reopens != 0 {
+	if s := b.Snapshot(); s.State != Closed {
 		t.Fatalf("3 probe successes close: %+v", s)
 	}
-	want := "closed→open,open→half_open,half_open→closed"
+	// A trip soon after the recovery is a re-open: the window doubles.
+	soon := at.Add(time.Second)
+	record(b, soon, OutcomeTimeout, 5)
+	if s := b.Snapshot(); s.State != Open || s.OpenUntil.Sub(soon) != 60*time.Second {
+		t.Fatalf("re-open after recovery: %+v (open for %s)", s, s.OpenUntil.Sub(soon))
+	}
+	// Long after a recovery the base window applies again.
+	late := NewBreaker(policy(), nil)
+	late.Adopt(BreakerSnapshot{State: Closed, Reopens: 3, Version: t0.UnixMilli()})
+	record(late, t0.Add(11*time.Minute), OutcomeTimeout, 5)
+	if s := late.Snapshot(); s.OpenUntil.Sub(t0.Add(11*time.Minute)) != 30*time.Second {
+		t.Fatalf("trip long after recovery: open for %s", s.OpenUntil.Sub(t0.Add(11*time.Minute)))
+	}
+	want := "closed→open,open→half_open,half_open→closed,closed→open"
 	if got := join(transitions); got != want {
 		t.Fatalf("transitions %s", got)
 	}

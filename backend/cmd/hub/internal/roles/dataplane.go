@@ -41,6 +41,7 @@ type dataPlane struct {
 	worker      *delivery.Worker      // worker
 	dispatcher  *callbacks.Dispatcher // worker: signed callbacks
 	scheduler   *delivery.Scheduler   // scheduler
+	breakers    *upstream.Breakers    // circuit breakers (gateway, worker, scheduler)
 	wg          sync.WaitGroup
 	stop        context.CancelFunc
 }
@@ -61,8 +62,17 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 		return nil, err
 	}
 	dp.transitions = &delivery.Transitions{DB: st.pg, Queue: q, OnTerminal: delivery.CallbackHook(enq)}
+	dp.breakers = upstream.NewBreakers(st.rdb, m, log)
 	if cfg.Role == Scheduler {
-		dp.scheduler = &delivery.Scheduler{DB: st.pg, Queue: q, Transitions: dp.transitions, Log: log}
+		// Probes need no credentials (DESIGN §10.4 synthetic probe; an auth error proves the vendor answers).
+		probeClient, err := upstream.New(m, upstream.Options{TracerProvider: tp})
+		if err != nil {
+			return nil, err
+		}
+		dp.client = probeClient
+		res := &delivery.Resilience{Breakers: dp.breakers, Upstream: probeClient, Snapshots: &reg.store, Queue: q, Log: log}
+		res.RegisterMetrics(m.Registry)
+		dp.scheduler = &delivery.Scheduler{DB: st.pg, Queue: q, Transitions: dp.transitions, Log: log, Resilience: res}
 		dp.scheduler.RegisterMetrics(m.Registry)
 		return dp, nil
 	}
@@ -97,7 +107,8 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 	dp.cache, dp.client = cache, client
 	dp.audit = audit.NewWriter(audit.PGStore{Pool: st.pg}, m, audit.WriterOptions{Log: log})
 	masker := audit.NewMasker(key)
-	attempter := &delivery.Attempter{Creds: cache, Upstream: client, Log: log}
+	limiter := upstream.NewAccountLimiter(st.rdb, m, log)
+	attempter := &delivery.Attempter{Creds: cache, Upstream: client, Breakers: dp.breakers, Limiter: limiter, Log: log}
 	budget := delivery.NewBudget(m.Registry)
 	settler := delivery.Settler{Transitions: dp.transitions, Budget: budget}
 
@@ -108,7 +119,7 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 			log.WarnContext(ctx, "idempotency scripts not preloaded (falls back to EVAL)", slog.String("error", err.Error()))
 		}
 		dp.edge = edge.New(edge.Deps{
-			Snapshots: &reg.store, Creds: cache, Upstream: client, Audit: dp.audit, Masker: masker, Metrics: m, Log: log,
+			Snapshots: &reg.store, Creds: cache, Upstream: client, Breakers: dp.breakers, Limiter: limiter, Audit: dp.audit, Masker: masker, Metrics: m, Log: log,
 			DebugHeaders: cfg.DebugHeaders, Idempotency: idem,
 			Queueing: &edge.Queueing{DB: st.pg, Queue: q, Settler: settler, Name: dp.name},
 		})
@@ -145,6 +156,9 @@ func (dp *dataPlane) start(ctx context.Context) {
 	ctx, dp.stop = context.WithCancel(context.WithoutCancel(ctx))
 	if dp.cache != nil {
 		dp.wg.Go(func() { dp.cache.Run(ctx) })
+	}
+	if dp.breakers != nil {
+		dp.wg.Go(func() { dp.breakers.Run(ctx) })
 	}
 	if dp.audit != nil {
 		dp.wg.Go(func() { dp.audit.Run(ctx) })
