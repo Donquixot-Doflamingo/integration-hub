@@ -76,18 +76,18 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 		_ = tp.Shutdown(ctx)
 		return err
 	}
-	var gw *gateway
-	if cfg.Role == Gateway {
+	var dp *dataPlane
+	if cfg.Role == Gateway || cfg.Role == Worker || cfg.Role == Scheduler {
 		secrets := opts.Secrets
 		if secrets == nil {
 			secrets = telemetry.NewSecretSet()
 		}
-		if gw, err = newGateway(ctx, cfg, metrics, log, secrets, tp, st.pg, reg); err != nil {
+		if dp, err = newDataPlane(ctx, cfg, metrics, log, secrets, tp, st, reg); err != nil {
 			_ = tp.Shutdown(ctx)
 			return err
 		}
-		gw.start(ctx)
-		defer gw.shutdown() // after the listeners closed (deferred calls run before st.close)
+		dp.start(ctx)
+		defer dp.shutdown() // after the listeners closed (deferred calls run before st.close)
 	}
 	reg.load(ctx)
 	checks := append(append(st.checks(), reg.check()), opts.ExtraChecks...)
@@ -95,7 +95,7 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	// ops is last so it is closed last: /readyz answers 503 while the public listener drains.
 	endpoints := []endpoint{{"ops", cfg.OpsAddr, opsHandler(cfg.Role, &ready, checks, metrics, log)}}
 	if cfg.Role.servesPublicHTTP() {
-		pub := telemetry.HTTPHandler(publicHandler(cfg.Role, gw), tp, string(cfg.Role))
+		pub := telemetry.HTTPHandler(publicHandler(cfg.Role, dp), tp, string(cfg.Role))
 		endpoints = append([]endpoint{{"http", cfg.HTTPAddr, pub}}, endpoints...)
 	}
 
@@ -171,9 +171,9 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 
 // publicHandler is the role's public surface: the edge for the gateway. The control plane
 // (admin) is mounted by EP-08; until then its paths are 404.
-func publicHandler(role Role, gw *gateway) http.Handler {
-	if role == Gateway && gw != nil {
-		return gw.edge.Handler()
+func publicHandler(role Role, dp *dataPlane) http.Handler {
+	if role == Gateway && dp != nil && dp.edge != nil {
+		return dp.edge.Handler()
 	}
 	return http.NotFoundHandler()
 }

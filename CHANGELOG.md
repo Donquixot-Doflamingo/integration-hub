@@ -6,6 +6,57 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `docs(milestones)` · add the M4 summary · HUB-123 · F-09
+  - docs/milestones/M4.md: acceptance evidence for every M4 line, what was built, deferred work, 7 deviations and 3 open questions
+  - F-09 in progress; new ticket HUB-124 for the per-integration retry schedule override
+- 2026-10-31 · `feat(delivery)` · send signed callbacks on terminal states and run the dispatcher · HUB-121 · F-11
+  - async_callback requests now end with a signed request.completed, request.failed or request.expired callback to each subscribed registrar endpoint, enqueued in the same transaction as the terminal state change (never twice, never missing)
+  - hub worker runs the callback dispatcher and warms registrar signing secrets; HUB_CALLBACK_ALLOW_LOOPBACK (dev only) lets callbacks reach a local http receiver
+  - Status responses of failed or expired requests now always carry error.request_id, as the contract requires
+- 2026-10-31 · `test(edge)` · close queued attempts in the audit trail and prove crash and duplicate safety · HUB-117 · F-09
+  - Each queued attempt's audit block now ends with request.completed, retry.scheduled or request.dead_lettered, recorded only by the actor whose transition won
+  - make itest proves the async timeline from accept to completion, atomic terminal commits, a worker crash after the vendor call (reclaimed, one terminal state and one callback for the caller) and one vendor call for six concurrent duplicates in sync, wait and async mode
+- 2026-10-31 · `feat(hub)` · run the worker and scheduler roles and queue requests in the gateway · HUB-112 · F-09
+  - hub worker --pool=messaging|llm now delivers queued requests; hub scheduler elects a leader and expires and prunes; hub gateway accepts async and wait requests and deduplicates Idempotency-Key through Redis
+  - The Redis client fails fast when Redis is down (one dial retry, 250 ms dial, 100 ms read/write) so idempotency stays within its request-path budget
+- 2026-10-31 · `feat(delivery)` · add the leader-elected scheduler with TTL expiry and pruning · HUB-114 · F-09
+  - The scheduler role elects one leader with a Postgres advisory lock held on its own session; a standby takes over within its poll interval (5 s by default) when the leader dies; scheduler_leader shows who leads
+  - Envelopes waiting past their TTL (accepted, retry_scheduled or parked) become expired, with the request.expired terminal event in the same transaction; dead letters older than 14 days and kept results past 7 days are pruned hourly
+- 2026-10-31 · `feat(edge)` · add async and wait delivery, request status and idempotency · HUB-115 · F-09
+  - async and async_callback integrations answer 202 (request_id, status accepted, poll, Location) only after the requests row and the outbox envelope committed; a worker delivers
+  - wait integrations persist, attempt at once in the gateway and answer 200 (or the canonical error) within wait_ms, else 202 in_flight while the gateway finishes; its claim keeps workers away so the request is never delivered twice
+  - GET /v1/requests/{id} returns the live state, attempts, timestamps and the final result or error, for the calling tenant only (others get 404 REQUEST_NOT_FOUND)
+  - Idempotency-Key: a completed request is replayed with X-Hub-Idempotent-Replay (original request id), a different body gets 409 IDEMPOTENCY_CONFLICT, a queued duplicate gets the original 202; failures release the key; with Redis down, money/quota integrations fail closed and others pass through
+- 2026-10-31 · `feat(delivery)` · add the delivery worker with backoff, retry budget and DLQ policy · HUB-112 · F-09
+  - Workers claim due envelopes per pool, check the TTL, re-resolve the active version (unless pinned or session-bound), re-transform the canonical body and deliver through the shared attempter
+  - Retryable failures (timeout, unavailable, rate limited) follow DESIGN §10.3 (+1 s … +1 h, 8 attempts, full jitter, never sooner than Retry-After); rejections, auth failures and transformer errors dead-letter at once with the last request and response; an envelope that crashed a worker twice is dead-lettered as poison
+  - Retries are limited to 20 % of each account's live traffic (retry_budget_exhausted_total); paused integrations are held without spending an attempt; every terminal change commits with the requests row, the kept result and the callback hook in one transaction
+- 2026-10-31 · `refactor(delivery)` · share one attempter across the sync, wait and worker paths · HUB-112 · F-09
+  - No behaviour change for callers: the sync path now runs through delivery.Attempter (transform, credentials, upstream, classification, response map), which the wait path and the worker reuse in M4
+  - Attempt rows record the integration version used; migration 00004 also adds requests.updated_at and hub.request_results (final result kept 7 days for status polling)
+- 2026-10-31 · `feat(queue)` · add the Postgres outbox queue and the guarded request states · HUB-110 · F-09
+  - Migration 00004 adds hub.outbox (claim, parked, reclaim, TTL and ordering indexes; fillfactor 70) and hub.dead_letters (14-day DLQ with the last vendor exchange)
+  - queue.Outbox: Enqueue (durable on commit; in_flight for wait-mode immediate attempts), Claim with SKIP LOCKED and a 30 s visibility (expired claims are reclaimed and counted as crashes), Ack, Nack, Park, Release in arrival order, DeadLetter, Expire, Replay; every method runs on the caller's transaction
+  - Request states and their allowed transitions (DESIGN §10.9) live in core; every worker transition is a compare-and-set on status and claim, so a late or duplicate outcome is refused (ErrLost)
+- 2026-10-31 · `feat(idempotency)` · add the Redis idempotency store · HUB-118 · F-10
+  - New backend/internal/idempotency store, scoped to tenant + integration + Idempotency-Key and hashed in Redis: Begin claims a key or reports in progress, completed (status, replay headers, body, original request id) or conflict (same key, other body or operation); Complete stores 200/202 results for 24 h from the first claim; Release frees a key after a failure so the retry runs fresh
+  - In-progress claims expire after 5 minutes, so a crashed gateway never pins a key; late Complete or Release by a request that lost its claim changes nothing
+  - Redis unavailable returns a typed ErrUnavailable within the 50 ms op timeout, for the edge's fail-closed or pass-through decision; responses over 1 MiB and credential headers are never stored
+  - New metrics idempotency_hits_total{result}, idempotency_writes_total{op,result} and redis_op_duration_seconds{op}; Begin p99 0.23–0.30 ms against compose Redis (budget 1 ms)
+- 2026-10-31 · `feat(callbacks)` · dispatch signed callbacks with retries and a callback DLQ · HUB-120 · F-11
+  - A callback dispatcher claims due deliveries (FOR UPDATE SKIP LOCKED, never more than its free senders), signs and POSTs them through the SSRF guard and records each outcome with a guarded transition, so concurrent dispatchers never double-send
+  - Failed callbacks retry on their own schedule (5 s, 30 s, 2 min, 10 min, 30 min, 1 h, 2 h, 4 h, 6 h, 6 h, ±20 % jitter; 11 attempts over about 20 h), independent of vendor delivery, then move to the callback DLQ; unknown endpoints and refused URLs dead-letter at once
+  - Every attempt is audited as callback.delivered (hash and size of the body only, never the signature or secret) and counted in callback_deliveries_total, callback_latency_seconds and callback_ssrf_blocked_total; callback_queue_oldest_age_s and callback_dlq_count are sampled every 15 s
+  - Abandoned claims of a crashed dispatcher are retried after 30 s; Run stops cleanly after finishing the attempts it started
+- 2026-10-31 · `feat(callbacks)` · sign callback payloads and enqueue them in the caller's transaction · HUB-120 · F-11
+  - request.completed, request.failed, request.expired and delivery.status bodies are built to contracts/schemas/events (request_id and idempotency_key always present) and checked against the schemas
+  - X-Hub-Signature is t=<unix>,v1=<hex HMAC-SHA256(secret, t.body)>, with one v1 per secret during a rotation overlap; a Verify helper implements the receiver side (5-minute tolerance)
+  - Terminal transitions can write one callback delivery per matching subscription in the same transaction (new table hub.callback_deliveries, migration 00005), so a callback exists only if the transition commits; endpoints of other tenants are never used
+- 2026-10-31 · `feat(callbacks)` · add the SSRF-guarded sender and registrar signing secrets · HUB-119 · F-11
+  - Callbacks go through an SSRF guard: https only, no redirects followed, no environment proxy, 5 s per attempt, optional host allowlist
+  - The guard resolves the host in the dialer and connects to the checked IP, refusing private, loopback, link-local (incl. cloud metadata), CGNAT, multicast, unspecified, documentation, NAT64/6to4/Teredo and IPv4-mapped equivalents, so DNS rebinding after registration cannot reach an internal address
+  - Registrar signing secrets live in the encrypted credential file (hubctl creds set <id> signing_secret=…, -slot next for a rotation overlap), are redacted from logs once loaded and are served from the warm cache without decrypting
+  - A dev/test-only loopback allowance lets local test receivers on 127.0.0.1 use plain http; production wiring does not set it
 - 2026-10-31 · `feat(frontend)` · add transformer dry-run with client-side JSON checks · HUB-269 · F-19
   - Editors can dry-run any transformer version with a pasted canonical body (or a vendor response for response transformers), starting from one of its fixtures, optionally for a given account
   - Invalid JSON is caught in the browser with its line and column, before anything is sent

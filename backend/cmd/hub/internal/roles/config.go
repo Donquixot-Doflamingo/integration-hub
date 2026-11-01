@@ -79,6 +79,9 @@ type Config struct {
 	DevKeyFile       string // key of the localfile credential source
 	AuditMaskKey     Secret // master key for x-pii masking (environment only; random per process when unset)
 	DebugHeaders     bool   // gateway: add the debug-only X-Hub-Integration-Version header
+	// CallbackAllowLoopback lets callbacks reach loopback registrar endpoints over http (dev
+	// receivers only; production leaves it false, DESIGN §12.1 SSRF guard).
+	CallbackAllowLoopback bool
 }
 
 // Load builds the config for role from flags (highest precedence), then HUB_* environment
@@ -99,7 +102,7 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	var (
 		c                                      = Config{Role: role, PGDSN: Secret(getenv("HUB_PG_DSN")), AuditMaskKey: Secret(getenv("HUB_AUDIT_MASK_KEY"))}
 		shutdownGrace, readyDrain, level, rate string
-		watch, debugHeaders                    bool
+		watch, debugHeaders, cbLoopback        bool
 	)
 	fs := flag.NewFlagSet("hub "+string(role), flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -120,11 +123,12 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	fs.BoolVar(&watch, "config-watch", env("HUB_CONFIG_WATCH", "false") == "true", "dev only: watch config-dir and swap snapshots")
 	fs.StringVar(&c.CredSource, "cred-source", env("HUB_CRED_SOURCE", "localfile://.data/dev-secrets.enc"), "credential source (localfile://<path> in phase 1)")
 	fs.StringVar(&c.DevKeyFile, "dev-key-file", env("HUB_DEV_KEY_FILE", ".data/dev.key"), "key file of the localfile credential source")
+	fs.BoolVar(&cbLoopback, "callback-allow-loopback", env("HUB_CALLBACK_ALLOW_LOOPBACK", "false") == "true", "dev only: allow callbacks to loopback http registrar endpoints")
 	fs.BoolVar(&debugHeaders, "debug-headers", env("HUB_DEBUG_HEADERS", "false") == "true", "gateway: send the debug-only X-Hub-Integration-Version header")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
-	c.ConfigWatch, c.DebugHeaders = watch, debugHeaders
+	c.ConfigWatch, c.DebugHeaders, c.CallbackAllowLoopback = watch, debugHeaders, cbLoopback
 	if fs.NArg() > 0 {
 		return Config{}, fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}

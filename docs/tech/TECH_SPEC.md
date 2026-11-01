@@ -121,7 +121,7 @@ integration-hub/
 │   │   └── hubmcp/               # main + cmd/hubmcp/internal/{tools,client}
 │   ├── internal/
 │   │   ├── edge/  registry/  transform/  resolve/  creds/  upstream/
-│   │   ├── queue/  delivery/  sessions/  audit/  callbacks/  webhooks/
+│   │   ├── queue/  delivery/  sessions/  idempotency/  audit/  callbacks/  webhooks/
 │   │   ├── control/  telemetry/
 │   │   └── core/                 # proposed leaf of shared value types (ADR-0001, §4)
 │   ├── pkg/hubclient/            # Go SDK (Result / Queued types, SSE reader)
@@ -143,7 +143,7 @@ integration-hub/
 └── docs/{DESIGN.md, product/, features/, tech/, tickets/, process/}
 ```
 
-`internal/*` matches DESIGN §18.1, plus `internal/core` (shared leaf types, ADR-0001) and `internal/testkit` (test-only helpers such as the in-process mockvendor). Binary-private code lives under `cmd/<bin>/internal/` so it cannot be imported by other binaries and does not add top-level packages.
+`internal/*` matches DESIGN §18.1, plus `internal/core` (shared leaf types, ADR-0001), `internal/idempotency` (the Redis Idempotency-Key store, split out of `edge` so its Lua scripts and Redis contract are tested on their own; ADR-0001, HUB-118) and `internal/testkit` (test-only helpers such as the in-process mockvendor). Binary-private code lives under `cmd/<bin>/internal/` so it cannot be imported by other binaries and does not add top-level packages.
 
 ---
 
@@ -162,11 +162,12 @@ Packages may import only packages in **lower** layers (or the same layer where l
 | L3 | `creds` | core, registry, telemetry | upstream, queue |
 | L3 | `queue` | core, telemetry | registry (envelopes carry ids, not snapshot pointers) |
 | L3 | `sessions` | core, telemetry | registry |
+| L3 | `idempotency` | core, telemetry | registry and every package above L3 (Redis Idempotency-Key store, HUB-118; the edge maps its outcomes to HTTP) |
 | L3 | `audit` | core, registry (PII paths for masking), telemetry | upstream, queue |
 | L4 | `upstream` | core, registry, creds, telemetry | resolve, transform, queue, audit (returns attempt facts; caller emits audit) |
 | L5 | `callbacks` | core, registry, audit, telemetry | delivery, edge |
 | L6 | `delivery` | core, registry, resolve, transform, creds, upstream, queue, sessions, audit, callbacks, telemetry | edge, webhooks, control |
-| L7 | `edge` | core, registry, resolve, transform, creds, upstream, queue, sessions, audit, delivery (shared `Attempter`), telemetry | webhooks, control |
+| L7 | `edge` | core, registry, resolve, transform, creds, upstream, queue, sessions, idempotency, audit, delivery (shared `Attempter`), telemetry | webhooks, control |
 | L7 | `webhooks` | core, registry, transform, audit, callbacks, telemetry | edge, delivery, control |
 | L7 | `control` | core, registry, transform, resolve, creds, upstream, queue, audit, sessions, telemetry | edge, delivery, webhooks |
 | test | `testkit` | nothing internal (core and telemetry allowed) | must never be imported by production code; only `cmd/mockvendor` and `_test.go` files use it |
@@ -183,10 +184,11 @@ flowchart BT
   audit --> registry
   queue --> core
   sessions --> core
+  idempotency --> core
   upstream --> creds
   callbacks --> audit
   delivery --> resolve & upstream & queue & sessions & callbacks
-  edge --> delivery
+  edge --> delivery & idempotency
   webhooks --> callbacks
   control --> resolve & upstream & queue
 ```
@@ -415,7 +417,7 @@ Columns per DESIGN §18.2. This section adds keys, indexes, partitioning and ret
 | `outbox` | `request_id` | partial `(next_attempt_at) WHERE status IN ('accepted','retry_scheduled')` (claim); partial `(account_id, endpoint_id, next_attempt_at) WHERE status='parked'` (release, arrival order); partial `(claimed_until) WHERE status='in_flight'` (reclaim); `(expires_at) WHERE status IN ('retry_scheduled','parked')` (TTL); `(ordering_key, created_at) WHERE ordering_key IS NOT NULL` | **Not partitioned.** Row deleted on terminal ack in the same TX as the `requests` status change, so it stays small. `fillfactor=70`, aggressive autovacuum (`autovacuum_vacuum_scale_factor=0.01`). DESIGN §18.2 lists `(status, next_attempt_at)` and `(status, account_id, endpoint_id)`; partial indexes are the same keys narrowed by status. |
 | `dead_letters` | `request_id` | `(reason, created_at)`, `(account_id, created_at)` (replay filters, DESIGN §10.6) | 14-day retention |
 | `vendor_sessions` | `session_id` | `(expires_at)`; `(account_id) WHERE expires_at > now()` (retire guard) | 10-min TTL typical |
-| `callback_deliveries` | `delivery_id` | partial `(next_attempt_at) WHERE status IN ('pending','retry_scheduled')`; `(request_id)` | own DLQ via `status='dead_lettered'` |
+| `callback_deliveries` | `delivery_id` | partial `(next_attempt_at) WHERE status IN ('pending','retry_scheduled')`; `(request_id)`; partial `(claimed_until) WHERE status='in_flight'` (reclaim, HUB-120); partial `(created_at) WHERE status='dead_lettered'` (DLQ count/replay, HUB-120); unique `(event_id, endpoint_id)` | own DLQ via `status='dead_lettered'`; `payload` holds the exact signed bytes (migration `00005_callbacks.sql`) |
 
 **Claim query** (DESIGN §11.2, §18.4):
 ```sql
@@ -431,6 +433,13 @@ RETURNING o.*;
 `pool` (messaging | llm) is a column derived from the capability at insert time (**Decision**; DESIGN §17 asks for separate pools but the table has no column for it).
 
 **Guarded transitions** (DESIGN §10.9): every status change is `UPDATE … WHERE request_id=$1 AND status=$expected AND claimed_by=$me`; zero rows affected means another actor won, and the caller drops its result (no double completion, no double callback).
+
+### 6.4 Redis keys (not Postgres; listed here so every store is in one place)
+| Key | Owner | Type | TTL | Contents |
+| --- | --- | --- | --- | --- |
+| `hub:idem:<hex sha256(tenant NUL integration NUL Idempotency-Key)>` | `idempotency` (HUB-118) | hash | lease 5 min while in progress; 24 h from the first claim once completed (Redis clock) | `st` (`p`/`c`), `bh` (sha256 of operation + body), `rid` (claiming request id), `exp` (unix ms deadline), and when completed `code` (200/202), `hdr` (allowlisted response headers as JSON), `body` (canonical response as replayed, ≤ 1 MiB with headers) |
+
+Raw idempotency keys never reach Redis (F-10 security). Every operation is one single-key Lua script, so it is atomic and Redis Cluster safe. Contract of the store (outcomes, replayable results, `ErrUnavailable`): `backend/internal/idempotency/doc.go`.
 
 ---
 
@@ -471,12 +480,13 @@ Flags override env. Env names: `HUB_*`. Loaded once at start into an immutable s
 | `HUB_HTTP_ADDR` | `:8080` (gateway), `:8081` (admin) | gateway, admin |
 | `HUB_OPS_ADDR` | `127.0.0.1:9090` in dev, `:9090` in cluster | all |
 | `HUB_PG_DSN`, `HUB_PG_MAX_CONNS` | compose DSN, 20 | all |
-| `HUB_REDIS_ADDR` | `localhost:6379` | all |
+| `HUB_REDIS_ADDR` | `localhost:6379` | all (gateway: idempotency store on the request path; build that client with `ContextTimeoutEnabled: true`, `DialerRetries: 1` and short read/write timeouts so a Redis outage fails within the 50 ms op timeout of §12.2 instead of go-redis' default 5 dial retries × 100 ms) |
 | `HUB_ADMIN_URL` | `http://localhost:8081` | data-plane roles (snapshot fetch) |
 | `HUB_BLOB_URL` | `file://./.data/blobs` | admin, boot fallback |
 | `HUB_CRED_SOURCE` | `localfile://.data/dev-secrets.enc` (not under `config/`: every file there is packed into snapshot blobs; git-ignored; `hubctl creds set`) | gateway (worker from M4) |
 | `HUB_DEV_KEY_FILE` | `.data/dev.key` (`hubctl creds init-key`, mode 0600, git-ignored). Missing → the gateway starts and every vendor call answers 503 `credentials_unavailable` | dev only |
 | `HUB_AUDIT_MASK_KEY` | unset → random per process (masked identifiers then change on restart); ≥ 32 bytes, environment only | gateway (worker from M4) |
+| `HUB_CALLBACK_ALLOW_LOOPBACK` | `false`; `true` lets callbacks reach loopback registrar endpoints over http (the dev registrar `http://127.0.0.1:8097`). Never set in production: the SSRF guard otherwise refuses loopback | worker, dev only |
 | `HUB_DEBUG_HEADERS` | `false`; `true` adds the debug-only `X-Hub-Integration-Version` to 200 responses | gateway, dev/support only |
 | `HUB_CONFIG_DIR` | `config` (dev registry, M1) | dev only |
 | `HUB_CONFIG_WATCH` | `false` (rebuild and swap on file changes, HUB-045) | dev only |
@@ -852,7 +862,7 @@ See DESIGN §3.1. Additional: **stage** — one timed step of the hot path (§11
 2. **Retention classes** in partitioned ledger tables (30 d masked vs 90 d sealed) (§6.2).
 3. ~~**Canonical codes for Hub-internal failures**~~ Resolved by the contract (1.0.0): `INTERNAL_ERROR` 500 (retryable), `PAYLOAD_TOO_LARGE` 413, `NOT_READY` 503 (`/readyz`), `IDEMPOTENCY_CONFLICT` 409 (`contracts/README.md`).
 4. **Malformed 2xx vendor bodies** classification (§10).
-5. **Redis down on the sync path**: idempotency check fail-open (risk of duplicate vendor call) vs fail-closed (503). Proposal: fail-closed when the endpoint is non-idempotent and a key was sent; fail-open otherwise.
+5. **Redis down on the sync path**: idempotency check fail-open (risk of duplicate vendor call) vs fail-closed (503). Proposal: fail-closed when the endpoint is non-idempotent and a key was sent; fail-open otherwise. *Store side done (HUB-118):* `idempotency` returns a typed `*UnavailableError` (`errors.Is(err, idempotency.ErrUnavailable)`); F-10 sets the policy the edge applies: fail closed with 500 `INTERNAL_ERROR` (retryable) for integrations with `moves_money_or_quota`, pass through without deduplication otherwise.
 6. **Node → admin service authentication** for snapshot long-poll (§7).
 7. **`pool` column** on `outbox` (§6.3) — implied by DESIGN §17, not in §18.2.
 8. **Dev OIDC stub** source (§17.3).

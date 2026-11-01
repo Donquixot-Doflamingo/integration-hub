@@ -70,11 +70,11 @@ func (s PGStore) Write(ctx context.Context, b Batch) error {
 		if len(b.Attempts) > 0 {
 			rows := make([][]any, len(b.Attempts))
 			for i, a := range b.Attempts {
-				rows[i] = []any{a.StartedAt, a.RequestID, a.AttemptNo, a.AccountID, a.EndpointID, nullable(a.Host),
+				rows[i] = []any{a.StartedAt, a.RequestID, a.AttemptNo, a.AccountID, a.EndpointID, nullable(a.IntegrationVersion), nullable(a.Host),
 					a.DurationMS, nullable(a.HTTPStatus), nullable(a.ErrorClass)}
 			}
 			if _, err := tx.CopyFrom(ctx, pgx.Identifier{"hub", "request_attempts"},
-				[]string{"started_at", "request_id", "attempt_no", "account_id", "endpoint_id", "host", "duration_ms", "http_status", "error_class"},
+				[]string{"started_at", "request_id", "attempt_no", "account_id", "endpoint_id", "integration_version", "host", "duration_ms", "http_status", "error_class"},
 				pgx.CopyFromRows(rows)); err != nil {
 				return fmt.Errorf("copy attempts: %w", err)
 			}

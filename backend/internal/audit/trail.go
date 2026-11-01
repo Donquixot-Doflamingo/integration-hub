@@ -25,6 +25,10 @@ type TrailOptions struct {
 	// Secrets are replaced by "***" in every stored payload, whatever the policy.
 	Secrets []string
 	Now     func() time.Time
+	// SeqBase offsets sequence numbers. Queued requests are recorded by several actors (the
+	// gateway at accept, a worker per attempt): each uses its own block (attempt n → n×100), so
+	// seq still orders the timeline. Gaps between blocks are expected.
+	SeqBase int
 }
 
 // Trail collects the §13.1 events of one request with sequence numbers, hashes and the payload
@@ -78,7 +82,7 @@ var canonicalStages = map[string]bool{RequestReceived: true, RequestValidated: t
 // Add records one event. payload is the exact bytes seen at that stage (nil when the event has
 // none); its sha256 and size are kept under every policy (DESIGN §13.3).
 func (t *Trail) Add(typ string, attempt int, payload []byte, meta map[string]any) {
-	e := Event{At: t.o.Now(), RequestID: t.o.RequestID, Seq: len(t.events) + 1, Type: typ, AttemptNo: attempt, Meta: meta, PayloadState: PayloadNone}
+	e := Event{At: t.o.Now(), RequestID: t.o.RequestID, Seq: t.o.SeqBase + len(t.events) + 1, Type: typ, AttemptNo: attempt, Meta: meta, PayloadState: PayloadNone}
 	if payload != nil {
 		sum := sha256.Sum256(payload)
 		e.SHA256, e.Bytes = "sha256:"+hex.EncodeToString(sum[:]), len(payload)
@@ -130,6 +134,17 @@ func (t *Trail) masked(typ string, payload []byte) []byte {
 	}
 	b, _ := json.Marshal(doc)
 	return b
+}
+
+// Stored returns the stored (policy-applied) payload of the latest event of type typ, or nil.
+// Dead letters keep it as the last vendor exchange: never the clear bytes.
+func (t *Trail) Stored(typ string) []byte {
+	for i := len(t.events) - 1; i >= 0; i-- {
+		if t.events[i].Type == typ {
+			return t.events[i].Payload
+		}
+	}
+	return nil
 }
 
 // Events returns the events recorded so far.

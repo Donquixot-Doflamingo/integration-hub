@@ -2,20 +2,15 @@ package edge
 
 import (
 	"encoding/json"
-	"errors"
 	"log/slog"
-	"maps"
 	"net/http"
-	"slices"
 	"time"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
-	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/resolve"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
-	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/transform"
 )
 
 // hdrAllowlist maps the caller headers a transformer may read (hdr.*, DESIGN §7.2).
@@ -35,20 +30,15 @@ type prepared struct {
 	body        map[string]any
 	raw         []byte
 	res         resolve.Resolution
-	account     *registry.Account
-	baseURL     string
-	request     *transform.Program
-	response    *transform.Program
-	input       transform.Input
+	hdr         map[string]any
 	timings     telemetry.Timings
 	trail       *audit.Trail
-	creds       creds.Credentials
 	attempts    int
 	attemptRows []audit.Attempt
 }
 
 // prepare runs DESIGN §5.1 steps 1–4 for one call: scope, operation, body limit, schema
-// validation, resolve and the transformer input, recording request.received, request.validated
+// validation and resolve, recording request.received, request.validated
 // and integration.resolved. A nil *prepared with an error means the caller was not authorized
 // (nothing is audited); otherwise the caller finishes the request with s.fail or s.finish.
 func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *core.CanonicalError) {
@@ -109,40 +99,17 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 		return p, internalError()
 	}
 	p.res = res
-	p.account = c.Snap.Accounts[res.Target.Account]
-	p.baseURL = c.Snap.Vendors[res.Target.Vendor].Regions[p.account.Region]
-	p.request = c.Snap.Programs[res.Target.Transformer.Request]
-	p.response = c.Snap.Programs[res.Target.Transformer.Response]
 	p.trail.Add(audit.IntegrationResolved, 0, nil, map[string]any{
 		"integration": id, "version": res.VersionNumber, "vendor": res.Target.Vendor, "account": res.Target.Account,
 		"transformers": map[string]string{"request": res.Target.Transformer.Request.String(), "response": res.Target.Transformer.Response.String()},
 		"target_index": res.TargetIndex, "policy": string(p.trail.Policy()), "snapshot_version": res.SnapshotVersion,
 	})
 
-	// Credentials come from the warm cache only; a miss is the account being unusable right
-	// now (rotation gone wrong, store down past the TTL), not a slow path (DESIGN §18.5 rule 4).
-	if p.creds, err = s.deps.Creds.Get(r.Context(), p.account.Account); err != nil {
-		s.log.ErrorContext(r.Context(), "credentials unavailable", slog.String("integration", id), slog.String("error", err.Error()))
-		if errors.Is(err, creds.ErrCacheMiss) {
-			return p, &core.CanonicalError{Code: core.CodeUpstreamUnavailable, Message: "The upstream is unavailable", Retryable: true,
-				RetryAfterMS: core.Ptr[int64](5000), Reason: core.Ptr("credentials_unavailable"), Upstream: &core.Upstream{}}
-		}
-		return p, internalError()
-	}
-	p.trail.AddSecrets(slices.Collect(maps.Values(p.creds.Values))...)
-	hdr := map[string]any{}
+	p.hdr = map[string]any{}
 	for name, key := range hdrAllowlist {
 		if v := r.Header.Get(name); v != "" {
-			hdr[key] = v
+			p.hdr[key] = v
 		}
-	}
-	cfg := make(map[string]any, len(p.account.Config))
-	for k, v := range p.account.Config {
-		cfg[k] = v
-	}
-	p.input = transform.Input{
-		Req: p.body, Hdr: hdr, Creds: p.creds.Values, Now: s.deps.Now(),
-		Account: map[string]any{"id": p.account.Account, "region": p.account.Region, "config": cfg},
 	}
 	return p, nil
 }
@@ -199,16 +166,4 @@ func (s *Server) record(r *http.Request, p *prepared, status string, httpStatus 
 	start := time.Now()
 	s.deps.Audit.Emit(p.trail.Batch(rec, p.attemptRows...))
 	p.timings.Observe(telemetry.StageAudit, start)
-}
-
-// transformError maps a request-transformer failure to TRANSFORM_FAILED (500). Path and
-// expression go to the log; the engine detail never does (it may quote input values).
-func (s *Server) transformError(r *http.Request, p *prepared, err error) *core.CanonicalError {
-	attrs := []any{slog.String("integration", p.integration.Integration), slog.String("transformer", p.request.Ref())}
-	var ee *transform.EvalError
-	if errors.As(err, &ee) {
-		attrs = append(attrs, slog.String("path", ee.Path), slog.String("expr", ee.Expr))
-	}
-	s.log.WarnContext(r.Context(), "transform failed", attrs...)
-	return &core.CanonicalError{Code: core.CodeTransformFailed, Message: "The request could not be transformed"}
 }

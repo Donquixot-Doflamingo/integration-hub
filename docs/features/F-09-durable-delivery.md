@@ -4,7 +4,7 @@
 The Postgres outbox behind the `Queue` interface, the worker loop, the guarded request state machine, backoff with jitter, retry budget, TTL expiry, DLQ with replay, and the three non-sync delivery modes: `wait` (default), `async`, `async_callback` (DESIGN §5.2, §10.3, §10.6–10.9, §11, D3, D9).
 
 ## Status
-`proposed` — 2026-10-31.
+`in-progress` — 2026-11-01. Queue, states, worker, scheduler, async and wait modes shipped in M4 (`docs/milestones/M4.md`); parking/drain is M5, the per-integration retry override HUB-124.
 
 ## Owner
 `backend-engineer`.
