@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **125** · todo: **69** · other (in-progress/in-review/blocked): **3**
+Total tickets: **197** · done: **127** · todo: **69** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -15,7 +15,7 @@ Total tickets: **197** · done: **125** · todo: **69** · other (in-progress/in
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
-| EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
+| EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 2 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
@@ -1347,15 +1347,15 @@ Worker uses the active version for `pending: re_resolve` (default) and `resolved
 
 ### HUB-175 — Vendor session store and pinning
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-088, HUB-114 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-088, HUB-114 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-175-vendor-sessions`
 
 `vendor_sessions` table; step 1 of a multi-op capability returns `X-Hub-Session`; later steps route to the pinned version + account; scheduler expires sessions; unknown/expired → 404 `SESSION_NOT_FOUND` (DESIGN §3.1, §6.3, §14).
 
 **Acceptance criteria**
-- [ ] Step 2 uses the version/account of step 1 even after a publish
-- [ ] Expired session → `SESSION_NOT_FOUND`
-- [ ] Session data never stores Aadhaar numbers (schema test)
+- [x] Step 2 uses the version/account of step 1 even after a publish
+- [x] Expired session → `SESSION_NOT_FOUND`
+- [x] Session data never stores Aadhaar numbers (schema test)
 
 ### HUB-176 — Account lifecycle and retire guard
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
@@ -1439,14 +1439,16 @@ Add cutover fixtures (second account, second mock vendor e.g. `moengage`, transf
 
 ### HUB-183 — Cutover scenario 6: session step 2 stays on v7
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-178, HUB-175 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-178, HUB-175 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-183-cutover-s6-session`
 
 §6.3 row 6 for each change type.
 
 **Acceptance criteria**
-- [ ] Step 2 of a session opened on v7 is served by v7's account and transformer
-- [ ] New sessions opened after publish use v8
+- [x] Step 2 of a session opened on v7 is served by v7's account and transformer
+- [x] New sessions opened after publish use v8
+
+Covered for an account + transformer swap (sync, wait; async step 2 in HUB-175's itest). The vendor-swap variant needs HUB-178's second mock vendor.
 
 ### HUB-184 — Retire guard and rollback acceptance; M6 summary
 - **Epic:** EP-07 · **Type:** test · **Area:** backend

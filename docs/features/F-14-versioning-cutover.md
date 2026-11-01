@@ -4,7 +4,7 @@
 Immutable integration versions behind a stable integration ID; the full publish validation pipeline; rollback as a new version; weighted gradual cutover and shadow mode; re-resolve vs pinned for pending work; per-attempt version recording; vendor-session pinning (DESIGN §6, D10, D11, D12).
 
 ## Status
-`proposed` — 2026-10-31.
+`in-progress` — 2026-11-02 (vendor sessions, HUB-175 and HUB-183, done).
 
 ## Owner
 `backend-engineer`.

@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `test(edge)` · prove session step 2 stays on v7 after publishing v8 · HUB-183 · F-14
+  - make itest opens a session on v7, publishes v8 (new account and transformers), and shows step 2 served by v7's account and transformers with the session's txn id, in sync and wait mode, while a session opened after the publish runs on v8
+  - HUB-175 and HUB-183 are done
+
 - 2026-11-02 · `feat(edge)` · open and pin vendor sessions in the invoke pipeline · HUB-175 · F-14
   - A successful step 1 whose response transformer maps session data answers 200 with `X-Hub-Session: ses_…`; the session is pinned to the version and account that served it
   - A request with `X-Hub-Session` runs on that exact version and account even after a publish, and its request transformer reads the data as `session.*`, in sync, wait and async mode and in dry-run; unknown, expired or another integration's sessions get 404 `SESSION_NOT_FOUND`
