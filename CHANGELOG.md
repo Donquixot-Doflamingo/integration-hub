@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-10-31 · `feat(delivery)` · admit vendor calls through breakers and limiters and apply on_circuit_open · HUB-144 · F-12
+  - Every vendor call is admitted by its (account, endpoint) breaker, the integration's tightened view (override) and the shared account rate limiter; outcomes feed the breaker with TECH_SPEC weights
+  - Open circuit, sync: fail_fast answers 503 UPSTREAM_UNAVAILABLE with circuit open and retry_after_ms (nothing sent), failover serves from the next target with X-Hub-Served-By failover:n (idempotent endpoints or keyed requests only), queue_if_allowed parks and answers 202 queued only with Prefer respond-async or a callback subscription
+  - Open circuit, wait: 202 queued circuit_open at once; async: the worker parks the envelope (arrival order, attempt not spent)
+  - Account limiter: one Redis token bucket per account across the fleet, live traffic first; tenant limiter: per tenant + integration at the edge (429 tenant_quota); per-account bulkhead unchanged (64)
 - 2026-10-31 · `feat(upstream)` · add the circuit breaker with Redis-shared state · HUB-140 · F-12
   - Each (account, endpoint) has a breaker: it opens on more than 50 % weighted failures over 30 s with at least 20 calls (429 counts half) or on 5 consecutive timeouts, stays open 30 s doubling per re-open up to 10 min, and lets 3 half-open probes decide
   - Breaker states are shared through Redis (pub/sub plus a 1 s reconcile): every node sees an open or closed circuit within about a second, the request path never waits on Redis, and an outage keeps each node's last state; breaker_state and breaker_transitions_total are exported

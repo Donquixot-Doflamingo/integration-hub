@@ -196,7 +196,7 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 	queueWait := w.now().Sub(env.CreatedAt)
 	out := w.Attempter.Run(ctx, Job{
 		RequestID: env.RequestID, Snap: snap, Res: res, Body: body, Hdr: hdr, Trail: trail, Timings: &timings,
-		FirstAttempt: c.Attempt,
+		FirstAttempt: c.Attempt, Live: c.Attempt == 1 && c.Status == core.StateAccepted, // drained and retried: not live
 	})
 	final := audit.Final{
 		Attempts: c.Attempt, IntegrationVersion: res.VersionNumber,

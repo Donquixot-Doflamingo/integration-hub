@@ -124,6 +124,16 @@ func (t *Transitions) Retry(ctx context.Context, env core.Envelope, worker strin
 	})
 }
 
+// Park holds a claimed envelope while its circuit is open (DESIGN §10.5).
+func (t *Transitions) Park(ctx context.Context, env core.Envelope, worker, account, endpoint string, attempts int) error {
+	return pgx.BeginFunc(ctx, t.DB, func(tx pgx.Tx) error {
+		if err := t.Queue.Park(ctx, tx, env.RequestID, worker, account, endpoint); err != nil {
+			return err
+		}
+		return t.Ledger.Progress(ctx, tx, env.RequestID, core.StateParked, attempts, t.now())
+	})
+}
+
 // Hold puts a claimed envelope back unattempted (paused integration).
 func (t *Transitions) Hold(ctx context.Context, env core.Envelope, worker string, at time.Time, reason string) error {
 	return t.Queue.Defer(ctx, t.DB, env.RequestID, worker, at, reason)

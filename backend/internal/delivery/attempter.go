@@ -32,6 +32,9 @@ type Upstream interface {
 type Attempter struct {
 	Creds    creds.Source
 	Upstream Upstream
+	// Breakers and Limiter are admission (DESIGN §10.4, §10.8); nil disables each.
+	Breakers *upstream.Breakers
+	Limiter  *upstream.AccountLimiter
 	Log      *slog.Logger
 	Now      func() time.Time
 }
@@ -51,6 +54,11 @@ type Job struct {
 	SyncRetry bool
 	// FirstAttempt numbers this run's first vendor call (attempts already made + 1).
 	FirstAttempt int
+	// Live marks caller traffic (sync, wait, a worker's first attempt): it may use the whole
+	// account bucket; retries and drain leave a reserve for it.
+	Live bool
+	// LimiterWait caps the wait for an account token (default: 250 ms live, 5 s otherwise).
+	LimiterWait time.Duration
 }
 
 // Result is what a job produced. Exactly one of Body and Err is set.
@@ -64,6 +72,12 @@ type Result struct {
 	// kept with a dead letter (DESIGN §10.6).
 	LastRequest  json.RawMessage
 	LastResponse json.RawMessage
+	// CircuitOpen reports that admission refused the call (Err carries circuit "open" and
+	// retry_after_ms): the caller applies on_circuit_open, or parks. Account and Endpoint name
+	// the breaker for parking.
+	CircuitOpen bool
+	Account     string
+	Endpoint    string
 }
 
 // AuditRequest is the audit and dry-run view of an upstream request.
@@ -164,13 +178,24 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 		return r
 	}
 
+	r.Account, r.Endpoint = target.AccountID, tf.VendorEndpoint
+	start = time.Now()
+	adm, ce := a.admit(ctx, j, target, tf.VendorEndpoint)
+	j.Timings.Observe(telemetry.StageAdmission, start)
+	if ce != nil {
+		r.Err, r.CircuitOpen = ce, ce.Circuit != nil
+		return r
+	}
 	n := max(j.FirstAttempt, 1)
 	att, err := a.attempt(ctx, j, &r, n, target, req)
-	if err != nil && j.SyncRetry && RetrySync(err, target.Endpoint.Idempotent, j.IdempotencyKey) {
+	if err != nil && j.SyncRetry && !adm.probe() && RetrySync(err, target.Endpoint.Idempotent, j.IdempotencyKey) {
+		adm.record(a.now(), transportOutcome(err)) // the retry is a fresh call for the breaker
+		adm = adm.again(a.now())
 		n++
 		att, err = a.attempt(ctx, j, &r, n, target, req)
 	}
 	if err != nil {
+		adm.record(a.now(), transportOutcome(err))
 		r.Err = TransportError(err)
 		return r
 	}
@@ -178,6 +203,7 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	start = time.Now()
 	out, vce, err := respProg.MapResponse(att.Response, in)
 	j.Timings.Observe(telemetry.StageResponseMap, start)
+	adm.record(a.now(), responseOutcome(att.Response.Status, vce))
 	if err != nil {
 		j.Trail.Add(audit.ResponseTransformFailed, n, nil, map[string]any{"transformer": respProg.Ref()})
 		a.Log.WarnContext(ctx, "response transform failed", slog.String("integration", integration), slog.String("transformer", respProg.Ref()))

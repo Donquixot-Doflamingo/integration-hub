@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **112** · todo: **84** · other (in-progress/in-review/blocked): **1**
+Total tickets: **197** · done: **118** · todo: **78** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -14,7 +14,7 @@ Total tickets: **197** · done: **112** · todo: **84** · other (in-progress/in
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
-| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 2 |
+| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 8 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
@@ -1132,14 +1132,14 @@ Share breaker state via Redis so all nodes agree within ~1 s; the hot path reads
 
 ### HUB-142 — Integration breaker overrides and pause
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-141, HUB-088 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-141, HUB-088 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `feat/HUB-142-breaker-overrides-pause`
 
 Apply per-integration overrides that tighten thresholds (e.g. 3 consecutive timeouts) and the pause kill switch: sync/wait → 503 `INTEGRATION_PAUSED`, nothing parked; worker nacks paused envelopes (DESIGN §10.4).
 
 **Acceptance criteria**
-- [ ] Override trips the integration's view at 3 timeouts while the shared breaker stays closed
-- [ ] Paused integration returns `INTEGRATION_PAUSED`; other integrations on the same account unaffected
+- [x] Override trips the integration's view at 3 timeouts while the shared breaker stays closed
+- [x] Paused integration returns `INTEGRATION_PAUSED`; other integrations on the same account unaffected
 
 ### HUB-143 — Synthetic health probes while open
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
@@ -1155,61 +1155,61 @@ Scheduler runs the vendor's `health_probe` (dry where possible) every 30 s while
 
 ### HUB-144 — on_circuit_open: fail_fast
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-141, HUB-088 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-141, HUB-088 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `feat/HUB-144-on-circuit-open-fail-fast`
 
 Sync mode with an open circuit returns 503 `UPSTREAM_UNAVAILABLE` with `retry_after_ms` from the breaker window and `circuit: "open"`; nothing sent or queued (DESIGN §5.3, D4).
 
 **Acceptance criteria**
-- [ ] Mockvendor records zero calls while open
-- [ ] `retry_after_ms` equals remaining open window ±1 s
+- [x] Mockvendor records zero calls while open
+- [x] `retry_after_ms` equals remaining open window ±1 s
 
 ### HUB-145 — on_circuit_open: failover and queue_if_allowed
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-144, HUB-115 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-144, HUB-115 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `feat/HUB-145-failover-queue-if-allowed`
 
 `failover` resolves the next failover target and repeats from Transform (idempotent endpoints or keyed requests only; sets `X-Hub-Served-By: failover:1`; exhausted → fail_fast). `queue_if_allowed` downgrades to async only with `Prefer: respond-async` or a callback subscription (DESIGN §5.3).
 
 **Acceptance criteria**
-- [ ] Non-idempotent request without key never fails over
-- [ ] Exhausted chain returns fail_fast envelope
-- [ ] `queue_if_allowed` without the header or subscription returns fail_fast
+- [x] Non-idempotent request without key never fails over
+- [x] Exhausted chain returns fail_fast envelope
+- [x] `queue_if_allowed` without the header or subscription returns fail_fast
 
 ### HUB-146 — Parking on open breaker
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-141, HUB-116, HUB-110 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Depends on:** HUB-141, HUB-116, HUB-110 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `feat/HUB-146-parking`
 
 Wait mode with an open circuit returns 202 `status: queued, reason: circuit_open` at once; the worker parks envelopes tagged with account + endpoint in arrival order (DESIGN §5.2, §10.5).
 
 **Acceptance criteria**
-- [ ] Wait returns 202 queued without attempting the vendor
-- [ ] Async envelopes move to `parked`; `parked_count` and `parked_oldest_age_s` exported
+- [x] Wait returns 202 queued without attempting the vendor
+- [x] Async envelopes move to `parked`; `parked_count` and `parked_oldest_age_s` exported
 
 ### HUB-147 — Account rate limiter (Redis token bucket)
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-086, HUB-023 · **Feature:** F-13 · **Stories:** US-13xx
+- **Status:** done · **Depends on:** HUB-086, HUB-023 · **Feature:** F-13 · **Stories:** US-13xx
 - **Branch:** `feat/HUB-147-account-rate-limiter`
 
 Shared Redis token bucket per account quota in the upstream client; live traffic has priority over drain/retries; workers wait for tokens instead of collecting 429s (DESIGN §10.8).
 
 **Acceptance criteria**
-- [ ] Aggregate send rate across 3 workers stays within 5 % of the account rps
-- [ ] Live traffic is served first when drain and live compete
-- [ ] `ratelimit_rejections_total{layer="account"}` exported
+- [x] Aggregate send rate across 3 workers stays within 5 % of the account rps
+- [x] Live traffic is served first when drain and live compete
+- [x] `ratelimit_rejections_total{layer="account"}` exported
 
 ### HUB-148 — Tenant limiter and bulkheads
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-081, HUB-086 · **Feature:** F-13 · **Stories:** US-13xx
+- **Status:** done · **Depends on:** HUB-081, HUB-086 · **Feature:** F-13 · **Stories:** US-13xx
 - **Branch:** `feat/HUB-148-tenant-limiter-bulkheads`
 
 Token bucket per tenant + integration at the edge (→ 429 `UPSTREAM_RATE_LIMITED`) and per-account concurrency limit (default 64 in flight) with a separate LLM worker pool (DESIGN §10.8).
 
 **Acceptance criteria**
-- [ ] Tenant over budget gets 429 without touching the vendor
-- [ ] 65th concurrent call to one account waits or fails per config; other accounts unaffected
-- [ ] LLM pool exhaustion does not starve messaging workers
+- [x] Tenant over budget gets 429 without touching the vendor
+- [x] 65th concurrent call to one account waits or fails per config; other accounts unaffected
+- [x] LLM pool exhaustion does not starve messaging workers
 
 ### HUB-149 — Ramped drain scheduler
 - **Epic:** EP-06 · **Type:** feat · **Area:** backend
