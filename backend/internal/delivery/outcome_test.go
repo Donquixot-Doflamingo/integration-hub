@@ -1,4 +1,4 @@
-package edge
+package delivery
 
 import (
 	"errors"
@@ -26,7 +26,7 @@ func TestTransportErrors(t *testing.T) {
 		{errors.New("anything else"), core.CodeUpstreamUnavailable, ""},
 	}
 	for _, tc := range cases {
-		ce := transportError(tc.err)
+		ce := TransportError(tc.err)
 		reason := ""
 		if ce.Reason != nil {
 			reason = *ce.Reason
@@ -55,8 +55,8 @@ func TestRetrySync(t *testing.T) {
 		{errors.New("plain"), true, "k", false},
 	}
 	for _, tc := range cases {
-		if got := retrySync(tc.err, tc.idempotent, tc.key); got != tc.want {
-			t.Errorf("retrySync(%v, %v, %q) = %v", tc.err, tc.idempotent, tc.key, got)
+		if got := RetrySync(tc.err, tc.idempotent, tc.key); got != tc.want {
+			t.Errorf("RetrySync(%v, %v, %q) = %v", tc.err, tc.idempotent, tc.key, got)
 		}
 	}
 }
@@ -66,12 +66,12 @@ func TestEnrichVendorError(t *testing.T) {
 	h := http.Header{}
 	h.Set("Retry-After", now.Add(4*time.Second).Format(http.TimeFormat))
 	ce := &core.CanonicalError{Code: core.CodeUpstreamRateLimited, Upstream: &core.Upstream{}}
-	enrichVendorError(ce, core.VendorResponse{Status: 429, Headers: h}, now)
+	EnrichVendorError(ce, core.VendorResponse{Status: 429, Headers: h}, now)
 	if ce.RetryAfterMS == nil || *ce.RetryAfterMS != 4000 {
 		t.Fatalf("HTTP-date Retry-After: %v", ce.RetryAfterMS)
 	}
 	pinned := &core.CanonicalError{Code: core.CodeUpstreamRateLimited, RetryAfterMS: core.Ptr[int64](10)}
-	enrichVendorError(pinned, core.VendorResponse{Headers: http.Header{"Retry-After": {"9"}}}, now)
+	EnrichVendorError(pinned, core.VendorResponse{Headers: http.Header{"Retry-After": {"9"}}}, now)
 	if *pinned.RetryAfterMS != 10 {
 		t.Fatal("a rule's retry_after_ms wins over the header")
 	}
@@ -83,18 +83,18 @@ func TestEnrichVendorError(t *testing.T) {
 		"errors[0]":     map[string]any{"errors": []any{map[string]any{"message": "bad name"}}},
 	} {
 		ce := &core.CanonicalError{Code: core.CodeUpstreamRejected, Message: defaultRejected}
-		enrichVendorError(ce, core.VendorResponse{Status: 400, Body: want}, now)
+		EnrichVendorError(ce, core.VendorResponse{Status: 400, Body: want}, now)
 		if ce.Message != "bad name" {
 			t.Errorf("%s: %q", body, ce.Message)
 		}
 	}
 	ruled := &core.CanonicalError{Code: core.CodeUpstreamRejected, Message: "from the rule"}
-	enrichVendorError(ruled, core.VendorResponse{Body: map[string]any{"message": "vendor"}}, now)
+	EnrichVendorError(ruled, core.VendorResponse{Body: map[string]any{"message": "vendor"}}, now)
 	if ruled.Message != "from the rule" {
 		t.Fatal("a rule's message wins")
 	}
 	coded := &core.CanonicalError{Code: core.CodeUpstreamRejected, Message: defaultRejected, Upstream: &core.Upstream{}}
-	enrichVendorError(coded, core.VendorResponse{Body: map[string]any{"error": map[string]any{"code": 512.0}}}, now)
+	EnrichVendorError(coded, core.VendorResponse{Body: map[string]any{"error": map[string]any{"code": 512.0}}}, now)
 	if coded.Upstream.Code == nil || *coded.Upstream.Code != "512" {
 		t.Fatalf("vendor code %v", coded.Upstream.Code)
 	}

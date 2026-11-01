@@ -39,6 +39,29 @@ type HubApiKey struct {
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
 }
 
+type HubCallbackDelivery struct {
+	DeliveryID         string             `json:"delivery_id"`
+	EventID            string             `json:"event_id"`
+	EventType          string             `json:"event_type"`
+	RequestID          string             `json:"request_id"`
+	TenantID           string             `json:"tenant_id"`
+	IntegrationID      string             `json:"integration_id"`
+	IntegrationVersion int32              `json:"integration_version"`
+	EndpointID         string             `json:"endpoint_id"`
+	Subscription       int32              `json:"subscription"`
+	Payload            []byte             `json:"payload"`
+	Status             string             `json:"status"`
+	Attempts           int32              `json:"attempts"`
+	NextAttemptAt      pgtype.Timestamptz `json:"next_attempt_at"`
+	ClaimedBy          pgtype.Text        `json:"claimed_by"`
+	ClaimedUntil       pgtype.Timestamptz `json:"claimed_until"`
+	LastHttpStatus     pgtype.Int4        `json:"last_http_status"`
+	LastError          pgtype.Text        `json:"last_error"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	DeliveredAt        pgtype.Timestamptz `json:"delivered_at"`
+}
+
 type HubCapability struct {
 	Capability     string             `json:"capability"`
 	Major          int32              `json:"major"`
@@ -58,6 +81,21 @@ type HubConfigSnapshot struct {
 	Reason    string             `json:"reason"`
 	Diff      []byte             `json:"diff"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type HubDeadLetter struct {
+	RequestID          string             `json:"request_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	TenantID           string             `json:"tenant_id"`
+	IntegrationID      string             `json:"integration_id"`
+	AccountID          pgtype.Text        `json:"account_id"`
+	Reason             string             `json:"reason"`
+	LastError          pgtype.Text        `json:"last_error"`
+	Attempts           int32              `json:"attempts"`
+	Envelope           []byte             `json:"envelope"`
+	LastVendorRequest  []byte             `json:"last_vendor_request"`
+	LastVendorResponse []byte             `json:"last_vendor_response"`
+	ReplayedAt         pgtype.Timestamptz `json:"replayed_at"`
 }
 
 type HubIntegration struct {
@@ -83,6 +121,27 @@ type HubIntegrationVersion struct {
 	Author        string             `json:"author"`
 	Reason        string             `json:"reason"`
 	PublishedAt   pgtype.Timestamptz `json:"published_at"`
+}
+
+type HubOutbox struct {
+	RequestID     string             `json:"request_id"`
+	Status        string             `json:"status"`
+	Pool          string             `json:"pool"`
+	TenantID      string             `json:"tenant_id"`
+	IntegrationID string             `json:"integration_id"`
+	AccountID     pgtype.Text        `json:"account_id"`
+	EndpointID    pgtype.Text        `json:"endpoint_id"`
+	Attempt       int32              `json:"attempt"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	OrderingKey   pgtype.Text        `json:"ordering_key"`
+	ClaimedBy     pgtype.Text        `json:"claimed_by"`
+	ClaimedUntil  pgtype.Timestamptz `json:"claimed_until"`
+	Crashes       int32              `json:"crashes"`
+	LastError     pgtype.Text        `json:"last_error"`
+	Envelope      []byte             `json:"envelope"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type HubRegistrarEndpoint struct {
@@ -115,18 +174,20 @@ type HubRequest struct {
 	VendorMs           pgtype.Float8      `json:"vendor_ms"`
 	QueueWaitMs        pgtype.Float8      `json:"queue_wait_ms"`
 	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type HubRequestAttempt struct {
-	StartedAt  pgtype.Timestamptz `json:"started_at"`
-	RequestID  string             `json:"request_id"`
-	AttemptNo  int32              `json:"attempt_no"`
-	AccountID  string             `json:"account_id"`
-	EndpointID string             `json:"endpoint_id"`
-	Host       pgtype.Text        `json:"host"`
-	DurationMs float64            `json:"duration_ms"`
-	HttpStatus pgtype.Int4        `json:"http_status"`
-	ErrorClass pgtype.Text        `json:"error_class"`
+	StartedAt          pgtype.Timestamptz `json:"started_at"`
+	RequestID          string             `json:"request_id"`
+	AttemptNo          int32              `json:"attempt_no"`
+	AccountID          string             `json:"account_id"`
+	EndpointID         string             `json:"endpoint_id"`
+	Host               pgtype.Text        `json:"host"`
+	DurationMs         float64            `json:"duration_ms"`
+	HttpStatus         pgtype.Int4        `json:"http_status"`
+	ErrorClass         pgtype.Text        `json:"error_class"`
+	IntegrationVersion pgtype.Int4        `json:"integration_version"`
 }
 
 type HubRequestEvent struct {
@@ -141,6 +202,14 @@ type HubRequestEvent struct {
 	PayloadState  string             `json:"payload_state"`
 	PayloadRef    pgtype.Text        `json:"payload_ref"`
 	Meta          []byte             `json:"meta"`
+}
+
+type HubRequestResult struct {
+	RequestID string             `json:"request_id"`
+	TenantID  string             `json:"tenant_id"`
+	Result    []byte             `json:"result"`
+	Error     []byte             `json:"error"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
 type HubTenant struct {

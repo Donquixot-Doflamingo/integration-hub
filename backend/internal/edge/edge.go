@@ -10,6 +10,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/delivery"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
@@ -31,22 +32,26 @@ type Deps struct {
 	DebugHeaders bool
 	Audit        audit.Sink    // default audit.Discard
 	Masker       *audit.Masker // x-pii masking key for the masked policy
-	Metrics      *telemetry.Metrics
-	Log          *slog.Logger
-	Now          func() time.Time
+	// Queueing enables wait and async delivery (nil: every mode is delivered synchronously).
+	Queueing *Queueing
+	// Idempotency enables Idempotency-Key deduplication (nil: keys are required where the
+	// integration says so, but not deduplicated).
+	Idempotency Idempotency
+	Metrics     *telemetry.Metrics
+	Log         *slog.Logger
+	Now         func() time.Time
 }
 
 // Upstream sends one attempt to a vendor (upstream.Client).
-type Upstream interface {
-	Attempt(ctx context.Context, t upstream.Target, req core.VendorRequest) (upstream.Attempt, error)
-}
+type Upstream = delivery.Upstream
 
 // Server is the gateway's public HTTP surface: /v1 caller API (DESIGN §4).
 type Server struct {
-	mux     *http.ServeMux
-	deps    Deps
-	log     *slog.Logger
-	metrics *telemetry.Metrics
+	mux       *http.ServeMux
+	deps      Deps
+	attempter *delivery.Attempter
+	log       *slog.Logger
+	metrics   *telemetry.Metrics
 }
 
 // New builds the gateway server and registers its routes.
@@ -70,6 +75,7 @@ func New(d Deps) *Server {
 		d.Metrics = telemetry.NewMetrics("gateway", "test")
 	}
 	s := &Server{mux: http.NewServeMux(), deps: d, log: d.Log.With(slog.String("component", "edge")), metrics: d.Metrics}
+	s.attempter = &delivery.Attempter{Creds: d.Creds, Upstream: d.Upstream, Log: s.log, Now: d.Now}
 	s.routes()
 	return s
 }
@@ -86,6 +92,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/integrations/{integration_id}/dry-run", s.authenticate(http.HandlerFunc(s.dryRun)))
 	s.mux.Handle("POST /v1/integrations/{integration_id}/invoke", s.authenticate(http.HandlerFunc(s.invoke)))
 	s.mux.Handle("POST /v1/integrations/{integration_id}/invoke/{operation}", s.authenticate(http.HandlerFunc(s.invoke)))
+	s.mux.Handle("GET /v1/requests/{request_id}", s.authenticate(http.HandlerFunc(s.getRequestStatus)))
 }
 
 // noCreds serves empty credentials (discovery-only servers and tests without vendor calls).

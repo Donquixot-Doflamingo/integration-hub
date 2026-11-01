@@ -17,7 +17,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish.
 
 ## Current phase
 - **Phase 1 (merged):** repo foundation. Docs, contracts, skills, agents, tickets.
-- **Phase 2 (in progress):** M0–M3 done (`docs/milestones/M0.md` … `M3.md`). Code, milestone by milestone, from DESIGN.md §19 (M0 → M8), with the admin console (EP-10) and MCP server (EP-11) in parallel against the frozen contracts.
+- **Phase 2 (in progress):** M0–M4 done (`docs/milestones/M0.md` … `M4.md`). Code, milestone by milestone, from DESIGN.md §19 (M0 → M8), with the admin console (EP-10) and MCP server (EP-11) in parallel against the frozen contracts.
 
 ## Working rules (DESIGN §0)
 - **Callers never see vendor names, account names or versions.** Caller contract = integration ID + canonical body → canonical response. If a change would leak vendor identity into the caller contract, stop and tell the user.

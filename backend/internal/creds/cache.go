@@ -89,7 +89,12 @@ type entry struct {
 // generation is one immutable cache state, published with a single pointer store.
 type generation struct {
 	active    map[string]*entry     // account → active slot
+	next      map[string]*entry     // account → next slot, while a rotation is staged
 	byVersion map[versionKey]*entry // account + version → active or next slot
+}
+
+func emptyGeneration() *generation {
+	return &generation{active: map[string]*entry{}, next: map[string]*entry{}, byVersion: map[versionKey]*entry{}}
 }
 
 // NewCache builds a cache over loader. Every value it loads is registered with secrets for
@@ -116,7 +121,7 @@ func NewCache(loader Loader, secrets *telemetry.SecretSet, m *telemetry.Metrics,
 			return nil, fmt.Errorf("creds: register metrics: %w", err)
 		}
 	}
-	c.gen.Store(&generation{active: map[string]*entry{}, byVersion: map[versionKey]*entry{}})
+	c.gen.Store(emptyGeneration())
 	return c, nil
 }
 
@@ -139,6 +144,23 @@ func (c *Cache) GetVersion(_ context.Context, accountID string, version int) (Cr
 	return Credentials{}, c.miss(accountID)
 }
 
+// Slots returns the active slot of id followed by its next slot while a rotation is staged
+// (DESIGN §6.6), for consumers that must honour both during an overlap, such as callback
+// signing (several v1= signatures). Same no-decrypt rule as Get.
+func (c *Cache) Slots(_ context.Context, id string) ([]Credentials, error) {
+	g := c.gen.Load()
+	now := c.opts.Now()
+	e := g.active[id]
+	if e == nil || !now.Before(e.expires) {
+		return nil, c.miss(id)
+	}
+	out := []Credentials{e.creds}
+	if n := g.next[id]; n != nil && now.Before(n.expires) {
+		out = append(out, n.creds)
+	}
+	return out, nil
+}
+
 func (c *Cache) miss(accountID string) error {
 	c.misses.WithLabelValues(accountID).Inc()
 	select {
@@ -148,9 +170,9 @@ func (c *Cache) miss(accountID string) error {
 	return &MissError{AccountID: accountID}
 }
 
-// Warm sets the accounts the cache serves (typically AccountIDs of the snapshot about to be
-// swapped in) and loads them now, off the request path. Accounts that fail to load keep their
-// previous, unexpired entry if they had one. The error lists every account that could not be
+// Warm sets the ids the cache serves (AccountIDs of the snapshot about to be swapped in, or
+// SnapshotSecretIDs in a role that also signs callbacks) and loads them now, off the request
+// path. Accounts that fail to load keep their previous, unexpired entry if they had one. The error lists every account that could not be
 // loaded; accounts that did load are served either way, so the caller decides whether a
 // partial warm blocks the swap.
 func (c *Cache) Warm(ctx context.Context, accountIDs []string) error {
@@ -203,7 +225,7 @@ func (c *Cache) backgroundRefresh(ctx context.Context, onMiss bool) {
 func (c *Cache) reloadLocked(ctx context.Context) error {
 	c.lastReload = c.opts.Now()
 	if len(c.wanted) == 0 {
-		c.gen.Store(&generation{active: map[string]*entry{}, byVersion: map[versionKey]*entry{}})
+		c.gen.Store(emptyGeneration())
 		return nil
 	}
 	c.decrypts.Inc()
@@ -211,7 +233,7 @@ func (c *Cache) reloadLocked(ctx context.Context) error {
 	now := c.opts.Now()
 	expires := now.Add(c.opts.TTL)
 	old := c.gen.Load()
-	next := &generation{active: make(map[string]*entry, len(c.wanted)), byVersion: make(map[versionKey]*entry, len(c.wanted))}
+	next := &generation{active: make(map[string]*entry, len(c.wanted)), next: map[string]*entry{}, byVersion: make(map[versionKey]*entry, len(c.wanted))}
 	var secrets []string
 	for _, id := range c.wanted {
 		s, ok := loaded[id]
@@ -219,6 +241,9 @@ func (c *Cache) reloadLocked(ctx context.Context) error {
 			// Keep the last good entries until they expire (bounded staleness, fail closed after TTL).
 			if e := old.active[id]; e != nil && now.Before(e.expires) {
 				next.active[id] = e
+				if n := old.next[id]; n != nil {
+					next.next[id] = n
+				}
 				for k, ve := range old.byVersion {
 					if k.account == id && now.Before(ve.expires) {
 						next.byVersion[k] = ve
@@ -232,7 +257,9 @@ func (c *Cache) reloadLocked(ctx context.Context) error {
 		next.byVersion[versionKey{id, s.Active.Version}] = act
 		secrets = appendSecrets(secrets, s.Active.Values)
 		if s.Next != nil {
-			next.byVersion[versionKey{id, s.Next.Version}] = &entry{creds: Credentials{AccountID: id, Version: s.Next.Version, Values: s.Next.Values}, expires: expires}
+			n := &entry{creds: Credentials{AccountID: id, Version: s.Next.Version, Values: s.Next.Values}, expires: expires}
+			next.next[id] = n
+			next.byVersion[versionKey{id, s.Next.Version}] = n
 			secrets = appendSecrets(secrets, s.Next.Values)
 		}
 	}

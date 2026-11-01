@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,25 +11,18 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/delivery"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/transform"
 )
 
-type upstreamRequest struct {
-	Method       string            `json:"method"`
-	URL          string            `json:"url"`
-	Headers      map[string]string `json:"headers"`
-	Body         any               `json:"body,omitempty"`
-	BodyEncoding string            `json:"body_encoding,omitempty"`
-}
-
 type dryRunResult struct {
-	RequestID       string          `json:"request_id"`
-	DryRun          bool            `json:"dry_run"`
-	Operation       string          `json:"operation"`
-	UpstreamRequest upstreamRequest `json:"upstream_request"`
-	Redacted        []string        `json:"redacted"`
-	Warnings        []string        `json:"warnings"`
+	RequestID       string                `json:"request_id"`
+	DryRun          bool                  `json:"dry_run"`
+	Operation       string                `json:"operation"`
+	UpstreamRequest delivery.AuditRequest `json:"upstream_request"`
+	Redacted        []string              `json:"redacted"`
+	Warnings        []string              `json:"warnings"`
 }
 
 // dryRun shows the upstream request the Hub would send, with credentials masked, and sends
@@ -46,23 +38,28 @@ func (s *Server) dryRun(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, p, ce)
 		return
 	}
-	in := p.input
-	in.UUID = func() string { return "00000000-0000-4000-8000-000000000000" } // stable output, no randomness
-	start := s.deps.Now()
-	plain, err := p.request.BuildRequest(in)
-	if err != nil {
-		s.fail(w, r, p, s.transformError(r, p, err))
+	in, cred, ce := s.attempter.Input(r.Context(), p.caller.Snap, p.res, p.body, p.hdr, p.trail)
+	if ce != nil {
+		s.fail(w, r, p, ce)
 		return
 	}
-	masked, err := p.request.DryRun(in)
+	in.UUID = func() string { return "00000000-0000-4000-8000-000000000000" } // stable output, no randomness
+	prog := p.caller.Snap.Programs[p.res.Target.Transformer.Request]
+	start := s.deps.Now()
+	plain, err := prog.BuildRequest(in)
+	if err != nil {
+		s.fail(w, r, p, s.attempter.TransformError(r.Context(), p.integration.Integration, prog.Ref(), err))
+		return
+	}
+	masked, err := prog.DryRun(in)
 	p.timings.Observe(telemetry.StageTransform, start)
 	if err != nil {
-		s.fail(w, r, p, s.transformError(r, p, err))
+		s.fail(w, r, p, s.attempter.TransformError(r.Context(), p.integration.Integration, prog.Ref(), err))
 		return
 	}
 	// The vendor's auth scheme (bearer, basic) adds headers after the transformer: show them,
 	// masked, so the output is what would really be sent.
-	if err := creds.ApplyVendor(p.caller.Snap.Vendors[p.res.Target.Vendor], p.creds, &plain); err != nil {
+	if err := creds.ApplyVendor(p.caller.Snap.Vendors[p.res.Target.Vendor], cred, &plain); err != nil {
 		s.log.ErrorContext(r.Context(), "auth scheme failed", slog.String("integration", p.integration.Integration), slog.String("error", err.Error()))
 		s.fail(w, r, p, internalError())
 		return
@@ -78,7 +75,7 @@ func (s *Server) dryRun(w http.ResponseWriter, r *http.Request) {
 
 	out := dryRunResult{
 		RequestID: RequestID(r.Context()), DryRun: true, Operation: op,
-		UpstreamRequest: upstreamRequest{Method: masked.Method, URL: upstreamURL(p.baseURL, masked), Headers: masked.Headers, Body: masked.Body},
+		UpstreamRequest: delivery.AuditRequest{Method: masked.Method, URL: delivery.UpstreamURL(p.caller.Snap.Vendors[p.res.Target.Vendor].Regions[p.caller.Snap.Accounts[p.res.Target.Account].Region], masked), Headers: masked.Headers, Body: masked.Body},
 		Redacted:        redactedPaths(plain, masked), Warnings: []string{},
 	}
 	if out.UpstreamRequest.Headers == nil {
@@ -90,22 +87,9 @@ func (s *Server) dryRun(w http.ResponseWriter, r *http.Request) {
 	if p.res.Integration.Paused {
 		out.Warnings = append(out.Warnings, "integration is paused: invocations currently return 503 INTEGRATION_PAUSED")
 	}
-	p.trail.AddJSON(audit.RequestTransformed, 0, out.UpstreamRequest, map[string]any{"dry_run": true, "transformer": p.request.Ref()})
+	p.trail.AddJSON(audit.RequestTransformed, 0, out.UpstreamRequest, map[string]any{"dry_run": true, "transformer": prog.Ref()})
 	writeJSON(w, http.StatusOK, out)
 	s.finish(r, p, http.StatusOK)
-}
-
-// upstreamURL joins the account's regional base URL, the path and the sorted query.
-func upstreamURL(base string, req core.VendorRequest) string {
-	u := strings.TrimSuffix(base, "/") + req.Path
-	if len(req.Query) > 0 {
-		q := url.Values{}
-		for k, v := range req.Query {
-			q.Set(k, v)
-		}
-		u += "?" + q.Encode()
-	}
-	return u
 }
 
 // redactedPaths lists what DryRun masked: "headers.<name>", "query.<name>", "body<json pointer>".

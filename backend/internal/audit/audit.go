@@ -16,6 +16,19 @@ const (
 	ResponseTransformFailed = "response.transform_failed"
 	RequestCompleted        = "request.completed"
 	RequestFailed           = "request.failed"
+	// Queued requests (DESIGN §13.1 "plus"): persisted in the outbox, accepted (202 sent),
+	// parked on an open circuit, the payload policy applied, the TTL passed, dead-lettered, and
+	// an attempt scheduled for later.
+	RequestPersisted    = "request.persisted"
+	RequestAccepted     = "request.accepted"
+	RequestParked       = "request.parked"
+	PolicyApplied       = "policy.applied"
+	RequestExpired      = "request.expired"
+	RequestDeadLettered = "request.dead_lettered"
+	RetryScheduled      = "retry.scheduled"
+	// CallbackDelivered records one outbound callback attempt (internal/callbacks, HUB-120):
+	// outcome and status in meta, payload hash and size only, never the signature or secret.
+	CallbackDelivered = "callback.delivered"
 )
 
 // PayloadState says what request_events.payload holds.
@@ -78,10 +91,12 @@ type Attempt struct {
 	AttemptNo  int
 	AccountID  string
 	EndpointID string
-	Host       string
-	DurationMS float64
-	HTTPStatus int
-	ErrorClass string
+	// IntegrationVersion is the version this attempt used (re-resolved per attempt, DESIGN §6.3).
+	IntegrationVersion int
+	Host               string
+	DurationMS         float64
+	HTTPStatus         int
+	ErrorClass         string
 }
 
 // Sink receives audit rows. Emit must never block the request path (DESIGN §18.5 rule 3).

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **196** · done: **95** · todo: **99** · other (in-progress/in-review/blocked): **2**
+Total tickets: **197** · done: **109** · todo: **86** · other (in-progress/in-review/blocked): **2**
 
 ## Epics
 
@@ -13,7 +13,7 @@ Total tickets: **196** · done: **95** · todo: **99** · other (in-progress/in-
 | EP-02 | M1 Config registry | M1 | F-03 | HUB-040–HUB-059 | 10 | 10 |
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
-| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 14 | 0 |
+| EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 0 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
@@ -925,170 +925,184 @@ Payloads over 64 KB are stored truncated in `request_events` today (`payload_sta
 
 ### HUB-110 — Postgres outbox Queue implementation
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-023 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-023 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-110-outbox-queue`
 
 Add the `outbox` and `dead_letters` tables with §18.2 indexes and implement `Queue` (DESIGN §11.2): `Enqueue` durable before return, `Claim` with `SKIP LOCKED` and 30 s visibility timeout, `Ack`, `Nack`, `Park`, `Release`, `DeadLetter`.
 
 **Acceptance criteria**
-- [ ] Two concurrent claimers never receive the same envelope (itest)
-- [ ] Expired visibility makes an envelope claimable again
-- [ ] `Release(account, endpoint, limit)` releases in arrival order
+- [x] Two concurrent claimers never receive the same envelope (itest)
+- [x] Expired visibility makes an envelope claimable again
+- [x] `Release(account, endpoint, limit)` releases in arrival order
 
 ### HUB-111 — Request state machine with guarded transitions
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-110, HUB-091 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-110, HUB-091 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-111-state-machine`
 
 Implement states `accepted → in_flight → succeeded | retry_scheduled | parked | dead_lettered | expired` (plus terminal `failed` for sync errors, contract `RequestState`) with compare-and-set transitions (DESIGN §10.9).
 
 **Acceptance criteria**
-- [ ] Every allowed transition succeeds and every other one is refused (table test)
-- [ ] Concurrent double-complete attempts result in exactly one terminal transition
+- [x] Every allowed transition succeeds and every other one is refused (table test)
+- [x] Concurrent double-complete attempts result in exactly one terminal transition
 
 ### HUB-112 — Worker loop with re-resolve and poison detector
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-111, HUB-083, HUB-085, HUB-087 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-111, HUB-083, HUB-085, HUB-087 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-112-worker-loop`
 
 Implement the §18.4 worker loop: claim, TTL check, re-resolve (active unless pinned/session), paused → nack, transform, upstream, classify → Ack/Nack/DeadLetter, record attempt. An envelope that crashes a worker twice is dead-lettered (DESIGN §10.6).
 
 **Acceptance criteria**
-- [ ] Envelope holds canonical body only; worker re-transforms at send time
-- [ ] Poison envelope dead-lettered after two crashes
-- [ ] Each attempt row records the integration version used
+- [x] Envelope holds canonical body only; worker re-transforms at send time
+- [x] Poison envelope dead-lettered after two crashes
+- [x] Each attempt row records the integration version used
 
 ### HUB-113 — Backoff, retry budget and DLQ policy
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-113-backoff-retry-budget`
 
 Apply the §10.3 schedule (+1 s … +1 h, 8 attempts) with full jitter, per-integration override, `max(backoff, Retry-After)` for 429, a retry budget of ≤ 20 % of account live traffic, and dead-letter with reason, last request/response and history (DESIGN §10.2, §10.6).
 
 **Acceptance criteria**
-- [ ] Jittered delays stay within the schedule bounds (property test)
-- [ ] 429 with `Retry-After: 10` waits ≥ 10 s
-- [ ] Retries beyond the budget are deferred and counted in `retry_budget_exhausted_total`
-- [ ] 401/403 and other 4xx dead-letter immediately
+- [x] Jittered delays stay within the schedule bounds (property test)
+- [x] 429 with `Retry-After: 10` waits ≥ 10 s
+- [x] Retries beyond the budget are deferred and counted in `retry_budget_exhausted_total`
+- [x] 401/403 and other 4xx dead-letter immediately
 
 ### HUB-114 — Scheduler role: leader election, due retries, TTL expiry
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-111 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-111 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-114-scheduler-ttl`
 
 Implement the `scheduler` role as a leader-elected singleton (Postgres advisory lock) with hot standby that promotes due retries and expires envelopes past `expires_at` (DESIGN §10.7, §17).
 
 **Acceptance criteria**
-- [ ] Only one scheduler is active; standby takes over within 15 s of leader death
-- [ ] Envelopes past TTL move to `expired` and emit `request.expired`
-- [ ] TTL defaults per capability, overridable per integration
+- [x] Only one scheduler is active; standby takes over within 15 s of leader death
+- [x] Envelopes past TTL move to `expired` and emit `request.expired`
+- [x] TTL defaults per capability, overridable per integration
 
 ### HUB-115 — Async mode and request status endpoint
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-088, HUB-110, HUB-111 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-088, HUB-110, HUB-111 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-115-async-mode-status`
 
 `async` mode persists the envelope and returns 202 with `request_id`, `status`, `poll`; `GET /v1/requests/{request_id}` returns status and final canonical result (DESIGN §4.3, §5.2).
 
 **Acceptance criteria**
-- [ ] 202 is returned only after the outbox insert committed
-- [ ] Async accept p99 ≤ 10 ms (benchmark)
-- [ ] Status endpoint is tenant-scoped (other tenants get 404)
-- [ ] Responses validate against the public contract
+- [x] 202 is returned only after the outbox insert committed
+- [x] Async accept p99 ≤ 10 ms (benchmark)
+- [x] Status endpoint is tenant-scoped (other tenants get 404)
+- [x] Responses validate against the public contract
 
 ### HUB-116 — Wait mode
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-115, HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-115, HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `feat/HUB-116-wait-mode`
 
 `wait` persists first, attempts immediately in the gateway, returns 200 within `wait_ms` or 202 `in_flight` and lets the worker finish (DESIGN §5.2, D3).
 
 **Acceptance criteria**
-- [ ] Vendor at 100 ms → 200 with result; vendor at 5 s with `wait_ms` 3000 → 202 `in_flight` then `succeeded` via worker
-- [ ] Gateway attempt and worker never both deliver (guarded transition test)
+- [x] Vendor at 100 ms → 200 with result; vendor at 5 s with `wait_ms` 3000 → 202 `in_flight` then `succeeded` via worker
+- [x] Gateway attempt and worker never both deliver (guarded transition test)
 
 ### HUB-117 — Async audit events and attempt records
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-111, HUB-092 · **Feature:** F-08 · **Stories:** US-08xx
+- **Status:** done · **Depends on:** HUB-111, HUB-092 · **Feature:** F-08 · **Stories:** US-08xx
 - **Branch:** `feat/HUB-117-audit-async-events`
 
 Emit `request.persisted`, `request.accepted`, `request.parked`, `policy.applied`, attempt events and terminal records written synchronously in the delivery transaction (DESIGN §13.1, §13.4).
 
 **Acceptance criteria**
-- [ ] Async request timeline complete from accept to terminal state
-- [ ] Terminal record and status update commit atomically
-- [ ] `queue_wait_ms` recorded on the final record
+- [x] Async request timeline complete from accept to terminal state
+- [x] Terminal record and status update commit atomically
+- [x] `queue_wait_ms` recorded on the final record
 
 ### HUB-118 — Idempotency store
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-088, HUB-023 · **Feature:** F-10 · **Stories:** US-10xx
+- **Status:** done · **Depends on:** HUB-088, HUB-023 · **Feature:** F-10 · **Stories:** US-10xx
 - **Branch:** `feat/HUB-118-idempotency`
 
 Redis-backed idempotency scoped to tenant + integration, 24 h: completed requests replay the stored result with `X-Hub-Idempotent-Replay: true`; an in-progress async duplicate returns the existing request's 202, a sync one or a different body gets 409 `IDEMPOTENCY_CONFLICT`; integrations with `moves_money_or_quota: true` reject requests without a key (DESIGN §4.2, §5.1 step 4, §6.3).
 
 **Acceptance criteria**
-- [ ] Replay returns identical body and status with the replay header
-- [ ] Missing key on a `moves_money_or_quota` integration → 400 `IDEMPOTENCY_KEY_REQUIRED`
-- [ ] Same key with a different body → 409 `IDEMPOTENCY_CONFLICT`
-- [ ] Redis down → fail closed for mandatory-key capabilities, pass-through otherwise (documented)
+- [x] Replay returns identical body and status with the replay header (store: identical status, allowlisted headers, body and original request id, integration-tested on Redis; the edge sets `X-Hub-Idempotent-Replay` when wiring)
+- [x] Missing key on a `moves_money_or_quota` integration → 400 `IDEMPOTENCY_KEY_REQUIRED` (edge behaviour; ticked by the lead when wiring)
+- [x] Same key with a different body → 409 `IDEMPOTENCY_CONFLICT` (store: `Conflict` for another body or operation; the edge maps it to 409)
+- [x] Redis down → fail closed for mandatory-key capabilities, pass-through otherwise (documented) (store returns the typed `ErrUnavailable`, contract in `internal/idempotency/doc.go`; the policy is edge behaviour, ticked by the lead when wiring)
+
+Store commit: `feat(idempotency): add the Redis idempotency store (HUB-118)`.
 
 ### HUB-119 — Registrar endpoints and SSRF guard
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-042, HUB-023 · **Feature:** F-11 · **Stories:** US-11xx
+- **Status:** done · **Depends on:** HUB-042, HUB-023 · **Feature:** F-11 · **Stories:** US-11xx
 - **Branch:** `feat/HUB-119-registrar-ssrf`
 
 Store registrar endpoints (URL on allowlisted host, signing secret ref) and implement the SSRF guard: resolve host, refuse private/link-local ranges, no redirects, 5 s timeout (DESIGN §12.1).
 
 **Acceptance criteria**
-- [ ] Callbacks to 10.0.0.0/8, 169.254.0.0/16, ::1, etc. refused (table test incl. DNS rebinding case)
-- [ ] Redirect responses are not followed
-- [ ] Signing secrets stored encrypted and registered for redaction
+- [x] Callbacks to 10.0.0.0/8, 169.254.0.0/16, ::1, etc. refused (table test incl. DNS rebinding case)
+- [x] Redirect responses are not followed
+- [x] Signing secrets stored encrypted and registered for redaction
 
 ### HUB-120 — Subscriptions and signed callback delivery
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-119, HUB-111 · **Feature:** F-11 · **Stories:** US-11xx
+- **Status:** done · **Depends on:** HUB-119, HUB-111 · **Feature:** F-11 · **Stories:** US-11xx
 - **Branch:** `feat/HUB-120-signed-callbacks`
 
 On terminal states, enqueue `callback_deliveries` for each subscription and POST with `X-Hub-Signature: t=<unix>,v1=HMAC-SHA256(secret, t + "." + body)`; payload carries `request_id` and `idempotency_key`; own retry schedule and DLQ (DESIGN §12.1).
 
 **Acceptance criteria**
-- [ ] Event types `request.completed|failed|expired` delivered per subscription
-- [ ] Failed callback retries independently of vendor delivery and dead-letters after the schedule
-- [ ] Payload validates against `contracts/schemas/events/`
+- [x] Event types `request.completed|failed|expired` delivered per subscription
+- [x] Failed callback retries independently of vendor delivery and dead-letters after the schedule
+- [x] Payload validates against `contracts/schemas/events/`
 
 ### HUB-121 — async_callback mode end-to-end
 - **Epic:** EP-05 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-120, HUB-115 · **Feature:** F-11 · **Stories:** US-11xx
+- **Status:** done · **Depends on:** HUB-120, HUB-115 · **Feature:** F-11 · **Stories:** US-11xx
 - **Branch:** `feat/HUB-121-async-callback-mode`
 
 `async_callback` persists → 202 → worker → signed POST of the result to the subscribed endpoint; publish/validation rejects the mode without a subscription (DESIGN §5.2).
 
 **Acceptance criteria**
-- [ ] E2E: caller receives 202 then a signed callback with the canonical result
-- [ ] Integration with `async_callback` and no subscription fails validation
+- [x] E2E: caller receives 202 then a signed callback with the canonical result
+- [x] Integration with `async_callback` and no subscription fails validation
 
 ### HUB-122 — M4 tests: worker crash and duplicate submissions
 - **Epic:** EP-05 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-112, HUB-116, HUB-118 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Depends on:** HUB-112, HUB-116, HUB-118 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `test/HUB-122-m4-crash-duplicates`
 
 Chaos-style tests for the first two M4 Accept items.
 
 **Acceptance criteria**
-- [ ] Kill a worker mid-flight → envelope reclaimed after visibility timeout and delivered once from the caller's view
-- [ ] Duplicate submissions with the same key → exactly one vendor call (mockvendor recording), for sync, wait and async
+- [x] Kill a worker mid-flight → envelope reclaimed after visibility timeout and delivered once from the caller's view
+- [x] Duplicate submissions with the same key → exactly one vendor call (mockvendor recording), for sync, wait and async
 
 ### HUB-123 — M4 tests: callback signature and TTL expiry; M4 summary
 - **Epic:** EP-05 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-121, HUB-114, HUB-117, HUB-122 · **Feature:** F-11 · **Stories:** US-11xx
+- **Status:** done · **Depends on:** HUB-121, HUB-114, HUB-117, HUB-122 · **Feature:** F-11 · **Stories:** US-11xx
 - **Branch:** `test/HUB-123-m4-callback-ttl`
 
 Remaining M4 Accept items plus the wrap-up.
 
 **Acceptance criteria**
-- [ ] Callback signature verified by a test receiver; tampered body or timestamp > 5 min is rejected
-- [ ] TTL expiry produces `expired` status and an `request.expired` callback
-- [ ] Milestone summary posted; F-09…F-11 docs updated
+- [x] Callback signature verified by a test receiver; tampered body or timestamp > 5 min is rejected
+- [x] TTL expiry produces `expired` status and an `request.expired` callback
+- [x] Milestone summary posted; F-09…F-11 docs updated
+
+### HUB-124 — Per-integration retry schedule override
+- **Epic:** EP-05 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-113 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `feat/HUB-124-retry-override`
+
+DESIGN §10.3 says the backoff schedule is overridable per integration. Add an optional `delivery.retry: { schedule: [...], max_attempts }` to integration versions (validated: increasing steps, 1–20 attempts, total under the TTL) and use it in the worker and the wait-mode settle. Found in M4 (HUB-113 shipped the default schedule only).
+
+**Acceptance criteria**
+- [ ] An integration version with a custom schedule retries on that schedule (worker itest)
+- [ ] Invalid schedules are refused at snapshot build with a path-qualified error
+- [ ] Integrations without an override keep DESIGN §10.3
 
 ## EP-06 — M5 Resilience
 

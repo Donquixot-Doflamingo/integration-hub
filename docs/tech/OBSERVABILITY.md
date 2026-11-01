@@ -105,15 +105,21 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `worker_inflight` | gauge | attempts | `pool` | `delivery` | saturation |
 | `bulkhead_inflight` | gauge | calls | `account` | `upstream` | DESIGN §10.8 |
 | `upstream_egress_denied_total` | counter | calls | `vendor` | `upstream` | calls refused before dialing: host not declared in the vendor's regions (HUB-086); any increase is a config or security problem |
-| `callback_deliveries_total` | counter | deliveries | `tenant, outcome` | `callbacks` | outbound webhook health |
-| `callback_latency_seconds` | histogram | s | `tenant` | `callbacks` | |
+| `callback_deliveries_total` | counter | attempts | `tenant, outcome` (`delivered`, `retry_scheduled`, `dead_lettered`; one per recorded attempt, HUB-120) | `callbacks` | outbound webhook health |
+| `callback_latency_seconds` | histogram | s | `tenant` (buckets 0.01–5 s) | `callbacks` | attempts that sent a request |
+| `callback_ssrf_blocked_total` | counter | attempts | `class` (`private`, `loopback`, `link_local`, `cgnat`, `multicast`, `unspecified`, `documentation`, `translation`, `reserved`) | `callbacks` | SSRF guard refusals at delivery (HUB-119/120); any increase is a misconfigured or hostile endpoint |
+| `callback_queue_oldest_age_s` | gauge | s | — | `callbacks` (each dispatcher, every 15 s) | age of the oldest due callback not yet sent |
+| `callback_dlq_count` | gauge | deliveries | — | `callbacks` (each dispatcher, every 15 s) | callback DLQ size (`status='dead_lettered'`) |
+| `callback_enqueued_total` | counter | deliveries | `event` | `callbacks` | deliveries written by `Enqueue` inside the state-change transaction (HUB-120) |
+| `callback_enqueue_skipped_total` | counter | subscriptions | `reason` (`unknown_version`, `unknown_endpoint`, `tenant_mismatch`) | `callbacks` | subscriptions that could not be honoured; any increase is a config problem |
 | `webhook_inbound_total` | counter | webhooks | `vendor, account, outcome` (`accepted`, `bad_signature`, `replay`, `uncorrelated`) | `webhooks` | |
 | `transform_duration_ms` | histogram | ms | `kind` (`request`,`response`,`error`,`stream`) | `transform` | M2 budget in prod |
 | `transform_budget_exceeded_total` | counter | events | `transformer, limit` (`nodes`,`output_size`,`time`) | `transform` | |
-| `idempotency_hits_total` | counter | hits | `result` (`replay`,`miss`,`in_progress`,`error`) | `edge` | |
+| `idempotency_hits_total` | counter | hits | `result` (`miss` = key claimed, `in_progress`, `replay`, `conflict` = same key with another body, `error` = Redis unavailable) | `idempotency` (HUB-118) | dedupe effectiveness; `error` feeds the Redis-down fail-closed/pass-through decision of the edge |
+| `idempotency_writes_total` | counter | writes | `op` (`complete`, `release`), `result` (complete: `stored`, `not_owner`, `too_large`, `not_replayable`, `error`; release: `released`, `missing`, `not_owner`, `error`) | `idempotency` (HUB-118) | `not_owner` = a request outlived its 5 min lease; `too_large` = response over 1 MiB, not replayable |
 | `creds_cache_miss_total` | counter | misses | `account` | `creds` | must stay 0 on the hot path |
 | `creds_decrypts_total` | counter | loader calls | — | `creds` | decrypting loads happen only at warm-up and background refresh (HUB-084); a rise with traffic is a bug |
-| `redis_op_duration_seconds` | histogram | s | `op` | `upstream`, `edge` | |
+| `redis_op_duration_seconds` | histogram | s | `op` (`idempotency_begin`, `idempotency_complete`, `idempotency_release`; upstream ops later) | `telemetry` registers it once per process; `idempotency` (HUB-118) observes, `upstream` later | one observation per Redis round trip; buckets 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 100, 500 ms so the 1 ms idempotency budget (DESIGN §18.6) is a boundary |
 | `pg_pool_acquire_duration_seconds`, `pg_pool_in_use` | histogram, gauge | s, conns | `pool` | cmd wiring (pgxpool stats) | |
 | `http_server_inflight` | gauge | requests | `server` (`public`,`admin`) | `edge`, `control` | |
 | `scheduler_leader` | gauge (0/1) | — | — | `delivery` | exactly one leader |
@@ -193,7 +199,7 @@ Logs **never** contain request or response bodies, canonical or vendor (backend/
 | `hub.upstream` | client | `upstream` | `hub.vendor`, `hub.account`, `hub.endpoint`, `hub.attempt`, `hub.breaker_state`, `server.address`, `http.response.status_code`, `hub.wait.limiter_ms`, `hub.wait.bulkhead_ms` |
 | `hub.queue.enqueue` | producer | `queue` | `hub.pool` |
 | `hub.worker.attempt` | consumer (linked) | `delivery` | `hub.attempt`, `hub.queue_wait_ms`, `hub.outcome` |
-| `hub.callback.deliver` | client | `callbacks` | `hub.endpoint_id`, `hub.callback.attempt` |
+| `hub.callback.deliver` | client | `callbacks` | `hub.endpoint_id`, `hub.callback.attempt`, `hub.callback.event`, `hub.request_id`, `http.response.status_code`, `hub.outcome` |
 | `hub.webhook.inbound` | server | `webhooks` | `hub.vendor`, `hub.account`, `hub.event_type`, `hub.correlated` |
 | `hub.snapshot.apply` | internal | `registry` | `hub.snapshot_version`, `hub.compile_ms` |
 | `hub.admin.*` | server | `control` | `hub.actor`, `hub.action` |
