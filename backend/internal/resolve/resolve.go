@@ -14,10 +14,11 @@ import (
 
 // Errors the edge maps to canonical codes.
 var (
-	ErrIntegrationNotFound = errors.New("integration not found") // INTEGRATION_NOT_FOUND
-	ErrNotGranted          = errors.New("tenant is not granted") // FORBIDDEN (reason not_granted)
-	ErrVersionNotFound     = errors.New("version not found")     // pinned/session version gone
-	ErrNoTarget            = errors.New("version has no target") // cannot happen in a validated snapshot
+	ErrIntegrationNotFound = errors.New("integration not found")  // INTEGRATION_NOT_FOUND
+	ErrNotGranted          = errors.New("tenant is not granted")  // FORBIDDEN (reason not_granted)
+	ErrVersionNotFound     = errors.New("version not found")      // pinned/session version gone
+	ErrNoTarget            = errors.New("version has no target")  // cannot happen in a validated snapshot
+	ErrAccountNotInVersion = errors.New("account not in version") // session account gone from its version
 )
 
 // Resolution is everything the pipeline needs for one attempt. Every attempt records
@@ -86,4 +87,33 @@ func pick(targets []registry.Target, routeKey string) (int, error) {
 		}
 	}
 	return len(targets) - 1, nil // weights total 100 in a validated snapshot
+}
+
+// ResolveSession pins a later step of a vendor session to the exact version and the account that
+// opened it (DESIGN §6.3 row 6): the target of that version (primary or failover) whose account is
+// account. The txn id lives at that account, so the result has no failover chain. A version that
+// is gone or no longer has a target on the account is ErrVersionNotFound / ErrAccountNotInVersion.
+// When several targets share the account, the first in file order wins (targets, then failover).
+func ResolveSession(snap *registry.Snapshot, tenant, integrationID string, version int, account string) (Resolution, error) {
+	if version <= 0 {
+		return Resolution{}, fmt.Errorf("%w: %s v%d", ErrVersionNotFound, integrationID, version)
+	}
+	res, err := Resolve(snap, tenant, integrationID, version, "")
+	if err != nil {
+		return Resolution{}, err
+	}
+	res.Failover = nil
+	for i, t := range res.Version.Targets {
+		if t.Account == account {
+			res.Target, res.TargetIndex = t, i
+			return res, nil
+		}
+	}
+	for i, t := range res.Version.Failover {
+		if t.Account == account {
+			res.Target, res.TargetIndex = t, len(res.Version.Targets)+i
+			return res, nil
+		}
+	}
+	return Resolution{}, fmt.Errorf("%w: %s v%d has no target on %s", ErrAccountNotInVersion, integrationID, version, account)
 }

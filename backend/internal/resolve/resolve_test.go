@@ -100,3 +100,34 @@ func BenchmarkResolve(b *testing.B) {
 		b.Errorf("p99 %s exceeds 0.05 ms", p99)
 	}
 }
+
+func TestResolveSessionPinsVersionAndAccount(t *testing.T) {
+	snap := snapshot(registry.Target{Account: "acct-a", Weight: 50}, registry.Target{Account: "acct-b", Weight: 50})
+	r, err := ResolveSession(snap, "orders-service", "int_x", 2, "acct-b")
+	if err != nil || r.VersionNumber != 2 || r.Target.Account != "acct-b" || r.TargetIndex != 1 || r.Failover != nil {
+		t.Fatalf("pinned target: %+v %v", r, err)
+	}
+	// A session opened while failover served is pinned to the failover account.
+	if r, err := ResolveSession(snap, "orders-service", "int_x", 2, "acct-fo"); err != nil || r.Target.Account != "acct-fo" || r.TargetIndex != 2 {
+		t.Fatalf("failover target: %+v %v", r, err)
+	}
+	// v1 is not active, but a session opened on it still resolves there.
+	if r, err := ResolveSession(snap, "orders-service", "int_x", 1, "acct-a"); err != nil || r.VersionNumber != 1 {
+		t.Fatalf("old version: %+v %v", r, err)
+	}
+	tests := []struct {
+		tenant, account string
+		version         int
+		want            error
+	}{
+		{"orders-service", "acct-z", 2, ErrAccountNotInVersion},
+		{"orders-service", "acct-a", 7, ErrVersionNotFound},
+		{"orders-service", "acct-a", 0, ErrVersionNotFound},
+		{"marketing", "acct-a", 2, ErrNotGranted},
+	}
+	for _, tt := range tests {
+		if _, err := ResolveSession(snap, tt.tenant, "int_x", tt.version, tt.account); !errors.Is(err, tt.want) {
+			t.Errorf("%s/v%d/%s: %v, want %v", tt.tenant, tt.version, tt.account, err, tt.want)
+		}
+	}
+}

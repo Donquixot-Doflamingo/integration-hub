@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(sessions)` · store vendor sessions pinned to version and account · HUB-175 · F-14
+  - New table hub.vendor_sessions (migration 00006): a session id (`ses_` + ULID) is pinned to the tenant, integration, version and account that opened it and expires after 10 minutes by default
+  - The store and the table both refuse session data holding an Aadhaar-like number (12 digits, optionally 4-4-4): the Aadhaar number is never stored
+  - `sessions.Expire` (scheduler sweep) and `sessions.CountOpen` (account retire guard) are ready for wiring; `resolve.ResolveSession` routes a later step to the exact version and the target on the session's account
+
 - 2026-11-02 · `feat(transform)` · map vendor session data in response transformers · HUB-175 · F-04
   - Response transformers may declare a `session:` section (expressions over res, req and account; creds, hdr and session are refused at compile) that maps what a later step of a multi-step operation needs, such as the vendor txn id
   - `Program.MapResponseSession` returns it on success only, bounded to 16 KB and the transform time budget; goldens pin it as `"session"` in `expected_response.json` and vendor-response fixtures may set `_context.req`

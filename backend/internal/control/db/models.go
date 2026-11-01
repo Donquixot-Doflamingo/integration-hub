@@ -252,3 +252,15 @@ type HubVendorEndpoint struct {
 	Idempotent       bool        `json:"idempotent"`
 	BatchMax         pgtype.Int4 `json:"batch_max"`
 }
+
+type HubVendorSession struct {
+	SessionID     string             `json:"session_id"`
+	TenantID      string             `json:"tenant_id"`
+	IntegrationID string             `json:"integration_id"`
+	Version       int32              `json:"version"`
+	AccountID     string             `json:"account_id"`
+	VendorTxnID   pgtype.Text        `json:"vendor_txn_id"`
+	Data          []byte             `json:"data"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
