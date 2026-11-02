@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Read integrations and versions and diff two versions (HUB-204) · HUB-204 · F-16
+  - GET /admin/v1/integrations with tenant, capability, vendor, account, paused, has_active_version, active_version_behind and q filters, cursor pages
+  - GET /integrations/{id} (with the active version in full and an ETag), /versions (newest first) and /versions/{n}
+  - GET /integrations/{id}/diff?from=&to= lists the exact changed spec paths (RFC 6902-style) plus a unified YAML diff
 - 2026-11-02 · `feat(control)` · Expose Publisher.Edit for validated config-tree edits (HUB-201) · HUB-201 · F-16
   - Admin resource handlers edit the config tree through one primitive: locked, fully validated, archived, logged and announced
 - 2026-11-02 · `feat(adminapi)` · Read the change log and pause integrations through the publisher lock (HUB-201) · HUB-201 · F-16
