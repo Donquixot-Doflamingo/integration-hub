@@ -46,7 +46,10 @@ type Result struct {
 }
 
 // ErrMissingAuthor and ErrMissingReason: every change is attributable (DESIGN §6.4).
+// ErrNotFound and ErrConflict classify the other refusals (the admin API maps them to 404, 409).
 var (
+	ErrNotFound      = errors.New("not found")
+	ErrConflict      = errors.New("conflict")
 	ErrMissingAuthor = errors.New("publish: author is required")
 	ErrMissingReason = errors.New("publish: reason is required")
 )
@@ -72,6 +75,8 @@ func (p *Publisher) now() time.Time {
 type tree struct {
 	files     map[string][]byte
 	contracts fs.FS
+	// base is the snapshot the edit started from (account draining compares against it).
+	base *registry.Snapshot
 }
 
 func (t *tree) sources() registry.Sources {
@@ -97,7 +102,7 @@ func (p *Publisher) load(ctx context.Context) (*tree, *registry.Snapshot, error)
 	if err != nil {
 		return nil, nil, err
 	}
-	t := &tree{files: map[string][]byte{}, contracts: src.Contracts}
+	t := &tree{files: map[string][]byte{}, contracts: src.Contracts, base: snap}
 	err = fs.WalkDir(src.Config, ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -146,78 +151,211 @@ func (p *Publisher) commit(ctx context.Context, t *tree, ch Change) (Result, err
 	return Result{ArchiveVersion: v, ChangeID: id, Snapshot: snap, Drained: drained}, nil
 }
 
+// publishLock serialises every edit of the config tree across admin replicas: load → commit of
+// one change must not interleave with another (both would start from the same version).
+const publishLock = 0x6875622d7075626c // "hub-publ"
+
+// locked runs fn while holding the publish advisory lock on a dedicated connection.
+func (p *Publisher) locked(ctx context.Context, fn func() (Result, error)) (Result, error) {
+	conn, err := p.Pool.Acquire(ctx)
+	if err != nil {
+		return Result{}, fmt.Errorf("publish lock: %w", err)
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, int64(publishLock)); err != nil {
+		return Result{}, fmt.Errorf("publish lock: %w", err)
+	}
+	defer func() {
+		_, _ = conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, int64(publishLock))
+	}()
+	return fn()
+}
+
 // PublishVersion publishes spec (an integration version document) as the next immutable
 // version of integration, optionally making it the active version.
 func (p *Publisher) PublishVersion(ctx context.Context, integration string, spec []byte, activate bool, author, reason string) (Result, error) {
+	return p.Publish(ctx, VersionRequest{Integration: integration, Spec: spec, Activate: activate, Author: author, Reason: reason})
+}
+
+// VersionRequest is one new integration version through the publish pipeline.
+type VersionRequest struct {
+	Integration string
+	// Spec is the version document; Derive, when set, computes it under the publish lock from
+	// the current integration (nil for an integration not in the tree yet) instead.
+	Spec   []byte
+	Derive func(in *registry.Integration) ([]byte, error)
+	// Version, when > 0, must be the number the pipeline assigns (the next one).
+	Version  int
+	Activate bool
+	// ExpectActive, when set, is the active version the caller saw (0: none). Another publish
+	// in between makes the request fail with *ActiveVersionConflictError (contract "Concurrency").
+	ExpectActive *int
+	// Header is integration.yaml of an integration that is not in the tree yet: its first
+	// version publishes both.
+	Header []byte
+	// Action names the change-log row (default publishIntegrationVersion); After adds fields to
+	// its after document (always {version, active}).
+	Action         string
+	After          map[string]any
+	Author, Reason string
+}
+
+// ActiveVersionConflictError: the active version is not the one the caller expected.
+type ActiveVersionConflictError struct {
+	Integration      string
+	Expected, Actual int // 0: no active version
+}
+
+func (e *ActiveVersionConflictError) Error() string {
+	return fmt.Sprintf("active version of %s is %d, expected %d", e.Integration, e.Actual, e.Expected)
+}
+
+// Unwrap classifies the error as a conflict.
+func (e *ActiveVersionConflictError) Unwrap() error { return ErrConflict }
+
+// Publish validates and publishes one new version (see VersionRequest).
+func (p *Publisher) Publish(ctx context.Context, req VersionRequest) (Result, error) {
+	return p.locked(ctx, func() (Result, error) {
+		t, snap, err := p.load(ctx)
+		if err != nil {
+			return Result{}, err
+		}
+		n, ch, err := t.addVersion(snap, req)
+		if err != nil {
+			return Result{}, err
+		}
+		res, err := p.commit(ctx, t, ch)
+		res.Version = n
+		return res, err
+	})
+}
+
+// Check runs the publish validation of req (the full snapshot build, goldens included) without
+// archiving anything: nil, or the registry.ConfigErrors a publish would fail with.
+func (p *Publisher) Check(ctx context.Context, req VersionRequest) error {
 	t, snap, err := p.load(ctx)
 	if err != nil {
-		return Result{}, err
+		return err
 	}
-	in, ok := snap.Integrations[integration]
-	if !ok {
-		return Result{}, fmt.Errorf("publish: unknown integration %q", integration)
+	if req.Author == "" {
+		req.Author = "validate"
 	}
-	n := 1
-	for v := range in.Versions {
-		n = max(n, v+1)
+	if req.Reason == "" {
+		req.Reason = "validate"
 	}
-	doc, err := versionDoc(spec, integration, n, author, reason)
-	if err != nil {
-		return Result{}, err
+	if _, _, err := t.addVersion(snap, req); err != nil {
+		return err
 	}
-	file := path.Join(path.Dir(in.File), "versions", strconv.Itoa(n)+".yaml")
-	if _, exists := t.files[file]; exists {
-		return Result{}, fmt.Errorf("publish: %s exists: versions are immutable", file)
+	_, err = registry.Build(t.sources(), p.now())
+	return err
+}
+
+// addVersion writes the version file of req (and integration.yaml for a new integration) into
+// t and returns the version number and the change-log row.
+func (t *tree) addVersion(snap *registry.Snapshot, req VersionRequest) (int, Change, error) {
+	id := req.Integration
+	in, exists := snap.Integrations[id]
+	file := path.Join("integrations", id, "integration.yaml")
+	active, n := 0, 1
+	switch {
+	case exists && req.Header != nil:
+		return 0, Change{}, fmt.Errorf("%w: integration %q already exists", ErrConflict, id)
+	case exists:
+		file, active = in.File, in.ActiveVersion
+		for v := range in.Versions {
+			n = max(n, v+1)
+		}
+	case req.Header == nil:
+		return 0, Change{}, fmt.Errorf("%w: integration %q", ErrNotFound, id)
+	default:
+		if _, taken := t.files[file]; taken {
+			return 0, Change{}, fmt.Errorf("%w: %s exists", ErrConflict, file)
+		}
+		t.files[file] = req.Header
+		in = nil
 	}
-	t.files[file] = doc
-	before := map[string]any{"active_version": in.ActiveVersion}
-	if activate {
-		if t.files[in.File], err = setScalar(t.files[in.File], "active_version", strconv.Itoa(n)); err != nil {
-			return Result{}, fmt.Errorf("publish: %s: %w", in.File, err)
+	if req.ExpectActive != nil && *req.ExpectActive != active {
+		return 0, Change{}, &ActiveVersionConflictError{Integration: id, Expected: *req.ExpectActive, Actual: active}
+	}
+	if req.Version > 0 && req.Version != n {
+		return 0, Change{}, fmt.Errorf("%w: %s v%d cannot be published: the next version is v%d", ErrConflict, id, req.Version, n)
+	}
+	spec := req.Spec
+	if req.Derive != nil {
+		var err error
+		if spec, err = req.Derive(in); err != nil {
+			return 0, Change{}, err
 		}
 	}
-	res, err := p.commit(ctx, t, Change{Actor: author, Action: "publishIntegrationVersion", ObjectType: "integration", ObjectID: integration,
-		Reason: reason, Before: before, After: map[string]any{"version": n, "active": activate}})
-	res.Version = n
-	return res, err
+	doc, err := versionDoc(spec, id, n, req.Author, req.Reason)
+	if err != nil {
+		return 0, Change{}, err
+	}
+	vfile := path.Join(path.Dir(file), "versions", strconv.Itoa(n)+".yaml")
+	if _, taken := t.files[vfile]; taken {
+		return 0, Change{}, fmt.Errorf("%w: %s exists: versions are immutable", ErrConflict, vfile)
+	}
+	t.files[vfile] = doc
+	if req.Activate {
+		if t.files[file], err = setScalar(t.files[file], "active_version", strconv.Itoa(n)); err != nil {
+			return 0, Change{}, fmt.Errorf("publish: %s: %w", file, err)
+		}
+	}
+	var before map[string]any
+	if exists {
+		before = map[string]any{"active_version": active}
+	}
+	after := map[string]any{}
+	maps.Copy(after, req.After)
+	after["version"], after["active"] = n, req.Activate
+	action := req.Action
+	if action == "" {
+		action = "publishIntegrationVersion"
+	}
+	return n, Change{Actor: req.Author, Action: action, ObjectType: "integration", ObjectID: id, Reason: req.Reason,
+		Before: before, After: after}, nil
 }
 
 // Rollback publishes a new version with the content of version to and activates it: v9 = v7,
 // history stays linear and nothing is deleted (DESIGN §6.4).
 func (p *Publisher) Rollback(ctx context.Context, integration string, to int, author, reason string) (Result, error) {
-	_, snap, err := p.load(ctx)
-	if err != nil {
-		return Result{}, err
+	req := VersionRequest{Integration: integration, Activate: true, Action: "rollbackIntegration", Author: author,
+		Reason: fmt.Sprintf("%s (rollback to v%d)", reason, to), After: map[string]any{"copied_from_version": to}}
+	req.Derive = CopyVersion(integration, to)
+	return p.Publish(ctx, req)
+}
+
+// CopyVersion is a Derive that copies version n of the integration (rollback, weights).
+func CopyVersion(integration string, n int) func(in *registry.Integration) ([]byte, error) {
+	return func(in *registry.Integration) ([]byte, error) {
+		if in == nil {
+			return nil, fmt.Errorf("%w: integration %q", ErrNotFound, integration)
+		}
+		old, ok := in.Versions[n]
+		if !ok {
+			return nil, fmt.Errorf("%w: %s has no version %d", ErrNotFound, integration, n)
+		}
+		return yaml.Marshal(old)
 	}
-	in, ok := snap.Integrations[integration]
-	if !ok {
-		return Result{}, fmt.Errorf("rollback: unknown integration %q", integration)
-	}
-	old, ok := in.Versions[to]
-	if !ok {
-		return Result{}, fmt.Errorf("rollback: %s has no version %d", integration, to)
-	}
-	spec, err := yaml.Marshal(old)
-	if err != nil {
-		return Result{}, err
-	}
-	res, err := p.PublishVersion(ctx, integration, spec, true, author, fmt.Sprintf("%s (rollback to v%d)", reason, to))
-	return res, err
 }
 
 // RetireAccount moves a draining account to retired once nothing references it: no active
 // version targets it, no pinned request and no open vendor session (DESIGN §6.5).
 func (p *Publisher) RetireAccount(ctx context.Context, account, author, reason string) (Result, error) {
+	return p.locked(ctx, func() (Result, error) { return p.retireAccount(ctx, account, author, reason) })
+}
+
+func (p *Publisher) retireAccount(ctx context.Context, account, author, reason string) (Result, error) {
 	t, snap, err := p.load(ctx)
 	if err != nil {
 		return Result{}, err
 	}
 	a, ok := snap.Accounts[account]
 	if !ok {
-		return Result{}, fmt.Errorf("retire: unknown account %q", account)
+		return Result{}, fmt.Errorf("%w: account %q", ErrNotFound, account)
 	}
 	if referenced(snap)[account] {
-		return Result{}, fmt.Errorf("retire: account %s is targeted by an active integration version", account)
+		return Result{}, fmt.Errorf("%w: account %s is targeted by an active integration version", ErrConflict, account)
 	}
 	if p.Guard != nil {
 		pinned, sessions, err := p.Guard(ctx, snap, account)
@@ -239,6 +377,38 @@ func (p *Publisher) RetireAccount(ctx context.Context, account, author, reason s
 		Before: map[string]any{"state": string(a.State)}, After: map[string]any{"state": string(registry.AccountRetired)}})
 }
 
+// SetPaused pauses or resumes an integration (the kill switch, DESIGN §10.4). Pause is not a
+// version: it edits integration.yaml and propagates with the snapshot. Pausing a paused
+// integration is a no-op that still records a change (the contract asks for the log).
+func (p *Publisher) SetPaused(ctx context.Context, integration string, paused bool, author, reason string) (Result, error) {
+	return p.locked(ctx, func() (Result, error) {
+		t, snap, err := p.load(ctx)
+		if err != nil {
+			return Result{}, err
+		}
+		in, ok := snap.Integrations[integration]
+		if !ok {
+			return Result{}, fmt.Errorf("%w: integration %q", ErrNotFound, integration)
+		}
+		pausedReason := ""
+		if paused {
+			pausedReason = reason
+		}
+		if t.files[in.File], err = setScalar(t.files[in.File], "paused", strconv.FormatBool(paused)); err != nil {
+			return Result{}, err
+		}
+		if t.files[in.File], err = setString(t.files[in.File], "paused_reason", pausedReason); err != nil {
+			return Result{}, err
+		}
+		action := "resumeIntegration"
+		if paused {
+			action = "pauseIntegration"
+		}
+		return p.commit(ctx, t, Change{Actor: author, Action: action, ObjectType: "integration", ObjectID: integration, Reason: reason,
+			Before: map[string]any{"paused": in.Paused, "paused_reason": in.PausedReason}, After: map[string]any{"paused": paused, "paused_reason": pausedReason}})
+	})
+}
+
 // referenced lists the accounts targeted (targets, failover) by an active integration version.
 func referenced(snap *registry.Snapshot) map[string]bool {
 	out := map[string]bool{}
@@ -254,16 +424,21 @@ func referenced(snap *registry.Snapshot) map[string]bool {
 	return out
 }
 
-// drainUnreferenced moves active accounts no active version targets to draining, and draining
+// drainUnreferenced moves active accounts that lost their last reference in this edit (targeted
+// by an active version of base, by none of snap) to draining, and draining
 // accounts that are targeted again back to active (DESIGN §6.5).
 func (t *tree) drainUnreferenced(snap *registry.Snapshot) ([]string, error) {
 	refs := referenced(snap)
+	before := map[string]bool{}
+	if t.base != nil {
+		before = referenced(t.base)
+	}
 	var drained []string
 	for _, id := range slices.Sorted(maps.Keys(snap.Accounts)) {
 		a := snap.Accounts[id]
 		next := a.State
 		switch {
-		case a.State == registry.AccountActive && !refs[id]:
+		case a.State == registry.AccountActive && !refs[id] && before[id]:
 			next = registry.AccountDraining
 			drained = append(drained, id)
 		case a.State == registry.AccountDraining && refs[id]:
@@ -322,6 +497,15 @@ func versionDoc(spec []byte, integration string, n int, author, reason string) (
 
 // setScalar sets a top-level scalar key of a YAML mapping, keeping comments and layout.
 func setScalar(doc []byte, key, value string) ([]byte, error) {
+	return setNode(doc, key, value, "", 0)
+}
+
+// setString is setScalar for free text: always a quoted YAML string ("true" stays text).
+func setString(doc []byte, key, value string) ([]byte, error) {
+	return setNode(doc, key, value, "!!str", yaml.DoubleQuotedStyle)
+}
+
+func setNode(doc []byte, key, value, tag string, style yaml.Style) ([]byte, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(doc, &root); err != nil {
 		return nil, err
@@ -332,10 +516,10 @@ func setScalar(doc []byte, key, value string) ([]byte, error) {
 	m := root.Content[0]
 	for i := 0; i+1 < len(m.Content); i += 2 {
 		if m.Content[i].Value == key {
-			m.Content[i+1].Value, m.Content[i+1].Tag, m.Content[i+1].Style = value, "", 0
+			m.Content[i+1].Value, m.Content[i+1].Tag, m.Content[i+1].Style = value, tag, style
 			return yaml.Marshal(&root)
 		}
 	}
-	m.Content = append(m.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: key}, &yaml.Node{Kind: yaml.ScalarNode, Value: value})
+	m.Content = append(m.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: key}, &yaml.Node{Kind: yaml.ScalarNode, Value: value, Tag: tag, Style: style})
 	return yaml.Marshal(&root)
 }

@@ -44,7 +44,8 @@ func TestAuthenticateAndAuthorize(t *testing.T) {
 	billing := &registry.Tenant{Tenant: "billing", APIKeys: []registry.APIKey{{KeyID: "k_b", Hash: HashKey("hk_test_billing"), Scopes: []string{"invoke"}, State: "active"}}}
 	gone := &registry.Tenant{Tenant: "gone", Status: "suspended", APIKeys: []registry.APIKey{{KeyID: "k_g", Hash: HashKey("hk_test_gone"), Scopes: []string{"invoke"}, State: "active"}}}
 	revoked := &registry.Tenant{Tenant: "rev", APIKeys: []registry.APIKey{{KeyID: "k_r", Hash: HashKey("hk_test_revoked"), Scopes: []string{"invoke"}, State: "revoked"}}}
-	snap = withTenants(t, snap, billing, gone, revoked)
+	off := &registry.Tenant{Tenant: "off", Disabled: true, APIKeys: []registry.APIKey{{KeyID: "k_o", Hash: HashKey("hk_test_disabled"), Scopes: []string{"invoke"}, State: "active"}}}
+	snap = withTenants(t, snap, billing, gone, revoked, off)
 
 	tests := []struct {
 		name, id, authz, scope string
@@ -55,6 +56,7 @@ func TestAuthenticateAndAuthorize(t *testing.T) {
 		{"not bearer", "int_evt_brandA", "Basic abc", "invoke", 401, "UNAUTHORIZED", ""},
 		{"unknown key", "int_evt_brandA", "Bearer hk_test_nope", "invoke", 401, "UNAUTHORIZED", ""},
 		{"revoked key", "int_evt_brandA", "Bearer hk_test_revoked", "invoke", 401, "UNAUTHORIZED", ""},
+		{"disabled tenant", "int_evt_brandA", "Bearer hk_test_disabled", "invoke", 401, "UNAUTHORIZED", ""},
 		{"suspended tenant", "int_evt_brandA", "Bearer hk_test_gone", "invoke", 403, "FORBIDDEN", "tenant_suspended"},
 		{"unknown integration", "int_nope", "Bearer " + devKey, "invoke", 404, "INTEGRATION_NOT_FOUND", ""},
 		{"not owner or grantee", "int_evt_brandA", "Bearer hk_test_billing", "invoke", 403, "FORBIDDEN", "not_granted"},
@@ -118,5 +120,43 @@ func BenchmarkAuthMiddleware(b *testing.B) {
 	b.ReportMetric(float64(p99.Microseconds()), "p99-µs")
 	if p99 > 100*time.Microsecond {
 		b.Errorf("p99 %s over 100 µs", p99)
+	}
+}
+
+// TestRotatedKeyOverlap is HUB-206: a rotated key (state expiring) keeps working until the
+// overlap ends and then gets 401 on the same snapshot; the replacement works throughout; a key
+// past its own expiry is refused too.
+func TestRotatedKeyOverlap(t *testing.T) {
+	start := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	past := start.Add(-time.Minute)
+	tn := &registry.Tenant{Tenant: "rot", APIKeys: []registry.APIKey{
+		{KeyID: "k_old", Hash: HashKey("hk_test_old"), Scopes: []string{"invoke"}, State: registry.KeyExpiring, ExpiresAt: &end, ReplacedBy: "k_new"},
+		{KeyID: "k_new", Hash: HashKey("hk_test_new"), Scopes: []string{"invoke"}, State: registry.KeyActive},
+		{KeyID: "k_exp", Hash: HashKey("hk_test_expired"), Scopes: []string{"invoke"}, State: registry.KeyActive, ExpiresAt: &past},
+	}}
+	snap := withTenants(t, devSnapshot(t), tn)
+	tests := []struct {
+		name, key string
+		at        time.Time
+		ok        bool
+	}{
+		{"old key during the overlap", "hk_test_old", start, true},
+		{"old key just before the end", "hk_test_old", end.Add(-time.Millisecond), true},
+		{"old key at the end", "hk_test_old", end, false},
+		{"old key after the end", "hk_test_old", end.Add(time.Hour), false},
+		{"new key during the overlap", "hk_test_new", start, true},
+		{"new key after the overlap", "hk_test_new", end.Add(time.Hour), true},
+		{"key past its own expiry", "hk_test_expired", start, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := New(Deps{Snapshots: staticSnapshots{snap}, Now: func() time.Time { return tt.at }})
+			h := withRequestID(s.authenticate(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })))
+			rec := call(t, h, "int_evt_brandA", "Bearer "+tt.key)
+			if (rec.Code == http.StatusNoContent) != tt.ok || (!tt.ok && rec.Code != http.StatusUnauthorized) {
+				t.Fatalf("status %d, want ok=%v", rec.Code, tt.ok)
+			}
+		})
 	}
 }

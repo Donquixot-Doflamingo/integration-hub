@@ -6,6 +6,109 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `docs(milestones)` · Accept M7 and write the control-plane summary (HUB-214) · HUB-214 · F-16
+  - M7 accepted: 79/79 admin operations, RBAC matrix, one change-log row per mutation, idempotent hubctl apply with exact plans
+  - docs/milestones/M7.md with Deviations and contract change requests; F-16 and F-17 shipped; M7 tickets done
+- 2026-11-02 · `feat(hubctl)` · Apply a config directory through the admin API, idempotently (HUB-211) · HUB-211 · F-17
+  - hubctl apply publishes integration metadata, pause, new active versions (draft + publish), account config/quota and tenant settings through the admin API, one change-log row each
+  - Changes it cannot express (new accounts, API keys, vendors, transformers, edits of published versions) are refused before anything is changed; an API validation failure stops it with the path-qualified error
+  - plan and apply compare objects as loaded: formatting, comments, defaults and publish metadata are not changes; admin/ files are server-owned
+- 2026-11-02 · `feat(adminapi)` · Seal-key, probe client and callback host allowlist as admin deps; skip disabled endpoints (HUB-206) · HUB-206 · F-16
+  - HUB_CALLBACK_HOSTS allowlists registrar endpoint hosts (host or .suffix); empty accepts any public host behind the SSRF guard
+  - Callbacks to a disabled registrar endpoint are not enqueued; queued ones are held and resume when it is re-enabled
+  - Connection tests use the admin's own metrics; unseal keys come from the admin deps
+- 2026-11-02 · `fix(control)` · Drain only accounts that lose their last reference, so new accounts stay active (HUB-203) · HUB-203 · F-15
+  - createAccount answers state active, as the contract says; an account drains only when a publish removes its last active reference
+  - The admin coverage test now fails when any hub-admin operation is not implemented (79 of 79)
+- 2026-11-02 · `feat(hubctl)` · Dry-run an integration and replay dead letters from the command line (HUB-212) · HUB-212 · F-17
+  - hubctl dry-run INTEGRATION BODY.json prints the vendor request of the active version's main target, credentials redacted
+  - hubctl replay counts matching dead letters first and replays only with -yes (-dry-run counts only)
+- 2026-11-02 · `feat(hubctl)` · Export the live registry and plan a config directory against it (HUB-210) · HUB-210 · F-17
+  - hubctl export writes the latest published snapshot's config tree to a directory (references only, never secret values)
+  - hubctl plan prints per-object, path-level changes against live and exits 3 when there are changes
+- 2026-11-02 · `feat(hubctl)` · Log in to the control plane and show the current identity (HUB-210) · HUB-210 · F-17
+  - hubctl login -dev gets a token from the admin's dev OIDC stub and saves it with mode 0600
+  - hubctl whoami prints subject, roles and tenant scope; admin errors print their code, details and request id
+- 2026-11-02 · `feat(adminapi)` · Serve transformers with golden-gated versions, dry-run and run-goldens (HUB-202) · HUB-202 · F-16
+  - GET /admin/v1/transformers (kind, capability, vendor_id, q filters), /transformers/{id}, /versions and /versions/{n} with YAML, fixtures and golden summary
+  - POST /transformers/{id}/versions creates version n+1 with its fixtures; a version whose goldens fail is refused with 422 goldens_pass and never exists
+  - POST /transformers/run-goldens reports pass/fail and JSON-pointer diffs per fixture; POST /transformers/dry-run shows the vendor request (credentials masked) or the canonical response without sending anything
+- 2026-11-02 · `feat(adminapi)` · Serve capabilities with additive-only immutable minors (HUB-202) · HUB-202 · F-16
+  - GET/POST /admin/v1/capabilities, GET /capabilities/{key}, GET/POST /capabilities/{key}/versions
+  - New capabilities and minors write their JSON Schemas into the published snapshot; the full build compiles them before anything is archived
+  - A minor that removes or renames a field, tightens a request constraint or drops an x-pii tag is refused with 422 (check additive_change)
+- 2026-11-02 · `feat(adminapi)` · Serve vendors and vendor endpoints with ETag and If-Match (HUB-202) · HUB-202 · F-16
+  - GET/POST /admin/v1/vendors, GET/PUT /vendors/{id}: vendors are edited in the config tree and published through the full snapshot build
+  - Vendors carry an ETag (quoted revision); PUT with a stale If-Match answers 412 PRECONDITION_FAILED with current_etag
+  - POST /vendors/{id}/endpoints adds <name>@<n+1>; existing endpoint versions never change
+- 2026-11-02 · `feat(adminapi)` · Register tenant webhook endpoints behind the SSRF guard with rotatable secrets (HUB-206) · HUB-206 · F-16
+  - GET/POST /admin/v1/registrar-endpoints, GET/PATCH/DELETE /registrar-endpoints/{id}, POST /registrar-endpoints/{id}/rotate-secret
+  - URLs that resolve to private, loopback or link-local ranges are refused with 400 VALIDATION_FAILED (callbacks SSRF guard)
+  - The signing secret is stored as localfile://<id> and shown once; during a rotation overlap callbacks are signed with the new and the old secret, then only the new one
+  - Delete is refused while any integration version subscribes; pending deliveries to a deleted endpoint are dead-lettered
+- 2026-11-02 · `feat(adminapi)` · Mint, rotate with overlap and revoke API keys; the edge honours expiry (HUB-206) · HUB-206 · F-16
+  - GET/POST /admin/v1/api-keys, GET /api-keys/{id}, POST /api-keys/{id}/revoke and /rotate; the plaintext key appears only in the create and rotate responses
+  - A rotated key stays valid (state expiring) for overlap_ms and then gets 401 on every node, without another publish
+  - Tenant YAML keys gain prefix, description, created_at, expires_at and replaced_by; states are validated (expiring needs expires_at)
+- 2026-11-02 · `feat(adminapi)` · Create, read and update tenants; disabled tenants' keys get 401 (HUB-206) · HUB-206 · F-16
+  - GET/POST /admin/v1/tenants, GET/PATCH /tenants/{id} (merge-patch of display fields, rate limit and disabled; If-Match → 412)
+  - tenant_viewer sees only its own tenants (404 otherwise)
+  - Tenant YAML gains display_name, description, contact and disabled; the edge answers 401 for keys of a disabled tenant
+- 2026-11-02 · `feat(adminapi)` · Rotate account credentials and test connections against the vendor (HUB-203) · HUB-203 · F-16
+  - POST /accounts/{id}/credentials/next, /promote, /delete-old run the DESIGN §6.6 runbook; 409 when a step does not apply
+  - POST /accounts/{id}/test-connection runs the vendor health probe (dry where declared) with the active or next slot; non-mutating, audited in the change log
+  - No response or change-log row carries credential values; no credential store configured answers 500
+- 2026-11-02 · `feat(adminapi)` · Create, read, update and transition accounts with write-only secrets (HUB-203) · HUB-203 · F-16
+  - GET/POST /admin/v1/accounts, GET/PATCH /accounts/{id} (merge-patch of config and quota, If-Match → 412)
+  - Initial credentials go to the credential store as the active slot v1; responses show slot metadata only
+  - POST /accounts/{id}/lifecycle: active -> draining -> retired; retire answers 409 RETIRE_BLOCKED with the guard's pinned/session counts and deletes the credentials
+- 2026-11-02 · `feat(adminapi)` · Show the breaker board and force breakers open or closed across nodes (HUB-209) · HUB-209 · F-16
+  - GET /admin/v1/breakers lists every breaker an active integration uses or that has shared state (state, hold, parked backlog), filterable by vendor, account and state; /breakers/{account}/{endpoint} adds config, forced transitions and integrations
+  - Admins force a breaker open or closed (optionally for a duration) and clear the hold; the hold is in Redis and in force on every node within about a second; clearing a forced-open breaker probes at once (half_open)
+  - A forced-closed breaker counts failures but never trips; the scheduler does not probe a held breaker
+- 2026-11-02 · `feat(adminapi)` · List, replay and purge dead letters by ids or by filter (HUB-209) · HUB-209 · F-16
+  - GET /admin/v1/dlq (tenant, integration, vendor, account, reason, replayed, time range; newest first, cursor pages) and /dlq/{id} with the canonical body per payload policy, last vendor exchange and attempt history
+  - POST /dlq/replay (editor) moves matching entries back to accepted; workers re-resolve and re-transform, so a fixed transformer applies; dry_run counts only, at most 10 000 per call
+  - POST /dlq/purge (admin) removes entries, the request ledger stays; replay and purge each write one change-log row in their transaction
+- 2026-11-02 · `feat(audit)` · Seal payloads per tenant and unseal them for audited admins (HUB-208) · HUB-208 · F-16
+  - Integrations with audit.payloads: sealed store every event payload as AES-256-GCM ciphertext under a per-tenant key (dev: derived from the localfile dev key); hashes and sizes stay those of the original bytes
+  - POST /admin/v1/requests/{id}/unseal (admin, reason of at least 10 characters) returns the clear payloads once with Cache-Control: no-store and writes one change-log row; non-sealed requests answer 409
+  - Without a seal key the sealed policy keeps hashes and sizes only; credentials are removed before sealing
+- 2026-11-02 · `feat(adminapi)` · Search requests and read their timeline and attempts (HUB-207) · HUB-207 · F-16
+  - GET /admin/v1/requests searches by tenant, integration, status, code, vendor, account, idempotency key and a ≤ 31-day range, newest first, with cursor pages
+  - GET /requests/{id}, /timeline (events in seq order with sha256 and size on every event) and /attempts (version per attempt)
+  - tenant_viewer sees only its tenants (404 outside them); migration 00008 adds the explorer and DLQ indexes
+- 2026-11-02 · `test(roles)` · Prove an admin pause reaches three gateway nodes within 10 s (HUB-205) · HUB-205 · F-16
+  - Integration test: POST /admin/v1/integrations/{id}/pause on hub admin makes 3 gateways following the archive answer 503 INTEGRATION_PAUSED within 10 s; resume undoes it
+- 2026-11-02 · `feat(adminapi)` · Create integrations and patch their metadata with If-Match (HUB-205) · HUB-205 · F-16
+  - POST /admin/v1/integrations creates an integration without an active version; nodes see it only when its first draft is published (expected_active_version null)
+  - PATCH /integrations/{id} merges description, grants and moves_money_or_quota through the publish pipeline; integrations return an ETag and a stale If-Match answers 412 PRECONDITION_FAILED
+- 2026-11-02 · `feat(adminapi)` · Publish drafts, roll back and reweigh integrations with version guards (HUB-205) · HUB-205 · F-16
+  - POST /versions/{n}/publish makes the draft the active version nodes run; failed checks answer 422 PUBLISH_VALIDATION_FAILED with contract pointers and meta.report
+  - POST /rollback publishes a copy of to_version as the next version (v9 = v7); POST /weights creates version n+1 from the active one with new weights, published or left as the draft
+  - Publish, rollback and weights take expected_active_version and answer 409 CONFLICT (expected and actual in meta) when another publish happened first
+- 2026-11-02 · `feat(adminapi)` · Keep integration drafts in Postgres and validate versions without publishing (HUB-205) · HUB-205 · F-16
+  - POST /integrations/{id}/versions creates the one draft (next version) from a spec or a copy of based_on; PUT /versions/{n} edits it; published versions answer 409
+  - Drafts are invisible to nodes until published (hub.integration_drafts, migration 00010); has_draft, latest_version, the version list and diff include them
+  - POST /versions/{n}/validate runs every publish check and returns the report with contract pointers (e.g. /targets/1/account_id); nothing is archived
+- 2026-11-02 · `feat(adminapi)` · Serve snapshots with a long-poll on the latest version (HUB-204) · HUB-204 · F-16
+  - GET /admin/v1/snapshots (newest first, with the change that produced each) and /snapshots/{v} with the objects changed versus the previous snapshot
+  - GET /snapshots/latest: If-None-Match + wait long-polls; the hub:snapshot ping answers within 1 s of a publish, the archive is re-read every second as the truth
+  - GET /snapshots/{v}/blob serves the registry blob as application/json (gzip with Accept-Encoding: gzip)
+- 2026-11-02 · `feat(adminapi)` · Read integrations and versions and diff two versions (HUB-204) · HUB-204 · F-16
+  - GET /admin/v1/integrations with tenant, capability, vendor, account, paused, has_active_version, active_version_behind and q filters, cursor pages
+  - GET /integrations/{id} (with the active version in full and an ETag), /versions (newest first) and /versions/{n}
+  - GET /integrations/{id}/diff?from=&to= lists the exact changed spec paths (RFC 6902-style) plus a unified YAML diff
+- 2026-11-02 · `feat(control)` · Expose Publisher.Edit for validated config-tree edits (HUB-201) · HUB-201 · F-16
+  - Admin resource handlers edit the config tree through one primitive: locked, fully validated, archived, logged and announced
+- 2026-11-02 · `feat(adminapi)` · Read the change log and pause integrations through the publisher lock (HUB-201) · HUB-201 · F-16
+  - GET /admin/v1/change-log (filters, cursor pages, newest first) and /change-log/{id} with before/after
+  - Pause and resume integrations with a mandatory 3–1024 character reason; each writes one change-log row
+  - Publisher edits are serialised across admin replicas by a Postgres advisory lock
+- 2026-11-02 · `feat(adminapi)` · Serve /admin/v1 with OIDC auth, a dev issuer stub and per-operation RBAC (HUB-200) · HUB-200 · F-16
+  - hub admin serves /admin/v1: ES256 OIDC tokens (JWKS via discovery), roles admin ⊃ editor ⊃ viewer and tenant_viewer per operation
+  - HUB_ADMIN_DEV_OIDC=true runs a dev issuer stub that mints tokens; with no issuer every admin request is 401
+  - GET /admin/v1/me returns roles, tenant scope and UI permissions
 - 2026-11-02 · `docs(milestones)` · Accept M6 with mixed-version and rollback checks; write the M6 summary (HUB-184) · HUB-184 · F-14
   - M6 accepted: every §6.3 row, rollback, retire guard, rotation, shadow and mixed-version propagation proven by itests
   - docs/milestones/M6.md with Deviations; F-14 and F-15 shipped; shadow_total and credential logs in OBSERVABILITY

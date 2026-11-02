@@ -28,6 +28,7 @@ const (
 	skipUnknownVersion  = "unknown_version"
 	skipUnknownEndpoint = "unknown_endpoint"
 	skipTenantMismatch  = "tenant_mismatch"
+	skipDisabled        = "endpoint_disabled"
 )
 
 // EnqueueOptions tune an Enqueuer. Zero values take the defaults.
@@ -110,6 +111,9 @@ func (e *Enqueuer) targets(ctx context.Context, snap *registry.Snapshot, ev *Eve
 			// A granted tenant's result never goes to the owner's endpoint (registry validation
 			// ties subscriptions to the owner tenant).
 			e.skip(ctx, ev, skipTenantMismatch, w.Endpoint)
+			continue
+		case r.Disabled: // the tenant switched the endpoint off (admin updateRegistrarEndpoint)
+			e.skip(ctx, ev, skipDisabled, w.Endpoint)
 			continue
 		}
 		dup := false

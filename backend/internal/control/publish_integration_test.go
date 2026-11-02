@@ -226,3 +226,33 @@ func TestRetireGuardCountsPinnedWorkAndSessions(t *testing.T) {
 		t.Fatalf("retire at zero: %v", err)
 	}
 }
+
+// TestEditValidatesAndLogs: a Publisher.Edit that breaks the config is refused with the build's
+// problems and archives nothing; a valid one archives, logs and returns the new snapshot.
+func TestEditValidatesAndLogs(t *testing.T) {
+	p, pool := publisher(t)
+	ctx := t.Context()
+	_, err := p.Edit(ctx, func(tr control.Tree, _ *registry.Snapshot) (control.Change, error) {
+		return control.Change{Actor: "ops@example.com", Action: "updateTenant", ObjectType: "tenant", ObjectID: "orders-service", Reason: "break it"},
+			tr.SetScalar("integrations/int_evt_brandA/integration.yaml", "active_version", "99")
+	})
+	var problems registry.ConfigErrors
+	if !errors.As(err, &problems) {
+		t.Fatalf("invalid edit: %v", err)
+	}
+	var n int
+	_ = pool.QueryRow(ctx, `SELECT count(*) FROM hub.config_snapshots`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("a refused edit archived %d snapshot(s)", n)
+	}
+	res, err := p.Edit(ctx, func(tr control.Tree, snap *registry.Snapshot) (control.Change, error) {
+		if len(tr.Paths("integrations")) == 0 || snap.Integrations["int_evt_brandA"] == nil {
+			t.Fatal("edit sees no tree")
+		}
+		return control.Change{Actor: "ops@example.com", Action: "updateIntegration", ObjectType: "integration", ObjectID: "int_evt_brandA",
+			Reason: "describe it"}, tr.SetString("integrations/int_evt_brandA/integration.yaml", "description", "Brand A: events")
+	})
+	if err != nil || res.Snapshot.Integrations["int_evt_brandA"].Description != "Brand A: events" || res.ChangeID == "" || res.ArchiveVersion == 0 {
+		t.Fatalf("valid edit: %+v %v", res, err)
+	}
+}

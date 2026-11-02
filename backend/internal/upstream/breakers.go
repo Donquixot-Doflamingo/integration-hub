@@ -72,26 +72,40 @@ type published struct {
 
 // MarshalJSON keeps the wire form readable for operators (redis-cli GET hub:breaker:...).
 func (s BreakerSnapshot) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		State     string    `json:"state"`
-		OpenUntil time.Time `json:"open_until"`
-		Reopens   int       `json:"reopens"`
-		Version   int64     `json:"version"`
-	}{s.State.String(), s.OpenUntil, s.Reopens, s.Version})
+	w := struct {
+		State       string     `json:"state"`
+		OpenUntil   time.Time  `json:"open_until"`
+		Reopens     int        `json:"reopens"`
+		Version     int64      `json:"version"`
+		Forced      string     `json:"forced,omitempty"`
+		ForcedUntil *time.Time `json:"forced_until,omitempty"`
+	}{State: s.State.String(), OpenUntil: s.OpenUntil, Reopens: s.Reopens, Version: s.Version}
+	if s.Forced != ForceNone {
+		w.Forced = s.Forced.String()
+		if !s.ForcedUntil.IsZero() {
+			w.ForcedUntil = &s.ForcedUntil
+		}
+	}
+	return json.Marshal(w)
 }
 
 // UnmarshalJSON is the inverse of MarshalJSON.
 func (s *BreakerSnapshot) UnmarshalJSON(b []byte) error {
 	var w struct {
-		State     string    `json:"state"`
-		OpenUntil time.Time `json:"open_until"`
-		Reopens   int       `json:"reopens"`
-		Version   int64     `json:"version"`
+		State       string     `json:"state"`
+		OpenUntil   time.Time  `json:"open_until"`
+		Reopens     int        `json:"reopens"`
+		Version     int64      `json:"version"`
+		Forced      string     `json:"forced"`
+		ForcedUntil *time.Time `json:"forced_until"`
 	}
 	if err := json.Unmarshal(b, &w); err != nil {
 		return err
 	}
-	*s = BreakerSnapshot{State: ParseBreakerState(w.State), OpenUntil: w.OpenUntil, Reopens: w.Reopens, Version: w.Version}
+	*s = BreakerSnapshot{State: ParseBreakerState(w.State), OpenUntil: w.OpenUntil, Reopens: w.Reopens, Version: w.Version, Forced: ParseForce(w.Forced)}
+	if w.ForcedUntil != nil && s.Forced != ForceNone {
+		s.ForcedUntil = *w.ForcedUntil
+	}
 	return nil
 }
 
@@ -291,13 +305,14 @@ func (bs *Breakers) Reconcile(ctx context.Context) {
 }
 
 // SharedOpen lists every shared (account, endpoint) breaker that Redis says is open or
-// half-open (the scheduler probes them, whichever node tripped them).
+// half-open (the scheduler probes them, whichever node tripped them). Breakers an admin holds
+// open are left out: a healthy probe must not end a force.
 func (bs *Breakers) SharedOpen(ctx context.Context) (map[BreakerKey]BreakerSnapshot, error) {
 	out := map[BreakerKey]BreakerSnapshot{}
 	if bs.rdb == nil {
 		for _, k := range bs.Keys() {
 			if b, _ := bs.Lookup(k); b != nil && k.Integration == "" {
-				if s := b.Snapshot(); s.State != Closed {
+				if s := b.Snapshot(); s.State != Closed && !s.Held(time.Now()) {
 					out[k] = s
 				}
 			}
@@ -311,7 +326,7 @@ func (bs *Breakers) SharedOpen(ctx context.Context) (map[BreakerKey]BreakerSnaps
 		if !ok || k.Integration != "" {
 			continue
 		}
-		if snap, ok := bs.SharedState(ctx, k); ok && snap.State != Closed {
+		if snap, ok := bs.SharedState(ctx, k); ok && snap.State != Closed && !snap.Held(time.Now()) {
 			out[k] = snap
 		}
 	}

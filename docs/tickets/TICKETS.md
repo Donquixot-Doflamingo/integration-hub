@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **198** · done: **141** · todo: **56** · other (in-progress/in-review/blocked): **1**
+Total tickets: **198** · done: **156** · todo: **41** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -16,7 +16,7 @@ Total tickets: **198** · done: **141** · todo: **56** · other (in-progress/in
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
-| EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
+| EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
@@ -1479,182 +1479,182 @@ Golden fixtures live in `transformers/<ID>/fixtures/`, shared by every version o
 
 ### HUB-200 — Admin server, OIDC dev stub, RBAC and /me
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-080, HUB-006 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** done · **Depends on:** HUB-080, HUB-006 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-200-admin-server-rbac`
 
 Serve `/admin/v1` in the `admin` role with an OIDC stub for dev (static issuer, signed dev tokens), RBAC `admin | editor | viewer | tenant_viewer`, and `GET /admin/v1/me` (DESIGN §16.1).
 
 **Acceptance criteria**
-- [ ] Unauthenticated → 401; insufficient role → 403 (table test per role)
-- [ ] `tenant_viewer` sees only its tenant's data
-- [ ] `/me` validates against `contracts/openapi/hub-admin.v1.yaml`
+- [x] Unauthenticated → 401; insufficient role → 403 (table test per role)
+- [x] `tenant_viewer` sees only its tenant's data
+- [x] `/me` validates against `contracts/openapi/hub-admin.v1.yaml`
 
 ### HUB-201 — Change log with mandatory reason
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-200, HUB-047 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** done · **Depends on:** HUB-200, HUB-047 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-201-change-log`
 
 `change_log` table and middleware recording actor, action, object, before, after, reason for every admin mutation; mutations without a reason are rejected (DESIGN §16.1).
 
 **Acceptance criteria**
-- [ ] Every mutating endpoint writes exactly one change_log row (enforced by a test that enumerates routes)
-- [ ] Missing reason → 400
-- [ ] `GET /admin/v1/change-log` with filters
+- [x] Every mutating endpoint writes exactly one change_log row (enforced by a test that enumerates routes)
+- [x] Missing reason → 400
+- [x] `GET /admin/v1/change-log` with filters
 
 ### HUB-202 — Admin: vendors, capabilities, transformers
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-201, HUB-067 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** done · **Depends on:** HUB-201, HUB-067 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-202-admin-vendors-caps-transformers`
 
 CRUD/read for vendors and capabilities; transformers list/get/create-version plus `dry-run` and `run-goldens` (DESIGN §16.1).
 
 **Acceptance criteria**
-- [ ] Transformer create refused when goldens fail
-- [ ] `run-goldens` returns per-fixture pass/fail with diffs
-- [ ] All responses validate against the admin contract
+- [x] Transformer create refused when goldens fail
+- [x] `run-goldens` returns per-fixture pass/fail with diffs
+- [x] All responses validate against the admin contract
 
 ### HUB-203 — Admin: accounts, test-connection, rotate, lifecycle
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-201, HUB-176, HUB-177 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** done · **Depends on:** HUB-201, HUB-176, HUB-177 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-203-admin-accounts`
 
 Account endpoints incl. `test-connection`, credential `rotate` (add next / promote) and lifecycle transitions; secrets are write-only (DESIGN §16.1, §6.5, §6.6).
 
 **Acceptance criteria**
-- [ ] No endpoint ever returns secret material
-- [ ] Retire returns the guard's blocking counts
-- [ ] Every call writes a change_log row
+- [x] No endpoint ever returns secret material
+- [x] Retire returns the guard's blocking counts
+- [x] Every call writes a change_log row
 
 ### HUB-204 — Admin: integrations read, version diff, snapshots
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-201, HUB-171 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** done · **Depends on:** HUB-201, HUB-171 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-204-admin-integrations-read`
 
 List/get integrations, list versions, diff two versions (structured + text), and snapshots list/get/latest long-poll (DESIGN §16.1, §8.2).
 
 **Acceptance criteria**
-- [ ] Diff of v7 vs v8 shows exact changed paths
-- [ ] `snapshots/latest` long-poll returns within 1 s of a publish
-- [ ] Responses validate against the admin contract
+- [x] Diff of v7 vs v8 shows exact changed paths
+- [x] `snapshots/latest` long-poll returns within 1 s of a publish
+- [x] Responses validate against the admin contract
 
 ### HUB-205 — Admin: publish, rollback, weights, pause
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-204, HUB-170, HUB-172, HUB-142 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** done · **Depends on:** HUB-204, HUB-170, HUB-172, HUB-142 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-205-admin-integrations-mutate`
 
 Mutating integration endpoints through the same publish pipeline: publish, rollback, set weights (new version), pause/resume; reason mandatory (DESIGN §16.1).
 
 **Acceptance criteria**
-- [ ] Validation errors returned path-qualified in the contract's error shape
-- [ ] Pause takes effect on all nodes within 10 s
-- [ ] Each mutation in change_log with before/after
+- [x] Validation errors returned path-qualified in the contract's error shape
+- [x] Pause takes effect on all nodes within 10 s
+- [x] Each mutation in change_log with before/after
 
 ### HUB-206 — Admin: tenants, API keys, registrar endpoints
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-201, HUB-119 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** done · **Depends on:** HUB-201, HUB-119 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-206-admin-tenants-keys`
 
 Tenants CRUD, API keys (shown once on create, rotation with overlap, revoke), registrar endpoints CRUD with SSRF validation (DESIGN §16.1, §16.5).
 
 **Acceptance criteria**
-- [ ] Key plaintext appears only in the create/rotate response
-- [ ] Old key keeps working during the overlap window then stops
-- [ ] Registrar URL on a private range rejected
+- [x] Key plaintext appears only in the create/rotate response
+- [x] Old key keeps working during the overlap window then stops
+- [x] Registrar URL on a private range rejected
 
 ### HUB-207 — Admin: request search and timeline
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-201, HUB-117 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** done · **Depends on:** HUB-201, HUB-117 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-207-admin-requests`
 
 Request explorer endpoints: search by tenant, integration, status, code, time range, idempotency key; timeline of events and attempts (DESIGN §16.1, §13).
 
 **Acceptance criteria**
-- [ ] Search uses indexed columns and is paginated (cursor)
-- [ ] Timeline returns events in seq order with hashes and sizes
-- [ ] `tenant_viewer` restricted to its tenant
+- [x] Search uses indexed columns and is paginated (cursor)
+- [x] Timeline returns events in seq order with hashes and sizes
+- [x] `tenant_viewer` restricted to its tenant
 
 ### HUB-208 — Sealed payload policy and audited unseal
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-207, HUB-093, HUB-084 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** done · **Depends on:** HUB-207, HUB-093, HUB-084 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-208-sealed-unseal`
 
 `sealed` policy: full raw bytes field-level encrypted with a per-tenant key (local key source in dev); `POST /admin/v1/requests/{id}/unseal` decrypts for an authorised admin with a reason, audited (DESIGN §13.2, D6).
 
 **Acceptance criteria**
-- [ ] Sealed bodies unreadable in the DB (ciphertext test)
-- [ ] Unseal requires `admin` role and reason; writes change_log
-- [ ] Hashes and sizes match the original bytes
+- [x] Sealed bodies unreadable in the DB (ciphertext test)
+- [x] Unseal requires `admin` role and reason; writes change_log
+- [x] Hashes and sizes match the original bytes
 
 ### HUB-209 — Admin: DLQ and breakers
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-201, HUB-113, HUB-141 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** done · **Depends on:** HUB-201, HUB-113, HUB-141 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-209-admin-dlq-breakers`
 
 DLQ list, replay by filter (tenant, integration, account, reason, time range; re-resolves and re-transforms), purge; breaker state list and force-open/close (DESIGN §10.6, §16.1).
 
 **Acceptance criteria**
-- [ ] Replay by filter moves matching entries to `accepted` and they deliver
-- [ ] Replay after a transformer fix uses the new transformer
-- [ ] Force-open is visible on all nodes within 1 s
+- [x] Replay by filter moves matching entries to `accepted` and they deliver
+- [x] Replay after a transformer fix uses the new transformer
+- [x] Force-open is visible on all nodes within 1 s
 
 ### HUB-210 — hubctl scaffold, export and plan
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-204, HUB-202 · **Feature:** F-17 · **Stories:** US-17xx
+- **Status:** done · **Depends on:** HUB-204, HUB-202 · **Feature:** F-17 · **Stories:** US-17xx
 - **Branch:** `feat/HUB-210-hubctl-plan`
 
 `hubctl` with auth config; `export` round-trips the registry (minus secrets) to YAML; `plan` diffs a local config dir against live and prints exact changes (DESIGN §16.1 config as code).
 
 **Acceptance criteria**
-- [ ] Export → plan against the same live shows no changes
-- [ ] Plan shows per-object path-level diffs
-- [ ] Secrets never written by export
+- [x] Export → plan against the same live shows no changes
+- [x] Plan shows per-object path-level diffs
+- [x] Secrets never written by export
 
 ### HUB-211 — hubctl apply
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-210, HUB-205, HUB-206 · **Feature:** F-17 · **Stories:** US-17xx
+- **Status:** done · **Depends on:** HUB-210, HUB-205, HUB-206 · **Feature:** F-17 · **Stories:** US-17xx
 - **Branch:** `feat/HUB-211-hubctl-apply`
 
 `hubctl apply` publishes through the same pipeline as the API and UI, with reason and author (DESIGN §8.2, §16.1).
 
 **Acceptance criteria**
-- [ ] Apply of the dev config twice: second run makes no changes (idempotent)
-- [ ] Apply stops at the first validation failure with the path-qualified error
-- [ ] Each applied change writes change_log
+- [x] Apply of the dev config twice: second run makes no changes (idempotent)
+- [x] Apply stops at the first validation failure with the path-qualified error
+- [x] Each applied change writes change_log
 
 ### HUB-212 — hubctl dry-run and replay
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-210, HUB-209 · **Feature:** F-17 · **Stories:** US-17xx
+- **Status:** done · **Depends on:** HUB-210, HUB-209 · **Feature:** F-17 · **Stories:** US-17xx
 - **Branch:** `feat/HUB-212-hubctl-dryrun-replay`
 
 `hubctl dry-run <integration> <body.json>` and `hubctl replay --filter …` wrapping the admin endpoints (DESIGN §19 M7).
 
 **Acceptance criteria**
-- [ ] Dry-run prints the vendor request with secrets redacted
-- [ ] Replay prints the count and requires `--yes` unless `--dry-run`
+- [x] Dry-run prints the vendor request with secrets redacted
+- [x] Replay prints the count and requires `--yes` unless `--dry-run`
 
 ### HUB-213 — Admin contract tests and RBAC matrix
 - **Epic:** EP-08 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-202, HUB-203, HUB-205, HUB-206, HUB-207, HUB-208, HUB-209 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** done · **Depends on:** HUB-202, HUB-203, HUB-205, HUB-206, HUB-207, HUB-208, HUB-209 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `test/HUB-213-admin-contract-tests`
 
 Validate every admin endpoint response against `contracts/openapi/hub-admin.v1.yaml` and test the full role × endpoint permission matrix.
 
 **Acceptance criteria**
-- [ ] Every operation in the admin contract has at least one passing contract test
-- [ ] RBAC matrix test covers all four roles × all endpoints
+- [x] Every operation in the admin contract has at least one passing contract test
+- [x] RBAC matrix test covers all four roles × all endpoints
 
 ### HUB-214 — M7 acceptance and milestone summary
 - **Epic:** EP-08 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-211, HUB-212, HUB-213 · **Feature:** F-17 · **Stories:** US-17xx
+- **Status:** done · **Depends on:** HUB-211, HUB-212, HUB-213 · **Feature:** F-17 · **Stories:** US-17xx
 - **Branch:** `test/HUB-214-m7-acceptance`
 
 Prove the M7 Accept line and post the wrap-up.
 
 **Acceptance criteria**
-- [ ] `hubctl apply` of the dev config is idempotent
-- [ ] `plan` shows exact diffs
-- [ ] Every admin mutation appears in change_log
-- [ ] Milestone summary posted; F-16, F-17 docs updated
+- [x] `hubctl apply` of the dev config is idempotent
+- [x] `plan` shows exact diffs
+- [x] Every admin mutation appears in change_log
+- [x] Milestone summary posted; F-16, F-17 docs updated
 
 ## EP-09 — M8 Observability & hardening
 

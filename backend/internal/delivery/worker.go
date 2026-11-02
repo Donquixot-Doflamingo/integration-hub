@@ -40,6 +40,7 @@ type Worker struct {
 	Attempter   *Attempter
 	Audit       audit.Sink
 	Masker      *audit.Masker
+	Sealer      *audit.Sealer // sealed policy encryption (nil: sealed stores hashes and sizes only)
 	Backoff     Backoff
 	Budget      *Budget
 	Metrics     *telemetry.Metrics
@@ -274,6 +275,6 @@ func (w *Worker) trail(snap *registry.Snapshot, env core.Envelope, attempt int) 
 	_ = json.Unmarshal(env.Canonical, &canonical)
 	return audit.NewTrail(audit.TrailOptions{
 		RequestID: env.RequestID, Tenant: env.Tenant, Policy: policy, PII: pii, Canonical: canonical,
-		Masker: w.Masker, Now: w.Now, SeqBase: attempt * 100,
+		Masker: w.Masker, Sealer: w.Sealer, Now: w.Now, SeqBase: attempt * 100,
 	})
 }

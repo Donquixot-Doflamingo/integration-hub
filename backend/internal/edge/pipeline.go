@@ -77,7 +77,7 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 	p.timings.Observe(telemetry.StageBodyLimit, start)
 	p.trailOpts = audit.TrailOptions{
 		RequestID: RequestID(r.Context()), Tenant: c.Tenant.Tenant, Policy: in.Active().Audit.Payloads,
-		PII: pii, Canonical: body, Masker: s.deps.Masker, Now: s.deps.Now,
+		PII: pii, Canonical: body, Masker: s.deps.Masker, Sealer: s.deps.Sealer, Now: s.deps.Now,
 	}
 	p.trail = audit.NewTrail(p.trailOpts)
 	p.trail.Add(audit.RequestReceived, 0, raw, receivedMeta(r, c))

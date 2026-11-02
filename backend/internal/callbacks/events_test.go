@@ -272,6 +272,7 @@ func testSnapshot(url string) *registry.Snapshot {
 						{Event: "request.completed", Endpoint: "reg_orders_cb"},
 						{Event: "request.completed", Endpoint: "reg_other_tenant"},
 						{Event: "request.completed", Endpoint: "reg_missing"},
+						{Event: "request.completed", Endpoint: "reg_off"},
 					},
 				}},
 			},
@@ -280,6 +281,7 @@ func testSnapshot(url string) *registry.Snapshot {
 			"reg_orders_cb":    reg("reg_orders_cb", "orders-service"),
 			"reg_orders_audit": reg("reg_orders_audit", "orders-service"),
 			"reg_other_tenant": reg("reg_other_tenant", "payments-service"),
+			"reg_off":          {EndpointID: "reg_off", Tenant: "orders-service", URL: url, SecretRef: "localfile://reg_off", Disabled: true},
 		},
 	}
 }
@@ -300,6 +302,9 @@ func TestEnqueueTargets(t *testing.T) {
 	}
 	if n := testutil.ToFloat64(e.skipped.WithLabelValues(skipUnknownEndpoint)); n != 1 {
 		t.Fatalf("unknown_endpoint skipped = %v", n)
+	}
+	if n := testutil.ToFloat64(e.skipped.WithLabelValues(skipDisabled)); n != 1 {
+		t.Fatalf("endpoint_disabled skipped = %v", n)
 	}
 
 	// No subscription for the type: nothing to write, the transaction is not touched (nil tx).

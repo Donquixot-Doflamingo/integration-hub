@@ -4,7 +4,7 @@
 The control plane API `/admin/v1` over every registry and operational resource, protected by OIDC and RBAC (`admin | editor | viewer | tenant_viewer`), with every mutation recorded in `change_log`. It backs `hubctl` (F-17), the admin console (F-19) and `hubmcp` admin tools (F-20) (DESIGN §16.1).
 
 ## Status
-`proposed` — 2026-10-31. Contract frozen in Phase 1 so F-19 can build in parallel.
+`shipped` — 2026-11-02 (M7, `docs/milestones/M7.md`): all 79 operations of `hub-admin.v1.yaml`.
 
 ## Owner
 `backend-engineer`; `contract-steward` owns `contracts/openapi/hub-admin.v1.yaml`.
@@ -97,3 +97,4 @@ HUB-200 – HUB-229 (EP-08, filter `feature: F-16`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-02 | Shipped in M7 (see docs/milestones/M7.md) | backend-engineer |

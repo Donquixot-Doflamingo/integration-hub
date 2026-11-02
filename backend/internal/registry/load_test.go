@@ -90,10 +90,12 @@ active_version: 3
 
 func TestLoadReportsEveryProblem(t *testing.T) {
 	_, err := Load(sources(t, files(map[string]string{
-		"vendors/clevertap.yaml":                      validFiles["vendors/clevertap.yaml"] + "\ntimeout: 5\n",
-		"accounts/ct-brandB-us.yaml":                  strings.Replace(validFiles["accounts/ct-brandB-us.yaml"], "account: ct-brandB-us", "account: ct-brandB-eu", 1),
-		"tenants/orders-service.yaml":                 "tenant: orders-service\napi_keys:\n  - key_id: k1\n    key: hk_live_plaintext\n",
-		"tenants/billing.yaml":                        "tenant: billing\napi_keys:\n  - { key_id: k1, hash: md5:abc, scopes: [invoke], state: active }\n",
+		"vendors/clevertap.yaml":      validFiles["vendors/clevertap.yaml"] + "\ntimeout: 5\n",
+		"accounts/ct-brandB-us.yaml":  strings.Replace(validFiles["accounts/ct-brandB-us.yaml"], "account: ct-brandB-us", "account: ct-brandB-eu", 1),
+		"tenants/orders-service.yaml": "tenant: orders-service\napi_keys:\n  - key_id: k1\n    key: hk_live_plaintext\n",
+		"tenants/billing.yaml": "tenant: billing\napi_keys:\n  - { key_id: k1, hash: md5:abc, scopes: [invoke], state: active }\n" +
+			"  - { key_id: k2, hash: \"sha256:0000000000000000000000000000000000000000000000000000000000000000\", scopes: [invoke], state: expiring }\n" +
+			"  - { key_id: k3, hash: \"sha256:1111111111111111111111111111111111111111111111111111111111111111\", scopes: [invoke], state: paused }\n",
 		"transformers/T1/7.yaml":                      strings.Replace(validFiles["transformers/T1/7.yaml"], "version: 7", "version: 8", 1),
 		"integrations/int_evt_brandA/versions/1.yaml": "integration: int_evt_brandA\nversion: 1\ntargets: [\n",
 		"capabilities/events.track.v1.yaml":           "capability: events.track@v1\nschema_ref: schemas/capabilities/missing.json\n",
@@ -107,6 +109,8 @@ func TestLoadReportsEveryProblem(t *testing.T) {
 		`accounts/ct-brandB-us.yaml: account: id "ct-brandB-eu" must equal the file name "ct-brandB-us"`,
 		"tenants/orders-service.yaml: line 4: field key not found",
 		"tenants/billing.yaml: api_keys[0].hash: must be",
+		"tenants/billing.yaml: api_keys[1].expires_at: an expiring key needs expires_at",
+		"tenants/billing.yaml: api_keys[2].state: must be active, expiring or revoked",
 		"transformers/T1/7.yaml: version: version 8 must equal the file name",
 		"integrations/int_evt_brandA/versions/1.yaml: ",
 		"capabilities/events.track.v1.yaml: schema_ref: read schemas/capabilities/missing.json",

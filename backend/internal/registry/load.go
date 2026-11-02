@@ -179,6 +179,15 @@ func Load(src Sources) (*Config, error) {
 				if k.KeyID == "" {
 					ps.add(file, at+".key_id", "required")
 				}
+				switch k.State {
+				case KeyActive, KeyRevoked:
+				case KeyExpiring:
+					if k.ExpiresAt == nil {
+						ps.add(file, at+".expires_at", "an expiring key needs expires_at (the end of its rotation overlap)")
+					}
+				default:
+					ps.add(file, at+".state", "must be active, expiring or revoked")
+				}
 			}
 			c.Tenants[t.Tenant] = &t
 		}

@@ -1,5 +1,6 @@
-// Command hubctl is the config-as-code and operations CLI (DESIGN §16.1). M2 ships
-// `hubctl transform test`; plan, apply, dry-run and replay arrive with the control plane (M7).
+// Command hubctl is the config-as-code and operations CLI (DESIGN §16.1): golden tests, the
+// local credential file, and the control-plane commands (login, whoami, export, plan, apply,
+// dry-run, replay).
 package main
 
 import (
@@ -19,7 +20,11 @@ const usage = `usage: hubctl <command> [flags]
 commands:
   transform test [-config-dir DIR] [-contracts-dir DIR] [-v] [TRANSFORMER...]
       Run the golden fixtures of every transformer (or only the given IDs, e.g. T1 or T1@7).
-      Exit 0 when all pass, 1 when any fails, 2 on usage or config errors.`
+      Exit 0 when all pass, 1 when any fails, 2 on usage or config errors.
+  creds ...
+      Local dev credential file (hubctl creds for details).
+
+` + adminUsage + "\n\n" + configUsage + "\n\n" + opsUsage
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -28,6 +33,24 @@ func main() {
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) >= 1 && args[0] == "creds" {
 		return credsCmd(args[1:], stdout, stderr)
+	}
+	if len(args) >= 1 {
+		switch args[0] {
+		case "login":
+			return loginCmd(args[1:], stdout, stderr)
+		case "whoami":
+			return whoamiCmd(args[1:], stdout, stderr)
+		case "export":
+			return exportCmd(args[1:], stdout, stderr)
+		case "plan":
+			return planCmd(args[1:], stdout, stderr)
+		case "apply":
+			return applyCmd(args[1:], stdout, stderr)
+		case "dry-run":
+			return dryRunCmd(args[1:], stdout, stderr)
+		case "replay":
+			return replayCmd(args[1:], stdout, stderr)
+		}
 	}
 	if len(args) >= 2 && args[0] == "transform" && args[1] == "test" {
 		return transformTest(args[2:], stdout, stderr)

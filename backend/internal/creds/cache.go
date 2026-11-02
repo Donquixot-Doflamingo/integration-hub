@@ -84,6 +84,9 @@ type versionKey struct {
 type entry struct {
 	creds   Credentials
 	expires time.Time
+	// until is the slot's own expiry (Slot.ExpiresAt; zero = none). Slots honours it for the
+	// next slot, which ends a registrar secret's rotation overlap on time.
+	until time.Time
 }
 
 // generation is one immutable cache state, published with a single pointer store.
@@ -146,7 +149,8 @@ func (c *Cache) GetVersion(_ context.Context, accountID string, version int) (Cr
 
 // Slots returns the active slot of id followed by its next slot while a rotation is staged
 // (DESIGN §6.6), for consumers that must honour both during an overlap, such as callback
-// signing (several v1= signatures). Same no-decrypt rule as Get.
+// signing (several v1= signatures). A next slot past its own expires_at is left out (the end
+// of a registrar secret's rotation overlap). Same no-decrypt rule as Get.
 func (c *Cache) Slots(_ context.Context, id string) ([]Credentials, error) {
 	g := c.gen.Load()
 	now := c.opts.Now()
@@ -155,7 +159,7 @@ func (c *Cache) Slots(_ context.Context, id string) ([]Credentials, error) {
 		return nil, c.miss(id)
 	}
 	out := []Credentials{e.creds}
-	if n := g.next[id]; n != nil && now.Before(n.expires) {
+	if n := g.next[id]; n != nil && now.Before(n.expires) && (n.until.IsZero() || now.Before(n.until)) {
 		out = append(out, n.creds)
 	}
 	return out, nil
@@ -258,6 +262,9 @@ func (c *Cache) reloadLocked(ctx context.Context) error {
 		secrets = appendSecrets(secrets, s.Active.Values)
 		if s.Next != nil {
 			n := &entry{creds: Credentials{AccountID: id, Version: s.Next.Version, Values: s.Next.Values}, expires: expires}
+			if s.Next.ExpiresAt != nil {
+				n.until = *s.Next.ExpiresAt
+			}
 			next.next[id] = n
 			next.byVersion[versionKey{id, s.Next.Version}] = n
 			secrets = appendSecrets(secrets, s.Next.Values)

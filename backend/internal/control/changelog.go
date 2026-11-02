@@ -30,8 +30,29 @@ type execer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
+type changeMetaKey struct{}
+
+type changeMeta struct {
+	roles     []string
+	requestID string
+}
+
+// WithChangeMeta attaches the caller's roles and request id to ctx: every change recorded under
+// it carries them unless the Change sets its own (the admin API wraps each mutation).
+func WithChangeMeta(ctx context.Context, roles []string, requestID string) context.Context {
+	return context.WithValue(ctx, changeMetaKey{}, changeMeta{roles: roles, requestID: requestID})
+}
+
 // RecordChange appends c (minting change_id and at when empty) and returns its id.
 func RecordChange(ctx context.Context, db execer, c Change) (string, error) {
+	if m, ok := ctx.Value(changeMetaKey{}).(changeMeta); ok {
+		if c.ActorRoles == nil {
+			c.ActorRoles = m.roles
+		}
+		if c.RequestID == "" {
+			c.RequestID = m.requestID
+		}
+	}
 	if c.ChangeID == "" {
 		c.ChangeID = "chg_" + core.NewULID(time.Now())
 	}

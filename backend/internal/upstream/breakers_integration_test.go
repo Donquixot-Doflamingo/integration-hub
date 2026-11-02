@@ -108,3 +108,58 @@ func waitState(t *testing.T, b *Breaker, want BreakerState, within time.Duration
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// TestForceReachesEveryNodeWithinOneSecond is HUB-209: an admin hold written to Redis (the
+// admin role has no breakers of its own) is in force on two gateway nodes within 1 s, one of
+// which never used the breaker, and clearing it returns both to automatic control.
+func TestForceReachesEveryNodeWithinOneSecond(t *testing.T) {
+	admin := redisClient(t, redisAddr())
+	a, b := node(t, redisClient(t, redisAddr())), node(t, redisClient(t, redisAddr()))
+	key := BreakerKey{Account: "acct-" + core.NewULID(time.Now()), Endpoint: "clevertap.upload@1"}
+	ba := a.Get(key, policy())
+	time.Sleep(200 * time.Millisecond) // subscriptions up
+	start := time.Now()
+	if _, next, err := ForceShared(t.Context(), admin, key, ForceOpen, time.Time{}, time.Now()); err != nil || next.Forced != ForceOpen {
+		t.Fatalf("force %+v %v", next, err)
+	}
+	waitState(t, ba, Open, time.Second)
+	if ok, _, _ := b.Get(key, policy()).Allow(time.Now()); ok {
+		t.Fatal("node B (never used the breaker) passed a forced-open breaker")
+	}
+	t.Logf("force-open in force on both nodes after %s", time.Since(start).Round(time.Millisecond))
+	if s, ok, _ := ReadShared(t.Context(), admin, key); !ok || s.Forced != ForceOpen {
+		t.Fatalf("shared %+v", s)
+	}
+	if open, _ := a.SharedOpen(t.Context()); open != nil {
+		if _, listed := open[key]; listed {
+			t.Fatalf("a held breaker must not be probed: %+v", open[key])
+		}
+	}
+	all, err := SharedStates(t.Context(), admin)
+	if err != nil || all[key].Forced != ForceOpen {
+		t.Fatalf("states %v %v", all[key], err)
+	}
+	if ttl := admin.TTL(t.Context(), breakerPrefix+key.String()).Val(); ttl != -1 {
+		t.Fatalf("an endless hold must not expire: ttl %s", ttl)
+	}
+
+	start = time.Now()
+	if _, _, err := ForceShared(t.Context(), admin, key, ForceNone, time.Time{}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, ba, HalfOpen, time.Second)
+	waitState(t, b.Get(key, policy()), HalfOpen, time.Second)
+	t.Logf("clear reached both nodes after %s", time.Since(start).Round(time.Millisecond))
+
+	// Force-close from a node holds closed everywhere: timeouts on node B do not trip it.
+	if _, err := a.Force(t.Context(), key, ForceClosed, time.Now().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	bb := b.Get(key, policy())
+	waitState(t, bb, Closed, time.Second)
+	record(bb, time.Now(), OutcomeTimeout, 10)
+	if s := bb.Snapshot(); s.State != Closed || s.Forced != ForceClosed {
+		t.Fatalf("forced closed tripped %+v", s)
+	}
+	_ = admin.Del(context.Background(), breakerPrefix+key.String())
+}
