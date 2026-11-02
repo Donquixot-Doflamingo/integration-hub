@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Rotate account credentials and test connections against the vendor (HUB-203) · HUB-203 · F-16
+  - POST /accounts/{id}/credentials/next, /promote, /delete-old run the DESIGN §6.6 runbook; 409 when a step does not apply
+  - POST /accounts/{id}/test-connection runs the vendor health probe (dry where declared) with the active or next slot; non-mutating, audited in the change log
+  - No response or change-log row carries credential values; no credential store configured answers 500
 - 2026-11-02 · `feat(adminapi)` · Create, read, update and transition accounts with write-only secrets (HUB-203) · HUB-203 · F-16
   - GET/POST /admin/v1/accounts, GET/PATCH /accounts/{id} (merge-patch of config and quota, If-Match → 412)
   - Initial credentials go to the credential store as the active slot v1; responses show slot metadata only

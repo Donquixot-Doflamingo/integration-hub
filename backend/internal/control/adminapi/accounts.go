@@ -14,13 +14,17 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"go.yaml.in/yaml/v3"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
 )
 
 // Accounts (HUB-203, DESIGN §6.5, §6.6, §16.1): credentialed vendor instances. Config lives in
@@ -35,6 +39,10 @@ func (s *Server) registerAccounts() {
 	s.handle("getAccount", RoleViewer, false, "GET /accounts/{account_id}", s.getAccount)
 	s.handle("updateAccount", RoleAdmin, true, "PATCH /accounts/{account_id}", s.updateAccount)
 	s.handle("transitionAccountLifecycle", RoleAdmin, true, "POST /accounts/{account_id}/lifecycle", s.transitionAccount)
+	s.handle("testAccountConnection", RoleEditor, false, "POST /accounts/{account_id}/test-connection", s.testAccountConnection)
+	s.handle("addNextCredential", RoleAdmin, true, "POST /accounts/{account_id}/credentials/next", s.addNextCredential)
+	s.handle("promoteNextCredential", RoleAdmin, true, "POST /accounts/{account_id}/credentials/promote", s.promoteNextCredential)
+	s.handle("deleteOldCredential", RoleAdmin, true, "POST /accounts/{account_id}/credentials/delete-old", s.deleteOldCredential)
 }
 
 // ---- helpers shared by the access resources (accounts, tenants, api keys, registrar) ----
@@ -551,4 +559,314 @@ func (s *Server) transitionAccount(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.writeAccount(w, r, http.StatusOK, res, id)
+}
+
+// ---- credential rotation (DESIGN §6.6): add next → test-connection → promote → delete old ----
+
+// accountForCredentials checks that the account exists and still holds credentials.
+func (s *Server) accountForCredentials(r *http.Request) (*registry.Snapshot, *registry.Account, error) {
+	snap, err := s.accessSnapshot(r.Context())
+	if err != nil {
+		return nil, nil, err
+	}
+	a, ok := snap.Accounts[r.PathValue("account_id")]
+	if !ok {
+		return nil, nil, notFound("Account")
+	}
+	if a.State == registry.AccountRetired {
+		return nil, nil, &Error{Status: http.StatusConflict, Code: CodeConflict, Details: []Detail{},
+			Message: "Account " + a.Account + " is retired: its credentials are deleted"}
+	}
+	return snap, a, nil
+}
+
+func (s *Server) writeSlots(w http.ResponseWriter, rot control.Rotation) {
+	writeJSON(w, http.StatusOK, map[string]any{"change_id": rot.ChangeID, "account_id": rot.Account, "credentials": rot.Slots})
+}
+
+func (s *Server) addNextCredential(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Credentials map[string]string `json:"credentials"`
+		ExpiresAt   *time.Time        `json:"expires_at"`
+		Reason      string            `json:"reason"`
+	}
+	if err := decode(w, r, &body); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	reason, err := reasonOf(r, body.Reason)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if len(body.Credentials) == 0 {
+		s.fail(w, r, badRequest("/credentials", "credentials need at least one value"))
+		return
+	}
+	for k, v := range body.Credentials {
+		if k == "" || v == "" {
+			s.fail(w, r, badRequest("/credentials", "credential names and values must not be empty"))
+			return
+		}
+	}
+	rot, err := s.accessRotator()
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	_, a, err := s.accountForCredentials(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	res, err := rot.AddNext(r.Context(), a.Account, body.Credentials, body.ExpiresAt, principal(r).Actor(), reason)
+	if err != nil {
+		s.fail(w, r, controlError(err))
+		return
+	}
+	s.writeSlots(w, res)
+}
+
+func (s *Server) promoteNextCredential(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ExpectedNextVersion int    `json:"expected_next_version"`
+		Reason              string `json:"reason"`
+	}
+	if err := decode(w, r, &body); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	reason, err := reasonOf(r, body.Reason)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if body.ExpectedNextVersion < 1 {
+		s.fail(w, r, badRequest("/expected_next_version", "expected_next_version must be >= 1"))
+		return
+	}
+	rot, err := s.accessRotator()
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	_, a, err := s.accountForCredentials(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	res, err := rot.Promote(r.Context(), a.Account, body.ExpectedNextVersion, principal(r).Actor(), reason)
+	if err != nil {
+		s.fail(w, r, controlError(err))
+		return
+	}
+	s.writeSlots(w, res)
+}
+
+func (s *Server) deleteOldCredential(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ExpectedPreviousVersion int    `json:"expected_previous_version"`
+		Reason                  string `json:"reason"`
+	}
+	if err := decode(w, r, &body); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	reason, err := reasonOf(r, body.Reason)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if body.ExpectedPreviousVersion < 1 {
+		s.fail(w, r, badRequest("/expected_previous_version", "expected_previous_version must be >= 1"))
+		return
+	}
+	rot, err := s.accessRotator()
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	_, a, err := s.accountForCredentials(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	res, err := rot.DeleteOld(r.Context(), a.Account, body.ExpectedPreviousVersion, principal(r).Actor(), reason)
+	if err != nil {
+		s.fail(w, r, controlError(err))
+		return
+	}
+	s.writeSlots(w, res)
+}
+
+// probeClient sends connection tests. Deps has no upstream client, so the admin builds its own
+// (same egress allowlist, TLS rules and timeouts as the data plane) with a private registry.
+var probeClient = sync.OnceValues(func() (*upstream.Client, error) {
+	return upstream.New(telemetry.NewMetrics("admin", "probe"), upstream.Options{})
+})
+
+// connectionTest is the contract's ConnectionTestResult.
+type connectionTest struct {
+	OK             bool      `json:"ok"`
+	Slot           string    `json:"slot"`
+	CredVersion    int       `json:"cred_version"`
+	EndpointRef    string    `json:"endpoint_ref"`
+	UpstreamStatus *int      `json:"upstream_status"`
+	LatencyMS      *int64    `json:"latency_ms"`
+	ErrorCode      *string   `json:"error_code"`
+	Message        *string   `json:"message"`
+	CheckedAt      time.Time `json:"checked_at"`
+}
+
+func (c *connectionTest) failed(code core.Code, msg string) {
+	c.OK, c.ErrorCode, c.Message = false, core.Ptr(string(code)), &msg
+}
+
+// staticHeaders maps credential values into the headers a request transformer of the endpoint
+// names with creds.<key> (static_headers vendors put credentials in their own headers).
+func staticHeaders(snap *registry.Snapshot, vendorEndpoint string, values map[string]string, h map[string]string) {
+	for _, ref := range slices.SortedFunc(maps.Keys(snap.Transformers), func(a, b registry.TransformerRef) int {
+		return strings.Compare(b.String(), a.String())
+	}) {
+		tf := snap.Transformers[ref]
+		if tf.Kind != registry.KindRequest || tf.VendorEndpoint != vendorEndpoint {
+			continue
+		}
+		var req struct {
+			Headers map[string]string `yaml:"headers"`
+		}
+		if tf.Request.Decode(&req) != nil {
+			continue
+		}
+		for name, expr := range req.Headers {
+			if key, ok := strings.CutPrefix(strings.TrimSpace(expr), "creds."); ok && values[key] != "" {
+				h[name] = values[key]
+			}
+		}
+		return
+	}
+}
+
+// testAccountConnection runs the vendor's health probe (dry where declared) with the chosen
+// slot's credentials. Non-mutating (no reason, no change_id) but audited in the change log.
+func (s *Server) testAccountConnection(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Slot        string `json:"slot"`
+		EndpointRef string `json:"endpoint_ref"`
+	}
+	if r.ContentLength != 0 {
+		if err := decode(w, r, &body); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	}
+	if body.Slot == "" {
+		body.Slot = "active"
+	}
+	if body.Slot != "active" && body.Slot != "next" {
+		s.fail(w, r, badRequest("/slot", "slot must be active or next"))
+		return
+	}
+	rot, err := s.accessRotator()
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	snap, a, err := s.accountForCredentials(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	v := snap.Vendors[a.Vendor]
+	probe := v.Defaults.HealthProbe
+	ep := body.EndpointRef
+	if ep == "" {
+		if probe == nil {
+			s.fail(w, r, badRequest("/endpoint_ref", "vendor "+v.Vendor+" declares no health probe: name an endpoint_ref"))
+			return
+		}
+		ep = probe.Endpoint
+	}
+	target, err := upstream.TargetFor(snap, a.Account, v.Vendor+"."+ep)
+	if err != nil {
+		s.fail(w, r, badRequest("/endpoint_ref", fmt.Sprintf("vendor %s has no endpoint %q", v.Vendor, ep)))
+		return
+	}
+	sec, ok, err := rot.ReadCredentials(a.Account)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	slot := &sec.Active
+	if body.Slot == "next" {
+		slot = sec.Next
+	}
+	if !ok || slot == nil {
+		s.fail(w, r, &Error{Status: http.StatusConflict, Code: CodeConflict, Details: []Detail{},
+			Message: fmt.Sprintf("Account %s has no %s credential", a.Account, body.Slot)})
+		return
+	}
+	res := connectionTest{OK: true, Slot: body.Slot, CredVersion: slot.Version, EndpointRef: ep, CheckedAt: s.d.Now().UTC()}
+	s.probe(r.Context(), snap, target, probe, creds.Credentials{AccountID: a.Account, Version: slot.Version, Values: slot.Values}, &res)
+	if _, err := control.RecordChange(r.Context(), s.d.Pool, control.Change{Actor: principal(r).Actor(), Action: "testAccountConnection",
+		ObjectType: "account", ObjectID: a.Account, Reason: "connection test of the " + body.Slot + " credential (non-mutating)",
+		After: map[string]any{"slot": res.Slot, "cred_version": res.CredVersion, "endpoint_ref": ep, "ok": res.OK,
+			"upstream_status": res.UpstreamStatus, "error_code": res.ErrorCode}}); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// probe sends one health-probe request with c applied by the vendor's auth scheme and fills res.
+// Messages name statuses and credential keys, never values or bodies.
+func (s *Server) probe(ctx context.Context, snap *registry.Snapshot, t upstream.Target, hp *registry.HealthProbe, c creds.Credentials, res *connectionTest) {
+	req := core.VendorRequest{Method: t.Endpoint.Method, Path: t.Endpoint.Path, Body: map[string]any{},
+		Headers: map[string]string{"X-Hub-Probe": "1", "Content-Type": "application/json"}}
+	if hp != nil && hp.Dry && hp.Endpoint == t.EndpointName {
+		req.Query = map[string]string{"dry": "1"}
+	}
+	if t.Vendor.Auth == creds.SchemeStaticHeaders {
+		staticHeaders(snap, t.Vendor.Vendor+"."+t.EndpointName, c.Values, req.Headers)
+	}
+	if err := creds.ApplyVendor(t.Vendor, c, &req); err != nil {
+		res.failed(core.CodeUpstreamAuthFailed, upperFirst(strings.TrimPrefix(err.Error(), "creds: ")))
+		return
+	}
+	client, err := probeClient()
+	if err != nil {
+		res.failed(core.CodeInternalError, "No upstream client")
+		return
+	}
+	at, err := client.Attempt(ctx, t, req)
+	res.LatencyMS = core.Ptr(at.Latency.Milliseconds())
+	var te *upstream.TransportError
+	switch {
+	case errors.As(err, &te) && te.Kind == upstream.KindTimeout:
+		res.failed(core.CodeUpstreamTimeout, "The vendor did not answer in time")
+		return
+	case err != nil:
+		res.failed(core.CodeUpstreamUnavailable, "The vendor could not be reached ("+string(kindOf(te))+")")
+		return
+	}
+	status := at.Response.Status
+	res.UpstreamStatus = &status
+	switch {
+	case status < 400:
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		res.failed(core.CodeUpstreamAuthFailed, fmt.Sprintf("The vendor refused the credential (HTTP %d)", status))
+	case status == http.StatusTooManyRequests:
+		res.failed(core.CodeUpstreamRateLimited, "The vendor rate-limited the probe (HTTP 429)")
+	case status >= 500:
+		res.failed(core.CodeUpstreamUnavailable, fmt.Sprintf("The vendor failed (HTTP %d)", status))
+	default:
+		res.failed(core.CodeUpstreamRejected, fmt.Sprintf("The vendor rejected the probe (HTTP %d)", status))
+	}
+}
+
+func kindOf(te *upstream.TransportError) upstream.Kind {
+	if te == nil {
+		return upstream.KindProtocol
+	}
+	return te.Kind
 }
