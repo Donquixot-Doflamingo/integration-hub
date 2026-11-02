@@ -36,6 +36,7 @@ type Deps struct {
 	DebugHeaders bool
 	Audit        audit.Sink    // default audit.Discard
 	Masker       *audit.Masker // x-pii masking key for the masked policy
+	Sealer       *audit.Sealer // sealed policy encryption (nil: sealed stores hashes and sizes only)
 	// Breakers and Limiter are admission (M5): circuit breakers and the account limiter.
 	Breakers *upstream.Breakers
 	Limiter  *upstream.AccountLimiter

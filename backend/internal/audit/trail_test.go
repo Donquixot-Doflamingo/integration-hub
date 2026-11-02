@@ -57,7 +57,7 @@ func TestPayloadPolicies(t *testing.T) {
 		{registry.PayloadMasked, PayloadMasked, false, false},
 		{"", PayloadMasked, false, false}, // default
 		{registry.PayloadMetadataOnly, PayloadOmitted, false, true},
-		{registry.PayloadSealed, PayloadOmitted, false, true}, // until HUB-208: never in clear
+		{registry.PayloadSealed, PayloadOmitted, false, true}, // no Sealer: fail closed, never in clear
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.policy), func(t *testing.T) {

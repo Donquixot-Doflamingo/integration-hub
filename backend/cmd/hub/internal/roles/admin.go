@@ -48,7 +48,7 @@ func adminHandler(ctx context.Context, cfg Config, log *slog.Logger, st *stores,
 		log.WarnContext(ctx, "no credential store: rotation endpoints answer 500 until `hubctl creds init-key`", slog.String("error", err.Error()))
 	}
 	api := adminapi.New(adminapi.Deps{Pool: st.pg, Redis: st.rdb, Verifier: verifier, Publisher: pub, Rotator: rot, Archive: reg.archive,
-		Snapshot: reg.store.Snapshot, Log: log})
+		Snapshot: reg.store.Snapshot, Log: log}).SetSealer(auditSealer(ctx, cfg, log))
 	mux := http.NewServeMux()
 	mux.Handle(adminapi.Base+"/", api.Handler())
 	if dev != nil {

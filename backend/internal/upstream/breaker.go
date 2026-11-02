@@ -96,6 +96,10 @@ type BreakerSnapshot struct {
 	OpenUntil time.Time // when an open breaker lets probes through
 	Reopens   int       // re-opens since the last close (doubles the open window)
 	Version   int64     // unix ms of the last transition; the newest wins across nodes
+	// Forced is an admin hold (HUB-209): open refuses every call, closed admits every call and
+	// never trips, until ForcedUntil (zero: until cleared). It travels with the state.
+	Forced      Force
+	ForcedUntil time.Time
 }
 
 // Breaker is the local state machine of one (account, endpoint) — or one integration's
@@ -147,6 +151,19 @@ func (b *Breaker) Allow(now time.Time) (ok bool, probe bool, retryAfter time.Dur
 			b.onChange(change[0], change[1], true)
 		}
 	}()
+	if b.snap.Forced != ForceNone {
+		if b.forceActive(now) {
+			if b.snap.Forced == ForceClosed {
+				return true, false, 0
+			}
+			retry := 30 * time.Second
+			if !b.snap.ForcedUntil.IsZero() {
+				retry = b.snap.ForcedUntil.Sub(now)
+			}
+			return false, false, retry
+		}
+		b.expireForce()
+	}
 	switch b.snap.State {
 	case Closed:
 		return true, false, 0
@@ -223,6 +240,9 @@ func (b *Breaker) Record(now time.Time, o Outcome, probe bool) {
 		b.consecTimeouts = 0
 	case OutcomeSuccess, OutcomeIgnore:
 		b.consecTimeouts = 0
+	}
+	if b.snap.Forced == ForceClosed && b.forceActive(now) {
+		return // counted, never tripped while forced closed
 	}
 	if b.policy.ConsecutiveTimeouts > 0 && b.consecTimeouts >= b.policy.ConsecutiveTimeouts {
 		change = b.open(now, false)

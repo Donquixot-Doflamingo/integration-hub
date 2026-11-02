@@ -48,6 +48,22 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - GET/POST /admin/v1/accounts, GET/PATCH /accounts/{id} (merge-patch of config and quota, If-Match → 412)
   - Initial credentials go to the credential store as the active slot v1; responses show slot metadata only
   - POST /accounts/{id}/lifecycle: active -> draining -> retired; retire answers 409 RETIRE_BLOCKED with the guard's pinned/session counts and deletes the credentials
+- 2026-11-02 · `feat(adminapi)` · Show the breaker board and force breakers open or closed across nodes (HUB-209) · HUB-209 · F-16
+  - GET /admin/v1/breakers lists every breaker an active integration uses or that has shared state (state, hold, parked backlog), filterable by vendor, account and state; /breakers/{account}/{endpoint} adds config, forced transitions and integrations
+  - Admins force a breaker open or closed (optionally for a duration) and clear the hold; the hold is in Redis and in force on every node within about a second; clearing a forced-open breaker probes at once (half_open)
+  - A forced-closed breaker counts failures but never trips; the scheduler does not probe a held breaker
+- 2026-11-02 · `feat(adminapi)` · List, replay and purge dead letters by ids or by filter (HUB-209) · HUB-209 · F-16
+  - GET /admin/v1/dlq (tenant, integration, vendor, account, reason, replayed, time range; newest first, cursor pages) and /dlq/{id} with the canonical body per payload policy, last vendor exchange and attempt history
+  - POST /dlq/replay (editor) moves matching entries back to accepted; workers re-resolve and re-transform, so a fixed transformer applies; dry_run counts only, at most 10 000 per call
+  - POST /dlq/purge (admin) removes entries, the request ledger stays; replay and purge each write one change-log row in their transaction
+- 2026-11-02 · `feat(audit)` · Seal payloads per tenant and unseal them for audited admins (HUB-208) · HUB-208 · F-16
+  - Integrations with audit.payloads: sealed store every event payload as AES-256-GCM ciphertext under a per-tenant key (dev: derived from the localfile dev key); hashes and sizes stay those of the original bytes
+  - POST /admin/v1/requests/{id}/unseal (admin, reason of at least 10 characters) returns the clear payloads once with Cache-Control: no-store and writes one change-log row; non-sealed requests answer 409
+  - Without a seal key the sealed policy keeps hashes and sizes only; credentials are removed before sealing
+- 2026-11-02 · `feat(adminapi)` · Search requests and read their timeline and attempts (HUB-207) · HUB-207 · F-16
+  - GET /admin/v1/requests searches by tenant, integration, status, code, vendor, account, idempotency key and a ≤ 31-day range, newest first, with cursor pages
+  - GET /requests/{id}, /timeline (events in seq order with sha256 and size on every event) and /attempts (version per attempt)
+  - tenant_viewer sees only its tenants (404 outside them); migration 00008 adds the explorer and DLQ indexes
 - 2026-11-02 · `feat(control)` · Expose Publisher.Edit for validated config-tree edits (HUB-201) · HUB-201 · F-16
   - Admin resource handlers edit the config tree through one primitive: locked, fully validated, archived, logged and announced
 - 2026-11-02 · `feat(adminapi)` · Read the change log and pause integrations through the publisher lock (HUB-201) · HUB-201 · F-16
