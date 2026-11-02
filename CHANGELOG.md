@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Serve transformers with golden-gated versions, dry-run and run-goldens (HUB-202) · HUB-202 · F-16
+  - GET /admin/v1/transformers (kind, capability, vendor_id, q filters), /transformers/{id}, /versions and /versions/{n} with YAML, fixtures and golden summary
+  - POST /transformers/{id}/versions creates version n+1 with its fixtures; a version whose goldens fail is refused with 422 goldens_pass and never exists
+  - POST /transformers/run-goldens reports pass/fail and JSON-pointer diffs per fixture; POST /transformers/dry-run shows the vendor request (credentials masked) or the canonical response without sending anything
 - 2026-11-02 · `feat(adminapi)` · Serve capabilities with additive-only immutable minors (HUB-202) · HUB-202 · F-16
   - GET/POST /admin/v1/capabilities, GET /capabilities/{key}, GET/POST /capabilities/{key}/versions
   - New capabilities and minors write their JSON Schemas into the published snapshot; the full build compiles them before anything is archived
