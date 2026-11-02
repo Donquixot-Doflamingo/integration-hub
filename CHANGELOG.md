@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Create, read, update and transition accounts with write-only secrets (HUB-203) · HUB-203 · F-16
+  - GET/POST /admin/v1/accounts, GET/PATCH /accounts/{id} (merge-patch of config and quota, If-Match → 412)
+  - Initial credentials go to the credential store as the active slot v1; responses show slot metadata only
+  - POST /accounts/{id}/lifecycle: active -> draining -> retired; retire answers 409 RETIRE_BLOCKED with the guard's pinned/session counts and deletes the credentials
 - 2026-11-02 · `feat(control)` · Expose Publisher.Edit for validated config-tree edits (HUB-201) · HUB-201 · F-16
   - Admin resource handlers edit the config tree through one primitive: locked, fully validated, archived, logged and announced
 - 2026-11-02 · `feat(adminapi)` · Read the change log and pause integrations through the publisher lock (HUB-201) · HUB-201 · F-16
