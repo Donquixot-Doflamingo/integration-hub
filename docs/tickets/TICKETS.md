@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **198** · done: **141** · todo: **55** · other (in-progress/in-review/blocked): **2**
+Total tickets: **198** · done: **141** · todo: **54** · other (in-progress/in-review/blocked): **3**
 
 ## Epics
 
@@ -1491,15 +1491,15 @@ Serve `/admin/v1` in the `admin` role with an OIDC stub for dev (static issuer, 
 
 ### HUB-201 — Change log with mandatory reason
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-200, HUB-047 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** in-progress · **Depends on:** HUB-200, HUB-047 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-201-change-log`
 
 `change_log` table and middleware recording actor, action, object, before, after, reason for every admin mutation; mutations without a reason are rejected (DESIGN §16.1).
 
 **Acceptance criteria**
 - [ ] Every mutating endpoint writes exactly one change_log row (enforced by a test that enumerates routes)
-- [ ] Missing reason → 400
-- [ ] `GET /admin/v1/change-log` with filters
+- [x] Missing reason → 400
+- [x] `GET /admin/v1/change-log` with filters
 
 ### HUB-202 — Admin: vendors, capabilities, transformers
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend

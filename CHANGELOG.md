@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Read the change log and pause integrations through the publisher lock (HUB-201) · HUB-201 · F-16
+  - GET /admin/v1/change-log (filters, cursor pages, newest first) and /change-log/{id} with before/after
+  - Pause and resume integrations with a mandatory 3–1024 character reason; each writes one change-log row
+  - Publisher edits are serialised across admin replicas by a Postgres advisory lock
 - 2026-11-02 · `feat(adminapi)` · Serve /admin/v1 with OIDC auth, a dev issuer stub and per-operation RBAC (HUB-200) · HUB-200 · F-16
   - hub admin serves /admin/v1: ES256 OIDC tokens (JWKS via discovery), roles admin ⊃ editor ⊃ viewer and tenant_viewer per operation
   - HUB_ADMIN_DEV_OIDC=true runs a dev issuer stub that mints tokens; with no issuer every admin request is 401

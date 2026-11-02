@@ -211,6 +211,7 @@ type IntegrationFile struct {
 	Grants        []string `yaml:"grants"`
 	ActiveVersion int      `yaml:"active_version"`
 	Paused        bool     `yaml:"paused"`
+	PausedReason  string   `yaml:"paused_reason,omitempty"`
 	Description   string   `yaml:"description,omitempty"`
 	// MovesMoneyOrQuota makes Idempotency-Key mandatory and gates hubmcp invokes (contracts).
 	MovesMoneyOrQuota bool `yaml:"moves_money_or_quota"`
