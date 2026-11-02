@@ -15,6 +15,18 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 - 2026-11-02 · `feat(hubctl)` · Log in to the control plane and show the current identity (HUB-210) · HUB-210 · F-17
   - hubctl login -dev gets a token from the admin's dev OIDC stub and saves it with mode 0600
   - hubctl whoami prints subject, roles and tenant scope; admin errors print their code, details and request id
+- 2026-11-02 · `feat(adminapi)` · Serve transformers with golden-gated versions, dry-run and run-goldens (HUB-202) · HUB-202 · F-16
+  - GET /admin/v1/transformers (kind, capability, vendor_id, q filters), /transformers/{id}, /versions and /versions/{n} with YAML, fixtures and golden summary
+  - POST /transformers/{id}/versions creates version n+1 with its fixtures; a version whose goldens fail is refused with 422 goldens_pass and never exists
+  - POST /transformers/run-goldens reports pass/fail and JSON-pointer diffs per fixture; POST /transformers/dry-run shows the vendor request (credentials masked) or the canonical response without sending anything
+- 2026-11-02 · `feat(adminapi)` · Serve capabilities with additive-only immutable minors (HUB-202) · HUB-202 · F-16
+  - GET/POST /admin/v1/capabilities, GET /capabilities/{key}, GET/POST /capabilities/{key}/versions
+  - New capabilities and minors write their JSON Schemas into the published snapshot; the full build compiles them before anything is archived
+  - A minor that removes or renames a field, tightens a request constraint or drops an x-pii tag is refused with 422 (check additive_change)
+- 2026-11-02 · `feat(adminapi)` · Serve vendors and vendor endpoints with ETag and If-Match (HUB-202) · HUB-202 · F-16
+  - GET/POST /admin/v1/vendors, GET/PUT /vendors/{id}: vendors are edited in the config tree and published through the full snapshot build
+  - Vendors carry an ETag (quoted revision); PUT with a stale If-Match answers 412 PRECONDITION_FAILED with current_etag
+  - POST /vendors/{id}/endpoints adds <name>@<n+1>; existing endpoint versions never change
 - 2026-11-02 · `feat(control)` · Expose Publisher.Edit for validated config-tree edits (HUB-201) · HUB-201 · F-16
   - Admin resource handlers edit the config tree through one primitive: locked, fully validated, archived, logged and announced
 - 2026-11-02 · `feat(adminapi)` · Read the change log and pause integrations through the publisher lock (HUB-201) · HUB-201 · F-16
