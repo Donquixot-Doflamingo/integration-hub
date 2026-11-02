@@ -122,3 +122,41 @@ func BenchmarkAuthMiddleware(b *testing.B) {
 		b.Errorf("p99 %s over 100 µs", p99)
 	}
 }
+
+// TestRotatedKeyOverlap is HUB-206: a rotated key (state expiring) keeps working until the
+// overlap ends and then gets 401 on the same snapshot; the replacement works throughout; a key
+// past its own expiry is refused too.
+func TestRotatedKeyOverlap(t *testing.T) {
+	start := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	past := start.Add(-time.Minute)
+	tn := &registry.Tenant{Tenant: "rot", APIKeys: []registry.APIKey{
+		{KeyID: "k_old", Hash: HashKey("hk_test_old"), Scopes: []string{"invoke"}, State: registry.KeyExpiring, ExpiresAt: &end, ReplacedBy: "k_new"},
+		{KeyID: "k_new", Hash: HashKey("hk_test_new"), Scopes: []string{"invoke"}, State: registry.KeyActive},
+		{KeyID: "k_exp", Hash: HashKey("hk_test_expired"), Scopes: []string{"invoke"}, State: registry.KeyActive, ExpiresAt: &past},
+	}}
+	snap := withTenants(t, devSnapshot(t), tn)
+	tests := []struct {
+		name, key string
+		at        time.Time
+		ok        bool
+	}{
+		{"old key during the overlap", "hk_test_old", start, true},
+		{"old key just before the end", "hk_test_old", end.Add(-time.Millisecond), true},
+		{"old key at the end", "hk_test_old", end, false},
+		{"old key after the end", "hk_test_old", end.Add(time.Hour), false},
+		{"new key during the overlap", "hk_test_new", start, true},
+		{"new key after the overlap", "hk_test_new", end.Add(time.Hour), true},
+		{"key past its own expiry", "hk_test_expired", start, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := New(Deps{Snapshots: staticSnapshots{snap}, Now: func() time.Time { return tt.at }})
+			h := withRequestID(s.authenticate(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })))
+			rec := call(t, h, "int_evt_brandA", "Bearer "+tt.key)
+			if (rec.Code == http.StatusNoContent) != tt.ok || (!tt.ok && rec.Code != http.StatusUnauthorized) {
+				t.Fatalf("status %d, want ok=%v", rec.Code, tt.ok)
+			}
+		})
+	}
+}

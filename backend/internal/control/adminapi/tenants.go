@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"go.yaml.in/yaml/v3"
 
@@ -301,12 +300,4 @@ func (s *Server) updateTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeTenant(w, r, http.StatusOK, res, id)
-}
-
-// keyState is the contract ApiKeyState of a stored key at now.
-func keyState(k registry.APIKey, _ time.Time) string {
-	if k.State == "" {
-		return "active"
-	}
-	return k.State
 }

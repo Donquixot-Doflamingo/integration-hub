@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Mint, rotate with overlap and revoke API keys; the edge honours expiry (HUB-206) · HUB-206 · F-16
+  - GET/POST /admin/v1/api-keys, GET /api-keys/{id}, POST /api-keys/{id}/revoke and /rotate; the plaintext key appears only in the create and rotate responses
+  - A rotated key stays valid (state expiring) for overlap_ms and then gets 401 on every node, without another publish
+  - Tenant YAML keys gain prefix, description, created_at, expires_at and replaced_by; states are validated (expiring needs expires_at)
 - 2026-11-02 · `feat(adminapi)` · Create, read and update tenants; disabled tenants' keys get 401 (HUB-206) · HUB-206 · F-16
   - GET/POST /admin/v1/tenants, GET/PATCH /tenants/{id} (merge-patch of display fields, rate limit and disabled; If-Match → 412)
   - tenant_viewer sees only its own tenants (404 otherwise)

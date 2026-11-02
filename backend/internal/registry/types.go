@@ -1,6 +1,8 @@
 package registry
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -369,6 +371,35 @@ type APIKey struct {
 	Hash   string   `yaml:"hash"` // "sha256:<64 hex>" of the full key
 	Scopes []string `yaml:"scopes"`
 	State  string   `yaml:"state"` // active | expiring | revoked
+	// Prefix is the first 12 characters of the key, for identification (never the secret part).
+	Prefix      string `yaml:"prefix,omitempty"`
+	Description string `yaml:"description,omitempty"`
+	// CreatedAt is when the key was minted; ExpiresAt ends it (a key's own expiry, or the end of
+	// a rotation overlap, state expiring). ReplacedBy names the key a rotation minted for it.
+	CreatedAt  *time.Time `yaml:"created_at,omitempty"`
+	ExpiresAt  *time.Time `yaml:"expires_at,omitempty"`
+	ReplacedBy string     `yaml:"replaced_by,omitempty"`
+}
+
+// API key states as stored (the admin API also reports expired: a key past its ExpiresAt).
+const (
+	KeyActive   = "active"
+	KeyExpiring = "expiring"
+	KeyRevoked  = "revoked"
+)
+
+// HashKey returns the stored form of an API key: "sha256:<hex>" (DESIGN §16.5). The edge
+// hashes presented keys with it; the admin API hashes the keys it mints.
+func HashKey(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// Usable reports whether the key authenticates at now: not revoked and not past its expiry.
+// A rotated key (expiring) keeps working until the overlap ends, then stops on every node
+// without another snapshot (DESIGN §16.5).
+func (k APIKey) Usable(now time.Time) bool {
+	return k.State != KeyRevoked && (k.ExpiresAt == nil || now.Before(*k.ExpiresAt))
 }
 
 // TenantLimit is the tenant-level fairness budget at the edge.
