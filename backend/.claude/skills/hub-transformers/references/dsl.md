@@ -16,6 +16,7 @@ The authoritative grammar is the parser in `internal/transform`; if this file an
 | `batch` | request | `{ path, max }` |
 | `response` | response | canonical output fields ← expressions |
 | `errors` | response | ordered rules `{ when, code, retryable, retry_after_ms?, message? }` |
+| `session` | response | vendor session data of a multi-step operation ← expressions over `res`, `req`, `account` (never `creds`, `hdr`, `session`); evaluated on success only; opens a session (`X-Hub-Session`) when at least one field is non-nil; ≤ 16 KB; a key `vendor_txn_id` is also kept in its own column (HUB-175) |
 | `stream` | stream | per-chunk mapping to canonical chunk (`delta.text`, `finish_reason`, `usage`) |
 | `supports` | request (LLM) | `[tools, vision, json_mode]` capability flags checked at publish |
 
@@ -43,7 +44,13 @@ response:
   status:     len(res.body.unprocessed ?? []) == 0 ? "ok" : "partial"
   vendor_ref: header(res, "X-Request-Id")
 ```
-Multi-step (session):
+Multi-step (session). Step 1's response transformer keeps what step 2 needs:
+```yaml
+session:
+  vendor_txn_id: res.body.txn        # also stored in vendor_sessions.vendor_txn_id
+  user: req.user.id                  # req is readable in session: (not in response:)
+```
+Step 2's request transformer reads it back:
 ```yaml
 body:
   txn: session.vendor_txn_id
@@ -61,17 +68,23 @@ body:
 ```json
 { "status": 429, "headers": { "Retry-After": "3" }, "body": { "status": "fail" } }
 ```
+`*.expected_response.json` for a success case of a transformer with a `session:` section (the session must be pinned in every success case)
+```json
+{ "response": { "status": "ok", "accepted": 1, "rejected": [] }, "session": { "vendor_txn_id": "vr-1", "user": "u-1" } }
+```
 `*.expected_response.json` for an error case
 ```json
 { "error": { "code": "UPSTREAM_RATE_LIMITED", "retryable": true, "retry_after_ms": 3000 } }
 ```
-Optional `_context` in `*.input.json` sets `hdr`, `account.config`, `session` and a fixed `now` (RFC 3339) for that case.
+Optional `_context` in `*.input.json` sets `hdr`, `account.config`, `session` and a fixed `now` (RFC 3339) for that case. In `*.vendor_response.json` it may also set `req` (the canonical request a `session:` section reads).
 
 ## Common compile/publish errors
 | Error | Fix |
 | --- | --- |
 | unknown field `req.user.uid` | field not in the capability schema; fix the path or request a schema change |
 | creds used in body target | move to header/auth, or justify `allow_creds_in_body` |
+| `creds.* is never allowed in session` | session data is stored in Postgres; keep only non-secret vendor state (txn id) |
+| `/session: unexpected` in a golden | the transformer maps a session: pin it under `"session"` in `expected_response.json` |
 | expression too deep / output too large | simplify; split into stdlib call; check batch max |
 | response output does not conform | output field names/types must match the capability response schema |
 | goldens failed | read the diff; update the transformer or (after doc check) the golden |

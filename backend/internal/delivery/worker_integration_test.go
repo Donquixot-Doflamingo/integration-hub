@@ -23,6 +23,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/sessions"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/mockvendor"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
@@ -378,7 +379,7 @@ func TestPausedIntegrationIsHeldWithoutAnAttempt(t *testing.T) {
 // active at send time unless it is pinned or bound to a vendor session, whether it waited in
 // the queue or parked behind an open breaker. Every attempt records the version it used.
 func TestSendTimeVersion(t *testing.T) {
-	sess := "ses_01JTESTSESSION0000000000000"
+	var sess string // opened by the session case on v2 / ct-brandA-in
 	cases := []struct {
 		name   string
 		edit   func(*core.Envelope)
@@ -395,6 +396,14 @@ func TestSendTimeVersion(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newRig(t)
 			r.route(mockvendor.Behaviour{Status: 200, Body: okBody})
+			if tc.name == "session" {
+				ses, err := sessions.Create(t.Context(), r.db, sessions.Open{TenantID: "orders-service", IntegrationID: "int_evt_brandA",
+					Version: 2, AccountID: "ct-brandA-in", Data: map[string]any{"step": "one"}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				sess = ses.ID
+			}
 			env := r.enqueueWith("int_evt_brandA", 6*time.Hour, tc.edit, tc.parked)
 			// The publish lands while the envelope waits: version 1 becomes active.
 			snap := r.snaps.Snapshot()

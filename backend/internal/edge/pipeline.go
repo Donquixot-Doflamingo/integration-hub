@@ -12,6 +12,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/delivery"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/resolve"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/sessions"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 )
 
@@ -38,6 +39,8 @@ type prepared struct {
 	trailOpts   audit.TrailOptions // for the shadow copy's own trail
 	attempts    int
 	attemptRows []audit.Attempt
+	// session is the vendor session of a later step (X-Hub-Session), nil on step 1.
+	session *sessions.Session
 }
 
 // prepare runs DESIGN §5.1 steps 1–4 for one call: scope, operation, body limit, schema
@@ -85,11 +88,6 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 	if p.op == nil {
 		return p, &core.CanonicalError{Code: core.CodeOperationNotFound, Message: "The capability has no operation " + operation}
 	}
-	if r.Header.Get("X-Hub-Session") != "" {
-		// Vendor sessions arrive with multi-step capabilities (M6); none is open before then.
-		return p, &core.CanonicalError{Code: core.CodeSessionNotFound, Message: "Unknown or expired session"}
-	}
-
 	start = time.Now()
 	ce = validate(p.op, p.body)
 	p.timings.Observe(telemetry.StageValidate, start)
@@ -104,19 +102,34 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 	if routeKey == "" {
 		routeKey = RequestID(r.Context())
 	}
-	res, err := resolve.Resolve(c.Snap, c.Tenant.Tenant, id, 0, routeKey)
-	p.timings.Observe(telemetry.StageResolve, start)
-	if err != nil {
-		// authorize already handled unknown and not granted; anything else is a broken snapshot.
-		s.log.ErrorContext(r.Context(), "resolve failed", slog.String("integration", id), slog.String("error", err.Error()))
-		return p, internalError()
+	var res resolve.Resolution
+	if sid := r.Header.Get("X-Hub-Session"); sid != "" {
+		// A later step of a vendor session: its exact version and account (DESIGN §6.3 row 6).
+		res, ce = s.resolveSession(r.Context(), p, id, sid)
+		p.timings.Observe(telemetry.StageResolve, start)
+		if ce != nil {
+			return p, ce
+		}
+	} else {
+		var err error
+		res, err = resolve.Resolve(c.Snap, c.Tenant.Tenant, id, 0, routeKey)
+		p.timings.Observe(telemetry.StageResolve, start)
+		if err != nil {
+			// authorize already handled unknown and not granted; anything else is a broken snapshot.
+			s.log.ErrorContext(r.Context(), "resolve failed", slog.String("integration", id), slog.String("error", err.Error()))
+			return p, internalError()
+		}
 	}
 	p.res = res
-	p.trail.Add(audit.IntegrationResolved, 0, nil, map[string]any{
+	resolved := map[string]any{
 		"integration": id, "version": res.VersionNumber, "vendor": res.Target.Vendor, "account": res.Target.Account,
 		"transformers": map[string]string{"request": res.Target.Transformer.Request.String(), "response": res.Target.Transformer.Response.String()},
 		"target_index": res.TargetIndex, "policy": string(p.trail.Policy()), "snapshot_version": res.SnapshotVersion,
-	})
+	}
+	if p.session != nil { // meta only: never the session data
+		resolved["session"] = delivery.SessionMeta(p.session.ID, "used", p.session.Version, p.session.AccountID)
+	}
+	p.trail.Add(audit.IntegrationResolved, 0, nil, resolved)
 
 	p.hdr = map[string]any{}
 	for name, key := range hdrAllowlist {
@@ -162,7 +175,8 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, p *prepared, ce *c
 // shadow starts the version's shadow copy of the request, if any (DESIGN §6.4). It never
 // delays or changes the caller's answer.
 func (s *Server) shadow(ctx context.Context, r *http.Request, p *prepared) {
-	if s.deps.Shadow == nil || p.res.Version == nil || p.res.Version.Shadow == nil {
+	// A later session step is bound to its vendor session, which the shadow target never saw.
+	if s.deps.Shadow == nil || p.res.Version == nil || p.res.Version.Shadow == nil || p.session != nil {
 		return
 	}
 	s.deps.Shadow.Copy(ctx, delivery.Job{

@@ -45,7 +45,7 @@ func (c *Config) CompileTransformer(ref TransformerRef) (*transform.Program, err
 	}
 	spec := transform.Spec{
 		ID: t.Transformer, Version: t.Version, Kind: string(t.Kind), Capability: t.Capability,
-		Request: t.Request, Response: t.Response, Errors: t.Errors, Batch: t.Batch, AllowCredsInBody: t.AllowCredsInBody,
+		Request: t.Request, Response: t.Response, Errors: t.Errors, Batch: t.Batch, Session: t.Session, AllowCredsInBody: t.AllowCredsInBody,
 	}
 	return transform.Compile(spec, transform.Options{RequestSchema: op.RequestSchema, ValidateResponse: op.Response.Validate})
 }

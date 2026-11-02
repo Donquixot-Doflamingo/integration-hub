@@ -30,6 +30,25 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Every control-plane write records actor, reason, before and after in hub.change_log
   - Rows cannot be updated or deleted (trigger)
   - ADR-0010: the snapshot archive is the registry's source of truth
+- 2026-11-02 · `test(edge)` · prove session step 2 stays on v7 after publishing v8 · HUB-183 · F-14
+  - make itest opens a session on v7, publishes v8 (new account and transformers), and shows step 2 served by v7's account and transformers with the session's txn id, in sync and wait mode, while a session opened after the publish runs on v8
+  - HUB-175 and HUB-183 are done
+
+- 2026-11-02 · `feat(edge)` · open and pin vendor sessions in the invoke pipeline · HUB-175 · F-14
+  - A successful step 1 whose response transformer maps session data answers 200 with `X-Hub-Session: ses_…`; the session is pinned to the version and account that served it
+  - A request with `X-Hub-Session` runs on that exact version and account even after a publish, and its request transformer reads the data as `session.*`, in sync, wait and async mode and in dry-run; unknown, expired or another integration's sessions get 404 `SESSION_NOT_FOUND`
+  - Queued steps carry `session_id`: the worker pins them the same way and dead-letters them as `SESSION_NOT_FOUND` if the session expired in the queue
+  - Session open and use are in the audit trail (id, version, account; never the data); session data with an Aadhaar-like number fails the step as `TRANSFORM_FAILED` and is never stored
+
+- 2026-11-02 · `feat(sessions)` · store vendor sessions pinned to version and account · HUB-175 · F-14
+  - New table hub.vendor_sessions (migration 00006): a session id (`ses_` + ULID) is pinned to the tenant, integration, version and account that opened it and expires after 10 minutes by default
+  - The store and the table both refuse session data holding an Aadhaar-like number (12 digits, optionally 4-4-4): the Aadhaar number is never stored
+  - `sessions.Expire` (scheduler sweep) and `sessions.CountOpen` (account retire guard) are ready for wiring; `resolve.ResolveSession` routes a later step to the exact version and the target on the session's account
+
+- 2026-11-02 · `feat(transform)` · map vendor session data in response transformers · HUB-175 · F-04
+  - Response transformers may declare a `session:` section (expressions over res, req and account; creds, hdr and session are refused at compile) that maps what a later step of a multi-step operation needs, such as the vendor txn id
+  - `Program.MapResponseSession` returns it on success only, bounded to 16 KB and the transform time budget; goldens pin it as `"session"` in `expected_response.json` and vendor-response fixtures may set `_context.req`
+
 - 2026-10-31 · `fix(delivery)` · retry transformer time-budget overruns and check breakers before transforming · HUB-149 · F-04
   - A transform that overruns its 5 ms wall-clock budget is re-run once; a second overrun is TRANSFORM_FAILED with reason time_budget and retryable, so a GC pause or a busy node no longer dead-letters a healthy request (seen in CI)
   - Breakers are checked before the transform (a refused call costs no transform); the account limiter waits right before the send

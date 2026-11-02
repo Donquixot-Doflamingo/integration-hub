@@ -165,6 +165,8 @@ type TransformerFile struct {
 	Response         yaml.Node `yaml:"response,omitempty"`
 	Errors           yaml.Node `yaml:"errors,omitempty"`
 	Batch            yaml.Node `yaml:"batch,omitempty"`
+	// Session (response transformers) maps the vendor session data of a multi-step operation.
+	Session yaml.Node `yaml:"session,omitempty"`
 }
 
 // TransformerRef is "T2@3".

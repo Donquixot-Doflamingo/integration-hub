@@ -48,6 +48,7 @@ type Program struct {
 	method, path          string
 	headers, query        []cfield
 	body, response        *cnode
+	session               *cnode
 	errors                []crule
 	batchPath             string
 	batchMax              int
@@ -61,6 +62,9 @@ func (p *Program) Ref() string { return p.ref }
 
 // Kind is request or response.
 func (p *Program) Kind() string { return p.kind }
+
+// HasSession reports whether the transformer maps vendor session data (a session: section).
+func (p *Program) HasSession() bool { return p.session != nil }
 
 // Batch returns the batchable body array and its max size, if declared (DESIGN §7.5).
 func (p *Program) Batch() (path string, maxItems int) { return p.batchPath, p.batchMax }
@@ -100,6 +104,9 @@ func CompiledExpressions() int64 { return compiled.Load() }
 var (
 	requestVars  = []string{"req", "hdr", "account", "creds", "session", "now", "uuid"}
 	responseVars = []string{"res", "account", "now", "uuid"}
+	// sessionVars: a response transformer's session: section also reads the canonical request
+	// (e.g. which user opened the session). Never creds or hdr: session data is stored.
+	sessionVars = []string{"res", "req", "account", "now", "uuid"}
 )
 
 // allowedBuiltins are the expr-lang builtins that are part of the DESIGN §7.3 standard library.
@@ -147,7 +154,7 @@ func Compile(s Spec, o Options) (*Program, error) {
 			return nil, &CompileError{Transformer: s.Ref(), Problems: []Problem{{Message: "request schema: " + err.Error()}}}
 		}
 	}
-	c := &compiler{spec: s, limits: o.Limits, schema: schema, ce: &CompileError{Transformer: s.Ref()}}
+	c := &compiler{spec: s, limits: o.Limits, schema: schema, ce: &CompileError{Transformer: s.Ref()}, mapping: s.Kind}
 	if s.Kind == "request" {
 		c.vars, c.otherVars = requestVars, responseVars
 	} else {
@@ -171,6 +178,9 @@ func Compile(s Spec, o Options) (*Program, error) {
 	}
 	if pt.response != nil {
 		p.response = c.node(pt.response, false)
+	}
+	if pt.session != nil {
+		p.session = c.sessionNode(pt.session)
 	}
 	for _, r := range pt.errors {
 		cr := crule{path: r.path, code: r.code, retryable: r.retryable,
@@ -196,6 +206,17 @@ type compiler struct {
 	vars, otherVars []string
 	opts            []expr.Option
 	ce              *CompileError
+	mapping         string // request | response | session: the section being compiled, for errors
+}
+
+// sessionNode compiles the session: section with its own variables (sessionVars). creds is
+// never allowed: session data is stored in Postgres (DESIGN §14, no secrets at rest).
+func (c *compiler) sessionNode(t *tmpl) *cnode {
+	vars, other, opts, mapping := c.vars, c.otherVars, c.opts, c.mapping
+	defer func() { c.vars, c.otherVars, c.opts, c.mapping = vars, other, opts, mapping }()
+	c.vars, c.otherVars, c.mapping = sessionVars, []string{"hdr", "session"}, "session"
+	c.opts = exprOptions(sessionVars, c.limits)
+	return c.node(t, true)
 }
 
 // node compiles a template; noCreds forbids creds.* (request body unless allow_creds_in_body).
@@ -240,13 +261,17 @@ func (c *compiler) expression(n *cnode, src string, noCreds bool) {
 	}
 	for _, id := range v.idents {
 		if !slices.Contains(c.vars, id) && slices.Contains(c.otherVars, id) {
-			c.ce.add(n.path, "%s is not available in %s mapping (DESIGN §7.2)", id, c.spec.Kind)
+			c.ce.add(n.path, "%s is not available in %s mapping (DESIGN §7.2)", id, c.mapping)
 			failed = true
 		}
 	}
 	if slices.Contains(v.idents, "creds") {
 		n.usesCreds = true
-		if noCreds {
+		switch {
+		case c.mapping == "session":
+			c.ce.add(n.path, "creds.* is never allowed in session: session data is stored (DESIGN §14)")
+			failed = true
+		case noCreds:
 			c.ce.add(n.path, "creds.* may only be used in headers or query (set allow_creds_in_body to override, DESIGN §7.2)")
 			failed = true
 		}

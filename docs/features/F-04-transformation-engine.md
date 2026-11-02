@@ -51,12 +51,13 @@ Vendor mappings scattered in caller code are untested and diverge. Mappings in t
 7. A transformer version is immutable; references are `Name@version`.
 8. Each production transformer file cites the vendor API doc URL it was verified against (DESIGN §0).
 9. Benchmark `BenchmarkTransform4KB` ≤ 0.5 ms p99 (DESIGN §7.6.5).
+10. Response transformers may declare a `session:` section (HUB-175, F-14): a mapping of session fields evaluated on success only, against `res`, `req` and `account` (`creds`, `hdr` and `session` are rejected at compile; `req.*` paths are checked against the capability request schema). `Program.MapResponseSession` returns it (nil when every field is nil); it is bounded by `MaxSessionBytes` (16 KB) and the same time budget. Goldens pin it as `"session"` in `expected_response.json`; vendor-response fixtures may carry `_context.req`.
 
 ## Data model impact
 `transformers(transformer_id, version, kind, capability, endpoint_id, yaml, fixtures)` immutable (DESIGN §18.2).
 
 ## Config impact
-Transformer YAML schema (kind `request|response|inbound`, `vendor_endpoint`, `request`, `response`, `errors`, `batch`, `stream`, `supports`, `allow_creds_in_body`).
+Transformer YAML schema (kind `request|response|inbound`, `vendor_endpoint`, `request`, `response`, `errors`, `session`, `batch`, `stream`, `supports`, `allow_creds_in_body`).
 
 ## Observability
 | Kind | Name | Notes |
@@ -94,3 +95,4 @@ HUB-060 – HUB-079.
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-02 | `session:` section in response transformers (HUB-175) | backend-engineer |
