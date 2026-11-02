@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Show the breaker board and force breakers open or closed across nodes (HUB-209) · HUB-209 · F-16
+  - GET /admin/v1/breakers lists every breaker an active integration uses or that has shared state (state, hold, parked backlog), filterable by vendor, account and state; /breakers/{account}/{endpoint} adds config, forced transitions and integrations
+  - Admins force a breaker open or closed (optionally for a duration) and clear the hold; the hold is in Redis and in force on every node within about a second; clearing a forced-open breaker probes at once (half_open)
+  - A forced-closed breaker counts failures but never trips; the scheduler does not probe a held breaker
 - 2026-11-02 · `feat(adminapi)` · List, replay and purge dead letters by ids or by filter (HUB-209) · HUB-209 · F-16
   - GET /admin/v1/dlq (tenant, integration, vendor, account, reason, replayed, time range; newest first, cursor pages) and /dlq/{id} with the canonical body per payload policy, last vendor exchange and attempt history
   - POST /dlq/replay (editor) moves matching entries back to accepted; workers re-resolve and re-transform, so a fixed transformer applies; dry_run counts only, at most 10 000 per call
