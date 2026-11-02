@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Create integrations and patch their metadata with If-Match (HUB-205) · HUB-205 · F-16
+  - POST /admin/v1/integrations creates an integration without an active version; nodes see it only when its first draft is published (expected_active_version null)
+  - PATCH /integrations/{id} merges description, grants and moves_money_or_quota through the publish pipeline; integrations return an ETag and a stale If-Match answers 412 PRECONDITION_FAILED
 - 2026-11-02 · `feat(adminapi)` · Publish drafts, roll back and reweigh integrations with version guards (HUB-205) · HUB-205 · F-16
   - POST /versions/{n}/publish makes the draft the active version nodes run; failed checks answer 422 PUBLISH_VALIDATION_FAILED with contract pointers and meta.report
   - POST /rollback publishes a copy of to_version as the next version (v9 = v7); POST /weights creates version n+1 from the active one with new weights, published or left as the draft
