@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Search requests and read their timeline and attempts (HUB-207) · HUB-207 · F-16
+  - GET /admin/v1/requests searches by tenant, integration, status, code, vendor, account, idempotency key and a ≤ 31-day range, newest first, with cursor pages
+  - GET /requests/{id}, /timeline (events in seq order with sha256 and size on every event) and /attempts (version per attempt)
+  - tenant_viewer sees only its tenants (404 outside them); migration 00011 adds the explorer and DLQ indexes
 - 2026-11-02 · `feat(control)` · Expose Publisher.Edit for validated config-tree edits (HUB-201) · HUB-201 · F-16
   - Admin resource handlers edit the config tree through one primitive: locked, fully validated, archived, logged and announced
 - 2026-11-02 · `feat(adminapi)` · Read the change log and pause integrations through the publisher lock (HUB-201) · HUB-201 · F-16
