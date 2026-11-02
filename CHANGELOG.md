@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(hubctl)` · Export the live registry and plan a config directory against it (HUB-210) · HUB-210 · F-17
+  - hubctl export writes the latest published snapshot's config tree to a directory (references only, never secret values)
+  - hubctl plan prints per-object, path-level changes against live and exits 3 when there are changes
 - 2026-11-02 · `feat(hubctl)` · Log in to the control plane and show the current identity (HUB-210) · HUB-210 · F-17
   - hubctl login -dev gets a token from the admin's dev OIDC stub and saves it with mode 0600
   - hubctl whoami prints subject, roles and tenant scope; admin errors print their code, details and request id

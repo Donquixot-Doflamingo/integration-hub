@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -58,4 +59,29 @@ func TestAdminErrorsCarryTheRequestID(t *testing.T) {
 	if code := run([]string{"whoami", "-admin-url", url}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "hubctl login -dev") {
 		t.Fatalf("no token: %d %s", code, errb.String())
 	}
+}
+
+// fakeAdmin serves canned answers keyed "METHOD /path" (query ignored): []byte bodies raw,
+// anything else as JSON. Requests must carry a bearer token.
+func fakeAdmin(t *testing.T, routes map[string]any) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+			http.Error(w, "no token", http.StatusUnauthorized)
+			return
+		}
+		v, ok := routes[r.Method+" "+r.URL.Path]
+		if !ok {
+			http.Error(w, "unexpected "+r.Method+" "+r.URL.Path, http.StatusNotFound)
+			return
+		}
+		if b, raw := v.([]byte); raw {
+			_, _ = w.Write(b)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(v)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
 }
