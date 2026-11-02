@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `build(control)` · Regenerate sqlc models for the change log (HUB-170) · HUB-170 · F-14
+  - make sqlc-check passes again (HubChangeLog model)
 - 2026-11-02 · `feat(registry)` · Let a transformer version carry its own golden fixtures (HUB-341) · HUB-341 · F-14
   - transformers/<ID>/fixtures/v<N>/ holds the goldens of version N; other versions keep the shared fixtures
 - 2026-11-02 · `feat(delivery)` · Copy requests to shadow targets and prove weight stickiness (HUB-173) · HUB-173 · F-14

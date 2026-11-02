@@ -73,6 +73,21 @@ type HubCapability struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type HubChangeLog struct {
+	ChangeID        string             `json:"change_id"`
+	At              pgtype.Timestamptz `json:"at"`
+	Actor           string             `json:"actor"`
+	ActorRoles      []string           `json:"actor_roles"`
+	Action          string             `json:"action"`
+	ObjectType      string             `json:"object_type"`
+	ObjectID        string             `json:"object_id"`
+	Reason          string             `json:"reason"`
+	Before          []byte             `json:"before"`
+	After           []byte             `json:"after"`
+	SnapshotVersion pgtype.Int8        `json:"snapshot_version"`
+	RequestID       pgtype.Text        `json:"request_id"`
+}
+
 type HubConfigSnapshot struct {
 	Version   int64              `json:"version"`
 	Checksum  string             `json:"checksum"`
