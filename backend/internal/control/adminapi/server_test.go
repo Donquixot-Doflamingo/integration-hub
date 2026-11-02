@@ -43,8 +43,7 @@ var pathParam = regexp.MustCompile(`\{[a-z_]+\}`)
 func samplePath(p string) string { return pathParam.ReplaceAllString(p, "x1") }
 
 // TestRoutesMatchContract: every registered route is a contract operation with the same method,
-// path and x-required-role, and is mutating exactly when it is not GET (except the contract's
-// non-mutating POST actions, which declare no reason).
+// path and x-required-role, and every contract operation is registered (HUB-213).
 func TestRoutesMatchContract(t *testing.T) {
 	spec := contract.Load(t, "hub-admin.v1.yaml")
 	ops := map[string]contract.Operation{}
@@ -70,7 +69,11 @@ func TestRoutesMatchContract(t *testing.T) {
 			t.Errorf("%s: route role %s, contract x-required-role %s", rt.Op, rt.Role, want)
 		}
 	}
-	t.Logf("%d of %d contract operations implemented", len(seen), len(ops))
+	for id, op := range ops { // HUB-213: every operation of the contract is served
+		if !seen[id] {
+			t.Errorf("contract operation %s (%s %s) is not implemented", id, op.Method, op.Path)
+		}
+	}
 }
 
 // TestRBACMatrix: for every registered route and every role, a caller below the operation's role

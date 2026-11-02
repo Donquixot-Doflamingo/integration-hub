@@ -75,6 +75,8 @@ func (p *Publisher) now() time.Time {
 type tree struct {
 	files     map[string][]byte
 	contracts fs.FS
+	// base is the snapshot the edit started from (account draining compares against it).
+	base *registry.Snapshot
 }
 
 func (t *tree) sources() registry.Sources {
@@ -100,7 +102,7 @@ func (p *Publisher) load(ctx context.Context) (*tree, *registry.Snapshot, error)
 	if err != nil {
 		return nil, nil, err
 	}
-	t := &tree{files: map[string][]byte{}, contracts: src.Contracts}
+	t := &tree{files: map[string][]byte{}, contracts: src.Contracts, base: snap}
 	err = fs.WalkDir(src.Config, ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -422,16 +424,21 @@ func referenced(snap *registry.Snapshot) map[string]bool {
 	return out
 }
 
-// drainUnreferenced moves active accounts no active version targets to draining, and draining
+// drainUnreferenced moves active accounts that lost their last reference in this edit (targeted
+// by an active version of base, by none of snap) to draining, and draining
 // accounts that are targeted again back to active (DESIGN §6.5).
 func (t *tree) drainUnreferenced(snap *registry.Snapshot) ([]string, error) {
 	refs := referenced(snap)
+	before := map[string]bool{}
+	if t.base != nil {
+		before = referenced(t.base)
+	}
 	var drained []string
 	for _, id := range slices.Sorted(maps.Keys(snap.Accounts)) {
 		a := snap.Accounts[id]
 		next := a.State
 		switch {
-		case a.State == registry.AccountActive && !refs[id]:
+		case a.State == registry.AccountActive && !refs[id] && before[id]:
 			next = registry.AccountDraining
 			drained = append(drained, id)
 		case a.State == registry.AccountDraining && refs[id]:

@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `fix(control)` · Drain only accounts that lose their last reference, so new accounts stay active (HUB-203) · HUB-203 · F-15
+  - createAccount answers state active, as the contract says; an account drains only when a publish removes its last active reference
+  - The admin coverage test now fails when any hub-admin operation is not implemented (79 of 79)
 - 2026-11-02 · `feat(hubctl)` · Dry-run an integration and replay dead letters from the command line (HUB-212) · HUB-212 · F-17
   - hubctl dry-run INTEGRATION BODY.json prints the vendor request of the active version's main target, credentials redacted
   - hubctl replay counts matching dead letters first and replays only with -yes (-dry-run counts only)

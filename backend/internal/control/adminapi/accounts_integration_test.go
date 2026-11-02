@@ -53,10 +53,14 @@ func noSecrets(t *testing.T, body string, extra ...string) {
 // createTestAccount creates account id through the API (it drains at once: no version targets it).
 func createTestAccount(a *adminRig, id string) {
 	a.t.Helper()
-	resp, _ := a.do(RoleAdmin, http.MethodPost, "/accounts", `{"account_id":"`+id+`","vendor_id":"clevertap","region":"in","config":{"project_id":"P"},
+	resp, body := a.do(RoleAdmin, http.MethodPost, "/accounts", `{"account_id":"`+id+`","vendor_id":"clevertap","region":"in","config":{"project_id":"P"},
 		"credentials":{"account_id":"P","passcode":"`+accessSecrets[2]+`"},"reason":"test account"}`)
 	if resp.Code != http.StatusCreated {
 		a.t.Fatalf("create %s: %d %s", id, resp.Code, resp.Body)
+	}
+	// A new account is active: it only drains once it loses its last reference (DESIGN §6.5).
+	if acct, _ := body["account"].(map[string]any); acct["state"] != "active" {
+		a.t.Fatalf("new account %s state %v", id, acct["state"])
 	}
 }
 
@@ -70,6 +74,9 @@ func init() {
 		body: `{"target_state":"retired","reason":"brand moved away"}`, setup: func(a *adminRig) {
 			withRotator(a)
 			createTestAccount(a, "ct-mut-life")
+			if resp, _ := a.do(RoleAdmin, http.MethodPost, "/accounts/ct-mut-life/lifecycle", `{"target_state":"draining","reason":"brand moving away"}`); resp.Code != 200 {
+				a.t.Fatalf("drain before retire: %d %s", resp.Code, resp.Body)
+			}
 		}}
 }
 
@@ -148,6 +155,7 @@ func TestAccountLifecycle(t *testing.T) {
 	}{
 		{"targeted account cannot drain", "ct-brandA-in", "draining", nil, 409, CodeConflict},
 		{"active cannot retire", "ct-brandA-in", "retired", nil, 409, CodeConflict},
+		{"a new account is active and drains on request", "ct-life-acct", "draining", nil, 200, ""},
 		{"unreferenced draining cannot re-activate", "ct-life-acct", "active", nil, 409, CodeConflict},
 		{"retire blocked by pinned requests and sessions", "ct-life-acct", "retired",
 			func(context.Context, *registry.Snapshot, string) (int, int, error) { return 12, 3, nil }, 409, CodeRetireBlocked},
@@ -181,6 +189,12 @@ func TestAccountLifecycle(t *testing.T) {
 				return
 			}
 			acct, _ := body["account"].(map[string]any)
+			if tc.target != "retired" {
+				if acct["state"] != tc.target {
+					t.Fatalf("state %v, want %s", acct["state"], tc.target)
+				}
+				return
+			}
 			if acct["state"] != "retired" || len(acct["credentials"].([]any)) != 0 {
 				t.Fatalf("retired account %v", acct)
 			}
