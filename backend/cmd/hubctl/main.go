@@ -24,7 +24,7 @@ commands:
   creds ...
       Local dev credential file (hubctl creds for details).
 
-` + adminUsage + "\n\n" + configUsage
+` + adminUsage + "\n\n" + configUsage + "\n\n" + opsUsage
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -44,6 +44,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return exportCmd(args[1:], stdout, stderr)
 		case "plan":
 			return planCmd(args[1:], stdout, stderr)
+		case "dry-run":
+			return dryRunCmd(args[1:], stdout, stderr)
+		case "replay":
+			return replayCmd(args[1:], stdout, stderr)
 		}
 	}
 	if len(args) >= 2 && args[0] == "transform" && args[1] == "test" {

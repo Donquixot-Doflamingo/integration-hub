@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(hubctl)` · Dry-run an integration and replay dead letters from the command line (HUB-212) · HUB-212 · F-17
+  - hubctl dry-run INTEGRATION BODY.json prints the vendor request of the active version's main target, credentials redacted
+  - hubctl replay counts matching dead letters first and replays only with -yes (-dry-run counts only)
 - 2026-11-02 · `feat(hubctl)` · Export the live registry and plan a config directory against it (HUB-210) · HUB-210 · F-17
   - hubctl export writes the latest published snapshot's config tree to a directory (references only, never secret values)
   - hubctl plan prints per-object, path-level changes against live and exits 3 when there are changes

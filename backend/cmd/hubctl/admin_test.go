@@ -62,7 +62,7 @@ func TestAdminErrorsCarryTheRequestID(t *testing.T) {
 }
 
 // fakeAdmin serves canned answers keyed "METHOD /path" (query ignored): []byte bodies raw,
-// anything else as JSON. Requests must carry a bearer token.
+// func(*http.Request) any computed per request, anything else as JSON. Requests must carry a bearer token.
 func fakeAdmin(t *testing.T, routes map[string]any) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,6 +74,9 @@ func fakeAdmin(t *testing.T, routes map[string]any) string {
 		if !ok {
 			http.Error(w, "unexpected "+r.Method+" "+r.URL.Path, http.StatusNotFound)
 			return
+		}
+		if f, dynamic := v.(func(*http.Request) any); dynamic {
+			v = f(r)
 		}
 		if b, raw := v.([]byte); raw {
 			_, _ = w.Write(b)
