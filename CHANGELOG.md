@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Register tenant webhook endpoints behind the SSRF guard with rotatable secrets (HUB-206) · HUB-206 · F-16
+  - GET/POST /admin/v1/registrar-endpoints, GET/PATCH/DELETE /registrar-endpoints/{id}, POST /registrar-endpoints/{id}/rotate-secret
+  - URLs that resolve to private, loopback or link-local ranges are refused with 400 VALIDATION_FAILED (callbacks SSRF guard)
+  - The signing secret is stored as localfile://<id> and shown once; during a rotation overlap callbacks are signed with the new and the old secret, then only the new one
+  - Delete is refused while any integration version subscribes; pending deliveries to a deleted endpoint are dead-lettered
 - 2026-11-02 · `feat(adminapi)` · Mint, rotate with overlap and revoke API keys; the edge honours expiry (HUB-206) · HUB-206 · F-16
   - GET/POST /admin/v1/api-keys, GET /api-keys/{id}, POST /api-keys/{id}/revoke and /rotate; the plaintext key appears only in the create and rotate responses
   - A rotated key stays valid (state expiring) for overlap_ms and then gets 401 on every node, without another publish

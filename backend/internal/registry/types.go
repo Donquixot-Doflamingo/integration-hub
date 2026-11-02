@@ -410,8 +410,14 @@ type TenantLimit struct {
 
 // RegistrarEndpoint is backend/config/registrar/<endpoint_id>.yaml: a tenant webhook destination.
 type RegistrarEndpoint struct {
-	EndpointID string `yaml:"endpoint_id"`
-	Tenant     string `yaml:"tenant"`
-	URL        string `yaml:"url"`
-	SecretRef  string `yaml:"secret_ref"`
+	EndpointID  string `yaml:"endpoint_id"`
+	Tenant      string `yaml:"tenant"`
+	URL         string `yaml:"url"`
+	SecretRef   string `yaml:"secret_ref"`
+	Description string `yaml:"description,omitempty"`
+	Disabled    bool   `yaml:"disabled,omitempty"`
+	// SecretVersion is the active signing secret's slot version (default 1).
+	SecretVersion int `yaml:"secret_version,omitempty"`
+	// SecretOverlapUntil: until then callbacks also carry a signature with the previous secret.
+	SecretOverlapUntil *time.Time `yaml:"secret_overlap_until,omitempty"`
 }
