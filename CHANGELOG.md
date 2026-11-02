@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Serve /admin/v1 with OIDC auth, a dev issuer stub and per-operation RBAC (HUB-200) · HUB-200 · F-16
+  - hub admin serves /admin/v1: ES256 OIDC tokens (JWKS via discovery), roles admin ⊃ editor ⊃ viewer and tenant_viewer per operation
+  - HUB_ADMIN_DEV_OIDC=true runs a dev issuer stub that mints tokens; with no issuer every admin request is 401
+  - GET /admin/v1/me returns roles, tenant scope and UI permissions
 - 2026-11-02 · `docs(milestones)` · Accept M6 with mixed-version and rollback checks; write the M6 summary (HUB-184) · HUB-184 · F-14
   - M6 accepted: every §6.3 row, rollback, retire guard, rotation, shadow and mixed-version propagation proven by itests
   - docs/milestones/M6.md with Deviations; F-14 and F-15 shipped; shadow_total and credential logs in OBSERVABILITY

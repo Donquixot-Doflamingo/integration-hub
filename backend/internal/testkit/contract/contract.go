@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -221,4 +222,35 @@ func (s *Spec) do(tb testing.TB, req *http.Request, invalid bool) (int, []byte) 
 		tb.Error(err)
 	}
 	return resp.StatusCode, rb
+}
+
+// Operation is one operation of a contract: method, path template (without the server base),
+// operationId and its string-valued x- extensions (x-required-role, ...).
+type Operation struct {
+	Method, Path, ID string
+	Extensions       map[string]string
+}
+
+// Operations lists every operation of the contract, sorted by path then method.
+func (s *Spec) Operations() []Operation {
+	var out []Operation
+	for _, path := range s.doc.Paths.InMatchingOrder() {
+		item := s.doc.Paths.Value(path)
+		for method, op := range item.Operations() {
+			ext := map[string]string{}
+			for k, v := range op.Extensions {
+				if str, ok := v.(string); ok {
+					ext[k] = str
+				}
+			}
+			out = append(out, Operation{Method: method, Path: path, ID: op.OperationID, Extensions: ext})
+		}
+	}
+	slices.SortFunc(out, func(a, b Operation) int {
+		if c := strings.Compare(a.Path, b.Path); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Method, b.Method)
+	})
+	return out
 }

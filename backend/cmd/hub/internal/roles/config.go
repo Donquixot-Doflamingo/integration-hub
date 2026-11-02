@@ -82,6 +82,12 @@ type Config struct {
 	// CallbackAllowLoopback lets callbacks reach loopback registrar endpoints over http (dev
 	// receivers only; production leaves it false, DESIGN §12.1 SSRF guard).
 	CallbackAllowLoopback bool
+	// Admin auth (DESIGN §16.1): OIDCIssuer verifies real tokens; AdminDevOIDC runs the dev
+	// issuer stub instead (never in production: it mints tokens for anyone). Neither: 401 always.
+	OIDCIssuer     string
+	OIDCAudience   string
+	AdminDevOIDC   bool
+	AdminPublicURL string // the admin's external base URL (the dev issuer's iss)
 }
 
 // Load builds the config for role from flags (highest precedence), then HUB_* environment
@@ -102,7 +108,7 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	var (
 		c                                      = Config{Role: role, PGDSN: Secret(getenv("HUB_PG_DSN")), AuditMaskKey: Secret(getenv("HUB_AUDIT_MASK_KEY"))}
 		shutdownGrace, readyDrain, level, rate string
-		watch, debugHeaders, cbLoopback        bool
+		watch, debugHeaders, cbLoopback, devID bool
 	)
 	fs := flag.NewFlagSet("hub "+string(role), flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -125,10 +131,14 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	fs.StringVar(&c.DevKeyFile, "dev-key-file", env("HUB_DEV_KEY_FILE", ".data/dev.key"), "key file of the localfile credential source")
 	fs.BoolVar(&cbLoopback, "callback-allow-loopback", env("HUB_CALLBACK_ALLOW_LOOPBACK", "false") == "true", "dev only: allow callbacks to loopback http registrar endpoints")
 	fs.BoolVar(&debugHeaders, "debug-headers", env("HUB_DEBUG_HEADERS", "false") == "true", "gateway: send the debug-only X-Hub-Integration-Version header")
+	fs.StringVar(&c.OIDCIssuer, "oidc-issuer", env("HUB_OIDC_ISSUER", ""), "admin: OIDC issuer URL whose tokens are accepted")
+	fs.StringVar(&c.OIDCAudience, "oidc-audience", env("HUB_OIDC_AUDIENCE", ""), "admin: required token audience (optional)")
+	fs.BoolVar(&devID, "admin-dev-oidc", env("HUB_ADMIN_DEV_OIDC", "false") == "true", "dev only: run the admin OIDC issuer stub")
+	fs.StringVar(&c.AdminPublicURL, "admin-public-url", env("HUB_ADMIN_PUBLIC_URL", "http://localhost:8081"), "admin: external base URL (dev issuer iss)")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
-	c.ConfigWatch, c.DebugHeaders, c.CallbackAllowLoopback = watch, debugHeaders, cbLoopback
+	c.ConfigWatch, c.DebugHeaders, c.CallbackAllowLoopback, c.AdminDevOIDC = watch, debugHeaders, cbLoopback, devID
 	if fs.NArg() > 0 {
 		return Config{}, fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}
@@ -161,6 +171,9 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	}
 	if role == Worker && c.WorkerPool != "messaging" && c.WorkerPool != "llm" {
 		errs = append(errs, fmt.Errorf("pool: want messaging or llm, got %q", c.WorkerPool))
+	}
+	if c.AdminDevOIDC && c.OIDCIssuer != "" {
+		errs = append(errs, errors.New("admin-dev-oidc and oidc-issuer are exclusive: the stub would shadow the real issuer"))
 	}
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, err

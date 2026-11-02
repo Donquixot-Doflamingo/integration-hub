@@ -488,6 +488,9 @@ Flags override env. Env names: `HUB_*`. Loaded once at start into an immutable s
 | `HUB_AUDIT_MASK_KEY` | unset → random per process (masked identifiers then change on restart); ≥ 32 bytes, environment only | gateway (worker from M4) |
 | `HUB_CALLBACK_ALLOW_LOOPBACK` | `false`; `true` lets callbacks reach loopback registrar endpoints over http (the dev registrar `http://127.0.0.1:8097`). Never set in production: the SSRF guard otherwise refuses loopback | worker, dev only |
 | `HUB_DEBUG_HEADERS` | `false`; `true` adds the debug-only `X-Hub-Integration-Version` to 200 responses | gateway, dev/support only |
+| `HUB_OIDC_ISSUER`, `HUB_OIDC_AUDIENCE` | unset; the issuer whose ES256 tokens `/admin/v1` accepts (JWKS through discovery, re-fetched on an unknown `kid`); audience optional | admin |
+| `HUB_ADMIN_DEV_OIDC` | `false`; `true` runs the dev issuer stub (`/.well-known/openid-configuration`, `/oidc/jwks`, `POST /oidc/dev-token` minting a token for any subject and roles). Exclusive with `HUB_OIDC_ISSUER`. With neither, every admin request is 401 | admin, dev only |
+| `HUB_ADMIN_PUBLIC_URL` | `http://localhost:8081`; the admin's external base URL, used as the dev issuer's `iss` | admin |
 | `HUB_CONFIG_DIR` | `config` (dev registry, M1) | dev only |
 | `HUB_CONFIG_WATCH` | `false` (rebuild and swap on file changes, HUB-045) | dev only |
 | `HUB_DATA_DIR` | `.data` (local cache `snapshot.json.gz` of the last good snapshot, HUB-048) | all |

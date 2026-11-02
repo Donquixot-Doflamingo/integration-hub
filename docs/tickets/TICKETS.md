@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **198** · done: **141** · todo: **56** · other (in-progress/in-review/blocked): **1**
+Total tickets: **198** · done: **141** · todo: **55** · other (in-progress/in-review/blocked): **2**
 
 ## Epics
 
@@ -1479,15 +1479,15 @@ Golden fixtures live in `transformers/<ID>/fixtures/`, shared by every version o
 
 ### HUB-200 — Admin server, OIDC dev stub, RBAC and /me
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-080, HUB-006 · **Feature:** F-16 · **Stories:** US-16xx
+- **Status:** in-review · **Depends on:** HUB-080, HUB-006 · **Feature:** F-16 · **Stories:** US-16xx
 - **Branch:** `feat/HUB-200-admin-server-rbac`
 
 Serve `/admin/v1` in the `admin` role with an OIDC stub for dev (static issuer, signed dev tokens), RBAC `admin | editor | viewer | tenant_viewer`, and `GET /admin/v1/me` (DESIGN §16.1).
 
 **Acceptance criteria**
-- [ ] Unauthenticated → 401; insufficient role → 403 (table test per role)
-- [ ] `tenant_viewer` sees only its tenant's data
-- [ ] `/me` validates against `contracts/openapi/hub-admin.v1.yaml`
+- [x] Unauthenticated → 401; insufficient role → 403 (table test per role)
+- [x] `tenant_viewer` sees only its tenant's data
+- [x] `/me` validates against `contracts/openapi/hub-admin.v1.yaml`
 
 ### HUB-201 — Change log with mandatory reason
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend

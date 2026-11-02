@@ -95,7 +95,14 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	// ops is last so it is closed last: /readyz answers 503 while the public listener drains.
 	endpoints := []endpoint{{"ops", cfg.OpsAddr, opsHandler(cfg.Role, &ready, checks, metrics, log)}}
 	if cfg.Role.servesPublicHTTP() {
-		pub := telemetry.HTTPHandler(publicHandler(cfg.Role, dp), tp, string(cfg.Role))
+		h := publicHandler(cfg.Role, dp)
+		if cfg.Role == Admin {
+			if h, err = adminHandler(ctx, cfg, log, st, reg); err != nil {
+				_ = tp.Shutdown(ctx)
+				return err
+			}
+		}
+		pub := telemetry.HTTPHandler(h, tp, string(cfg.Role))
 		endpoints = append([]endpoint{{"http", cfg.HTTPAddr, pub}}, endpoints...)
 	}
 
@@ -170,8 +177,7 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	return runErr
 }
 
-// publicHandler is the role's public surface: the edge for the gateway. The control plane
-// (admin) is mounted by EP-08; until then its paths are 404.
+// publicHandler is the gateway's public surface (the edge); the admin role uses adminHandler.
 func publicHandler(role Role, dp *dataPlane) http.Handler {
 	if role == Gateway && dp != nil && dp.edge != nil {
 		return dp.edge.Handler()
