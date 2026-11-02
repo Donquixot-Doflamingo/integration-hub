@@ -97,7 +97,7 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	if cfg.Role.servesPublicHTTP() {
 		h := publicHandler(cfg.Role, dp)
 		if cfg.Role == Admin {
-			if h, err = adminHandler(ctx, cfg, log, st, reg); err != nil {
+			if h, err = adminHandler(ctx, cfg, metrics, log, st, reg); err != nil {
 				_ = tp.Shutdown(ctx)
 				return err
 			}

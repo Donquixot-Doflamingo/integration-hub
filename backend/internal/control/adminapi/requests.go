@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -38,21 +37,8 @@ func (s *Server) registerRequests() {
 	s.handle("unsealRequest", RoleAdmin, true, "POST /requests/{request_id}/unseal", s.unsealRequest)
 }
 
-// sealers holds each server's sealed-payload key source. Deps has no field for it yet
-// (change request: Deps.Sealer); cmd/hub sets it with SetSealer.
-var sealers sync.Map // *Server → *audit.Sealer
-
-// SetSealer gives the server the key source unsealRequest decrypts with (nil: unseal is 500).
-func (s *Server) SetSealer(sl *audit.Sealer) *Server {
-	sealers.Store(s, sl)
-	return s
-}
-
-func (s *Server) sealer() *audit.Sealer {
-	v, _ := sealers.Load(s)
-	sl, _ := v.(*audit.Sealer)
-	return sl
-}
+// sealer is the key source unsealRequest decrypts with (nil: unseal answers 500).
+func (s *Server) sealer() *audit.Sealer { return s.d.Sealer }
 
 // maxSearchSpan is the widest created_at range one search may cover (contract: ≤ 31 days);
 // defaultSearchSpan applies when from is omitted.

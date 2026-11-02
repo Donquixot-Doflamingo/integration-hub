@@ -215,3 +215,24 @@ func postJSON(t *testing.T, url, body string) (int, []byte) {
 	b, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, b
 }
+
+func TestCallbackHostAllowlist(t *testing.T) {
+	open := New(Deps{})
+	if !open.callbackHostAllowed("https://anything.example.org/cb") {
+		t.Fatal("an empty allowlist accepts any host (the SSRF guard still runs)")
+	}
+	s := New(Deps{CallbackHosts: []string{"hooks.orders.example", ".partners.example"}})
+	for raw, want := range map[string]bool{
+		"https://hooks.orders.example/cb":         true,
+		"https://HOOKS.orders.example:8443/cb":    true,
+		"https://a.partners.example/cb":           true,
+		"https://partners.example/cb":             false, // ".x" matches subdomains only
+		"https://evil-partners.example/cb":        false,
+		"https://hooks.orders.example.evil.io/cb": false,
+		"https://other.example/cb":                false,
+	} {
+		if got := s.callbackHostAllowed(raw); got != want {
+			t.Errorf("%s: %v, want %v", raw, got, want)
+		}
+	}
+}

@@ -19,9 +19,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
 )
 
 // Base is the API's path prefix.
@@ -38,8 +40,15 @@ type Deps struct {
 	Archive   *control.Archive
 	// Snapshot is the admin's current snapshot (reads that need no archive round trip).
 	Snapshot func() *registry.Snapshot
-	Log      *slog.Logger
-	Now      func() time.Time
+	// Sealer decrypts sealed payloads for unsealRequest (nil: unseal answers 500).
+	Sealer *audit.Sealer
+	// Upstream sends account connection tests (nil: a private client with its own metrics).
+	Upstream *upstream.Client
+	// CallbackHosts allowlists registrar endpoint hosts: "hooks.example.com" matches that host,
+	// ".example.com" any host under it. Empty: any public host (the SSRF guard still applies).
+	CallbackHosts []string
+	Log           *slog.Logger
+	Now           func() time.Time
 }
 
 // Route is one registered operation.

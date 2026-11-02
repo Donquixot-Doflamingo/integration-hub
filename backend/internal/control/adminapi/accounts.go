@@ -699,8 +699,8 @@ func (s *Server) deleteOldCredential(w http.ResponseWriter, r *http.Request) {
 	s.writeSlots(w, res)
 }
 
-// probeClient sends connection tests. Deps has no upstream client, so the admin builds its own
-// (same egress allowlist, TLS rules and timeouts as the data plane) with a private registry.
+// probeClient sends connection tests when Deps.Upstream is nil: a private client (same egress
+// allowlist, TLS rules and timeouts as the data plane) with its own metrics registry.
 var probeClient = sync.OnceValues(func() (*upstream.Client, error) {
 	return upstream.New(telemetry.NewMetrics("admin", "probe"), upstream.Options{})
 })
@@ -833,7 +833,10 @@ func (s *Server) probe(ctx context.Context, snap *registry.Snapshot, t upstream.
 		res.failed(core.CodeUpstreamAuthFailed, upperFirst(strings.TrimPrefix(err.Error(), "creds: ")))
 		return
 	}
-	client, err := probeClient()
+	client, err := s.d.Upstream, error(nil)
+	if client == nil {
+		client, err = probeClient()
+	}
 	if err != nil {
 		res.failed(core.CodeInternalError, "No upstream client")
 		return

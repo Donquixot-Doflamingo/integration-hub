@@ -59,7 +59,7 @@ func init() {
 		body: `{"reason":"Customer dispute SUP-4411: verify bureau response"}`,
 		setup: func(a *adminRig) {
 			sl := testSealer(a.t)
-			a.s.SetSealer(sl)
+			a.s.d.Sealer = sl
 			sealedRequest(a.t, a, unsealCaseID, sl)
 		}}
 }
@@ -72,7 +72,7 @@ func hexSHA(b string) string { s := sha256.Sum256([]byte(b)); return hex.EncodeT
 func TestSealedPayloads(t *testing.T) {
 	a := newAdminRig(t)
 	sl := testSealer(t)
-	a.s.SetSealer(sl)
+	a.s.d.Sealer = sl
 	id := sealedRequest(t, a, "", sl)
 
 	// In the database: ciphertext only.

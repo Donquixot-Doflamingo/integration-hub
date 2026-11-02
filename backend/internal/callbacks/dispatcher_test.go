@@ -169,6 +169,7 @@ func dispatcherSnapshot(url string) *registry.Snapshot {
 	s := testSnapshot(url)
 	s.Registrar["reg_private"] = &registry.RegistrarEndpoint{EndpointID: "reg_private", Tenant: "orders-service", URL: "https://10.0.0.1/cb", SecretRef: "localfile://reg_orders_cb"}
 	s.Registrar["reg_nosecret"] = &registry.RegistrarEndpoint{EndpointID: "reg_nosecret", Tenant: "orders-service", URL: url, SecretRef: "localfile://missing"}
+	s.Registrar["reg_off"] = &registry.RegistrarEndpoint{EndpointID: "reg_off", Tenant: "orders-service", URL: url, SecretRef: "localfile://reg_orders_cb", Disabled: true}
 	return s
 }
 
@@ -241,6 +242,7 @@ func TestDispatcherAttemptOutcomes(t *testing.T) {
 		{name: "endpoint of another tenant dead-letters", endpoint: "reg_other_tenant", attempt: 1, want: statusDeadLettered, errClass: errTenantMismatch},
 		{name: "secret not loaded retried", endpoint: "reg_nosecret", attempt: 1, want: statusRetryScheduled, errClass: errSecretUnavailable},
 		{name: "ssrf blocked retried", endpoint: "reg_private", attempt: 1, want: statusRetryScheduled, errClass: errSSRFBlocked},
+		{name: "disabled endpoint held, not sent", endpoint: "reg_off", attempt: 1, want: statusRetryScheduled, errClass: errEndpointDisabled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fx := newDispatchFixture(t, DispatcherOptions{})

@@ -9,11 +9,17 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control/adminapi"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
 )
 
 // adminHandler is the admin role's public surface: /admin/v1 and, in dev, the OIDC issuer stub
 // (/.well-known/openid-configuration, /oidc/*).
-func adminHandler(ctx context.Context, cfg Config, log *slog.Logger, st *stores, reg *roleRegistry) (http.Handler, error) {
+func adminHandler(ctx context.Context, cfg Config, m *telemetry.Metrics, log *slog.Logger, st *stores, reg *roleRegistry) (http.Handler, error) {
+	probe, err := upstream.New(m, upstream.Options{}) // account connection tests (admin metrics)
+	if err != nil {
+		return nil, err
+	}
 	var verifier adminapi.Verifier
 	var dev *adminapi.DevIssuer
 	switch {
@@ -48,7 +54,8 @@ func adminHandler(ctx context.Context, cfg Config, log *slog.Logger, st *stores,
 		log.WarnContext(ctx, "no credential store: rotation endpoints answer 500 until `hubctl creds init-key`", slog.String("error", err.Error()))
 	}
 	api := adminapi.New(adminapi.Deps{Pool: st.pg, Redis: st.rdb, Verifier: verifier, Publisher: pub, Rotator: rot, Archive: reg.archive,
-		Snapshot: reg.store.Snapshot, Log: log}).SetSealer(auditSealer(ctx, cfg, log))
+		Snapshot: reg.store.Snapshot, Log: log, Sealer: auditSealer(ctx, cfg, log), Upstream: probe,
+		CallbackHosts: cfg.CallbackHosts})
 	mux := http.NewServeMux()
 	mux.Handle(adminapi.Base+"/", api.Handler())
 	if dev != nil {

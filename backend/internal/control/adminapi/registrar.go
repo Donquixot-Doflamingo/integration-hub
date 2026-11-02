@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -38,12 +39,34 @@ func (s *Server) registerRegistrar() {
 var defaultRegistrarGuard = sync.OnceValue(func() *callbacks.Guard { return callbacks.NewGuard(callbacks.GuardOptions{}) })
 
 // checkRegistrarURL vets a registrar URL with the SSRF guard (tests replace it to inject a
-// resolver). Any public host is accepted: Deps carries no callback host allowlist yet.
+// resolver). Deps.CallbackHosts narrows the hosts further (vetRegistrarURL).
 var checkRegistrarURL = func(ctx context.Context, raw string) error { return defaultRegistrarGuard().CheckURL(ctx, raw) }
+
+// callbackHostAllowed applies Deps.CallbackHosts (DESIGN §12.1: the URL host must be allowlisted).
+func (s *Server) callbackHostAllowed(raw string) bool {
+	if len(s.d.CallbackHosts) == 0 {
+		return true
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, h := range s.d.CallbackHosts {
+		h = strings.ToLower(strings.TrimSpace(h))
+		if host == h || (strings.HasPrefix(h, ".") && strings.HasSuffix(host, h)) {
+			return true
+		}
+	}
+	return false
+}
 
 func (s *Server) vetRegistrarURL(ctx context.Context, raw string) error {
 	if !strings.HasPrefix(raw, "https://") {
 		return badRequest("/url", "url must be https")
+	}
+	if !s.callbackHostAllowed(raw) {
+		return badRequest("/url", "url host is not in the callback host allowlist (HUB_CALLBACK_HOSTS)")
 	}
 	err := checkRegistrarURL(ctx, raw)
 	var blocked *callbacks.BlockedError

@@ -56,6 +56,7 @@ const (
 const (
 	errEndpointUnknown   = "endpoint_unknown"
 	errTenantMismatch    = "tenant_mismatch"
+	errEndpointDisabled  = "endpoint_disabled"
 	errSecretUnavailable = "secret_unavailable"
 	errSSRFBlocked       = "ssrf_blocked"
 	errPolicy            = "url_refused"
@@ -399,6 +400,8 @@ func (d *Dispatcher) send(ctx context.Context, row delivery) result {
 		return result{errClass: errEndpointUnknown, permanent: true}
 	case ep.Tenant != row.TenantID:
 		return result{errClass: errTenantMismatch, permanent: true}
+	case ep.Disabled: // held, not lost: deliveries resume on the schedule once it is re-enabled
+		return result{errClass: errEndpointDisabled}
 	}
 	secrets, err := d.deps.Secrets.SigningSecrets(ctx, ep.SecretRef)
 	if err != nil {

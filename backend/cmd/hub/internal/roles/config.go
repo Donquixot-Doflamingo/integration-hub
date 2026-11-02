@@ -88,6 +88,9 @@ type Config struct {
 	OIDCAudience   string
 	AdminDevOIDC   bool
 	AdminPublicURL string // the admin's external base URL (the dev issuer's iss)
+	// CallbackHosts allowlists registrar endpoint hosts at the admin ("h" or ".suffix"); empty
+	// accepts any public host (the SSRF guard still applies).
+	CallbackHosts []string
 }
 
 // Load builds the config for role from flags (highest precedence), then HUB_* environment
@@ -135,10 +138,17 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	fs.StringVar(&c.OIDCAudience, "oidc-audience", env("HUB_OIDC_AUDIENCE", ""), "admin: required token audience (optional)")
 	fs.BoolVar(&devID, "admin-dev-oidc", env("HUB_ADMIN_DEV_OIDC", "false") == "true", "dev only: run the admin OIDC issuer stub")
 	fs.StringVar(&c.AdminPublicURL, "admin-public-url", env("HUB_ADMIN_PUBLIC_URL", "http://localhost:8081"), "admin: external base URL (dev issuer iss)")
+	var callbackHosts string
+	fs.StringVar(&callbackHosts, "callback-hosts", env("HUB_CALLBACK_HOSTS", ""), "admin: comma-separated registrar host allowlist (host or .suffix)")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
 	c.ConfigWatch, c.DebugHeaders, c.CallbackAllowLoopback, c.AdminDevOIDC = watch, debugHeaders, cbLoopback, devID
+	for _, h := range strings.Split(callbackHosts, ",") {
+		if h = strings.TrimSpace(h); h != "" {
+			c.CallbackHosts = append(c.CallbackHosts, h)
+		}
+	}
 	if fs.NArg() > 0 {
 		return Config{}, fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}
