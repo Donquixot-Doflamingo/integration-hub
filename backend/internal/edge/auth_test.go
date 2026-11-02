@@ -44,7 +44,8 @@ func TestAuthenticateAndAuthorize(t *testing.T) {
 	billing := &registry.Tenant{Tenant: "billing", APIKeys: []registry.APIKey{{KeyID: "k_b", Hash: HashKey("hk_test_billing"), Scopes: []string{"invoke"}, State: "active"}}}
 	gone := &registry.Tenant{Tenant: "gone", Status: "suspended", APIKeys: []registry.APIKey{{KeyID: "k_g", Hash: HashKey("hk_test_gone"), Scopes: []string{"invoke"}, State: "active"}}}
 	revoked := &registry.Tenant{Tenant: "rev", APIKeys: []registry.APIKey{{KeyID: "k_r", Hash: HashKey("hk_test_revoked"), Scopes: []string{"invoke"}, State: "revoked"}}}
-	snap = withTenants(t, snap, billing, gone, revoked)
+	off := &registry.Tenant{Tenant: "off", Disabled: true, APIKeys: []registry.APIKey{{KeyID: "k_o", Hash: HashKey("hk_test_disabled"), Scopes: []string{"invoke"}, State: "active"}}}
+	snap = withTenants(t, snap, billing, gone, revoked, off)
 
 	tests := []struct {
 		name, id, authz, scope string
@@ -55,6 +56,7 @@ func TestAuthenticateAndAuthorize(t *testing.T) {
 		{"not bearer", "int_evt_brandA", "Basic abc", "invoke", 401, "UNAUTHORIZED", ""},
 		{"unknown key", "int_evt_brandA", "Bearer hk_test_nope", "invoke", 401, "UNAUTHORIZED", ""},
 		{"revoked key", "int_evt_brandA", "Bearer hk_test_revoked", "invoke", 401, "UNAUTHORIZED", ""},
+		{"disabled tenant", "int_evt_brandA", "Bearer hk_test_disabled", "invoke", 401, "UNAUTHORIZED", ""},
 		{"suspended tenant", "int_evt_brandA", "Bearer hk_test_gone", "invoke", 403, "FORBIDDEN", "tenant_suspended"},
 		{"unknown integration", "int_nope", "Bearer " + devKey, "invoke", 404, "INTEGRATION_NOT_FOUND", ""},
 		{"not owner or grantee", "int_evt_brandA", "Bearer hk_test_billing", "invoke", 403, "FORBIDDEN", "not_granted"},

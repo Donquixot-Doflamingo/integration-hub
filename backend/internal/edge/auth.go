@@ -53,7 +53,8 @@ func bearer(r *http.Request) (string, bool) {
 
 // authenticate checks the tenant key against the in-memory hashed key set of the current
 // snapshot; no database access (DESIGN §5.1 step 1). The key is hashed and looked up, then the
-// stored and computed hashes are compared in constant time. It records StageAuth.
+// stored and computed hashes are compared in constant time. Keys of a disabled tenant are
+// refused like unknown keys (401, hub-admin updateTenant). It records StageAuth.
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return s.metrics.TimedMiddleware(telemetry.StageAuth, func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +71,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			}
 			hash := HashKey(key)
 			entry, found := snap.KeyByHash(hash)
-			if !found || subtle.ConstantTimeCompare([]byte(entry.Key.Hash), []byte(hash)) != 1 || entry.Key.State == "revoked" {
+			if !found || subtle.ConstantTimeCompare([]byte(entry.Key.Hash), []byte(hash)) != 1 || entry.Key.State == "revoked" || entry.Tenant.Disabled {
 				WriteError(w, r, unauthorized)
 				return
 			}

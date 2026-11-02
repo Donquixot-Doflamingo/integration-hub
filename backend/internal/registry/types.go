@@ -351,10 +351,16 @@ type PublishMeta struct {
 
 // Tenant is backend/config/tenants/<tenant>.yaml.
 type Tenant struct {
-	Tenant    string      `yaml:"tenant"`
-	APIKeys   []APIKey    `yaml:"api_keys"`
-	RateLimit TenantLimit `yaml:"rate_limit"`
-	Status    string      `yaml:"status,omitempty"` // active | suspended
+	Tenant string `yaml:"tenant"`
+	// DisplayName, Description and Contact are display fields of the admin API (defaults: the id).
+	DisplayName string      `yaml:"display_name,omitempty"`
+	Description string      `yaml:"description,omitempty"`
+	Contact     string      `yaml:"contact,omitempty"`
+	APIKeys     []APIKey    `yaml:"api_keys"`
+	RateLimit   TenantLimit `yaml:"rate_limit"`
+	Status      string      `yaml:"status,omitempty"` // active | suspended
+	// Disabled turns every key of the tenant off (401 at the edge, admin updateTenant).
+	Disabled bool `yaml:"disabled,omitempty"`
 }
 
 // APIKey is a tenant key, stored only as a hash (DESIGN §16.5).

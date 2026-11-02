@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Create, read and update tenants; disabled tenants' keys get 401 (HUB-206) · HUB-206 · F-16
+  - GET/POST /admin/v1/tenants, GET/PATCH /tenants/{id} (merge-patch of display fields, rate limit and disabled; If-Match → 412)
+  - tenant_viewer sees only its own tenants (404 otherwise)
+  - Tenant YAML gains display_name, description, contact and disabled; the edge answers 401 for keys of a disabled tenant
 - 2026-11-02 · `feat(adminapi)` · Rotate account credentials and test connections against the vendor (HUB-203) · HUB-203 · F-16
   - POST /accounts/{id}/credentials/next, /promote, /delete-old run the DESIGN §6.6 runbook; 409 when a step does not apply
   - POST /accounts/{id}/test-connection runs the vendor health probe (dry where declared) with the active or next slot; non-mutating, audited in the change log
