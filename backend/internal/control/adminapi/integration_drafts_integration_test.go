@@ -11,10 +11,10 @@ import (
 
 func init() {
 	mutationCases["createIntegrationDraft"] = mutationCase{role: RoleEditor, method: http.MethodPost, path: "/integrations/int_evt_brandA/versions",
-		body: `{"reason":"canary draft"}`, setup: clearDrafts}
+		body: `{"reason":"canary draft"}`, setup: resetArchive}
 	mutationCases["updateIntegrationDraft"] = mutationCase{role: RoleEditor, method: http.MethodPut, path: "/integrations/int_evt_brandA/versions/3",
-		body: `{"spec":` + apiSpecJSON(80, "ct-brandA-in") + `,"reason":"canary 20 %"}`, setup: func(a *adminRig) {
-			clearDrafts(a)
+		body: `{"spec":` + apiSpecJSON(80, "ct-brandB-us") + `,"reason":"canary 20 %"}`, setup: func(a *adminRig) {
+			resetArchive(a)
 			if resp, body := a.do(RoleEditor, http.MethodPost, "/integrations/int_evt_brandA/versions", `{"reason":"canary draft"}`); resp.Code != 201 {
 				a.t.Fatalf("draft: %d %v", resp.Code, body)
 			}

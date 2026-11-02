@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Publish drafts, roll back and reweigh integrations with version guards (HUB-205) · HUB-205 · F-16
+  - POST /versions/{n}/publish makes the draft the active version nodes run; failed checks answer 422 PUBLISH_VALIDATION_FAILED with contract pointers and meta.report
+  - POST /rollback publishes a copy of to_version as the next version (v9 = v7); POST /weights creates version n+1 from the active one with new weights, published or left as the draft
+  - Publish, rollback and weights take expected_active_version and answer 409 CONFLICT (expected and actual in meta) when another publish happened first
 - 2026-11-02 · `feat(adminapi)` · Keep integration drafts in Postgres and validate versions without publishing (HUB-205) · HUB-205 · F-16
   - POST /integrations/{id}/versions creates the one draft (next version) from a spec or a copy of based_on; PUT /versions/{n} edits it; published versions answer 409
   - Drafts are invisible to nodes until published (hub.integration_drafts, migration 00010); has_draft, latest_version, the version list and diff include them
