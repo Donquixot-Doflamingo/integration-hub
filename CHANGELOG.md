@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · List, replay and purge dead letters by ids or by filter (HUB-209) · HUB-209 · F-16
+  - GET /admin/v1/dlq (tenant, integration, vendor, account, reason, replayed, time range; newest first, cursor pages) and /dlq/{id} with the canonical body per payload policy, last vendor exchange and attempt history
+  - POST /dlq/replay (editor) moves matching entries back to accepted; workers re-resolve and re-transform, so a fixed transformer applies; dry_run counts only, at most 10 000 per call
+  - POST /dlq/purge (admin) removes entries, the request ledger stays; replay and purge each write one change-log row in their transaction
 - 2026-11-02 · `feat(audit)` · Seal payloads per tenant and unseal them for audited admins (HUB-208) · HUB-208 · F-16
   - Integrations with audit.payloads: sealed store every event payload as AES-256-GCM ciphertext under a per-tenant key (dev: derived from the localfile dev key); hashes and sizes stay those of the original bytes
   - POST /admin/v1/requests/{id}/unseal (admin, reason of at least 10 characters) returns the clear payloads once with Cache-Control: no-store and writes one change-log row; non-sealed requests answer 409
