@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(audit)` · Seal payloads per tenant and unseal them for audited admins (HUB-208) · HUB-208 · F-16
+  - Integrations with audit.payloads: sealed store every event payload as AES-256-GCM ciphertext under a per-tenant key (dev: derived from the localfile dev key); hashes and sizes stay those of the original bytes
+  - POST /admin/v1/requests/{id}/unseal (admin, reason of at least 10 characters) returns the clear payloads once with Cache-Control: no-store and writes one change-log row; non-sealed requests answer 409
+  - Without a seal key the sealed policy keeps hashes and sizes only; credentials are removed before sealing
 - 2026-11-02 · `feat(adminapi)` · Search requests and read their timeline and attempts (HUB-207) · HUB-207 · F-16
   - GET /admin/v1/requests searches by tenant, integration, status, code, vendor, account, idempotency key and a ≤ 31-day range, newest first, with cursor pages
   - GET /requests/{id}, /timeline (events in seq order with sha256 and size on every event) and /attempts (version per attempt)

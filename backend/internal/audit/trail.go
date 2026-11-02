@@ -22,6 +22,9 @@ type TrailOptions struct {
 	PII       []registry.PIIPath     // x-pii paths of the operation's request schema
 	Canonical map[string]any         // validated canonical body (masking values)
 	Masker    *Masker
+	// Sealer encrypts payloads under the sealed policy (HUB-208). Without one a sealed
+	// integration stores hashes and sizes only (fail closed, never clear bytes).
+	Sealer *Sealer
 	// Secrets are replaced by "***" in every stored payload, whatever the policy.
 	Secrets []string
 	Now     func() time.Time
@@ -86,7 +89,7 @@ func (t *Trail) Add(typ string, attempt int, payload []byte, meta map[string]any
 	if payload != nil {
 		sum := sha256.Sum256(payload)
 		e.SHA256, e.Bytes = "sha256:"+hex.EncodeToString(sum[:]), len(payload)
-		e.Payload, e.PayloadState = t.store(typ, payload)
+		e.Payload, e.PayloadState = t.store(typ, e.Seq, payload)
 	}
 	t.events = append(t.events, e)
 }
@@ -100,7 +103,7 @@ func (t *Trail) AddJSON(typ string, attempt int, v any, meta map[string]any) {
 	t.Add(typ, attempt, b, meta)
 }
 
-func (t *Trail) store(typ string, payload []byte) ([]byte, PayloadState) {
+func (t *Trail) store(typ string, seq int, payload []byte) ([]byte, PayloadState) {
 	var out []byte
 	state := PayloadFull
 	switch t.o.Policy {
@@ -108,18 +111,37 @@ func (t *Trail) store(typ string, payload []byte) ([]byte, PayloadState) {
 		out = bytes.Clone(payload)
 	case registry.PayloadMasked:
 		out, state = t.masked(typ, payload), PayloadMasked
+	case registry.PayloadSealed:
+		if t.o.Sealer == nil {
+			return nil, PayloadOmitted
+		}
+		out = t.redact(bytes.Clone(payload)) // credentials are never stored, not even encrypted
+		truncated := len(out) > MaxInlinePayload
+		if truncated {
+			out = out[:MaxInlinePayload]
+		}
+		sealed, err := t.o.Sealer.Seal(t.o.Tenant, t.o.RequestID, seq, out, truncated)
+		clear(out)
+		if err != nil {
+			return nil, PayloadOmitted // fail closed: hash and size only
+		}
+		return sealed, PayloadSealed
 	default:
-		// metadata_only, and sealed until field-level encryption lands (HUB-208): never store
-		// a body that the policy does not allow in clear.
+		// metadata_only: never store a body.
 		return nil, PayloadOmitted
 	}
-	for _, s := range t.secrets {
-		out = bytes.ReplaceAll(out, s, []byte(Redacted))
-	}
+	out = t.redact(out)
 	if len(out) > MaxInlinePayload {
 		return out[:MaxInlinePayload], PayloadTruncated
 	}
 	return out, state
+}
+
+func (t *Trail) redact(out []byte) []byte {
+	for _, s := range t.secrets {
+		out = bytes.ReplaceAll(out, s, []byte(Redacted))
+	}
+	return out
 }
 
 func (t *Trail) masked(typ string, payload []byte) []byte {
@@ -137,10 +159,14 @@ func (t *Trail) masked(typ string, payload []byte) []byte {
 }
 
 // Stored returns the stored (policy-applied) payload of the latest event of type typ, or nil.
-// Dead letters keep it as the last vendor exchange: never the clear bytes.
+// Dead letters keep it as the last vendor exchange: never the clear bytes. A sealed payload is
+// nil here: its ciphertext only opens through the audited unseal.
 func (t *Trail) Stored(typ string) []byte {
 	for i := len(t.events) - 1; i >= 0; i-- {
 		if t.events[i].Type == typ {
+			if t.events[i].PayloadState == PayloadSealed {
+				return nil
+			}
 			return t.events[i].Payload
 		}
 	}

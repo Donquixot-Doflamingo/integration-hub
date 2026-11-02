@@ -6,16 +6,20 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
@@ -31,6 +35,23 @@ func (s *Server) registerRequests() {
 	s.handle("getRequest", RoleTenantViewer, false, "GET /requests/{request_id}", s.getRequest)
 	s.handle("getRequestTimeline", RoleTenantViewer, false, "GET /requests/{request_id}/timeline", s.getRequestTimeline)
 	s.handle("listRequestAttempts", RoleTenantViewer, false, "GET /requests/{request_id}/attempts", s.listRequestAttempts)
+	s.handle("unsealRequest", RoleAdmin, true, "POST /requests/{request_id}/unseal", s.unsealRequest)
+}
+
+// sealers holds each server's sealed-payload key source. Deps has no field for it yet
+// (change request: Deps.Sealer); cmd/hub sets it with SetSealer.
+var sealers sync.Map // *Server → *audit.Sealer
+
+// SetSealer gives the server the key source unsealRequest decrypts with (nil: unseal is 500).
+func (s *Server) SetSealer(sl *audit.Sealer) *Server {
+	sealers.Store(s, sl)
+	return s
+}
+
+func (s *Server) sealer() *audit.Sealer {
+	v, _ := sealers.Load(s)
+	sl, _ := v.(*audit.Sealer)
+	return sl
 }
 
 // maxSearchSpan is the widest created_at range one search may cover (contract: ≤ 31 days);
@@ -489,9 +510,9 @@ FROM hub.request_events WHERE request_id = $1 AND at >= $2 ORDER BY seq`, row.Re
 	})
 }
 
-// view renders a stored event. clear is the decrypted payload of a sealed event (unseal only);
-// otherwise sealed and metadata_only events carry no payload.
-func (e storedEvent) view(policy string, clear []byte, truncated bool) (timelineEvent, bool) {
+// view renders a stored event. unsealed (unsealRequest only) shows sealed events with clear,
+// their decrypted payload; otherwise sealed and metadata_only events carry no payload.
+func (e storedEvent) view(policy string, unsealed bool, clear []byte, truncated bool) (timelineEvent, bool) {
 	typ := e.Type
 	if alias, ok := timelineAliases[typ]; ok {
 		typ = alias
@@ -500,7 +521,7 @@ func (e storedEvent) view(policy string, clear []byte, truncated bool) (timeline
 		return timelineEvent{}, false
 	}
 	v := timelineEvent{Seq: e.Seq, Type: typ, At: e.At.UTC(), AttemptNo: e.AttemptNo, PayloadRef: e.PayloadRef, SHA256: emptySHA256,
-		Sealed: e.State == audit.PayloadSealed && clear == nil, Truncated: e.State == audit.PayloadTruncated || truncated}
+		Sealed: e.State == audit.PayloadSealed && !unsealed, Truncated: e.State == audit.PayloadTruncated || truncated}
 	if e.SHA256 != nil {
 		v.SHA256 = strings.TrimPrefix(*e.SHA256, "sha256:")
 	}
@@ -508,12 +529,12 @@ func (e storedEvent) view(policy string, clear []byte, truncated bool) (timeline
 		v.Bytes = *e.Bytes
 	}
 	hidden := policy == string(registry.PayloadMetadataOnly) || e.State == audit.PayloadOmitted ||
-		((policy == string(registry.PayloadSealed) || e.State == audit.PayloadSealed) && clear == nil)
+		((policy == string(registry.PayloadSealed) || e.State == audit.PayloadSealed) && !unsealed)
 	if hidden {
 		return v, true
 	}
 	body := e.Payload
-	if clear != nil {
+	if e.State == audit.PayloadSealed {
 		body = clear
 	}
 	v.Payload = map[string]any{}
@@ -545,7 +566,7 @@ func (s *Server) getRequestTimeline(w http.ResponseWriter, r *http.Request) {
 	}
 	events := make([]timelineEvent, 0, len(stored))
 	for _, e := range stored {
-		if v, ok := e.view(row.Policy, nil, false); ok {
+		if v, ok := e.view(row.Policy, false, nil, e.State == audit.PayloadSealed && audit.SealedTruncated(e.Payload)); ok {
 			events = append(events, v)
 		}
 	}
@@ -614,4 +635,74 @@ func (s *Server) listRequestAttempts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"request_id": row.RequestID, "items": items})
+}
+
+// unsealRequest decrypts the sealed payloads of a request for an admin (DESIGN §13.2, D6,
+// HUB-208). The clear payloads exist only in this response (Cache-Control: no-store); the
+// change log records who opened which events and why, never the payloads.
+func (s *Server) unsealRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var body struct {
+		EventSeqs []int  `json:"event_seqs"`
+		Reason    string `json:"reason"`
+	}
+	if err := decode(w, r, &body); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	reason, err := reasonOf(r, body.Reason)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if utf8.RuneCountInString(reason) < 10 {
+		s.fail(w, r, badRequest("/reason", "An unseal reason must be at least 10 characters and should cite a ticket"))
+		return
+	}
+	row, err := s.loadRequest(ctx, r, r.PathValue("request_id"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if row.Policy != string(registry.PayloadSealed) {
+		s.fail(w, r, &Error{Status: http.StatusConflict, Code: CodeConflict, Message: "The request is not sealed (payload policy " + row.Policy + ")"})
+		return
+	}
+	sealer := s.sealer()
+	if sealer == nil {
+		s.fail(w, r, errors.New("no seal key source configured"))
+		return
+	}
+	stored, err := s.loadEvents(ctx, row)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	events, opened := make([]timelineEvent, 0, len(stored)), make([]int, 0, len(stored))
+	for _, e := range stored {
+		if len(body.EventSeqs) > 0 && !slices.Contains(body.EventSeqs, e.Seq) {
+			continue
+		}
+		var clear []byte
+		var truncated bool
+		if e.State == audit.PayloadSealed {
+			if clear, truncated, err = sealer.Open(row.TenantID, row.RequestID, e.Seq, e.Payload); err != nil {
+				s.fail(w, r, fmt.Errorf("unseal %s seq %d: %w", row.RequestID, e.Seq, err))
+				return
+			}
+			opened = append(opened, e.Seq)
+		}
+		if v, ok := e.view(row.Policy, true, clear, truncated); ok {
+			events = append(events, v)
+		}
+	}
+	changeID, err := control.RecordChange(ctx, s.d.Pool, control.Change{Actor: principal(r).Actor(), Action: "unsealRequest",
+		ObjectType: "request", ObjectID: row.RequestID, Reason: reason,
+		After: map[string]any{"tenant_id": row.TenantID, "event_seqs": opened}})
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"change_id": changeID, "request_id": row.RequestID, "events": events})
 }

@@ -111,6 +111,7 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 	dp.cache, dp.client = cache, client
 	dp.audit = audit.NewWriter(audit.PGStore{Pool: st.pg}, m, audit.WriterOptions{Log: log})
 	masker := audit.NewMasker(key)
+	sealer := auditSealer(ctx, cfg, log)
 	limiter := upstream.NewAccountLimiter(st.rdb, m, log)
 	attempter := &delivery.Attempter{Creds: cache, Upstream: client, Breakers: dp.breakers, Limiter: limiter, Log: log}
 	budget := delivery.NewBudget(m.Registry)
@@ -124,14 +125,14 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 			log.WarnContext(ctx, "idempotency scripts not preloaded (falls back to EVAL)", slog.String("error", err.Error()))
 		}
 		dp.edge = edge.New(edge.Deps{
-			Snapshots: &reg.store, Creds: cache, Upstream: client, Breakers: dp.breakers, Limiter: limiter, Audit: dp.audit, Masker: masker, Metrics: m, Log: log,
+			Snapshots: &reg.store, Creds: cache, Upstream: client, Breakers: dp.breakers, Limiter: limiter, Audit: dp.audit, Masker: masker, Sealer: sealer, Metrics: m, Log: log,
 			DebugHeaders: cfg.DebugHeaders, Idempotency: idem, Shadow: dp.shadow,
 			Queueing: &edge.Queueing{DB: st.pg, Queue: q, Settler: settler, Name: dp.name},
 		})
 	case Worker:
 		dp.worker = &delivery.Worker{
 			Name: dp.name, Pool: cfg.WorkerPool, DB: st.pg, Queue: q, Transitions: dp.transitions, Snapshots: &reg.store,
-			Attempter: attempter, Audit: dp.audit, Masker: masker, Budget: budget, Metrics: m, Log: log,
+			Attempter: attempter, Audit: dp.audit, Masker: masker, Sealer: sealer, Budget: budget, Metrics: m, Log: log,
 		}
 		if dp.dispatcher, err = callbacks.NewDispatcher(callbacks.DispatcherDeps{
 			Pool: st.pg, Snapshots: &reg.store, Secrets: creds.RegistrarSecrets{Cache: cache}, Audit: dp.audit,
