@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Serve vendors and vendor endpoints with ETag and If-Match (HUB-202) · HUB-202 · F-16
+  - GET/POST /admin/v1/vendors, GET/PUT /vendors/{id}: vendors are edited in the config tree and published through the full snapshot build
+  - Vendors carry an ETag (quoted revision); PUT with a stale If-Match answers 412 PRECONDITION_FAILED with current_etag
+  - POST /vendors/{id}/endpoints adds <name>@<n+1>; existing endpoint versions never change
 - 2026-11-02 · `feat(control)` · Expose Publisher.Edit for validated config-tree edits (HUB-201) · HUB-201 · F-16
   - Admin resource handlers edit the config tree through one primitive: locked, fully validated, archived, logged and announced
 - 2026-11-02 · `feat(adminapi)` · Read the change log and pause integrations through the publisher lock (HUB-201) · HUB-201 · F-16
