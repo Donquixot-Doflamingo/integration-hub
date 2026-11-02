@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"net/http"
 	"slices"
@@ -12,6 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"go.yaml.in/yaml/v3"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
 
@@ -54,10 +58,14 @@ func latestVersion(in *registry.Integration) int {
 	return latest
 }
 
-// integrationView is the contract's Integration (without the active version in full).
-func (s *Server) integrationView(ctx context.Context, snap *registry.Snapshot, in *registry.Integration) map[string]any {
+// integrationView is the contract's Integration (without the active version in full). fallback
+// is the time reported for an integration the change log does not know.
+func (s *Server) integrationView(ctx context.Context, in *registry.Integration, hasDraft bool, fallback time.Time) map[string]any {
 	latest := latestVersion(in)
-	created, updated := s.objectTimes(ctx, "integration", in.Integration, snap.BuiltAt)
+	if hasDraft {
+		latest++
+	}
+	created, updated := s.objectTimes(ctx, "integration", in.Integration, fallback)
 	var active, latestV *int
 	if in.ActiveVersion > 0 {
 		active = &in.ActiveVersion
@@ -72,7 +80,7 @@ func (s *Server) integrationView(ctx context.Context, snap *registry.Snapshot, i
 	return map[string]any{
 		"integration_id": in.Integration, "owner_tenant": in.OwnerTenant, "capability": in.Capability,
 		"description": nullable(in.Description), "grants": grants, "moves_money_or_quota": in.MovesMoneyOrQuota,
-		"active_version": active, "latest_version": latestV, "has_draft": false,
+		"active_version": active, "latest_version": latestV, "has_draft": hasDraft,
 		"paused": in.Paused, "paused_reason": nullable(in.PausedReason), "active": nil,
 		"created_at": created, "updated_at": updated,
 	}
@@ -113,17 +121,78 @@ func sees(p Principal, in *registry.Integration) bool {
 	return slices.ContainsFunc(in.Grants, p.SeesTenant)
 }
 
+// catalog is every integration the admin knows: the snapshot's (what nodes run) plus the
+// created ones without a published version (Postgres), with their drafts.
+type catalog struct {
+	snap    *registry.Snapshot
+	all     map[string]*registry.Integration
+	pending map[string]control.PendingIntegration
+	drafts  map[string]control.Draft
+}
+
+func (c *catalog) draft(id string) (control.Draft, bool) {
+	d, ok := c.drafts[id]
+	return d, ok
+}
+
+// fallback is the time reported for an integration the change log does not know.
+func (c *catalog) fallback(id string) time.Time {
+	if p, ok := c.pending[id]; ok {
+		return p.CreatedAt
+	}
+	return c.snap.BuiltAt
+}
+
+// pendingIntegration turns a pending row into an integration without versions.
+func pendingIntegration(p control.PendingIntegration) (*registry.Integration, error) {
+	var f registry.IntegrationFile
+	if err := yaml.Unmarshal(p.Header, &f); err != nil {
+		return nil, fmt.Errorf("pending integration %s: %w", p.Integration, err)
+	}
+	return &registry.Integration{IntegrationFile: f, Versions: map[int]*registry.IntegrationVersion{},
+		File: "integrations/" + p.Integration + "/integration.yaml", VersionFiles: map[int]string{}}, nil
+}
+
+func (s *Server) catalog(ctx context.Context) (*catalog, error) {
+	snap, err := s.snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c := &catalog{snap: snap, all: maps.Clone(snap.Integrations), pending: map[string]control.PendingIntegration{}, drafts: map[string]control.Draft{}}
+	if s.d.Pool == nil {
+		return c, nil
+	}
+	if c.drafts, err = control.ListDrafts(ctx, s.d.Pool); err != nil {
+		return nil, err
+	}
+	pending, err := control.ListPending(ctx, s.d.Pool)
+	if err != nil {
+		return nil, err
+	}
+	for id, p := range pending {
+		if _, published := c.all[id]; published {
+			continue // its first publish succeeded; the row is a leftover
+		}
+		in, err := pendingIntegration(p)
+		if err != nil {
+			return nil, err
+		}
+		c.all[id], c.pending[id] = in, p
+	}
+	return c, nil
+}
+
 // visibleIntegration loads the integration of the path, 404 outside the caller's scope.
-func (s *Server) visibleIntegration(r *http.Request) (*registry.Snapshot, *registry.Integration, error) {
-	snap, err := s.snapshot(r.Context())
+func (s *Server) visibleIntegration(r *http.Request) (*catalog, *registry.Integration, error) {
+	c, err := s.catalog(r.Context())
 	if err != nil {
 		return nil, nil, err
 	}
-	in, ok := snap.Integrations[r.PathValue("integration_id")]
+	in, ok := c.all[r.PathValue("integration_id")]
 	if !ok || !sees(principal(r), in) {
-		return snap, nil, notFound("Integration")
+		return c, nil, notFound("Integration")
 	}
-	return snap, in, nil
+	return c, in, nil
 }
 
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
@@ -151,15 +220,15 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	paused, hasActive, behind := boolFilters[0], boolFilters[1], boolFilters[2]
-	snap, err := s.snapshot(r.Context())
+	c, err := s.catalog(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	needle := strings.ToLower(q.Get("q"))
 	var rows []integrationRow
-	for _, id := range slices.Sorted(maps.Keys(snap.Integrations)) {
-		rows = append(rows, integrationRow{id: id, in: snap.Integrations[id]})
+	for _, id := range slices.Sorted(maps.Keys(c.all)) {
+		rows = append(rows, integrationRow{id: id, in: c.all[id]})
 	}
 	var items []map[string]any
 	var last string
@@ -184,7 +253,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if hasActive != nil && (act != nil) != *hasActive {
 			continue
 		}
-		hasDraft := false
+		_, hasDraft := c.draft(row.id)
 		if behind != nil && (act == nil || (latestVersion(in) > in.ActiveVersion || hasDraft) != *behind) {
 			continue
 		}
@@ -201,7 +270,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	if len(items) == limit && last != "" && last != rows[len(rows)-1].id {
 		next = nextCursor(last)
 	}
-	s.fillUpdatedAt(r.Context(), snap, items)
+	s.fillUpdatedAt(r.Context(), c, items)
 	if items == nil {
 		items = []map[string]any{}
 	}
@@ -262,11 +331,11 @@ func (s *Server) integrationSummary(in *registry.Integration, hasDraft bool) map
 }
 
 // fillUpdatedAt sets updated_at of each summary from the change log in one query.
-func (s *Server) fillUpdatedAt(ctx context.Context, snap *registry.Snapshot, items []map[string]any) {
+func (s *Server) fillUpdatedAt(ctx context.Context, c *catalog, items []map[string]any) {
 	ids := make([]string, len(items))
 	for i, it := range items {
 		ids[i] = it["integration_id"].(string)
-		it["updated_at"] = snap.BuiltAt.UTC()
+		it["updated_at"] = c.fallback(ids[i]).UTC()
 	}
 	if s.d.Pool == nil || len(ids) == 0 {
 		return
@@ -292,22 +361,24 @@ func (s *Server) fillUpdatedAt(ctx context.Context, snap *registry.Snapshot, ite
 }
 
 func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) {
-	snap, in, err := s.visibleIntegration(r)
+	c, in, err := s.visibleIntegration(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	view := s.integrationView(r.Context(), snap, in)
+	_, hasDraft := c.draft(in.Integration)
+	view := s.integrationView(r.Context(), in, hasDraft, c.fallback(in.Integration))
 	if v := in.Active(); v != nil {
 		meta := s.versionMeta(r.Context(), in.Integration)
-		view["active"] = publishedVersionView(snap, in, in.ActiveVersion, v, meta[in.ActiveVersion])
+		view["active"] = publishedVersionView(c.snap, in, in.ActiveVersion, v, meta[in.ActiveVersion])
 	}
-	w.Header().Set("ETag", integrationETag(in, false))
+	w.Header().Set("ETag", integrationETag(in, hasDraft))
 	writeJSON(w, http.StatusOK, view)
 }
 
 // versionMeta is what the change log knows about a published version.
 type versionMeta struct {
+	Author          string     `json:"author"` // the draft's author when a draft was published
 	BasedOn         *int       `json:"based_on"`
 	CopiedFrom      *int       `json:"copied_from_version"`
 	CreatedAt       *time.Time `json:"created_at"`
@@ -345,7 +416,7 @@ WHERE object_type = 'integration' AND object_id = $1 AND snapshot_version IS NOT
 		if json.Unmarshal(after, &a) != nil || a.Version < 1 {
 			continue
 		}
-		m.BasedOn, m.CopiedFrom, m.CreatedAt, m.known = a.BasedOn, a.CopiedFrom, a.CreatedAt, true
+		m.Author, m.BasedOn, m.CopiedFrom, m.CreatedAt, m.known = a.Author, a.BasedOn, a.CopiedFrom, a.CreatedAt, true
 		m.PublishedAt = m.PublishedAt.UTC()
 		out[a.Version] = m
 	}
@@ -372,8 +443,12 @@ func publishedVersionView(snap *registry.Snapshot, in *registry.Integration, n i
 		prev := n - 1
 		basedOn = &prev
 	}
+	author := v.Publish.Author
+	if m.Author != "" {
+		author = m.Author
+	}
 	return map[string]any{"integration_id": in.Integration, "version": n, "state": "published", "spec": renderSpec(v),
-		"based_on": basedOn, "copied_from_version": m.CopiedFrom, "author": v.Publish.Author, "reason": v.Publish.Reason,
+		"based_on": basedOn, "copied_from_version": m.CopiedFrom, "author": author, "reason": v.Publish.Reason,
 		"created_at": created, "published_at": published, "published_by": by, "snapshot_version": snapV}
 }
 
@@ -384,14 +459,33 @@ func versionSummary(view map[string]any, active int) map[string]any {
 		"published_at": view["published_at"], "is_active": view["version"] == active && view["state"] == "published"}
 }
 
-// versionViews lists every version of in (newest first) as full IntegrationVersion views.
-func (s *Server) versionViews(ctx context.Context, snap *registry.Snapshot, in *registry.Integration) []map[string]any {
-	meta := s.versionMeta(ctx, in.Integration)
-	var out []map[string]any
-	for _, n := range slices.Backward(slices.Sorted(maps.Keys(in.Versions))) {
-		out = append(out, publishedVersionView(snap, in, n, in.Versions[n], meta[n]))
+// draftView is the contract's IntegrationVersion of a draft: always the next version.
+func draftView(in *registry.Integration, d control.Draft) (map[string]any, error) {
+	v, err := parseVersionYAML(d.Spec)
+	if err != nil {
+		return nil, err
 	}
-	return out
+	return map[string]any{"integration_id": in.Integration, "version": latestVersion(in) + 1, "state": "draft", "spec": renderSpec(v),
+		"based_on": d.BasedOn, "copied_from_version": d.CopiedFrom, "author": d.Author, "reason": d.Reason,
+		"created_at": d.CreatedAt, "published_at": nil, "published_by": nil, "snapshot_version": nil}, nil
+}
+
+// versionViews lists every version of in (newest first: the draft, then the published ones)
+// as full IntegrationVersion views.
+func (s *Server) versionViews(ctx context.Context, c *catalog, in *registry.Integration) ([]map[string]any, error) {
+	var out []map[string]any
+	if d, ok := c.draft(in.Integration); ok {
+		v, err := draftView(in, d)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	meta := s.versionMeta(ctx, in.Integration)
+	for _, n := range slices.Backward(slices.Sorted(maps.Keys(in.Versions))) {
+		out = append(out, publishedVersionView(c.snap, in, n, in.Versions[n], meta[n]))
+	}
+	return out, nil
 }
 
 func (s *Server) listIntegrationVersions(w http.ResponseWriter, r *http.Request) {
@@ -408,14 +502,19 @@ func (s *Server) listIntegrationVersions(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	state := r.URL.Query().Get("state")
-	snap, in, err := s.visibleIntegration(r)
+	c, in, err := s.visibleIntegration(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	views, err := s.versionViews(r.Context(), c, in)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	items := []map[string]any{}
 	var next *string
-	for _, v := range s.versionViews(r.Context(), snap, in) {
+	for _, v := range views {
 		n := v["version"].(int)
 		if (after > 0 && n >= after) || (state != "" && v["state"] != state) {
 			continue
@@ -439,8 +538,12 @@ func pathVersion(r *http.Request) (int, error) {
 }
 
 // findVersion returns the full view of version n of in, or 404.
-func (s *Server) findVersion(ctx context.Context, snap *registry.Snapshot, in *registry.Integration, n int) (map[string]any, error) {
-	for _, v := range s.versionViews(ctx, snap, in) {
+func (s *Server) findVersion(ctx context.Context, c *catalog, in *registry.Integration, n int) (map[string]any, error) {
+	views, err := s.versionViews(ctx, c, in)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range views {
 		if v["version"] == n {
 			return v, nil
 		}
@@ -454,12 +557,12 @@ func (s *Server) getIntegrationVersion(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	snap, in, err := s.visibleIntegration(r)
+	c, in, err := s.visibleIntegration(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	v, err := s.findVersion(r.Context(), snap, in, n)
+	v, err := s.findVersion(r.Context(), c, in, n)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -477,14 +580,14 @@ func (s *Server) diffIntegrationVersions(w http.ResponseWriter, r *http.Request)
 		}
 		ns[i] = n
 	}
-	snap, in, err := s.visibleIntegration(r)
+	c, in, err := s.visibleIntegration(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	var specs [2]map[string]any
 	for i, n := range ns {
-		v, err := s.findVersion(r.Context(), snap, in, n)
+		v, err := s.findVersion(r.Context(), c, in, n)
 		if err != nil {
 			s.fail(w, r, err)
 			return
@@ -519,7 +622,17 @@ func (s *Server) setPaused(paused bool) http.HandlerFunc {
 			s.fail(w, r, controlError(err))
 			return
 		}
-		in := res.Snapshot.Integrations[r.PathValue("integration_id")]
-		writeJSON(w, http.StatusOK, map[string]any{"change_id": res.ChangeID, "integration": s.integrationView(r.Context(), res.Snapshot, in)})
+		writeJSON(w, http.StatusOK, map[string]any{"change_id": res.ChangeID, "integration": s.changedIntegration(r.Context(), res.Snapshot, r.PathValue("integration_id"))})
 	}
+}
+
+// changedIntegration is the Integration of a mutation response, read from the snapshot the
+// mutation produced.
+func (s *Server) changedIntegration(ctx context.Context, snap *registry.Snapshot, id string) map[string]any {
+	hasDraft := false
+	if s.d.Pool != nil {
+		_, err := control.GetDraft(ctx, s.d.Pool, id)
+		hasDraft = err == nil
+	}
+	return s.integrationView(ctx, snap.Integrations[id], hasDraft, snap.BuiltAt)
 }

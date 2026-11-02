@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(adminapi)` · Keep integration drafts in Postgres and validate versions without publishing (HUB-205) · HUB-205 · F-16
+  - POST /integrations/{id}/versions creates the one draft (next version) from a spec or a copy of based_on; PUT /versions/{n} edits it; published versions answer 409
+  - Drafts are invisible to nodes until published (hub.integration_drafts, migration 00010); has_draft, latest_version, the version list and diff include them
+  - POST /versions/{n}/validate runs every publish check and returns the report with contract pointers (e.g. /targets/1/account_id); nothing is archived
 - 2026-11-02 · `feat(adminapi)` · Serve snapshots with a long-poll on the latest version (HUB-204) · HUB-204 · F-16
   - GET /admin/v1/snapshots (newest first, with the change that produced each) and /snapshots/{v} with the objects changed versus the previous snapshot
   - GET /snapshots/latest: If-None-Match + wait long-polls; the hub:snapshot ping answers within 1 s of a publish, the archive is re-read every second as the truth

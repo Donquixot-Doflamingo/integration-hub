@@ -40,7 +40,7 @@ func publishUpTo(t *testing.T, a *adminRig, last int) {
 // version and an ETag, versions newest first, one version in full; every answer validates
 // against the contract.
 func TestIntegrationReads(t *testing.T) {
-	a := newAdminRig(t)
+	a := newDraftRig(t)
 	publishUpTo(t, a, 8)
 
 	resp, body := a.do(RoleViewer, http.MethodGet, "/integrations", "")
@@ -127,7 +127,7 @@ func TestIntegrationReads(t *testing.T) {
 // TestDiffShowsExactPaths is HUB-204's acceptance: the diff of v7 (100 % ct-brandA-in) and v8
 // (90/10) names exactly the changed paths, and the unified text shows them.
 func TestDiffShowsExactPaths(t *testing.T) {
-	a := newAdminRig(t)
+	a := newDraftRig(t)
 	publishUpTo(t, a, 8)
 	resp, body := a.do(RoleTenantViewer, http.MethodGet, "/integrations/int_evt_brandA/diff?from=7&to=8", "")
 	if resp.Code != 200 {

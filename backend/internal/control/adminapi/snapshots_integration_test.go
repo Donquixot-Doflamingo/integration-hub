@@ -19,7 +19,7 @@ import (
 // TestSnapshotsListAndGet is HUB-204: snapshots newest first with their change, a snapshot's
 // changed objects versus the previous one, and the blob as JSON (or gzip on request).
 func TestSnapshotsListAndGet(t *testing.T) {
-	a := newAdminRig(t)
+	a := newDraftRig(t)
 	publishUpTo(t, a, 4) // archive v1 = v3 published from the dev tree, v2 = v4
 	resp, body := a.do(RoleEditor, http.MethodPost, "/integrations/int_evt_brandA/pause", `{"reason":"snapshot test"}`)
 	if resp.Code != 200 {
@@ -82,7 +82,7 @@ func TestSnapshotsListAndGet(t *testing.T) {
 // TestLatestSnapshotLongPoll is HUB-204's acceptance: a long poll on the current version
 // answers within 1 s of the next publish; without a publish it answers 304 after wait.
 func TestLatestSnapshotLongPoll(t *testing.T) {
-	a := newAdminRig(t)
+	a := newDraftRig(t)
 	publishUpTo(t, a, 3)
 	resp, body := a.do(RoleViewer, http.MethodGet, "/snapshots/latest", "")
 	if resp.Code != 200 || body["version"] != 1.0 || resp.Header().Get("ETag") != `"1"` || body["blob_url"] != "/admin/v1/snapshots/1/blob" {
