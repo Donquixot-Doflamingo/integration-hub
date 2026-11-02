@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(hubctl)` · Log in to the control plane and show the current identity (HUB-210) · HUB-210 · F-17
+  - hubctl login -dev gets a token from the admin's dev OIDC stub and saves it with mode 0600
+  - hubctl whoami prints subject, roles and tenant scope; admin errors print their code, details and request id
 - 2026-11-02 · `feat(control)` · Expose Publisher.Edit for validated config-tree edits (HUB-201) · HUB-201 · F-16
   - Admin resource handlers edit the config tree through one primitive: locked, fully validated, archived, logged and announced
 - 2026-11-02 · `feat(adminapi)` · Read the change log and pause integrations through the publisher lock (HUB-201) · HUB-201 · F-16
