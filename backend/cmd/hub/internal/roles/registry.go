@@ -6,10 +6,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
@@ -24,6 +27,9 @@ const (
 	archiveTimeout = 3 * time.Second
 	pruneEvery     = time.Hour
 )
+
+// followEvery is the archive poll backing up the hub:snapshot ping (a var: tests shorten it).
+var followEvery = 5 * time.Second
 
 // roleRegistry owns the role's snapshot store. In M1 every role builds its snapshot from the dev
 // config directory; the admin role archives each new snapshot (hub.config_snapshots + blob) and
@@ -43,16 +49,19 @@ type roleRegistry struct {
 	// credential cache) and react to one (prune upstream pools). Both may be nil.
 	beforeSwap func(context.Context, *registry.Snapshot)
 	afterSwap  func(*registry.Snapshot)
+	// archiveSeen is the newest archive version this node has considered (follow).
+	archiveSeen atomic.Int64
+	rdb         *redis.Client
 }
 
-func newRegistry(cfg Config, m *telemetry.Metrics, log *slog.Logger, pool *pgxpool.Pool) (*roleRegistry, error) {
+func newRegistry(cfg Config, m *telemetry.Metrics, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Client) (*roleRegistry, error) {
 	blobs, err := control.OpenBlobStore(cfg.BlobURL)
 	if err != nil {
 		return nil, err
 	}
 	r := &roleRegistry{
 		src: registry.Sources{Config: os.DirFS(cfg.ConfigDir), Contracts: os.DirFS(cfg.ContractsDir)},
-		cfg: cfg, log: log, archive: control.NewArchive(pool, blobs),
+		cfg: cfg, log: log, archive: control.NewArchive(pool, blobs), rdb: rdb,
 		version: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "snapshot_version", Help: "Version of the config snapshot this node serves (DESIGN §16.2).",
 		}),
@@ -125,10 +134,10 @@ func (r *roleRegistry) adopt(ctx context.Context, src registry.Sources, snap *re
 		r.origin.WithLabelValues(o).Set(v)
 	}
 	r.writeCache(ctx, src, snap)
-	if r.cfg.Role == Admin && origin == "config" {
+	if r.cfg.Role == Admin && origin == "config" && r.mayArchiveConfig(ctx) {
 		actx, cancel := context.WithTimeout(ctx, archiveTimeout)
 		defer cancel()
-		v, published, err := r.archive.Publish(actx, src, snap, "hub-admin:"+r.cfg.ConfigDir, "config directory changed")
+		v, published, err := r.archive.Publish(actx, src, snap, control.ConfigAuthorPrefix+r.cfg.ConfigDir, "config directory changed")
 		switch {
 		case err != nil:
 			r.failures.WithLabelValues("archive_error").Inc()
@@ -182,10 +191,10 @@ func (r *roleRegistry) watch(ctx context.Context) {
 				r.afterSwap(s)
 			}
 			r.writeCache(ctx, r.src, s)
-			if r.cfg.Role == Admin {
+			if r.cfg.Role == Admin && r.mayArchiveConfig(ctx) {
 				actx, cancel := context.WithTimeout(ctx, archiveTimeout)
 				defer cancel()
-				if _, _, err := r.archive.Publish(actx, r.src, s, "hub-admin:"+r.cfg.ConfigDir, "config directory changed"); err != nil {
+				if _, _, err := r.archive.Publish(actx, r.src, s, control.ConfigAuthorPrefix+r.cfg.ConfigDir, "config directory changed"); err != nil {
 					r.failures.WithLabelValues("archive_error").Inc()
 					r.log.ErrorContext(ctx, "snapshot not archived", slog.String("error", err.Error()))
 				}
@@ -196,6 +205,79 @@ func (r *roleRegistry) watch(ctx context.Context) {
 	if err != nil {
 		r.log.ErrorContext(ctx, "config watcher stopped", slog.String("error", err.Error()))
 	}
+}
+
+// mayArchiveConfig: the config directory is a bootstrap (ADR-0010). It is archived while the
+// archive is empty or holds only config-directory snapshots; once a published change is
+// archived, archiving the directory would undo it.
+func (r *roleRegistry) mayArchiveConfig(ctx context.Context) bool {
+	actx, cancel := context.WithTimeout(ctx, archiveTimeout)
+	defer cancel()
+	meta, err := r.archive.LatestMeta(actx)
+	if errors.Is(err, control.ErrNoSnapshot) {
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	if !strings.HasPrefix(meta.Author, control.ConfigAuthorPrefix) {
+		r.log.InfoContext(ctx, "archive holds published changes: config directory not archived (ADR-0010)", slog.Int64("archive_version", meta.Version))
+		return false
+	}
+	return true
+}
+
+// follow keeps the node on the newest archived snapshot (DESIGN §6.4: nodes swap within 10 s of
+// a publish): it checks on every hub:snapshot ping and every followEvery, adopts an archive
+// version newer than the last one it considered when its checksum differs from what it serves,
+// and keeps the last good snapshot when the archive cannot be read.
+func (r *roleRegistry) follow(ctx context.Context) {
+	ping := make(<-chan *redis.Message)
+	if r.rdb != nil {
+		sub := r.rdb.Subscribe(ctx, control.SnapshotChannel)
+		defer func() { _ = sub.Close() }()
+		ping = sub.Channel()
+	}
+	t := time.NewTicker(followEvery)
+	defer t.Stop()
+	r.syncArchive(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ping:
+		case <-t.C:
+		}
+		r.syncArchive(ctx)
+	}
+}
+
+func (r *roleRegistry) syncArchive(ctx context.Context) {
+	actx, cancel := context.WithTimeout(ctx, archiveTimeout)
+	defer cancel()
+	meta, err := r.archive.LatestMeta(actx)
+	if err != nil {
+		if !errors.Is(err, control.ErrNoSnapshot) && ctx.Err() == nil {
+			r.log.DebugContext(ctx, "archive unreachable: keeping the current snapshot", slog.String("error", err.Error()))
+		}
+		return
+	}
+	if meta.Version <= r.archiveSeen.Load() {
+		return
+	}
+	if cur := r.store.Snapshot(); cur != nil && cur.Checksum == meta.Checksum {
+		r.archiveSeen.Store(meta.Version)
+		return
+	}
+	snap, src, v, err := r.archive.Latest(actx, timeNow())
+	if err != nil {
+		r.failures.WithLabelValues("fetch_error").Inc()
+		r.log.WarnContext(ctx, "archived snapshot not loaded: keeping the current one", slog.String("error", err.Error()))
+		return
+	}
+	r.archiveSeen.Store(v)
+	r.log.InfoContext(ctx, "snapshot.applied from the archive", slog.Int64("archive_version", v), slog.String("checksum", snap.Checksum))
+	r.adopt(ctx, src, snap, "archive")
 }
 
 // pruneLoop deletes archived snapshots older than 90 days, at start and then hourly (scheduler).

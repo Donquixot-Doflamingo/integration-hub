@@ -4,7 +4,7 @@
 Accounts move `active → draining → retired` with a retire guard, and hold `active`/`next` credential slots so rotation needs no integration version (DESIGN §6.5, §6.6).
 
 ## Status
-`proposed` — 2026-10-31.
+`shipped` — 2026-11-02 (M6, `docs/milestones/M6.md`).
 
 ## Owner
 `backend-engineer`.
@@ -65,6 +65,8 @@ Account YAML `state`, `credentials_ref`; vendor `health_probe`.
 | Metric | `hub_requests_total{code="UPSTREAM_AUTH_FAILED",account}` | watched after promote |
 | Metric | `credential_expiry_days` | |
 | Alert | any `UPSTREAM_AUTH_FAILED` | page |
+| Log | `credentials decrypted` (info), `credentials reloaded after rotation` (info) | account@version only, never values (HUB-177) |
+| Change log | `addNextCredential`, `promoteNextCredential`, `deleteOldCredential`, `retireAccount` | slot metadata (version, fingerprint), never values |
 
 ## Security & PII
 Old credentials deleted at retire or after rotation confirmation; deletion audited.
@@ -93,3 +95,4 @@ HUB-170 – HUB-199 (EP-07, filter `feature: F-15`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-02 | Shipped in M6: retire guard, rotation with a `previous` slot, `hub:creds` reload | backend-engineer |

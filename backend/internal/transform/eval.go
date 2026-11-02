@@ -73,6 +73,9 @@ func (p *Program) env(in Input, res map[string]any) map[string]any {
 		env["req"], env["hdr"], env["session"], env["creds"] = orEmpty(in.Req), orEmpty(in.Hdr), orEmpty(in.Session), creds
 	} else {
 		env["res"] = res
+		if p.session != nil { // only the session: section reads req (sessionVars)
+			env["req"] = orEmpty(in.Req)
+		}
 	}
 	return env
 }

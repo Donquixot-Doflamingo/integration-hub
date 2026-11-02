@@ -118,7 +118,8 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `idempotency_hits_total` | counter | hits | `result` (`miss` = key claimed, `in_progress`, `replay`, `conflict` = same key with another body, `error` = Redis unavailable) | `idempotency` (HUB-118) | dedupe effectiveness; `error` feeds the Redis-down fail-closed/pass-through decision of the edge |
 | `idempotency_writes_total` | counter | writes | `op` (`complete`, `release`), `result` (complete: `stored`, `not_owner`, `too_large`, `not_replayable`, `error`; release: `released`, `missing`, `not_owner`, `error`) | `idempotency` (HUB-118) | `not_owner` = a request outlived its 5 min lease; `too_large` = response over 1 MiB, not replayable |
 | `creds_cache_miss_total` | counter | misses | `account` | `creds` | must stay 0 on the hot path |
-| `creds_decrypts_total` | counter | loader calls | — | `creds` | decrypting loads happen only at warm-up and background refresh (HUB-084); a rise with traffic is a bug |
+| `creds_decrypts_total` | counter | loader calls | — | `creds` | decrypting loads happen only at warm-up and background refresh (HUB-084); a rise with traffic is a bug. Each load also logs `credentials decrypted` (account@version list, never values; HUB-177) |
+| `shadow_total` | counter | copies | `integration, mode, outcome` (`ok`, `vendor_error`, `failed`, `dropped`) | `delivery` | shadow cutover health (HUB-173); `dropped` means the 64-copy bound was hit. Replaces the proposed `shadow_mismatch_total` |
 | `redis_op_duration_seconds` | histogram | s | `op` (`idempotency_begin`, `idempotency_complete`, `idempotency_release`; upstream ops later) | `telemetry` registers it once per process; `idempotency` (HUB-118) observes, `upstream` later | one observation per Redis round trip; buckets 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 100, 500 ms so the 1 ms idempotency budget (DESIGN §18.6) is a boundary |
 | `pg_pool_acquire_duration_seconds`, `pg_pool_in_use` | histogram, gauge | s, conns | `pool` | cmd wiring (pgxpool stats) | |
 | `http_server_inflight` | gauge | requests | `server` (`public`,`admin`) | `edge`, `control` | |
@@ -177,6 +178,8 @@ Request-scoped fields are attached once via a `slog.Logger` stored in the contex
 
 ### 4.4 Bodies
 Logs **never** contain request or response bodies, canonical or vendor (backend/AGENTS.md). For debugging, use the audit timeline (subject to payload policy) or `dry-run`. The only exception is `mockvendor`, which may log bodies because it only sees synthetic data.
+
+Vendor sessions (HUB-175, F-14): session data is never logged either. The edge logs `session lookup failed` / `session create failed` (ERROR, Postgres errors), `session target gone` (WARN, the session's version or account left the snapshot) and `session data refused` (WARN, the store refused an Aadhaar-like number or oversize data) with the integration and the error only; the worker logs `session lookup failed`. Session open/use is in the audit trail as `session` meta (id, event, version, account) on `response.transformed` / `integration.resolved`. No new metrics: the lookup is timed in the `resolve` stage of `hub_overhead_ms`.
 
 ### 4.5 Sampling
 - Hot-path WARN events that can storm (Redis timeout, limiter rejection) are rate-limited per `(msg, account)` key: first 10 per 10 s, then 1 in 100, with `sampled_out` count on the next emitted line.

@@ -6,6 +6,61 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `docs(milestones)` · Accept M6 with mixed-version and rollback checks; write the M6 summary (HUB-184) · HUB-184 · F-14
+  - M6 accepted: every §6.3 row, rollback, retire guard, rotation, shadow and mixed-version propagation proven by itests
+  - docs/milestones/M6.md with Deviations; F-14 and F-15 shipped; shadow_total and credential logs in OBSERVABILITY
+- 2026-11-02 · `test(edge)` · Prove the §6.3 cutover rows for account, vendor and transformer changes (HUB-178) · HUB-178 · F-14
+  - Cutover fixtures: a second account, a test-only second vendor and T1@8 with its own goldens
+  - Completed, in-flight, queued (re_resolve and pinned), retried and new requests land on the version §6.3 says, for each change type
+  - Publishing v8 leaves every audit row of a v7 request byte for byte unchanged
+- 2026-11-02 · `feat(control)` · Guard retires with pinned envelopes and open sessions; sweep expired sessions (HUB-176) · HUB-176 · F-15
+  - Retiring an account is refused with counts while a pinned or session-bound request or an open vendor session still references it
+  - The scheduler leader deletes expired vendor sessions every 30 s
+- 2026-11-02 · `build(control)` · Regenerate sqlc models for the change log (HUB-170) · HUB-170 · F-14
+  - make sqlc-check passes again (HubChangeLog model)
+- 2026-11-02 · `feat(registry)` · Let a transformer version carry its own golden fixtures (HUB-341) · HUB-341 · F-14
+  - transformers/<ID>/fixtures/v<N>/ holds the goldens of version N; other versions keep the shared fixtures
+- 2026-11-02 · `feat(delivery)` · Copy requests to shadow targets and prove weight stickiness (HUB-173) · HUB-173 · F-14
+  - An integration version can name a shadow target: requests are copied after the caller's answer, the copy's result is audited and never returned
+  - Shadows of non-idempotent (side-effect) endpoints must be dry_run: they are transformed and audited, never sent
+  - Weight changes across versions move only the shifted buckets (90/10 → 50/50 → 0/100)
+- 2026-11-02 · `feat(creds)` · Rotate credentials through next, promote and delete-old with node pings (HUB-177) · HUB-177 · F-15
+  - Accounts gain a previous slot; add next → promote → delete old, each with an optimistic expected version
+  - Every rotation step writes a change-log row with slot metadata only, and every node reloads its credential cache within a second
+  - Each credential decrypt is logged with account ids and versions, never values
+- 2026-11-02 · `test(delivery)` · Prove send-time version choice for queued, parked, pinned and session envelopes (HUB-174) · HUB-174 · F-14
+  - Queued and parked envelopes use the version active at send time (D10)
+  - Pinned and session envelopes stay on their accepted version; every attempt records it
+- 2026-11-02 · `feat(roles)` · Follow the snapshot archive on every node via Redis ping and poll (HUB-171) · HUB-171 · F-14
+  - A publish reaches every node within a second (Redis hub:snapshot ping, 5 s poll fallback)
+  - A node that cannot read the archive keeps serving its last good snapshot
+- 2026-11-02 · `feat(control)` · Publish, roll back and retire through a validating publisher (HUB-170) · HUB-170 · F-14
+  - Publishing an integration version runs the full registry build; any error blocks it with a path-qualified message
+  - Published versions are immutable; rollback creates a new version with the old spec
+  - Accounts move active → draining → retired; retire is refused while pinned work or sessions reference them
+- 2026-11-02 · `feat(control)` · Add the append-only change log and archive-backed source-of-truth ADR (HUB-170) · HUB-170 · F-14
+  - Every control-plane write records actor, reason, before and after in hub.change_log
+  - Rows cannot be updated or deleted (trigger)
+  - ADR-0010: the snapshot archive is the registry's source of truth
+- 2026-11-02 · `test(edge)` · prove session step 2 stays on v7 after publishing v8 · HUB-183 · F-14
+  - make itest opens a session on v7, publishes v8 (new account and transformers), and shows step 2 served by v7's account and transformers with the session's txn id, in sync and wait mode, while a session opened after the publish runs on v8
+  - HUB-175 and HUB-183 are done
+
+- 2026-11-02 · `feat(edge)` · open and pin vendor sessions in the invoke pipeline · HUB-175 · F-14
+  - A successful step 1 whose response transformer maps session data answers 200 with `X-Hub-Session: ses_…`; the session is pinned to the version and account that served it
+  - A request with `X-Hub-Session` runs on that exact version and account even after a publish, and its request transformer reads the data as `session.*`, in sync, wait and async mode and in dry-run; unknown, expired or another integration's sessions get 404 `SESSION_NOT_FOUND`
+  - Queued steps carry `session_id`: the worker pins them the same way and dead-letters them as `SESSION_NOT_FOUND` if the session expired in the queue
+  - Session open and use are in the audit trail (id, version, account; never the data); session data with an Aadhaar-like number fails the step as `TRANSFORM_FAILED` and is never stored
+
+- 2026-11-02 · `feat(sessions)` · store vendor sessions pinned to version and account · HUB-175 · F-14
+  - New table hub.vendor_sessions (migration 00006): a session id (`ses_` + ULID) is pinned to the tenant, integration, version and account that opened it and expires after 10 minutes by default
+  - The store and the table both refuse session data holding an Aadhaar-like number (12 digits, optionally 4-4-4): the Aadhaar number is never stored
+  - `sessions.Expire` (scheduler sweep) and `sessions.CountOpen` (account retire guard) are ready for wiring; `resolve.ResolveSession` routes a later step to the exact version and the target on the session's account
+
+- 2026-11-02 · `feat(transform)` · map vendor session data in response transformers · HUB-175 · F-04
+  - Response transformers may declare a `session:` section (expressions over res, req and account; creds, hdr and session are refused at compile) that maps what a later step of a multi-step operation needs, such as the vendor txn id
+  - `Program.MapResponseSession` returns it on success only, bounded to 16 KB and the transform time budget; goldens pin it as `"session"` in `expected_response.json` and vendor-response fixtures may set `_context.req`
+
 - 2026-10-31 · `fix(delivery)` · retry transformer time-budget overruns and check breakers before transforming · HUB-149 · F-04
   - A transform that overruns its 5 ms wall-clock budget is re-run once; a second overrun is TRANSFORM_FAILED with reason time_budget and retryable, so a GC pause or a busy node no longer dead-letters a healthy request (seen in CI)
   - Breakers are checked before the transform (a refused call costs no transform); the account limiter waits right before the send

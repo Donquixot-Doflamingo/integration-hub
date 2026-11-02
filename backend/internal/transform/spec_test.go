@@ -21,6 +21,7 @@ type specFile struct {
 	Response         yaml.Node `yaml:"response"`
 	Errors           yaml.Node `yaml:"errors"`
 	Batch            yaml.Node `yaml:"batch"`
+	Session          yaml.Node `yaml:"session"`
 }
 
 func specFromYAML(t testing.TB, src string) Spec {
@@ -30,7 +31,7 @@ func specFromYAML(t testing.TB, src string) Spec {
 		t.Fatalf("yaml: %v", err)
 	}
 	return Spec{ID: f.Transformer, Version: f.Version, Kind: f.Kind, Capability: f.Capability,
-		Request: f.Request, Response: f.Response, Errors: f.Errors, Batch: f.Batch, AllowCredsInBody: f.AllowCredsInBody}
+		Request: f.Request, Response: f.Response, Errors: f.Errors, Batch: f.Batch, Session: f.Session, AllowCredsInBody: f.AllowCredsInBody}
 }
 
 func devSpec(t testing.TB, rel string) Spec {

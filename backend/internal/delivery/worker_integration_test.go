@@ -23,6 +23,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/sessions"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/mockvendor"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
@@ -173,6 +174,13 @@ var okBody = json.RawMessage(`{"status":"success","processed":1,"unprocessed":[]
 // enqueue queues an events.track request the way the edge does: requests row + outbox in one TX.
 func (r *rig) enqueue(integration string, ttl time.Duration) core.Envelope {
 	r.t.Helper()
+	return r.enqueueWith(integration, ttl, nil, false)
+}
+
+// enqueueWith is enqueue with an envelope edit and, when parked, the envelope parked on its
+// breaker key instead of due.
+func (r *rig) enqueueWith(integration string, ttl time.Duration, edit func(*core.Envelope), parked bool) core.Envelope {
+	r.t.Helper()
 	now := r.now()
 	env := core.Envelope{
 		RequestID: "req_" + core.NewULID(now), Tenant: "orders-service", IntegrationID: integration, ResolvedVersion: 2,
@@ -180,10 +188,16 @@ func (r *rig) enqueue(integration string, ttl time.Duration) core.Envelope {
 		Canonical:     json.RawMessage(`{"user":{"id":"u_48213"},"event":{"name":"order_placed","timestamp":"2026-10-31T09:15:00Z"}}`),
 		NextAttemptAt: now.Add(-time.Millisecond), ExpiresAt: now.Add(ttl), CreatedAt: now,
 	}
+	if edit != nil {
+		edit(&env)
+	}
 	err := pgx.BeginFunc(r.t.Context(), r.db, func(tx pgx.Tx) error {
 		if err := (audit.Ledger{}).Insert(r.t.Context(), tx, audit.Record{RequestID: env.RequestID, CreatedAt: now, TenantID: env.Tenant,
 			IntegrationID: integration, Capability: env.Capability, Operation: "default", Mode: "async", Status: "accepted", PayloadPolicy: "masked"}); err != nil {
 			return err
+		}
+		if parked {
+			return r.w.Queue.EnqueueParked(r.t.Context(), tx, env, "ct-brandA-in", "upload")
 		}
 		return r.w.Queue.Enqueue(r.t.Context(), tx, env)
 	})
@@ -358,5 +372,123 @@ func TestPausedIntegrationIsHeldWithoutAnAttempt(t *testing.T) {
 	_ = r.db.QueryRow(t.Context(), `SELECT status, attempt FROM hub.outbox WHERE request_id = $1`, env.RequestID).Scan(&status, &attempt)
 	if status != "accepted" || attempt != 0 || len(r.mv.Requests(t, nil)) != 0 {
 		t.Fatalf("paused: %s attempt %d", status, attempt)
+	}
+}
+
+// TestSendTimeVersion is HUB-174 (D10): an envelope accepted under v2 is sent with the version
+// active at send time unless it is pinned or bound to a vendor session, whether it waited in
+// the queue or parked behind an open breaker. Every attempt records the version it used.
+func TestSendTimeVersion(t *testing.T) {
+	var sess string // opened by the session case on v2 / ct-brandA-in
+	cases := []struct {
+		name   string
+		edit   func(*core.Envelope)
+		parked bool
+		want   int
+	}{
+		{"queued re_resolve", nil, false, 1},
+		{"parked re_resolve", nil, true, 1},
+		{"queued pinned", func(e *core.Envelope) { e.Pinned = true }, false, 2},
+		{"parked pinned", func(e *core.Envelope) { e.Pinned = true }, true, 2},
+		{"session", func(e *core.Envelope) { e.SessionID = &sess }, false, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRig(t)
+			r.route(mockvendor.Behaviour{Status: 200, Body: okBody})
+			if tc.name == "session" {
+				ses, err := sessions.Create(t.Context(), r.db, sessions.Open{TenantID: "orders-service", IntegrationID: "int_evt_brandA",
+					Version: 2, AccountID: "ct-brandA-in", Data: map[string]any{"step": "one"}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				sess = ses.ID
+				t.Cleanup(func() {
+					_, _ = r.db.Exec(context.Background(), `DELETE FROM hub.vendor_sessions WHERE session_id = $1`, ses.ID)
+				})
+			}
+			env := r.enqueueWith("int_evt_brandA", 6*time.Hour, tc.edit, tc.parked)
+			// The publish lands while the envelope waits: version 1 becomes active.
+			snap := r.snaps.Snapshot()
+			cp := *snap
+			cp.Integrations = map[string]*registry.Integration{}
+			for k, v := range snap.Integrations {
+				c := *v
+				if k == "int_evt_brandA" {
+					c.ActiveVersion = 1
+				}
+				cp.Integrations[k] = &c
+			}
+			r.snaps.s.Store(&cp)
+			if tc.parked {
+				if r.process() != 0 {
+					t.Fatal("a parked envelope was claimed")
+				}
+				if n, err := r.w.Queue.Release(t.Context(), r.db, "ct-brandA-in", "upload", 10); err != nil || n != 1 {
+					t.Fatalf("release %d %v", n, err)
+				}
+			}
+			if r.process() != 1 {
+				t.Fatal("not claimed")
+			}
+			if s, _ := r.status(env.RequestID); s != "succeeded" {
+				t.Fatalf("status %s", s)
+			}
+			a := r.sink.attempts()
+			if len(a) != 1 || a[0].IntegrationVersion != tc.want {
+				t.Fatalf("want one attempt on v%d, got %+v", tc.want, a)
+			}
+		})
+	}
+}
+
+// rotatingLoader serves one account slot that a test can promote.
+type rotatingLoader struct{ s atomic.Pointer[creds.Slot] }
+
+func (l *rotatingLoader) Load(_ context.Context, ids []string) (map[string]creds.AccountSecrets, error) {
+	out := map[string]creds.AccountSecrets{}
+	for _, id := range ids {
+		out[id] = creds.AccountSecrets{Active: *l.s.Load()}
+	}
+	return out, nil
+}
+
+// TestParkedDrainUsesPromotedCredential is HUB-177: credentials are injected at send time, so
+// an envelope parked before a promotion is drained with the new active credential.
+func TestParkedDrainUsesPromotedCredential(t *testing.T) {
+	r := newRig(t)
+	r.route(mockvendor.Behaviour{Status: 200, Body: okBody})
+	l := &rotatingLoader{}
+	l.s.Store(&creds.Slot{Version: 3, Values: map[string]string{"account_id": "fake-acct-W0RK", "passcode": "fake-pass-OLD3"}})
+	cache, err := creds.NewCache(l, telemetry.NewSecretSet(), telemetry.NewMetrics("worker", "rotation"), creds.CacheOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Warm(t.Context(), creds.AccountIDs(r.snaps.Snapshot())); err != nil {
+		t.Fatal(err)
+	}
+	r.w.Attempter.Creds = cache
+
+	env := r.enqueueWith("int_evt_brandA", 6*time.Hour, nil, true)
+	// Promotion while the envelope is parked: the node reloads on the hub:creds ping.
+	l.s.Store(&creds.Slot{Version: 4, Values: map[string]string{"account_id": "fake-acct-W0RK", "passcode": "fake-pass-NEW4"}})
+	if err := cache.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.w.Queue.Release(t.Context(), r.db, "ct-brandA-in", "upload", 10); err != nil || n != 1 {
+		t.Fatalf("release %d %v", n, err)
+	}
+	if r.process() != 1 {
+		t.Fatal("not claimed")
+	}
+	if s, _ := r.status(env.RequestID); s != "succeeded" {
+		t.Fatalf("status %s", s)
+	}
+	reqs := r.mv.Requests(t, nil)
+	if len(reqs) != 1 {
+		t.Fatalf("vendor saw %d requests", len(reqs))
+	}
+	if got := reqs[0].Headers["X-Clevertap-Passcode"]; len(got) != 1 || got[0] != "fake-pass-NEW4" {
+		t.Fatalf("drain sent passcode %v, want the promoted one", got)
 	}
 }

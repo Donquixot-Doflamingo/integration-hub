@@ -147,6 +147,20 @@ func (t *Trail) Stored(typ string) []byte {
 	return nil
 }
 
+// Annotate sets meta[key] = value on the latest event of type typ (nothing when there is none):
+// context learned after the event, such as the vendor session a response opened.
+func (t *Trail) Annotate(typ, key string, value any) {
+	for i := len(t.events) - 1; i >= 0; i-- {
+		if t.events[i].Type == typ {
+			if t.events[i].Meta == nil {
+				t.events[i].Meta = map[string]any{}
+			}
+			t.events[i].Meta[key] = value
+			return
+		}
+	}
+}
+
 // Events returns the events recorded so far.
 func (t *Trail) Events() []Event { return t.events }
 

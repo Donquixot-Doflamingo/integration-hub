@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -70,6 +71,10 @@ func (s *Server) envelope(r *http.Request, p *prepared) core.Envelope {
 	if k := r.Header.Get("Idempotency-Key"); k != "" {
 		env.IdempotencyKey = &k
 	}
+	if p.session != nil { // the worker pins the attempt to the session's version and account
+		id := p.session.ID
+		env.SessionID = &id
+	}
 	if tp := r.Header.Get("Traceparent"); tp != "" {
 		env.Trace = map[string]string{"traceparent": tp}
 	}
@@ -130,9 +135,10 @@ func (s *Server) accept(w http.ResponseWriter, r *http.Request, p *prepared) {
 }
 
 type waitOutcome struct {
-	state core.State
-	res   delivery.Result
-	err   error
+	state     core.State
+	res       delivery.Result
+	err       error
+	sessionID string
 }
 
 // deliverWait is wait mode (D3): persist claimed by this gateway, attempt at once, answer 200
@@ -170,9 +176,18 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 	go func() {
 		defer cancel()
 		res := s.attempter.Run(ctx, delivery.Job{
-			RequestID: env.RequestID, Snap: p.caller.Snap, Res: p.res, Body: p.body, Hdr: p.hdr,
+			RequestID: env.RequestID, Snap: p.caller.Snap, Res: p.res, Body: p.body, Hdr: p.hdr, Session: p.sessionData(),
 			IdempotencyKey: idemKey, Trail: p.trail, Timings: &timings, FirstAttempt: 1, Live: true,
 		})
+		// Step 1 succeeded: open the session before the success commits. A failure to open it
+		// fails the request like a broken mapping (TRANSFORM_FAILED) or a Hub error.
+		var sessionID string
+		if res.Err == nil {
+			var ce *core.CanonicalError
+			if sessionID, ce = s.openSession(ctx, p, p.trail, res); ce != nil {
+				res.Err, res.Body = ce, nil
+			}
+		}
 		final := audit.Final{
 			Attempts: max(len(res.Attempts), 1), IntegrationVersion: p.res.VersionNumber,
 			HubOverheadMS: telemetry.Millis(timings.Overhead(s.deps.Now())), VendorMS: telemetry.Millis(timings.Stage(telemetry.StageUpstream)),
@@ -183,7 +198,8 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 		}
 		delivery.TerminalAudit(p.trail, final.Attempts, state, err, res.Err)
 		s.deps.Audit.Emit(audit.Batch{Events: p.trail.Events(), Attempts: res.Attempts})
-		done <- waitOutcome{state: state, res: res, err: err}
+		done <- waitOutcome{state: state, res: res, err: err, sessionID: sessionID}
+		s.shadow(ctx, r, p)
 	}()
 
 	t := time.NewTimer(wait)
@@ -194,6 +210,10 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 		case o.err != nil && !delivery.IsLost(o.err):
 			WriteError(w, r, persistFailed())
 		case o.state == core.StateSucceeded:
+			setSessionHeader(w, o.sessionID)
+			if s.deps.DebugHeaders {
+				w.Header().Set("X-Hub-Integration-Version", strconv.Itoa(p.res.VersionNumber))
+			}
 			w.Header().Set("X-Hub-Served-By", "primary")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)

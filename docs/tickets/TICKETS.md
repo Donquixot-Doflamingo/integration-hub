@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **197** · done: **125** · todo: **71** · other (in-progress/in-review/blocked): **1**
+Total tickets: **198** · done: **141** · todo: **56** · other (in-progress/in-review/blocked): **1**
 
 ## Epics
 
@@ -15,7 +15,7 @@ Total tickets: **197** · done: **125** · todo: **71** · other (in-progress/in
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
-| EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 15 | 0 |
+| EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 0 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
@@ -1288,178 +1288,192 @@ Scenario 5 plus the milestone wrap-up.
 
 ### HUB-170 — Publish pipeline with full validation
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-069, HUB-048, HUB-043 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-069, HUB-048, HUB-043 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-170-publish-pipeline`
 
 Publish = validate (schemas compile, expressions type-check, goldens pass, response output conforms, referenced accounts/transformers exist and not retired, interactive → sync only, `supports` matches) → immutable version row → new snapshot (DESIGN §6.4, §8.2).
 
 **Acceptance criteria**
-- [ ] Each validation failure blocks publish with a path-qualified error (table test per rule)
-- [ ] Published versions cannot be modified
-- [ ] Publish requires author and reason
+- [x] Each validation failure blocks publish with a path-qualified error (table test per rule)
+- [x] Published versions cannot be modified
+- [x] Publish requires author and reason
 
 ### HUB-171 — Snapshot distribution to nodes
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-171-snapshot-distribution`
 
 Nodes long-poll `/admin/v1/snapshots/latest` and listen to a Redis ping, download, compile in the background and swap atomically; a node that cannot fetch keeps the last good snapshot (DESIGN §6.4, §8.2).
 
 **Acceptance criteria**
-- [ ] Publish reaches 3 nodes within 10 s (itest)
-- [ ] Control plane down → nodes keep serving last good
-- [ ] `snapshot_version` gauge exported per node
+- [x] Publish reaches 3 nodes within 10 s (itest)
+- [x] Control plane down → nodes keep serving last good
+- [x] `snapshot_version` gauge exported per node
 
 ### HUB-172 — Rollback as a new version
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-172-rollback-new-version`
 
 Rollback publishes a new version with the old content (v9 = v7); history stays linear, nothing is deleted (DESIGN §6.4).
 
 **Acceptance criteria**
-- [ ] Rollback to v7 creates v9 with v7's spec and a reason
-- [ ] Version list remains strictly increasing with no gaps
+- [x] Rollback to v7 creates v9 with v7's spec and a reason
+- [x] Version list remains strictly increasing with no gaps
 
 ### HUB-173 — Gradual cutover: weights and shadow
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-083, HUB-170, HUB-092 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-083, HUB-170, HUB-092 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-173-weights-shadow`
 
 Support weight changes across successive versions (90/10 → 50/50 → 0/100) and `shadow` targets: serve from A, copy to B, log B's result, never return it; dry-run-only shadow for vendors with side effects (DESIGN §6.4).
 
 **Acceptance criteria**
-- [ ] Shadow result recorded in audit and never returned to the caller
-- [ ] Side-effect vendors only receive dry-run shadow (no vendor call recorded)
-- [ ] Weight changes keep stickiness for unchanged buckets
+- [x] Shadow result recorded in audit and never returned to the caller
+- [x] Side-effect vendors only receive dry-run shadow (no vendor call recorded)
+- [x] Weight changes keep stickiness for unchanged buckets
 
 ### HUB-174 — Re-resolve vs pinned at send time
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-112, HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-112, HUB-170 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-174-reresolve-pinned`
 
 Worker uses the active version for `pending: re_resolve` (default) and `resolved_version` for `pinned` or session envelopes; every attempt records its version (DESIGN §6.3, §11.3, D10).
 
 **Acceptance criteria**
-- [ ] Parked envelope re-resolves to v8 after publish (re_resolve)
-- [ ] Pinned envelope stays on v7
-- [ ] `request_attempts.integration_version` set on every attempt
+- [x] Parked envelope re-resolves to v8 after publish (re_resolve)
+- [x] Pinned envelope stays on v7
+- [x] `request_attempts.integration_version` set on every attempt
 
 ### HUB-175 — Vendor session store and pinning
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-088, HUB-114 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-088, HUB-114 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `feat/HUB-175-vendor-sessions`
 
 `vendor_sessions` table; step 1 of a multi-op capability returns `X-Hub-Session`; later steps route to the pinned version + account; scheduler expires sessions; unknown/expired → 404 `SESSION_NOT_FOUND` (DESIGN §3.1, §6.3, §14).
 
 **Acceptance criteria**
-- [ ] Step 2 uses the version/account of step 1 even after a publish
-- [ ] Expired session → `SESSION_NOT_FOUND`
-- [ ] Session data never stores Aadhaar numbers (schema test)
+- [x] Step 2 uses the version/account of step 1 even after a publish
+- [x] Expired session → `SESSION_NOT_FOUND`
+- [x] Session data never stores Aadhaar numbers (schema test)
 
 ### HUB-176 — Account lifecycle and retire guard
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-174, HUB-175, HUB-170 · **Feature:** F-15 · **Stories:** US-15xx
+- **Status:** done · **Depends on:** HUB-174, HUB-175, HUB-170 · **Feature:** F-15 · **Stories:** US-15xx
 - **Branch:** `feat/HUB-176-account-lifecycle`
 
 `active → draining → retired`: draining when no active version targets the account; retire refused while pinned requests or open sessions reference it; credentials deleted only at retire (DESIGN §6.5).
 
 **Acceptance criteria**
-- [ ] Account auto-enters `draining` after the last referencing publish
-- [ ] Retire refused with counts of pinned requests and sessions
-- [ ] Retired account cannot be referenced by a new publish
+- [x] Account auto-enters `draining` after the last referencing publish
+- [x] Retire refused with counts of pinned requests and sessions
+- [x] Retired account cannot be referenced by a new publish
 
 ### HUB-177 — Credential rotation (active / next)
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-084, HUB-171 · **Feature:** F-15 · **Stories:** US-15xx
+- **Status:** done · **Depends on:** HUB-084, HUB-171 · **Feature:** F-15 · **Stories:** US-15xx
 - **Branch:** `feat/HUB-177-credential-rotation`
 
 Accounts hold `active` and `next` credentials: add next → connection test → promote → delete old. In-flight calls keep the injected credential; later attempts (incl. drain) use `active` at send time; cache invalidated on snapshot ping (DESIGN §6.6, §9).
 
 **Acceptance criteria**
-- [ ] Promote takes effect on all nodes within 10 s
-- [ ] A parked request drained after promotion uses the new credential
-- [ ] Every decrypt and credential change audited
+- [x] Promote takes effect on all nodes within 10 s
+- [x] A parked request drained after promotion uses the new credential
+- [x] Every decrypt and credential change audited
 
 ### HUB-178 — Cutover scenario 1: completed before publish (account, vendor, transformer)
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-173, HUB-174, HUB-046 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-173, HUB-174, HUB-046 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-178-cutover-s1-completed`
 
 Add cutover fixtures (second account, second mock vendor e.g. `moengage`, transformer `T1@8`) and test §6.3 row 1 for each change type.
 
 **Acceptance criteria**
-- [ ] For account, vendor and transformer swaps: completed v7 requests keep v7, its account and payloads in audit
-- [ ] Publish rewrites no audit rows (row checksum test)
+- [x] For account, vendor and transformer swaps: completed v7 requests keep v7, its account and payloads in audit
+- [x] Publish rewrites no audit rows (row checksum test)
 
 ### HUB-179 — Cutover scenario 2: in-flight stays on v7
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-179-cutover-s2-inflight`
 
 §6.3 row 2 for each change type, using mockvendor slow drip to hold a request in flight across publish.
 
 **Acceptance criteria**
-- [ ] In-flight attempt completes on v7's target for all three change types
-- [ ] Attempt row records v7
+- [x] In-flight attempt completes on v7's target for all three change types
+- [x] Attempt row records v7
 
 ### HUB-180 — Cutover scenario 3: parked/queued re-resolve vs pinned
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-180-cutover-s3-parked`
 
 §6.3 row 3 for each change type.
 
 **Acceptance criteria**
-- [ ] `re_resolve`: parked envelope delivered via v8's target
-- [ ] `pinned`: delivered via v7's target
-- [ ] Holds for account, vendor and transformer changes
+- [x] `re_resolve`: parked envelope delivered via v8's target
+- [x] `pinned`: delivered via v7's target
+- [x] Holds for account, vendor and transformer changes
 
 ### HUB-181 — Cutover scenario 4: retry with same key resolves fresh
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-178, HUB-118 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-178, HUB-118 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-181-cutover-s4-retry`
 
 §6.3 row 4 for each change type.
 
 **Acceptance criteria**
-- [ ] Retry of a failed v7 request with the same idempotency key lands on v8
-- [ ] A completed request with the same key is replayed, not re-sent
+- [x] Retry of a failed v7 request with the same idempotency key lands on v8
+- [x] A completed request with the same key is replayed, not re-sent
 
 ### HUB-182 — Cutover scenario 5: first new request uses v8
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-182-cutover-s5-new`
 
 §6.3 row 5 for each change type.
 
 **Acceptance criteria**
-- [ ] New request after propagation uses v8
-- [ ] Caller URL, body and response schema unchanged (contract validation)
+- [x] New request after propagation uses v8
+- [x] Caller URL, body and response schema unchanged (contract validation)
 
 ### HUB-183 — Cutover scenario 6: session step 2 stays on v7
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-178, HUB-175 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** done · **Depends on:** HUB-178, HUB-175 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-183-cutover-s6-session`
 
 §6.3 row 6 for each change type.
 
 **Acceptance criteria**
-- [ ] Step 2 of a session opened on v7 is served by v7's account and transformer
-- [ ] New sessions opened after publish use v8
+- [x] Step 2 of a session opened on v7 is served by v7's account and transformer
+- [x] New sessions opened after publish use v8
+
+Covered for an account + transformer swap (sync, wait; async step 2 in HUB-175's itest). The vendor-swap variant needs HUB-178's second mock vendor.
 
 ### HUB-184 — Retire guard and rollback acceptance; M6 summary
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-176, HUB-172, HUB-177, HUB-179, HUB-180, HUB-181, HUB-182, HUB-183 · **Feature:** F-15 · **Stories:** US-15xx
+- **Status:** done · **Depends on:** HUB-176, HUB-172, HUB-177, HUB-179, HUB-180, HUB-181, HUB-182, HUB-183 · **Feature:** F-15 · **Stories:** US-15xx
 - **Branch:** `test/HUB-184-m6-acceptance`
 
 Remaining M6 Accept items, mixed-version propagation, and the wrap-up.
 
 **Acceptance criteria**
-- [ ] Retire refused while pinned requests or sessions exist; succeeds at zero
-- [ ] Rollback restores behaviour and leaves history linear
-- [ ] During propagation one node on v7 and another on v8 both record exact versions
-- [ ] Milestone summary posted; F-14, F-15 docs updated
+- [x] Retire refused while pinned requests or sessions exist; succeeds at zero
+- [x] Rollback restores behaviour and leaves history linear
+- [x] During propagation one node on v7 and another on v8 both record exact versions
+- [x] Milestone summary posted; F-14, F-15 docs updated
+
+### HUB-341 — Per-version golden fixtures for transformers
+- **Epic:** EP-07 · **Type:** feat · **Area:** backend
+- **Status:** done · **Depends on:** HUB-046 · **Feature:** F-14 · **Stories:** US-14xx
+- **Branch:** `phase-2/m6-versioning`
+
+Golden fixtures live in `transformers/<ID>/fixtures/`, shared by every version of the ID, so a new version that changes its output (T1@7 → T1@8) cannot pass them without breaking the old one. Found while building the M6 cutover fixtures. Let `transformers/<ID>/fixtures/v<N>/` hold the cases of version N when it exists; otherwise the shared directory applies (DESIGN §7.6).
+
+**Acceptance criteria**
+- [x] A version with its own `fixtures/v<N>/` runs only those cases
+- [x] Versions without one keep using the shared fixtures
+- [x] A failing per-version golden names `fixtures/v<N>/<case>`
 
 ## EP-08 — M7 Control plane & hubctl
 

@@ -4,7 +4,7 @@
 Immutable integration versions behind a stable integration ID; the full publish validation pipeline; rollback as a new version; weighted gradual cutover and shadow mode; re-resolve vs pinned for pending work; per-attempt version recording; vendor-session pinning (DESIGN §6, D10, D11, D12).
 
 ## Status
-`proposed` — 2026-10-31.
+`shipped` — 2026-11-02 (M6, `docs/milestones/M6.md`).
 
 ## Owner
 `backend-engineer`.
@@ -62,6 +62,14 @@ DESIGN §6.3 request handling at publish of v8:
 5. During propagation two nodes may serve different versions; per-request version recording keeps audit exact.
 6. Publish produces a new snapshot (F-03) and a `change_log` row with author and reason.
 
+### Vendor sessions (HUB-175, HUB-183) — implementation notes
+- **Open (step 1)**: a response transformer with a `session:` section (F-04) maps session data on success. The edge stores it with `sessions.Create` (`ses_` + ULID, TTL 10 min) pinned to tenant, integration, the version that served and the account that served (failover included), and answers `X-Hub-Session` on the 200 (sync, or wait within the window). An async step 1 opens nothing. A later step never opens another session.
+- **Use (step ≥ 2)**: `X-Hub-Session` → `sessions.Get` (unknown, expired, other tenant or integration → 404 `SESSION_NOT_FOUND`) → `resolve.ResolveSession` (exact version + the target on the session's account, no failover; version/account gone → 404 `SESSION_NOT_FOUND`); the request transformer reads `session.*`. Wait and async envelopes carry `session_id` and `resolved_version`; the worker reloads the session and pins the same way, and dead-letters the request as `SESSION_NOT_FOUND` when the session expired in the queue. Dry-run with `X-Hub-Session` uses the session too.
+- **Never stored**: the store and the table refuse a 12-digit (4-4-4) number anywhere in the data or `vendor_txn_id` (DESIGN §14); `creds.*` is refused in `session:` at compile; data ≤ 16 KB.
+- **Audit**: `integration.resolved` meta `session: {id, event: used, version, account}`; `response.transformed` meta `session: {id, event: opened, version, account, expires_at}` (or `event: refused`). Never the data.
+- **For the lead**: the scheduler calls `sessions.Expire(ctx, db, now)` each tick; the retire guard calls `sessions.CountOpen(ctx, db, accountID)`.
+- **Deviation**: one PK read per step ≥ 2 request on the sync path — [ADR-0011](../tech/adr/0011-vendor-session-lookup-on-the-request-path.md).
+
 ## Data model impact
 `integrations(active_version, paused)`, `integration_versions(spec JSONB, author, reason, published_at)` immutable, `request_attempts.integration_version`, `vendor_sessions.version` (DESIGN §18.2).
 
@@ -72,8 +80,12 @@ Integration YAML `versions[]`, `targets[].weight`, `targets[].shadow` (proposed 
 | Kind | Name | Notes |
 | --- | --- | --- |
 | Metric | `hub_requests_total{version}`, `vendor_latency_ms{version}` | canary comparison |
-| Metric | `shadow_mismatch_total{integration}` | proposed |
+| Metric | `shadow_total{integration, mode, outcome}` | shadow copies (HUB-173); results in the request's audit block at seq 900000+ |
+| Log | `archived snapshot not loaded: keeping the current one` (warn) | node follower (HUB-171): read or build failure, last good snapshot kept |
+| Change log | `hub.change_log` row per publish, rollback, retire | actor, reason, before/after (HUB-170) |
 | Log | `integration_published` | id, from, to, author, reason |
+| Log | `session lookup failed`, `session create failed` (error), `session target gone`, `session data refused` (warn) | integration + error only; never session data |
+| Audit meta | `session` on `integration.resolved` / `response.transformed` | id, event, version, account (HUB-175) |
 
 ## Security & PII
 Versions never surface to callers except debug header (F-06). Publish requires `editor`/`admin` (F-16).
@@ -103,3 +115,5 @@ HUB-170 – HUB-199 (EP-07, filter `feature: F-14`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-02 | Vendor session implementation notes (HUB-175, HUB-183) | backend-engineer |
+| 2026-11-02 | Shipped in M6: publisher, distribution, shadow, cutover tests | backend-engineer |

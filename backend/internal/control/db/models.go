@@ -73,6 +73,21 @@ type HubCapability struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type HubChangeLog struct {
+	ChangeID        string             `json:"change_id"`
+	At              pgtype.Timestamptz `json:"at"`
+	Actor           string             `json:"actor"`
+	ActorRoles      []string           `json:"actor_roles"`
+	Action          string             `json:"action"`
+	ObjectType      string             `json:"object_type"`
+	ObjectID        string             `json:"object_id"`
+	Reason          string             `json:"reason"`
+	Before          []byte             `json:"before"`
+	After           []byte             `json:"after"`
+	SnapshotVersion pgtype.Int8        `json:"snapshot_version"`
+	RequestID       pgtype.Text        `json:"request_id"`
+}
+
 type HubConfigSnapshot struct {
 	Version   int64              `json:"version"`
 	Checksum  string             `json:"checksum"`
@@ -251,4 +266,16 @@ type HubVendorEndpoint struct {
 	ConnectTimeoutMs int32       `json:"connect_timeout_ms"`
 	Idempotent       bool        `json:"idempotent"`
 	BatchMax         pgtype.Int4 `json:"batch_max"`
+}
+
+type HubVendorSession struct {
+	SessionID     string             `json:"session_id"`
+	TenantID      string             `json:"tenant_id"`
+	IntegrationID string             `json:"integration_id"`
+	Version       int32              `json:"version"`
+	AccountID     string             `json:"account_id"`
+	VendorTxnID   pgtype.Text        `json:"vendor_txn_id"`
+	Data          []byte             `json:"data"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 }

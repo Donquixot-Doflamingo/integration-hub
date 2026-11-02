@@ -117,6 +117,21 @@ func TestValidateRejectsInvalidConfigs(t *testing.T) {
 		{"publish metadata missing", func(t *testing.T) map[string]string {
 			return map[string]string{v1: version(t, "publish: { author: platform-team, reason: initial }", "publish: { author: platform-team }")}
 		}, Problem{v1, "publish", "author and reason are required"}},
+		{"shadow sends to a side-effect endpoint", func(t *testing.T) map[string]string {
+			return map[string]string{
+				v1:                       version(t, "publish: {", shadowYAML("send", "")+"publish: {"),
+				"vendors/clevertap.yaml": strings.Replace(validFiles["vendors/clevertap.yaml"], "idempotent: true", "idempotent: false", 1),
+			}
+		}, Problem{v1, "shadow.mode", "clevertap.upload@1 is not idempotent (it has side effects): its shadow must be dry_run"}},
+		{"shadow mode unknown", func(t *testing.T) map[string]string {
+			return map[string]string{v1: version(t, "publish: {", shadowYAML("mirror", "")+"publish: {")}
+		}, Problem{v1, "shadow.mode", "must be send or dry_run"}},
+		{"shadow sample ratio out of range", func(t *testing.T) map[string]string {
+			return map[string]string{v1: version(t, "publish: {", shadowYAML("dry_run", "\n  sample_ratio: 1.5")+"publish: {")}
+		}, Problem{v1, "shadow.sample_ratio", "must be 0..1"}},
+		{"shadow target unknown account", func(t *testing.T) map[string]string {
+			return map[string]string{v1: version(t, "publish: {", strings.Replace(shadowYAML("dry_run", ""), "ct-brandB-us", "ct-nope", 1)+"publish: {")}
+		}, Problem{v1, "shadow.target.account", `unknown account "ct-nope"`}},
 		{"registrar url not absolute", func(t *testing.T) map[string]string {
 			return map[string]string{"registrar/reg_orders_cb.yaml": strings.Replace(validFiles["registrar/reg_orders_cb.yaml"], "https://orders.internal.example/hub/callbacks", "/hub/callbacks", 1)}
 		}, Problem{"registrar/reg_orders_cb.yaml", "url", "must be an absolute http(s) URL"}},
@@ -169,5 +184,20 @@ func TestValidateReportsAllProblemsInOnePass(t *testing.T) {
 	var ps ConfigErrors
 	if !errors.As(err, &ps) || len(ps) != 3 {
 		t.Fatalf("want exactly 3 problems, got %v", err)
+	}
+}
+
+// shadowYAML is a shadow block copying to ct-brandB-us.
+func shadowYAML(mode, extra string) string {
+	return "shadow:\n  target: { vendor: clevertap, account: ct-brandB-us, transformer: { request: T1@7, response: R2@1 } }\n  mode: " + mode + extra + "\n"
+}
+
+func TestShadowDryRunIsValidForSideEffectEndpoints(t *testing.T) {
+	_, err := validateFiles(t, sources(t, files(map[string]string{
+		v1:                       version(t, "publish: {", shadowYAML("dry_run", "\n  sample_ratio: 0.25")+"publish: {"),
+		"vendors/clevertap.yaml": strings.Replace(validFiles["vendors/clevertap.yaml"], "idempotent: true", "idempotent: false", 1),
+	})))
+	if err != nil {
+		t.Fatalf("dry_run shadow on a side-effect endpoint must be valid: %v", err)
 	}
 }

@@ -182,6 +182,31 @@ func (a *Archive) Latest(ctx context.Context, now time.Time) (*registry.Snapshot
 	return snap, src, row.Version, nil
 }
 
+// Meta is the newest archived snapshot's header (cheap: no blob read).
+type Meta struct {
+	Version  int64
+	Checksum string
+	Author   string
+}
+
+// LatestMeta returns the newest archived snapshot's version, checksum and author.
+func (a *Archive) LatestMeta(ctx context.Context) (Meta, error) {
+	row, err := db.New(a.pool).LatestSnapshot(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Meta{}, ErrNoSnapshot
+	}
+	if err != nil {
+		return Meta{}, fmt.Errorf("archive: latest: %w", err)
+	}
+	return Meta{Version: row.Version, Checksum: row.Checksum, Author: row.Author}, nil
+}
+
+// SnapshotChannel is the Redis channel the publisher pings with each new archive version.
+const SnapshotChannel = "hub:snapshot"
+
+// ConfigAuthorPrefix marks snapshots the admin role archived from its config directory.
+const ConfigAuthorPrefix = "hub-admin:"
+
 // Prune deletes snapshots older than olderThan (always keeping the newest) and their blobs.
 func (a *Archive) Prune(ctx context.Context, olderThan time.Time) (int, error) {
 	rows, err := db.New(a.pool).PruneSnapshots(ctx, pgtype.Timestamptz{Time: olderThan, Valid: true})

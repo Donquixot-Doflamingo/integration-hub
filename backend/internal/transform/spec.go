@@ -11,14 +11,17 @@ import (
 // Spec is one transformer as stored in config (backend/config/transformers/<id>/<version>.yaml).
 // The registry fills it from its TransformerFile; this package never reads files.
 type Spec struct {
-	ID               string
-	Version          int
-	Kind             string // request | response
-	Capability       string
-	Request          yaml.Node
-	Response         yaml.Node
-	Errors           yaml.Node
-	Batch            yaml.Node
+	ID         string
+	Version    int
+	Kind       string // request | response
+	Capability string
+	Request    yaml.Node
+	Response   yaml.Node
+	Errors     yaml.Node
+	Batch      yaml.Node
+	// Session (response transformers only) maps the vendor session data a multi-step operation
+	// keeps between steps (DESIGN §3.1, §14): evaluated on success against res, req and account.
+	Session          yaml.Node
 	AllowCredsInBody bool
 }
 
@@ -88,6 +91,7 @@ type parsed struct {
 	headers, query []field // values are expression nodes
 	body           *tmpl
 	response       *tmpl
+	session        *tmpl
 	errors         []errorRule
 	batchPath      string
 	batchMax       int
@@ -115,7 +119,7 @@ func parse(s Spec) (*parsed, *CompileError) {
 		if !present(s.Request) {
 			ce.add("request", "required for a request transformer")
 		}
-		for name, n := range map[string]yaml.Node{"response": s.Response, "errors": s.Errors} {
+		for name, n := range map[string]yaml.Node{"response": s.Response, "errors": s.Errors, "session": s.Session} {
 			if present(n) {
 				ce.add(name, "not allowed in a request transformer")
 			}
@@ -143,6 +147,12 @@ func parse(s Spec) (*parsed, *CompileError) {
 		}
 		if present(s.Errors) {
 			p.parseErrors(&s.Errors, ce)
+		}
+		if present(s.Session) {
+			p.session = parseTmpl(&s.Session, "session", ce)
+			if p.session != nil && (p.session.kind != nodeObject || len(p.session.fields) == 0) {
+				ce.add("session", "must be a non-empty mapping of session fields")
+			}
 		}
 	default:
 		ce.add("kind", "must be request or response, got %q", s.Kind)

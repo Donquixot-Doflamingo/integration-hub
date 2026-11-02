@@ -45,14 +45,26 @@ func (c *Config) CompileTransformer(ref TransformerRef) (*transform.Program, err
 	}
 	spec := transform.Spec{
 		ID: t.Transformer, Version: t.Version, Kind: string(t.Kind), Capability: t.Capability,
-		Request: t.Request, Response: t.Response, Errors: t.Errors, Batch: t.Batch, AllowCredsInBody: t.AllowCredsInBody,
+		Request: t.Request, Response: t.Response, Errors: t.Errors, Batch: t.Batch, Session: t.Session, AllowCredsInBody: t.AllowCredsInBody,
 	}
 	return transform.Compile(spec, transform.Options{RequestSchema: op.RequestSchema, ValidateResponse: op.Response.Validate})
 }
 
 // TransformerFixtures returns the fixtures/ directory of a transformer (golden cases).
 func TransformerFixtures(config fs.FS, ref TransformerRef) (fs.FS, error) {
-	return fs.Sub(config, path.Join("transformers", ref.ID, "fixtures"))
+	return fs.Sub(config, FixtureDir(config, ref))
+}
+
+// FixtureDir is the fixture directory of ref: transformers/<ID>/fixtures/v<N> when version N
+// has its own cases (its output differs from other versions), else the shared
+// transformers/<ID>/fixtures.
+func FixtureDir(config fs.FS, ref TransformerRef) string {
+	shared := path.Join("transformers", ref.ID, "fixtures")
+	own := path.Join(shared, fmt.Sprintf("v%d", ref.Version))
+	if st, err := fs.Stat(config, own); err == nil && st.IsDir() {
+		return own
+	}
+	return shared
 }
 
 // compileAll compiles every transformer once and runs its goldens (DESIGN §6.4, AGENTS §3.4). A
@@ -85,9 +97,9 @@ func (c *Config) compileAll(config fs.FS) (map[TransformerRef]*transform.Program
 				continue
 			}
 			failed = true
-			at := path.Join("transformers", ref.ID, "fixtures", r.Case)
+			at := path.Join(FixtureDir(config, ref), r.Case)
 			if r.Case == "" {
-				at = path.Join("transformers", ref.ID, "fixtures")
+				at = FixtureDir(config, ref)
 			}
 			msg := r.Err
 			if len(r.Diffs) > 0 {

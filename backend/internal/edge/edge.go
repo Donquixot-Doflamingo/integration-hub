@@ -15,6 +15,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/delivery"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/sessions"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
 )
@@ -38,14 +39,19 @@ type Deps struct {
 	// Breakers and Limiter are admission (M5): circuit breakers and the account limiter.
 	Breakers *upstream.Breakers
 	Limiter  *upstream.AccountLimiter
+	// Shadow copies requests to shadow targets (nil: shadows are not sent).
+	Shadow *delivery.Shadower
 	// Queueing enables wait and async delivery (nil: every mode is delivered synchronously).
 	Queueing *Queueing
 	// Idempotency enables Idempotency-Key deduplication (nil: keys are required where the
 	// integration says so, but not deduplicated).
 	Idempotency Idempotency
-	Metrics     *telemetry.Metrics
-	Log         *slog.Logger
-	Now         func() time.Time
+	// Sessions is the vendor session store (HUB-175). nil: Queueing.DB when queueing is wired;
+	// without either, X-Hub-Session is always SESSION_NOT_FOUND and no session can be opened.
+	Sessions sessions.DB
+	Metrics  *telemetry.Metrics
+	Log      *slog.Logger
+	Now      func() time.Time
 }
 
 // Upstream sends one attempt to a vendor (upstream.Client).
@@ -79,6 +85,9 @@ func New(d Deps) *Server {
 	}
 	if d.Now == nil {
 		d.Now = time.Now
+	}
+	if d.Sessions == nil && d.Queueing != nil && d.Queueing.DB != nil {
+		d.Sessions = d.Queueing.DB
 	}
 	if d.Metrics == nil {
 		d.Metrics = telemetry.NewMetrics("gateway", "test")
