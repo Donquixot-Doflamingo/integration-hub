@@ -44,6 +44,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return exportCmd(args[1:], stdout, stderr)
 		case "plan":
 			return planCmd(args[1:], stdout, stderr)
+		case "apply":
+			return applyCmd(args[1:], stdout, stderr)
 		case "dry-run":
 			return dryRunCmd(args[1:], stdout, stderr)
 		case "replay":

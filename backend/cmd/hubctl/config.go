@@ -30,9 +30,12 @@ const configUsage = `config as code:
   export -out DIR [-force]
       Write the live registry tree (the latest published snapshot) to DIR. No secret is ever
       written: the tree holds credential references only.
-  plan [-config-dir DIR]
-      Diff DIR (default config) against live, per object with path-level changes.
-      Exit 0 with no changes, 3 when there are changes, 1 on errors.`
+  plan [-config-dir DIR] [-contracts-dir DIR]
+      Diff DIR (default config) against live, per object with path-level changes. Objects
+      are compared as loaded (formatting, comments, defaults and publish metadata are not
+      changes); admin/ files are written by the control plane and skipped.
+      Exit 0 with no changes, 3 when there are changes, 1 on errors.
+` + applyUsage
 
 // liveTree downloads the latest published snapshot's config tree.
 func (c *adminClient) liveTree(ctx context.Context) (map[string][]byte, int64, error) {
@@ -183,6 +186,7 @@ func planCmd(args []string, stdout, stderr io.Writer) int {
 	var a adminFlags
 	a.register(fs)
 	dir := fs.String("config-dir", "config", "local registry config directory")
+	contracts := fs.String("contracts-dir", "../contracts", "contracts directory (capability schemas)")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		fmt.Fprintln(stderr, configUsage)
 		return 2
@@ -202,7 +206,7 @@ func planCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "hubctl: %v\n", err)
 		return 1
 	}
-	changes := diffTrees(live, local)
+	changes, _, _ := semanticDiff(live, local, *contracts)
 	if len(changes) == 0 {
 		fmt.Fprintf(stdout, "No changes: %s matches snapshot %d.\n", *dir, version)
 		return 0

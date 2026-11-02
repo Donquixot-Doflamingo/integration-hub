@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(hubctl)` · Apply a config directory through the admin API, idempotently (HUB-211) · HUB-211 · F-17
+  - hubctl apply publishes integration metadata, pause, new active versions (draft + publish), account config/quota and tenant settings through the admin API, one change-log row each
+  - Changes it cannot express (new accounts, API keys, vendors, transformers, edits of published versions) are refused before anything is changed; an API validation failure stops it with the path-qualified error
+  - plan and apply compare objects as loaded: formatting, comments, defaults and publish metadata are not changes; admin/ files are server-owned
 - 2026-11-02 · `feat(adminapi)` · Seal-key, probe client and callback host allowlist as admin deps; skip disabled endpoints (HUB-206) · HUB-206 · F-16
   - HUB_CALLBACK_HOSTS allowlists registrar endpoint hosts (host or .suffix); empty accepts any public host behind the SSRF guard
   - Callbacks to a disabled registrar endpoint are not enqueued; queued ones are held and resume when it is re-enabled

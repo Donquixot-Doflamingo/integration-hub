@@ -328,3 +328,7 @@ func integrationETag(in *registry.Integration, hasDraft bool) string {
 	sum := sha256.Sum256(b)
 	return `"` + hex.EncodeToString(sum[:8]) + `"`
 }
+
+// SpecOf renders a registry integration version as the contract's IntegrationSpec (hubctl
+// apply sends it as a draft).
+func SpecOf(v *registry.IntegrationVersion) map[string]any { return renderSpec(v) }
