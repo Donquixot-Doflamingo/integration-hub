@@ -4,7 +4,7 @@
 Immutable integration versions behind a stable integration ID; the full publish validation pipeline; rollback as a new version; weighted gradual cutover and shadow mode; re-resolve vs pinned for pending work; per-attempt version recording; vendor-session pinning (DESIGN §6, D10, D11, D12).
 
 ## Status
-`in-progress` — 2026-11-02 (vendor sessions, HUB-175 and HUB-183, done).
+`shipped` — 2026-11-02 (M6, `docs/milestones/M6.md`).
 
 ## Owner
 `backend-engineer`.
@@ -80,7 +80,9 @@ Integration YAML `versions[]`, `targets[].weight`, `targets[].shadow` (proposed 
 | Kind | Name | Notes |
 | --- | --- | --- |
 | Metric | `hub_requests_total{version}`, `vendor_latency_ms{version}` | canary comparison |
-| Metric | `shadow_mismatch_total{integration}` | proposed |
+| Metric | `shadow_total{integration, mode, outcome}` | shadow copies (HUB-173); results in the request's audit block at seq 900000+ |
+| Log | `archived snapshot not loaded: keeping the current one` (warn) | node follower (HUB-171): read or build failure, last good snapshot kept |
+| Change log | `hub.change_log` row per publish, rollback, retire | actor, reason, before/after (HUB-170) |
 | Log | `integration_published` | id, from, to, author, reason |
 | Log | `session lookup failed`, `session create failed` (error), `session target gone`, `session data refused` (warn) | integration + error only; never session data |
 | Audit meta | `session` on `integration.resolved` / `response.transformed` | id, event, version, account (HUB-175) |
@@ -114,3 +116,4 @@ HUB-170 – HUB-199 (EP-07, filter `feature: F-14`).
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-11-02 | Vendor session implementation notes (HUB-175, HUB-183) | backend-engineer |
+| 2026-11-02 | Shipped in M6: publisher, distribution, shadow, cutover tests | backend-engineer |

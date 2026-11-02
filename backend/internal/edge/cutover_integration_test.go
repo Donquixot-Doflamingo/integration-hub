@@ -496,3 +496,25 @@ func TestCutoverRetryWithSameKeyResolvesFresh(t *testing.T) {
 		})
 	}
 }
+
+// TestMixedVersionPropagation is HUB-184: while a publish propagates, one gateway still serves
+// v7 and another already serves v8; each records the exact version and account it used.
+func TestMixedVersionPropagation(t *testing.T) {
+	ch := cutoverChanges[0] // account change
+	old := newCutoverRig(t, registry.ModeSync, registry.ReResolve)
+	updated := newCutoverRig(t, registry.ModeSync, registry.ReResolve)
+	updated.publish(t, 8)
+	for _, n := range []struct {
+		node    *cutoverRig
+		version int
+	}{{old, 7}, {updated, 8}} {
+		rec := n.node.invoke(t, ch.integration, "")
+		if rec.Code != 200 || rec.Header().Get("X-Hub-Integration-Version") != strconv.Itoa(n.version) {
+			t.Fatalf("node on v%d answered %d %v", n.version, rec.Code, rec.Header())
+		}
+		v, attempts, _ := n.node.ledger(t, rec.Header().Get("X-Hub-Request-Id"))
+		if want := strconv.Itoa(n.version) + " " + accountOf(ch, n.version); v != n.version || attempts[0] != want {
+			t.Fatalf("node on v%d recorded v%d %v", n.version, v, attempts)
+		}
+	}
+}

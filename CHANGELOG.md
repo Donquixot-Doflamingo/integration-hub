@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `docs(milestones)` · Accept M6 with mixed-version and rollback checks; write the M6 summary (HUB-184) · HUB-184 · F-14
+  - M6 accepted: every §6.3 row, rollback, retire guard, rotation, shadow and mixed-version propagation proven by itests
+  - docs/milestones/M6.md with Deviations; F-14 and F-15 shipped; shadow_total and credential logs in OBSERVABILITY
 - 2026-11-02 · `test(edge)` · Prove the §6.3 cutover rows for account, vendor and transformer changes (HUB-178) · HUB-178 · F-14
   - Cutover fixtures: a second account, a test-only second vendor and T1@8 with its own goldens
   - Completed, in-flight, queued (re_resolve and pinned), retried and new requests land on the version §6.3 says, for each change type

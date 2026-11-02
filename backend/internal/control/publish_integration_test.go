@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -120,6 +121,10 @@ func TestPublishImmutableLinearRollback(t *testing.T) {
 	}
 	if in.Versions[5].Targets[0].Transformer != in.Versions[1].Targets[0].Transformer || in.Versions[5].Targets[0].Account != in.Versions[1].Targets[0].Account {
 		t.Fatalf("v5 is not v1's content: %+v vs %+v", in.Versions[5].Targets, in.Versions[1].Targets)
+	}
+	if !reflect.DeepEqual(in.Versions[5].Delivery, in.Versions[1].Delivery) || !reflect.DeepEqual(in.Versions[5].Audit, in.Versions[1].Audit) ||
+		!reflect.DeepEqual(in.Versions[5].Targets, in.Versions[1].Targets) {
+		t.Fatal("rollback must restore v1's behaviour: targets, delivery and audit policy")
 	}
 	for v := 1; v <= 5; v++ { // strictly increasing, no gaps, nothing deleted
 		if in.Versions[v] == nil {
