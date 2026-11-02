@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **198** · done: **127** · todo: **62** · other (in-progress/in-review/blocked): **9**
+Total tickets: **198** · done: **127** · todo: **57** · other (in-progress/in-review/blocked): **14**
 
 ## Epics
 
@@ -1383,59 +1383,59 @@ Accounts hold `active` and `next` credentials: add next → connection test → 
 
 ### HUB-178 — Cutover scenario 1: completed before publish (account, vendor, transformer)
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-173, HUB-174, HUB-046 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-review · **Depends on:** HUB-173, HUB-174, HUB-046 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-178-cutover-s1-completed`
 
 Add cutover fixtures (second account, second mock vendor e.g. `moengage`, transformer `T1@8`) and test §6.3 row 1 for each change type.
 
 **Acceptance criteria**
-- [ ] For account, vendor and transformer swaps: completed v7 requests keep v7, its account and payloads in audit
-- [ ] Publish rewrites no audit rows (row checksum test)
+- [x] For account, vendor and transformer swaps: completed v7 requests keep v7, its account and payloads in audit
+- [x] Publish rewrites no audit rows (row checksum test)
 
 ### HUB-179 — Cutover scenario 2: in-flight stays on v7
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-review · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-179-cutover-s2-inflight`
 
 §6.3 row 2 for each change type, using mockvendor slow drip to hold a request in flight across publish.
 
 **Acceptance criteria**
-- [ ] In-flight attempt completes on v7's target for all three change types
-- [ ] Attempt row records v7
+- [x] In-flight attempt completes on v7's target for all three change types
+- [x] Attempt row records v7
 
 ### HUB-180 — Cutover scenario 3: parked/queued re-resolve vs pinned
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-review · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-180-cutover-s3-parked`
 
 §6.3 row 3 for each change type.
 
 **Acceptance criteria**
-- [ ] `re_resolve`: parked envelope delivered via v8's target
-- [ ] `pinned`: delivered via v7's target
-- [ ] Holds for account, vendor and transformer changes
+- [x] `re_resolve`: parked envelope delivered via v8's target
+- [x] `pinned`: delivered via v7's target
+- [x] Holds for account, vendor and transformer changes
 
 ### HUB-181 — Cutover scenario 4: retry with same key resolves fresh
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-178, HUB-118 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-review · **Depends on:** HUB-178, HUB-118 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-181-cutover-s4-retry`
 
 §6.3 row 4 for each change type.
 
 **Acceptance criteria**
-- [ ] Retry of a failed v7 request with the same idempotency key lands on v8
-- [ ] A completed request with the same key is replayed, not re-sent
+- [x] Retry of a failed v7 request with the same idempotency key lands on v8
+- [x] A completed request with the same key is replayed, not re-sent
 
 ### HUB-182 — Cutover scenario 5: first new request uses v8
 - **Epic:** EP-07 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
+- **Status:** in-review · **Depends on:** HUB-178 · **Feature:** F-14 · **Stories:** US-14xx
 - **Branch:** `test/HUB-182-cutover-s5-new`
 
 §6.3 row 5 for each change type.
 
 **Acceptance criteria**
-- [ ] New request after propagation uses v8
-- [ ] Caller URL, body and response schema unchanged (contract validation)
+- [x] New request after propagation uses v8
+- [x] Caller URL, body and response schema unchanged (contract validation)
 
 ### HUB-183 — Cutover scenario 6: session step 2 stays on v7
 - **Epic:** EP-07 · **Type:** test · **Area:** backend

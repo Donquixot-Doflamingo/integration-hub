@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `test(edge)` · Prove the §6.3 cutover rows for account, vendor and transformer changes (HUB-178) · HUB-178 · F-14
+  - Cutover fixtures: a second account, a test-only second vendor and T1@8 with its own goldens
+  - Completed, in-flight, queued (re_resolve and pinned), retried and new requests land on the version §6.3 says, for each change type
+  - Publishing v8 leaves every audit row of a v7 request byte for byte unchanged
 - 2026-11-02 · `feat(control)` · Guard retires with pinned envelopes and open sessions; sweep expired sessions (HUB-176) · HUB-176 · F-15
   - Retiring an account is refused with counts while a pinned or session-bound request or an open vendor session still references it
   - The scheduler leader deletes expired vendor sessions every 30 s
