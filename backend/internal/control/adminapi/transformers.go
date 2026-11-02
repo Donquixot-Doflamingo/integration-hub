@@ -215,13 +215,6 @@ func readFixtures(fsys fs.FS, dir, kind string) ([]fixture, error) {
 
 // ---- golden runs ----
 
-type diffOp struct {
-	Op     string `json:"op"`
-	Path   string `json:"path"`
-	Before any    `json:"before,omitempty"`
-	After  any    `json:"after,omitempty"`
-}
-
 type goldenCase struct {
 	Fixture string   `json:"fixture"`
 	Passed  bool     `json:"passed"`

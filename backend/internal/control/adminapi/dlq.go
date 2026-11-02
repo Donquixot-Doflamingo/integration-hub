@@ -164,7 +164,7 @@ func (s *Server) listDeadLetters(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, errNoDB)
 		return
 	}
-	snap := s.snapshot()
+	snap := s.servingSnapshot()
 	var args []any
 	arg := func(v any) string { args = append(args, v); return "$" + strconv.Itoa(len(args)) }
 	where := f.where(snap, arg)
@@ -213,7 +213,7 @@ func (s *Server) getDeadLetter(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("request_id")
 	var envelope, lastReq, lastResp []byte
 	d, err := scanDeadLetter(s.d.Pool.QueryRow(ctx, `SELECT `+deadLetterColumns+`, d.envelope, d.last_vendor_request, d.last_vendor_response
-FROM hub.dead_letters d WHERE d.request_id = $1`, id), s.snapshot(), &envelope, &lastReq, &lastResp)
+FROM hub.dead_letters d WHERE d.request_id = $1`, id), s.servingSnapshot(), &envelope, &lastReq, &lastResp)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !principal(r).SeesTenant(d.TenantID)) {
 		s.fail(w, r, notFound("Dead letter"))
 		return
@@ -317,7 +317,7 @@ func (s *Server) match(ctx context.Context, tx pgx.Tx, sel dlqSelection, unrepla
 	arg := func(v any) string { args = append(args, v); return "$" + strconv.Itoa(len(args)) }
 	var where []string
 	if sel.Filter != nil {
-		where = sel.Filter.where(s.snapshot(), arg)
+		where = sel.Filter.where(s.servingSnapshot(), arg)
 	} else {
 		where = []string{"d.request_id = ANY(" + arg(sel.RequestIDs) + ")"}
 	}

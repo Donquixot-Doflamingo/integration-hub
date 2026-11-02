@@ -167,7 +167,7 @@ func (s *Server) listBreakers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	snap := s.snapshot()
+	snap := s.servingSnapshot()
 	if snap == nil {
 		s.fail(w, r, errNoSnapshot)
 		return
@@ -271,7 +271,7 @@ WHERE object_type = 'breaker' AND object_id = $1 ORDER BY at DESC LIMIT 50`, ref
 
 func (s *Server) getBreaker(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	snap := s.snapshot()
+	snap := s.servingSnapshot()
 	ref, err := resolveBreaker(snap, r.PathValue("account_id"), r.PathValue("endpoint_ref"))
 	if err != nil {
 		s.fail(w, r, err)
@@ -333,7 +333,7 @@ func (s *Server) forceBreaker(force upstream.Force) http.HandlerFunc {
 			s.fail(w, r, badRequest("/duration_ms", "duration_ms must be 1000..86400000"))
 			return
 		}
-		snap := s.snapshot()
+		snap := s.servingSnapshot()
 		ref, err := resolveBreaker(snap, r.PathValue("account_id"), r.PathValue("endpoint_ref"))
 		if err != nil {
 			s.fail(w, r, err)

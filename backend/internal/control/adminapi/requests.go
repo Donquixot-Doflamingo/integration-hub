@@ -179,7 +179,7 @@ func vendorOf(snap *registry.Snapshot, account string) string {
 	return ""
 }
 
-func (s *Server) snapshot() *registry.Snapshot {
+func (s *Server) servingSnapshot() *registry.Snapshot {
 	if s.d.Snapshot == nil {
 		return nil
 	}
@@ -248,7 +248,7 @@ func (s *Server) searchRequests(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, errNoDB)
 		return
 	}
-	snap := s.snapshot()
+	snap := s.servingSnapshot()
 	sql, args := f.sql()
 	rows, err := s.d.Pool.Query(r.Context(), sql, args...)
 	if err != nil {
@@ -290,7 +290,7 @@ func (s *Server) requestFilterOf(r *http.Request) (requestFilter, error) {
 	}
 	if v := q.Get("vendor_id"); v != "" {
 		accounts := []string{}
-		if snap := s.snapshot(); snap != nil {
+		if snap := s.servingSnapshot(); snap != nil {
 			for id, a := range snap.Accounts {
 				if a.Vendor == v && (f.Accounts == nil || slices.Contains(f.Accounts, id)) {
 					accounts = append(accounts, id)
@@ -367,7 +367,7 @@ WHERE r.created_at BETWEEN $2 AND $3 AND r.request_id = $1`, id, from, to).Scan(
 	}
 	row.HubOverheadMS = millis(overhead)
 	if row.AccountID != nil {
-		if v := vendorOf(s.snapshot(), *row.AccountID); v != "" {
+		if v := vendorOf(s.servingSnapshot(), *row.AccountID); v != "" {
 			row.VendorID = &v
 		}
 	}
@@ -590,7 +590,7 @@ type attemptView struct {
 
 // loadAttempts lists a request's attempts in order (fallbackVersion when a row has none).
 func (s *Server) loadAttempts(ctx context.Context, requestID string, since time.Time, fallbackVersion *int) ([]attemptView, error) {
-	snap := s.snapshot()
+	snap := s.servingSnapshot()
 	rows, err := s.d.Pool.Query(ctx, `SELECT attempt_no, integration_version, account_id, endpoint_id, started_at, duration_ms, http_status, error_class
 FROM hub.request_attempts WHERE request_id = $1 AND started_at >= $2 ORDER BY attempt_no, started_at`, requestID, since.Add(-time.Minute))
 	if err != nil {

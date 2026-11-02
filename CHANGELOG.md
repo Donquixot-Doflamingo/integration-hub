@@ -64,6 +64,27 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - GET /admin/v1/requests searches by tenant, integration, status, code, vendor, account, idempotency key and a ≤ 31-day range, newest first, with cursor pages
   - GET /requests/{id}, /timeline (events in seq order with sha256 and size on every event) and /attempts (version per attempt)
   - tenant_viewer sees only its tenants (404 outside them); migration 00008 adds the explorer and DLQ indexes
+- 2026-11-02 · `test(roles)` · Prove an admin pause reaches three gateway nodes within 10 s (HUB-205) · HUB-205 · F-16
+  - Integration test: POST /admin/v1/integrations/{id}/pause on hub admin makes 3 gateways following the archive answer 503 INTEGRATION_PAUSED within 10 s; resume undoes it
+- 2026-11-02 · `feat(adminapi)` · Create integrations and patch their metadata with If-Match (HUB-205) · HUB-205 · F-16
+  - POST /admin/v1/integrations creates an integration without an active version; nodes see it only when its first draft is published (expected_active_version null)
+  - PATCH /integrations/{id} merges description, grants and moves_money_or_quota through the publish pipeline; integrations return an ETag and a stale If-Match answers 412 PRECONDITION_FAILED
+- 2026-11-02 · `feat(adminapi)` · Publish drafts, roll back and reweigh integrations with version guards (HUB-205) · HUB-205 · F-16
+  - POST /versions/{n}/publish makes the draft the active version nodes run; failed checks answer 422 PUBLISH_VALIDATION_FAILED with contract pointers and meta.report
+  - POST /rollback publishes a copy of to_version as the next version (v9 = v7); POST /weights creates version n+1 from the active one with new weights, published or left as the draft
+  - Publish, rollback and weights take expected_active_version and answer 409 CONFLICT (expected and actual in meta) when another publish happened first
+- 2026-11-02 · `feat(adminapi)` · Keep integration drafts in Postgres and validate versions without publishing (HUB-205) · HUB-205 · F-16
+  - POST /integrations/{id}/versions creates the one draft (next version) from a spec or a copy of based_on; PUT /versions/{n} edits it; published versions answer 409
+  - Drafts are invisible to nodes until published (hub.integration_drafts, migration 00010); has_draft, latest_version, the version list and diff include them
+  - POST /versions/{n}/validate runs every publish check and returns the report with contract pointers (e.g. /targets/1/account_id); nothing is archived
+- 2026-11-02 · `feat(adminapi)` · Serve snapshots with a long-poll on the latest version (HUB-204) · HUB-204 · F-16
+  - GET /admin/v1/snapshots (newest first, with the change that produced each) and /snapshots/{v} with the objects changed versus the previous snapshot
+  - GET /snapshots/latest: If-None-Match + wait long-polls; the hub:snapshot ping answers within 1 s of a publish, the archive is re-read every second as the truth
+  - GET /snapshots/{v}/blob serves the registry blob as application/json (gzip with Accept-Encoding: gzip)
+- 2026-11-02 · `feat(adminapi)` · Read integrations and versions and diff two versions (HUB-204) · HUB-204 · F-16
+  - GET /admin/v1/integrations with tenant, capability, vendor, account, paused, has_active_version, active_version_behind and q filters, cursor pages
+  - GET /integrations/{id} (with the active version in full and an ETag), /versions (newest first) and /versions/{n}
+  - GET /integrations/{id}/diff?from=&to= lists the exact changed spec paths (RFC 6902-style) plus a unified YAML diff
 - 2026-11-02 · `feat(control)` · Expose Publisher.Edit for validated config-tree edits (HUB-201) · HUB-201 · F-16
   - Admin resource handlers edit the config tree through one primitive: locked, fully validated, archived, logged and announced
 - 2026-11-02 · `feat(adminapi)` · Read the change log and pause integrations through the publisher lock (HUB-201) · HUB-201 · F-16

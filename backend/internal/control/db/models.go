@@ -124,9 +124,28 @@ type HubIntegration struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type HubIntegrationDraft struct {
+	IntegrationID     string             `json:"integration_id"`
+	Spec              string             `json:"spec"`
+	BasedOn           pgtype.Int4        `json:"based_on"`
+	CopiedFromVersion pgtype.Int4        `json:"copied_from_version"`
+	Author            string             `json:"author"`
+	Reason            string             `json:"reason"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
 type HubIntegrationGrant struct {
 	IntegrationID string `json:"integration_id"`
 	TenantID      string `json:"tenant_id"`
+}
+
+type HubIntegrationPending struct {
+	IntegrationID string             `json:"integration_id"`
+	Header        string             `json:"header"`
+	Author        string             `json:"author"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type HubIntegrationVersion struct {

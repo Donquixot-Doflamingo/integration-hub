@@ -8,8 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -160,12 +158,4 @@ func TestSealedPayloads(t *testing.T) {
 	if evs := all["events"].([]any); len(evs) != 3 || evs[2].(map[string]any)["payload"].(map[string]any)["body"].(map[string]any)["score"] != 781.0 {
 		t.Fatalf("all events %v", all)
 	}
-}
-
-// request builds an authorized admin request (for ServeInvalid: refusals the contract also refuses).
-func (a *adminRig) request(role Role, method, path, body string) *http.Request {
-	req := httptest.NewRequestWithContext(a.t.Context(), method, Base+path, strings.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+token(a.t, a.iss, role, "orders-service"))
-	req.Header.Set("Content-Type", "application/json")
-	return req
 }
