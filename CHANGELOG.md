@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `test(roles)` · Prove an admin pause reaches three gateway nodes within 10 s (HUB-205) · HUB-205 · F-16
+  - Integration test: POST /admin/v1/integrations/{id}/pause on hub admin makes 3 gateways following the archive answer 503 INTEGRATION_PAUSED within 10 s; resume undoes it
 - 2026-11-02 · `feat(adminapi)` · Create integrations and patch their metadata with If-Match (HUB-205) · HUB-205 · F-16
   - POST /admin/v1/integrations creates an integration without an active version; nodes see it only when its first draft is published (expected_active_version null)
   - PATCH /integrations/{id} merges description, grants and moves_money_or_quota through the publish pipeline; integrations return an ETag and a stale If-Match answers 412 PRECONDITION_FAILED
