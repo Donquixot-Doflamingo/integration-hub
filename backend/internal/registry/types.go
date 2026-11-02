@@ -1,6 +1,8 @@
 package registry
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -351,10 +353,16 @@ type PublishMeta struct {
 
 // Tenant is backend/config/tenants/<tenant>.yaml.
 type Tenant struct {
-	Tenant    string      `yaml:"tenant"`
-	APIKeys   []APIKey    `yaml:"api_keys"`
-	RateLimit TenantLimit `yaml:"rate_limit"`
-	Status    string      `yaml:"status,omitempty"` // active | suspended
+	Tenant string `yaml:"tenant"`
+	// DisplayName, Description and Contact are display fields of the admin API (defaults: the id).
+	DisplayName string      `yaml:"display_name,omitempty"`
+	Description string      `yaml:"description,omitempty"`
+	Contact     string      `yaml:"contact,omitempty"`
+	APIKeys     []APIKey    `yaml:"api_keys"`
+	RateLimit   TenantLimit `yaml:"rate_limit"`
+	Status      string      `yaml:"status,omitempty"` // active | suspended
+	// Disabled turns every key of the tenant off (401 at the edge, admin updateTenant).
+	Disabled bool `yaml:"disabled,omitempty"`
 }
 
 // APIKey is a tenant key, stored only as a hash (DESIGN §16.5).
@@ -363,6 +371,35 @@ type APIKey struct {
 	Hash   string   `yaml:"hash"` // "sha256:<64 hex>" of the full key
 	Scopes []string `yaml:"scopes"`
 	State  string   `yaml:"state"` // active | expiring | revoked
+	// Prefix is the first 12 characters of the key, for identification (never the secret part).
+	Prefix      string `yaml:"prefix,omitempty"`
+	Description string `yaml:"description,omitempty"`
+	// CreatedAt is when the key was minted; ExpiresAt ends it (a key's own expiry, or the end of
+	// a rotation overlap, state expiring). ReplacedBy names the key a rotation minted for it.
+	CreatedAt  *time.Time `yaml:"created_at,omitempty"`
+	ExpiresAt  *time.Time `yaml:"expires_at,omitempty"`
+	ReplacedBy string     `yaml:"replaced_by,omitempty"`
+}
+
+// API key states as stored (the admin API also reports expired: a key past its ExpiresAt).
+const (
+	KeyActive   = "active"
+	KeyExpiring = "expiring"
+	KeyRevoked  = "revoked"
+)
+
+// HashKey returns the stored form of an API key: "sha256:<hex>" (DESIGN §16.5). The edge
+// hashes presented keys with it; the admin API hashes the keys it mints.
+func HashKey(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// Usable reports whether the key authenticates at now: not revoked and not past its expiry.
+// A rotated key (expiring) keeps working until the overlap ends, then stops on every node
+// without another snapshot (DESIGN §16.5).
+func (k APIKey) Usable(now time.Time) bool {
+	return k.State != KeyRevoked && (k.ExpiresAt == nil || now.Before(*k.ExpiresAt))
 }
 
 // TenantLimit is the tenant-level fairness budget at the edge.
@@ -373,8 +410,14 @@ type TenantLimit struct {
 
 // RegistrarEndpoint is backend/config/registrar/<endpoint_id>.yaml: a tenant webhook destination.
 type RegistrarEndpoint struct {
-	EndpointID string `yaml:"endpoint_id"`
-	Tenant     string `yaml:"tenant"`
-	URL        string `yaml:"url"`
-	SecretRef  string `yaml:"secret_ref"`
+	EndpointID  string `yaml:"endpoint_id"`
+	Tenant      string `yaml:"tenant"`
+	URL         string `yaml:"url"`
+	SecretRef   string `yaml:"secret_ref"`
+	Description string `yaml:"description,omitempty"`
+	Disabled    bool   `yaml:"disabled,omitempty"`
+	// SecretVersion is the active signing secret's slot version (default 1).
+	SecretVersion int `yaml:"secret_version,omitempty"`
+	// SecretOverlapUntil: until then callbacks also carry a signature with the previous secret.
+	SecretOverlapUntil *time.Time `yaml:"secret_overlap_until,omitempty"`
 }

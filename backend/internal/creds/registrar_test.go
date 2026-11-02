@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
@@ -141,5 +142,30 @@ func TestSlotsWithoutNext(t *testing.T) {
 	b, err := fx.cache.Slots(t.Context(), "ct-brandB-us")
 	if err != nil || len(b) != 2 || b[0].Version != 3 || b[1].Version != 4 {
 		t.Fatalf("Slots(with next) = %+v, %v", b, err)
+	}
+}
+
+// TestSlotsDropExpiredNext: a next slot past its expires_at (the end of a registrar secret's
+// rotation overlap) is no longer returned, without another decrypt.
+func TestSlotsDropExpiredNext(t *testing.T) {
+	fx := newFixture(t)
+	f, _ := newTestFile(t)
+	until := fx.clock.Now().Add(time.Minute)
+	all := devSecrets()
+	all["reg_rot"] = AccountSecrets{Active: Slot{Version: 2, Values: map[string]string{SigningSecretKey: "new-signing-secret-0002"}},
+		Next: &Slot{Version: 1, Values: map[string]string{SigningSecretKey: "old-signing-secret-0001"}, ExpiresAt: &until}}
+	if err := f.WriteAll(all); err != nil {
+		t.Fatal(err)
+	}
+	fx.loader.inner = f
+	if err := fx.cache.Warm(t.Context(), []string{"reg_rot"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := fx.cache.Slots(t.Context(), "reg_rot"); err != nil || len(got) != 2 || got[0].Version != 2 {
+		t.Fatalf("during the overlap: %+v %v", got, err)
+	}
+	fx.clock.Advance(time.Minute) // still inside the cache TTL: no reload decides this
+	if got, err := fx.cache.Slots(t.Context(), "reg_rot"); err != nil || len(got) != 1 || got[0].Version != 2 {
+		t.Fatalf("after the overlap: %+v %v", got, err)
 	}
 }

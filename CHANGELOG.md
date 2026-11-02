@@ -27,6 +27,27 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - GET/POST /admin/v1/vendors, GET/PUT /vendors/{id}: vendors are edited in the config tree and published through the full snapshot build
   - Vendors carry an ETag (quoted revision); PUT with a stale If-Match answers 412 PRECONDITION_FAILED with current_etag
   - POST /vendors/{id}/endpoints adds <name>@<n+1>; existing endpoint versions never change
+- 2026-11-02 · `feat(adminapi)` · Register tenant webhook endpoints behind the SSRF guard with rotatable secrets (HUB-206) · HUB-206 · F-16
+  - GET/POST /admin/v1/registrar-endpoints, GET/PATCH/DELETE /registrar-endpoints/{id}, POST /registrar-endpoints/{id}/rotate-secret
+  - URLs that resolve to private, loopback or link-local ranges are refused with 400 VALIDATION_FAILED (callbacks SSRF guard)
+  - The signing secret is stored as localfile://<id> and shown once; during a rotation overlap callbacks are signed with the new and the old secret, then only the new one
+  - Delete is refused while any integration version subscribes; pending deliveries to a deleted endpoint are dead-lettered
+- 2026-11-02 · `feat(adminapi)` · Mint, rotate with overlap and revoke API keys; the edge honours expiry (HUB-206) · HUB-206 · F-16
+  - GET/POST /admin/v1/api-keys, GET /api-keys/{id}, POST /api-keys/{id}/revoke and /rotate; the plaintext key appears only in the create and rotate responses
+  - A rotated key stays valid (state expiring) for overlap_ms and then gets 401 on every node, without another publish
+  - Tenant YAML keys gain prefix, description, created_at, expires_at and replaced_by; states are validated (expiring needs expires_at)
+- 2026-11-02 · `feat(adminapi)` · Create, read and update tenants; disabled tenants' keys get 401 (HUB-206) · HUB-206 · F-16
+  - GET/POST /admin/v1/tenants, GET/PATCH /tenants/{id} (merge-patch of display fields, rate limit and disabled; If-Match → 412)
+  - tenant_viewer sees only its own tenants (404 otherwise)
+  - Tenant YAML gains display_name, description, contact and disabled; the edge answers 401 for keys of a disabled tenant
+- 2026-11-02 · `feat(adminapi)` · Rotate account credentials and test connections against the vendor (HUB-203) · HUB-203 · F-16
+  - POST /accounts/{id}/credentials/next, /promote, /delete-old run the DESIGN §6.6 runbook; 409 when a step does not apply
+  - POST /accounts/{id}/test-connection runs the vendor health probe (dry where declared) with the active or next slot; non-mutating, audited in the change log
+  - No response or change-log row carries credential values; no credential store configured answers 500
+- 2026-11-02 · `feat(adminapi)` · Create, read, update and transition accounts with write-only secrets (HUB-203) · HUB-203 · F-16
+  - GET/POST /admin/v1/accounts, GET/PATCH /accounts/{id} (merge-patch of config and quota, If-Match → 412)
+  - Initial credentials go to the credential store as the active slot v1; responses show slot metadata only
+  - POST /accounts/{id}/lifecycle: active -> draining -> retired; retire answers 409 RETIRE_BLOCKED with the guard's pinned/session counts and deletes the credentials
 - 2026-11-02 · `feat(control)` · Expose Publisher.Edit for validated config-tree edits (HUB-201) · HUB-201 · F-16
   - Admin resource handlers edit the config tree through one primitive: locked, fully validated, archived, logged and announced
 - 2026-11-02 · `feat(adminapi)` · Read the change log and pause integrations through the publisher lock (HUB-201) · HUB-201 · F-16
