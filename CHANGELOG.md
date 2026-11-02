@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `feat(control)` · Guard retires with pinned envelopes and open sessions; sweep expired sessions (HUB-176) · HUB-176 · F-15
+  - Retiring an account is refused with counts while a pinned or session-bound request or an open vendor session still references it
+  - The scheduler leader deletes expired vendor sessions every 30 s
 - 2026-11-02 · `build(control)` · Regenerate sqlc models for the change log (HUB-170) · HUB-170 · F-14
   - make sqlc-check passes again (HubChangeLog model)
 - 2026-11-02 · `feat(registry)` · Let a transformer version carry its own golden fixtures (HUB-341) · HUB-341 · F-14

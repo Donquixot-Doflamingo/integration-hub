@@ -1359,14 +1359,14 @@ Worker uses the active version for `pending: re_resolve` (default) and `resolved
 
 ### HUB-176 — Account lifecycle and retire guard
 - **Epic:** EP-07 · **Type:** feat · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-174, HUB-175, HUB-170 · **Feature:** F-15 · **Stories:** US-15xx
+- **Status:** in-review · **Depends on:** HUB-174, HUB-175, HUB-170 · **Feature:** F-15 · **Stories:** US-15xx
 - **Branch:** `feat/HUB-176-account-lifecycle`
 
 `active → draining → retired`: draining when no active version targets the account; retire refused while pinned requests or open sessions reference it; credentials deleted only at retire (DESIGN §6.5).
 
 **Acceptance criteria**
 - [x] Account auto-enters `draining` after the last referencing publish
-- [ ] Retire refused with counts of pinned requests and sessions
+- [x] Retire refused with counts of pinned requests and sessions
 - [x] Retired account cannot be referenced by a new publish
 
 ### HUB-177 — Credential rotation (active / next)

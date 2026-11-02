@@ -5,16 +5,21 @@ package control_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/sessions"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/migrations"
 )
 
@@ -162,5 +167,57 @@ func TestAccountLifecycle(t *testing.T) {
 	}
 	if _, err := p.PublishVersion(ctx, "int_evt_brandA", spec("ct-brandA-in", "R1@2"), true, "ops@example.com", "back"); err == nil || !strings.Contains(err.Error(), "retired") {
 		t.Fatalf("a retired account must not be referenced: %v", err)
+	}
+}
+
+// TestRetireGuardCountsPinnedWorkAndSessions is HUB-176/184: the real guard refuses a retire
+// while a pinned or session-bound envelope will still be sent on ct-brandA-in, or a vendor
+// session is open on it, and lets it through at zero.
+func TestRetireGuardCountsPinnedWorkAndSessions(t *testing.T) {
+	p, pool := publisher(t)
+	ctx := t.Context()
+	p.Guard = control.RetireGuard(pool)
+	// Other tests share hub.vendor_sessions and hub.outbox: start from no references.
+	if _, err := pool.Exec(ctx, `DELETE FROM hub.vendor_sessions WHERE account_id = 'ct-brandA-in'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM hub.outbox WHERE integration_id = 'int_evt_brandA'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.PublishVersion(ctx, "int_evt_brandA", spec("ct-brandB-us", "R1@2"), true, "ops@example.com", "move brand A to the US account"); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	env := core.Envelope{RequestID: "req_" + core.NewULID(now), Tenant: "orders-service", IntegrationID: "int_evt_brandA", ResolvedVersion: 2,
+		Pinned: true, Capability: "events.track@v1", Operation: "default", Mode: "async", Canonical: json.RawMessage(`{}`),
+		NextAttemptAt: now.Add(time.Hour), ExpiresAt: now.Add(6 * time.Hour), CreatedAt: now}
+	if err := (&queue.Outbox{}).Enqueue(ctx, pool, env); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM hub.outbox WHERE request_id = $1`, env.RequestID)
+	})
+	ses, err := sessions.Create(ctx, pool, sessions.Open{TenantID: "orders-service", IntegrationID: "int_evt_brandA", Version: 2,
+		AccountID: "ct-brandA-in", Data: map[string]any{"step": "one"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM hub.vendor_sessions WHERE session_id = $1`, ses.ID)
+	})
+
+	_, err = p.RetireAccount(ctx, "ct-brandA-in", "ops@example.com", "decommission")
+	var blocked *control.RetireBlockedError
+	if !errors.As(err, &blocked) || blocked.Pinned != 1 || blocked.Sessions != 1 {
+		t.Fatalf("retire with a pinned envelope and a session: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM hub.outbox WHERE request_id = $1`, env.RequestID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM hub.vendor_sessions WHERE session_id = $1`, ses.ID); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := p.RetireAccount(ctx, "ct-brandA-in", "ops@example.com", "decommission"); err != nil || r.Snapshot.Accounts["ct-brandA-in"].State != registry.AccountRetired {
+		t.Fatalf("retire at zero: %v", err)
 	}
 }

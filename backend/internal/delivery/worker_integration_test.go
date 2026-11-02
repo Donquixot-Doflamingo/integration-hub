@@ -403,6 +403,9 @@ func TestSendTimeVersion(t *testing.T) {
 					t.Fatal(err)
 				}
 				sess = ses.ID
+				t.Cleanup(func() {
+					_, _ = r.db.Exec(context.Background(), `DELETE FROM hub.vendor_sessions WHERE session_id = $1`, ses.ID)
+				})
 			}
 			env := r.enqueueWith("int_evt_brandA", 6*time.Hour, tc.edit, tc.parked)
 			// The publish lands while the envelope waits: version 1 becomes active.

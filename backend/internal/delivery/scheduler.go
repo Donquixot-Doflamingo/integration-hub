@@ -10,6 +10,7 @@ import (
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/sessions"
 )
 
 // SchedulerLock is the Postgres advisory lock key of the scheduler leader ("hubsched").
@@ -32,6 +33,9 @@ type Scheduler struct {
 	Tick        time.Duration // expiry sweep while leading (default 1 s)
 	Standby     time.Duration // leadership poll while standing by (default 5 s)
 	PruneEvery  time.Duration // default 1 h
+	// SessionSweepEvery deletes expired vendor sessions (default 30 s). Get already hides them;
+	// the sweep keeps the table and the retire guard's count small.
+	SessionSweepEvery time.Duration
 	// Resilience (probes, drain) runs every Tick while leading; nil skips it.
 	Resilience *Resilience
 
@@ -95,6 +99,8 @@ func (s *Scheduler) lead(ctx context.Context) error {
 	defer tick.Stop()
 	prune := time.NewTicker(orDefault(s.PruneEvery, time.Hour))
 	defer prune.Stop()
+	sweep := time.NewTicker(orDefault(s.SessionSweepEvery, 30*time.Second))
+	defer sweep.Stop()
 	s.prune(ctx)
 	for {
 		select {
@@ -110,6 +116,8 @@ func (s *Scheduler) lead(ctx context.Context) error {
 			}
 		case <-prune.C:
 			s.prune(ctx)
+		case <-sweep.C:
+			s.sweepSessions(ctx)
 		}
 	}
 }
@@ -136,6 +144,14 @@ func (s *Scheduler) expire(ctx context.Context) {
 		if len(envs) < 100 {
 			return
 		}
+	}
+}
+
+func (s *Scheduler) sweepSessions(ctx context.Context) {
+	if n, err := sessions.Expire(ctx, s.DB, s.now()); err != nil {
+		s.Log.WarnContext(ctx, "session sweep failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		s.Log.DebugContext(ctx, "expired vendor sessions deleted", slog.Int64("count", n))
 	}
 }
 

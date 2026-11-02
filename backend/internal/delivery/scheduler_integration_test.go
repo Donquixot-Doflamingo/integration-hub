@@ -16,6 +16,7 @@ import (
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/sessions"
 )
 
 func newScheduler(t *testing.T, tr *Transitions) (*Scheduler, func()) {
@@ -96,4 +97,32 @@ func TestSchedulerExpiresWaitingEnvelopes(t *testing.T) {
 	if !found {
 		t.Fatalf("no request.expired terminal event: %+v", r.ended)
 	}
+}
+
+// TestSchedulerSweepsExpiredSessions: the leader deletes vendor sessions past expires_at
+// (HUB-175). The scheduler clock runs 2 min ahead to stay clear of host/DB clock skew.
+func TestSchedulerSweepsExpiredSessions(t *testing.T) {
+	db, err := pgxpool.New(t.Context(), os.Getenv("HUB_PG_DSN"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(db.Close)
+	ses, err := sessions.Create(t.Context(), db, sessions.Open{TenantID: "orders-service", IntegrationID: "int_evt_brandA", Version: 1,
+		AccountID: "ct-brandA-in", Data: map[string]any{"step": "one"}, TTL: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := &queue.Outbox{}
+	s := &Scheduler{DB: db, Queue: q, Transitions: &Transitions{DB: db, Queue: q}, Log: slog.New(slog.DiscardHandler),
+		Now: func() time.Time { return time.Now().Add(2 * time.Minute) }, Tick: 50 * time.Millisecond, Standby: 100 * time.Millisecond,
+		SessionSweepEvery: 50 * time.Millisecond}
+	ctx, cancel := context.WithCancel(context.WithoutCancel(t.Context()))
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+	t.Cleanup(func() { cancel(); <-done })
+	waitFor(t, "the expired session to be deleted", 5*time.Second, func() bool {
+		var n int
+		_ = db.QueryRow(t.Context(), `SELECT count(*) FROM hub.vendor_sessions WHERE session_id = $1`, ses.ID).Scan(&n)
+		return n == 0
+	})
 }
