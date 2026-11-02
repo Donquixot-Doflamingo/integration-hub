@@ -184,3 +184,20 @@ func changeRows(t *testing.T, pool *pgxpool.Pool) int {
 	}
 	return n
 }
+
+// TestDryRunAgainstTheAdminAPI is HUB-212 on the real endpoints: dry-run prints the vendor
+// request with credentials redacted; replay counts first and needs -yes.
+func TestDryRunAgainstTheAdminAPI(t *testing.T) {
+	url, _ := liveAdmin(t)
+	body := filepath.Join(t.TempDir(), "body.json")
+	_ = os.WriteFile(body, []byte(`{"user":{"id":"u_48213"},"event":{"name":"order_placed","timestamp":"2026-10-31T09:15:00Z"}}`), 0o600)
+	code, out, errs := hubctl(t, "dry-run", "-admin-url", url, "int_evt_brandA", body)
+	redacted := strings.Contains(strings.ToLower(out), "x-clevertap-passcode: ***")
+	if code != 0 || !strings.Contains(out, "POST ") || !strings.Contains(out, "/1/upload") || !redacted || !strings.Contains(out, `"identity": "u_48213"`) {
+		t.Fatalf("dry-run %d:\n%s%s", code, out, errs)
+	}
+	code, out, errs = hubctl(t, "replay", "-admin-url", url, "-integration", "int_evt_brandA", "-error-code", "NO_SUCH_CODE_CUTOVER", "-reason", "replay check")
+	if code != 0 || !strings.Contains(out, "0 dead letter(s) match") {
+		t.Fatalf("replay count %d: %s %s", code, out, errs)
+	}
+}

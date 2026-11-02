@@ -4,7 +4,7 @@
 `hubctl` (`backend/cmd/hubctl`) makes Git the reviewable source of the registry: `plan` diffs local YAML against live, `apply` publishes through the same pipeline, plus `transform test`, `dry-run`, `replay` and `validate` (DESIGN §16.1, §19 M7).
 
 ## Status
-`proposed` — 2026-10-31. `hubctl transform test` ships earlier with F-04 (M2).
+`shipped` — 2026-11-02 (M7, `docs/milestones/M7.md`): login, whoami, export, plan, apply (subset, see Deviations), dry-run, replay. `hubctl transform test` shipped with F-04 (M2).
 
 ## Owner
 `backend-engineer`.
@@ -100,3 +100,4 @@ HUB-200 – HUB-229 (EP-08, filter `feature: F-17`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-02 | Shipped in M7 (see docs/milestones/M7.md) | backend-engineer |

@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-02 · `docs(milestones)` · Accept M7 and write the control-plane summary (HUB-214) · HUB-214 · F-16
+  - M7 accepted: 79/79 admin operations, RBAC matrix, one change-log row per mutation, idempotent hubctl apply with exact plans
+  - docs/milestones/M7.md with Deviations and contract change requests; F-16 and F-17 shipped; M7 tickets done
 - 2026-11-02 · `feat(hubctl)` · Apply a config directory through the admin API, idempotently (HUB-211) · HUB-211 · F-17
   - hubctl apply publishes integration metadata, pause, new active versions (draft + publish), account config/quota and tenant settings through the admin API, one change-log row each
   - Changes it cannot express (new accounts, API keys, vendors, transformers, edits of published versions) are refused before anything is changed; an API validation failure stops it with the path-qualified error
