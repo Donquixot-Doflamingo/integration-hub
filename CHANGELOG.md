@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `test(roles)` · Check deploy queries against exported metrics (HUB-232) · HUB-232 · F-18
+  - Every alert rule and dashboard query is parsed with the PromQL parser; an unknown metric, label matcher, by() or on() label fails the backend tests with the alert or panel name
+  - Dashboards are linted: stable uid, unique panel ids, data source only through ${datasource}, every variable defined
+  - Every DESIGN §16.3 alert must have one rule with its runbook link and a firing and a non-firing promtool case
+  - make monitoring runs promtool check/test and these tests (ADR-0013; github.com/prometheus/prometheus is a test-only dependency)
 - 2026-11-06 · `chore(deploy)` · Add DESIGN §16.3 alert rules and dashboards (HUB-232) · HUB-232 · F-18
   - deploy/alerts/hub.rules.yaml: the ten §16.3 alerts (six page, four warn), each with summary, description and a docs/runbooks/<AlertName>.md link; promtool unit tests with a firing and a non-firing case per alert
   - "Any" alerts (UPSTREAM_AUTH_FAILED, TRANSFORM_FAILED, audit drops) also fire on the first event of a new label set, which a plain increase() misses
