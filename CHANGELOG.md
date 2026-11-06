@@ -9,6 +9,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 - 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
   - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
   - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series
+- 2026-11-07 · `fix(load)` · Triage hubload for gosec with #nosec annotations (HUB-235) · HUB-235 · F-18
+  - The gosec CI gate passes on `cmd/hubload`: seven flagged lines (G304, G404, G204) carry reviewed `#nosec` annotations and are listed in SECURITY.md §8.1
 - 2026-11-07 · `docs(tech)` · Add the M8 load and soak test report (HUB-235, HUB-236) · HUB-235 · F-18
   - `docs/tech/LOAD_TEST_REPORT.md` leads with direct vs through-the-Hub latency (vendor at 0/50/200 ms, mockvendor stand-in): the Hub adds about 1.1–1.4 ms typical and 2.5–3.5 ms at p99
   - Sync: 500 RPS with 0 errors, ledger overhead p99 3.8 ms (6.5 ms with the limiter's Redis call); knee at about 600 RPS on 2 shared CPUs
@@ -30,6 +32,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 - 2026-11-07 · `feat(roles)` · Serve pprof on the ops port only (HUB-403) · HUB-403 · F-18
   - Every role serves `/debug/pprof/*` on its ops port (TECH_SPEC §2, OBSERVABILITY §8.1), so a running gateway or worker can be CPU- and heap-profiled
   - The public gateway and admin listeners still answer 404 on `/debug/pprof/`
+- 2026-11-07 · `docs(milestones)` · Add the M8 summary and v1.0.0 release notes (HUB-237) · HUB-237 · F-18
+  - docs/milestones/M8.md: acceptance per DESIGN §19 M8 with evidence (500 sync RPS and the zero-loss soak met; 2,000 async msg/s not met on the 2-CPU box), the latency the Hub adds, deviations and deferred tickets
+  - docs/releases/v1.0.0.md: draft release notes with contract versions and the blockers before tagging (HUB-406, HUB-401, HUB-405, staging load runs)
+- 2026-11-07 · `docs(tickets)` · Mark the tickets merged in #17 to #26 done (HUB-237) · HUB-237 · F-18
+  - 20 tickets set to done with their merge commit subjects: HUB-156, HUB-231 to HUB-234, HUB-238, HUB-239, HUB-300 to HUB-307, HUB-342 to HUB-345
+  - Open criteria stay visible: the Grafana import check (HUB-243) and the 10-run itest soak (checked in HUB-236)
 - 2026-11-07 · `fix(hubmcp)` · Triage the hubmcp context keys for gosec with #nosec (HUB-300) · HUB-300 · F-20
   - The gosec CI gate (HUB-234) passes on hubmcp: the two context map key names flagged as G101 carry reviewed `#nosec` annotations and are listed in SECURITY.md §8.1
 - 2026-11-07 · `fix(hubmcp)` · Refuse idempotency keys the Idempotency-Key header cannot carry (HUB-303) · HUB-303 · F-20

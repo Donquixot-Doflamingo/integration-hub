@@ -63,13 +63,13 @@ func matchTicks(comm, cmd string) uint64 {
 			continue
 		}
 		if comm != "" {
-			b, err := os.ReadFile(d + "/comm") //nolint:gosec // G304: /proc entries from a fixed glob
+			b, err := os.ReadFile(d + "/comm") // #nosec G304 -- /proc entries from a fixed glob
 			if err != nil || strings.TrimSpace(string(b)) != comm {
 				continue
 			}
 		}
 		if cmd != "" {
-			b, err := os.ReadFile(d + "/cmdline") //nolint:gosec // G304: /proc entries from a fixed glob
+			b, err := os.ReadFile(d + "/cmdline") // #nosec G304 -- /proc entries from a fixed glob
 			if err != nil || !strings.Contains(strings.ReplaceAll(string(b), "\x00", " "), cmd) {
 				continue
 			}

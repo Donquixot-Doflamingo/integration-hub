@@ -204,12 +204,13 @@ Both tools run with `go run <module>@<version>` (pinned in the Makefile; bump de
 | Rule | Where | Why it is safe |
 | --- | --- | --- |
 | G115 (integer conversion) | `audit/store.go`, `audit/ledger.go` (`int64(SnapshotVersion)`), `control/guard.go` (`int32` version), `audit/seal.go` (`byte(len(id))`), `registry/watch.go`, `core/ids.go`, `core/state.go`, `resolve/resolve.go`, `testkit/mockvendor/server.go` | values are bounded (versions far below 2^31, id length checked to 1..255, 48-bit timestamps, modulo 100) or only hashed/compared for equality |
-| G304 (file path from variable) | `creds/localfile.go` (`HUB_DEV_KEY_FILE`), `control/snapshots.go` (path confined to the blob root), `cmd/hubctl/ops.go` (file named by the operator) | operator configuration or confined path, never request input |
+| G304 (file path from variable) | `creds/localfile.go` (`HUB_DEV_KEY_FILE`), `control/snapshots.go` (path confined to the blob root), `cmd/hubctl/ops.go` (file named by the operator), `cmd/hubload/report.go` (the operator's run directory), `cmd/hubload/sys.go` (`/proc` entries from a fixed glob) | operator configuration or confined path, never request input |
 | G301 / G306 (dir 0755 / file 0644) | `cmd/hubctl/config.go` | writes registry config pulled from a snapshot: readable by design, no secrets (snapshots contain none) |
 | G705 (XSS via `Write`) | `control/adminapi/snapshots.go` (`getSnapshot`) | archived registry JSON served with `Content-Type: application/json`, never HTML; `nosniff` hardening tracked in HUB-248 |
 | G107 / G704 (request to variable URL) | `testkit/contract/contract.go` | test helper calling the test's own server |
-| G404 (math/rand) | `delivery/backoff.go`, `testkit/mockvendor/server.go` | retry jitter and a deterministic test double, not security |
+| G404 (math/rand) | `delivery/backoff.go`, `testkit/mockvendor/server.go`, `cmd/hubload/soak.go` (seeded chaos schedule) | retry jitter and a deterministic test double, not security |
 | G101 (hardcoded credentials) | `cmd/hubctl/creds.go`, `cmd/hubmcp/httpserve.go` (`tokenExtra*`) | usage text that mentions `signing_secret=`; context map key names; no credential |
+| G204 (subprocess with variable input) | `cmd/hubload/soak.go` | the soak's restart hook is a path the operator passes to the load-test tool; never part of the Hub binaries |
 
 ## 9. Security testing
 SSRF, signature, redaction and secret-grep tests (TESTING_STRATEGY §2, §3, §5); the role-log secret grep (HUB-234, below); fuzzing of parsers (§8); RBAC table test generated from §7 (every role × action → expected 2xx/403); dependency and image scans (§8); a pre-production review of the threat model before the first real vendor account is created.

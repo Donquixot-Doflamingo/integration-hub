@@ -51,7 +51,7 @@ func loadResults(dir string) ([]RateResult, []SoakResult, error) {
 	var rates []RateResult
 	var soaks []SoakResult
 	for _, f := range files {
-		b, err := os.ReadFile(f) //nolint:gosec // G304: result files of the operator's run directory
+		b, err := os.ReadFile(f) // #nosec G304 -- result files of the operator's run directory
 		if err != nil {
 			return nil, nil, err
 		}
@@ -293,7 +293,7 @@ func refreshLedger(ctx context.Context, dir, dsn string) error {
 	}
 	defaults := map[string]string{"sync": "int_load_sync", "async": "int_load_async"}
 	for _, f := range files {
-		b, err := os.ReadFile(f) //nolint:gosec // G304: result files of the operator's run directory
+		b, err := os.ReadFile(f) // #nosec G304 -- result files of the operator's run directory
 		if err != nil {
 			return err
 		}

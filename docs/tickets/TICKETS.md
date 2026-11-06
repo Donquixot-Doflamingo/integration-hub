@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **236** · done: **158** · todo: **53** · other (in-progress/in-review/blocked): **25**
+Total tickets: **236** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **6**
 
 ## Epics
 
@@ -14,14 +14,14 @@ Total tickets: **236** · done: **158** · todo: **53** · other (in-progress/in
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
-| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 17 | 16 |
+| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 17 | 17 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 17 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
-| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 1 |
+| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
-| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 0 |
-| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 0 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks and by the M8 load test) | M8+ | F-18, F-15, F-08, F-09, F-13 | HUB-400–HUB-429 | 12 | 0 |
+| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 8 |
+| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 4 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 12 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -1300,7 +1300,7 @@ Scenario 5 plus the milestone wrap-up.
 
 ### HUB-156 — Drain catch-up cap: one second of the rate, not two ticks
 - **Epic:** EP-06 · **Type:** fix · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-155 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Merged:** Merge pull request #25 from Donquixot-Doflamingo/fix/HUB-156-drain-catch-up · **Depends on:** HUB-155 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `fix/HUB-156-drain-catch-up`
 
 After HUB-155, `TestChaos2RecoveryAndRampedDrain` still failed once on CI (#19: ramp step 2 released 15/20). With a 100 ms tick, a scheduler pass slower than 200 ms (probes, expiry, Postgres and Redis round trips on a slow runner) hit the 2-tick catch-up cap and the rest of its quota was lost again. One second of quota is the account's own per-second budget, so capping the catch-up there makes up any realistic stall without ever releasing above the ramped rate.
@@ -1707,7 +1707,7 @@ Export every §16.2 metric with labels tenant, integration, vendor, account, ver
 
 ### HUB-231 — Tracing: edge, transform, upstream, callback spans
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-027, HUB-088, HUB-120 · **Feature:** F-18 · **Stories:** US-1806
+- **Status:** done · **Merged:** Merge pull request #19 from Donquixot-Doflamingo/feat/HUB-231-tracing-spans · **Depends on:** HUB-027, HUB-088, HUB-120 · **Feature:** F-18 · **Stories:** US-1806
 - **Branch:** `feat/HUB-231-tracing-spans`
 
 OTel spans for edge, transform, upstream and callback; accept caller `traceparent`; forward it to vendors that accept it (DESIGN §16.4). Decisions in ADR-0013 (vendor forwarding by `HUB_TRACE_FORWARD_VENDORS`, enqueue span in the envelope, `callback_deliveries.traceparent`, link-aware sampler).
@@ -1718,7 +1718,7 @@ OTel spans for edge, transform, upstream and callback; accept caller `traceparen
 
 ### HUB-232 — Alert rules and dashboards as code
 - **Epic:** EP-09 · **Type:** chore · **Area:** infra
-- **Status:** in-review · **Depends on:** HUB-230 · **Feature:** F-18 · **Stories:** US-1801, US-1804
+- **Status:** done · **Merged:** Merge pull request #20 from Donquixot-Doflamingo/chore/HUB-232-alerts-dashboards · **Depends on:** HUB-230 · **Feature:** F-18 · **Stories:** US-1801, US-1804
 - **Branch:** `chore/HUB-232-alerts-dashboards`
 
 Prometheus alert rules for every §16.3 alert with `promtool` unit tests, and dashboards JSON for tenant, vendor and platform views in `deploy/`.
@@ -1731,7 +1731,7 @@ Shipped: `deploy/alerts/hub.rules.yaml` + `*_test.yml`, `deploy/dashboards/{tena
 
 ### HUB-233 — PII deletion job by subject identifier
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-093, HUB-208 · **Feature:** F-18 · **Stories:** US-1805
+- **Status:** done · **Merged:** Merge pull request #18 from Donquixot-Doflamingo/feat/HUB-233-pii-deletion · **Depends on:** HUB-093, HUB-208 · **Feature:** F-18 · **Stories:** US-1805
 - **Branch:** `feat/HUB-233-pii-deletion`
 
 Job that purges stored payloads by subject identifier using `x-pii` tags while keeping hashes and metadata (DESIGN §16.5).
@@ -1745,7 +1745,7 @@ Shipped as the `hub erase-subject` maintenance command, because the admin contra
 
 ### HUB-234 — Security hardening checks
 - **Epic:** EP-09 · **Type:** chore · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-086, HUB-022 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** done · **Merged:** Merge pull request #23 from Donquixot-Doflamingo/chore/HUB-234-security-hardening · **Depends on:** HUB-086, HUB-022 · **Feature:** F-18 · **Stories:** US-18xx
 - **Branch:** `chore/HUB-234-security-hardening`
 
 Add `gosec` and `govulncheck` to CI, verify TLS 1.2+ and egress allowlist enforcement, body limits and secret redaction across all roles (DESIGN §16.5, `docs/tech/SECURITY.md`).
@@ -1786,7 +1786,7 @@ Built as `hubload soak` (`make soak`): chaos loop on the mockvendor control API 
 
 ### HUB-237 — Runbooks and M8 summary
 - **Epic:** EP-09 · **Type:** docs · **Area:** docs
-- **Status:** in-progress · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-1807
+- **Status:** in-review · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-1807
 - **Branch:** `docs/HUB-237-runbooks-m8`
 
 Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`, credential rotation, snapshot lag; post the M8 wrap-up. The alert rules (HUB-232) link `docs/runbooks/<AlertName>.md` for all ten alerts in `deploy/alerts/hub.rules.yaml` (six page, four warn).
@@ -1795,19 +1795,19 @@ Part 1 done: `docs/runbooks/` has one runbook per alert (all ten, page and warn)
 
 **Acceptance criteria**
 - [x] Each paging alert links a runbook: `docs/runbooks/<AlertName>.md` exists for every `runbook_url` in `deploy/alerts/hub.rules.yaml` (the four warn alerts too)
-- [ ] Milestone summary posted; F-18 doc updated
-- [ ] Release notes for v1.0.0 prepared per `docs/process/RELEASE.md`
+- [x] Milestone summary posted; F-18 doc updated: `docs/milestones/M8.md`
+- [x] Release notes for v1.0.0 prepared per `docs/process/RELEASE.md`: `docs/releases/v1.0.0.md` (draft; tagging waits on the blockers it lists)
 
 ### HUB-238 — Transformer time budget flakes under -race in the full itest run
 - **Epic:** EP-09 · **Type:** test · **Area:** backend
-- **Status:** in-review · **Depends on:** — · **Feature:** F-04 · **Stories:** US-04xx
+- **Status:** done · **Merged:** Merge pull request #17 from Donquixot-Doflamingo/test/HUB-238-timing-flakes · **Depends on:** — · **Feature:** F-04 · **Stories:** US-04xx
 - **Branch:** `test/HUB-238-transform-budget-flake`
 
 During the HUB-230 `make itest` run, `TestCutoverCompletedAndNewRequests/transformer` failed once: the publish check ran goldens for `R2@1` (`fixtures/partial`), which took 8.08 ms against the 5 ms transform time budget under `-race` on a loaded machine. It passed 5/5 in isolation. The publish-time golden run should not be sensitive to scheduler load.
 
 **Acceptance criteria**
 - [x] Publish-time goldens either measure CPU time, apply the budget only outside `-race`, or retry once before failing on time alone: RunGoldens re-runs a case once on ErrTimeBudget (`TestGoldensRetryTimeBudgetOnce`)
-- [ ] `make itest` passes 10 consecutive full runs on CI hardware
+- [ ] `make itest` passes 10 consecutive full runs on CI hardware. Not run as a dedicated soak; every PR since (#18 to #27) ran the full itest on CI, and the one ramp-test failure was fixed in HUB-155/156. Kept open as a check for the HUB-236 soak.
 
 ### HUB-240 — Tracing: remaining stage spans and upstream attempt attributes
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
@@ -2010,7 +2010,7 @@ Rules beyond DESIGN §16.3 planned in OBSERVABILITY §11.2 (`SchedulerLeaderMiss
 
 ### HUB-239 — Registry watch test reads a half-written config file
 - **Epic:** EP-09 · **Type:** test · **Area:** backend
-- **Status:** in-review · **Depends on:** — · **Feature:** F-03 · **Stories:** US-03xx
+- **Status:** done · **Merged:** Merge pull request #17 from Donquixot-Doflamingo/test/HUB-238-timing-flakes · **Depends on:** — · **Feature:** F-03 · **Stories:** US-03xx
 - **Branch:** `test/HUB-238-timing-flakes`
 
 `TestWatchSwapsValidEditsAndKeepsLastGoodOnInvalid` failed on `main` (run 41415977028) with `accounts/ct-brandA-in.yaml: EOF`: the test edits files with `os.WriteFile`, which truncates before writing, and the 50 ms watcher sometimes read the empty file. The product behaviour is right (an unreadable edit is rejected and the last good snapshot keeps serving); the test raced its own write.
@@ -2480,7 +2480,7 @@ Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits
 
 ### HUB-300 — hubmcp scaffold with official MCP Go SDK (stdio)
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** in-review · **Depends on:** HUB-020, HUB-006, HUB-094 · **Feature:** F-20 · **Stories:** US-2006
+- **Status:** done · **Merged:** Merge pull request #24 from Donquixot-Doflamingo/feat/HUB-300-hubmcp · **Depends on:** HUB-020, HUB-006, HUB-094 · **Feature:** F-20 · **Stories:** US-2006
 - **Branch:** `feat/HUB-300-hubmcp-scaffold` (delivered on `feat/HUB-300-hubmcp` with HUB-301–307)
 
 Create `cmd/hubmcp` using the official MCP Go SDK with stdio transport, config (Hub URL, tenant key from env, optional admin token) and tool registration from the frozen MCP tool definitions.
@@ -2492,7 +2492,7 @@ Create `cmd/hubmcp` using the official MCP Go SDK with stdio transport, config (
 
 ### HUB-301 — Streamable HTTP transport
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2006
+- **Status:** done · **Merged:** Merge pull request #24 from Donquixot-Doflamingo/feat/HUB-300-hubmcp · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2006
 - **Branch:** `feat/HUB-301-hubmcp-http` (delivered on `feat/HUB-300-hubmcp`)
 
 Add streamable HTTP transport with bearer auth for shared deployments.
@@ -2503,7 +2503,7 @@ Add streamable HTTP transport with bearer auth for shared deployments.
 
 ### HUB-302 — Discovery tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2001
+- **Status:** done · **Merged:** Merge pull request #24 from Donquixot-Doflamingo/feat/HUB-300-hubmcp · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2001
 - **Branch:** `feat/HUB-302-mcp-discovery-tools` (delivered on `feat/HUB-300-hubmcp`)
 
 Tools to list integrations, describe one, and fetch a capability's schemas, backed by the discovery endpoints (HUB-090 contract).
@@ -2514,7 +2514,7 @@ Tools to list integrations, describe one, and fetch a capability's schemas, back
 
 ### HUB-303 — Invoke, request status and dry-run tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2002, US-2003, US-2004
+- **Status:** done · **Merged:** Merge pull request #24 from Donquixot-Doflamingo/feat/HUB-300-hubmcp · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2002, US-2003, US-2004
 - **Branch:** `feat/HUB-303-mcp-invoke-tools` (delivered on `feat/HUB-300-hubmcp`)
 
 Tools to invoke an integration (returning Result vs Queued explicitly), get request status, and dry-run.
@@ -2525,7 +2525,7 @@ Tools to invoke an integration (returning Result vs Queued explicitly), get requ
 
 ### HUB-304 — Confirm guard for money/quota integrations
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** in-review · **Depends on:** HUB-303 · **Feature:** F-20 · **Stories:** US-2003
+- **Status:** done · **Merged:** Merge pull request #24 from Donquixot-Doflamingo/feat/HUB-300-hubmcp · **Depends on:** HUB-303 · **Feature:** F-20 · **Stories:** US-2003
 - **Branch:** `feat/HUB-304-mcp-confirm-guard` (delivered on `feat/HUB-300-hubmcp`)
 
 For integrations with `moves_money_or_quota: true` (read via `getIntegration`), the invoke tool requires an explicit `confirm: true` and an idempotency key, and echoes a summary before calling.
@@ -2536,7 +2536,7 @@ For integrations with `moves_money_or_quota: true` (read via `getIntegration`), 
 
 ### HUB-305 — Admin read-only tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2005
+- **Status:** done · **Merged:** Merge pull request #24 from Donquixot-Doflamingo/feat/HUB-300-hubmcp · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2005
 - **Branch:** `feat/HUB-305-mcp-admin-readonly` (delivered on `feat/HUB-300-hubmcp`)
 
 Read-only admin tools (request search/timeline, breaker states, DLQ list, integration versions) using a viewer token against `contracts/openapi/hub-admin.v1.yaml`; no mutating tools.
@@ -2549,7 +2549,7 @@ Delivered: the three admin tools of the frozen tool contract (`hub_admin_search_
 
 ### HUB-306 — MCP tests
 - **Epic:** EP-11 · **Type:** test · **Area:** mcp
-- **Status:** in-review · **Depends on:** HUB-301, HUB-302, HUB-303, HUB-304, HUB-305 · **Feature:** F-20 · **Stories:** US-2001–US-2006
+- **Status:** done · **Merged:** Merge pull request #24 from Donquixot-Doflamingo/feat/HUB-300-hubmcp · **Depends on:** HUB-301, HUB-302, HUB-303, HUB-304, HUB-305 · **Feature:** F-20 · **Stories:** US-2001–US-2006
 - **Branch:** `test/HUB-306-mcp-tests` (delivered on `feat/HUB-300-hubmcp`)
 
 Tool schema snapshot tests against the MCP contract, handler tests against a fake Hub, and an MCP Inspector smoke run.
@@ -2562,7 +2562,7 @@ The protocol smoke run is `TestSpawnedBinaryOverStdio` (the binary spawned over 
 
 ### HUB-307 — MCP e2e against a running Hub
 - **Epic:** EP-11 · **Type:** test · **Area:** mcp
-- **Status:** in-review · **Depends on:** HUB-306, HUB-097, HUB-123 · **Feature:** F-20 · **Stories:** US-2001–US-2005
+- **Status:** done · **Merged:** Merge pull request #24 from Donquixot-Doflamingo/feat/HUB-300-hubmcp · **Depends on:** HUB-306, HUB-097, HUB-123 · **Feature:** F-20 · **Stories:** US-2001–US-2005
 - **Branch:** `test/HUB-307-mcp-e2e` (delivered on `feat/HUB-300-hubmcp`)
 
 Run hubmcp against a compose Hub + mockvendor and exercise discovery, sync invoke, async invoke + status, dry-run.
@@ -2765,7 +2765,7 @@ Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §9: `CredentialSource` 
 
 ### HUB-342 — Use-case catalogue and a runnable OTP → account-verification example
 - **Epic:** EP-12 · **Type:** docs · **Area:** docs
-- **Status:** in-review · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
+- **Status:** done · **Merged:** Merge pull request #21 from Donquixot-Doflamingo/docs/HUB-342-use-cases · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
 - **Branch:** `docs/HUB-342-use-cases`
 
 The product owner asked how calls work and how UX-style flows ("first an OTP, then the user gives the account number") are handled inside the Hub. Write `docs/use-cases/README.md`: a catalogue for non-engineers of what the Hub does today vs what is planned, with the caller's exact requests and responses (shapes from `contracts/openapi/hub-public.v1.yaml`, no vendor names), a sequence diagram, failure behaviour and a status line citing the test that proves it. Back the two-step flow with a runnable example under `examples/otp-account-flow/` (registry overlay kept out of `backend/config` and `contracts/`, fictional vendor `demo-kyc` on mockvendor) and an integration test through the real gateway. Gaps found on the way become their own tickets (HUB-343 … HUB-348).
@@ -2780,7 +2780,7 @@ The product owner asked how calls work and how UX-style flows ("first an OTP, th
 
 ### HUB-343 — Per-operation transformers on integration version targets
 - **Epic:** EP-12 · **Type:** feat · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-344 · **Feature:** F-22 (built in F-14) · **Stories:** US-2205
+- **Status:** done · **Merged:** Merge pull request #26 from Donquixot-Doflamingo/feat/HUB-343-per-operation-transformers · **Depends on:** HUB-344 · **Feature:** F-22 (built in F-14) · **Stories:** US-2205
 - **Branch:** `feat/HUB-343-per-operation-transformers`
 
 Found while building HUB-342. A target has one transformer pair (`transformer: {request, response}`), and the attempter uses it for every operation (`internal/delivery/attempter.go`). Because a request transformer names one `vendor_endpoint` and is compiled against one operation's schema, a multi-operation capability (DESIGN §3.1 `kyc.aadhaar_otp@v1` with `generate` and `verify`, each on its own vendor endpoint) cannot be expressed today. Let a target map each operation to its own pair, keeping the current single pair for single-operation capabilities. Needs the admin contract change in HUB-344 first (integration versions are created and shown through `/admin/v1`).
@@ -2793,7 +2793,7 @@ Found while building HUB-342. A target has one transformer pair (`transformer: {
 
 ### HUB-344 — Contract: per-operation transformers in admin integration versions
 - **Epic:** EP-12 · **Type:** contract · **Area:** contracts
-- **Status:** in-review · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
+- **Status:** done · **Merged:** Merge pull request #26 from Donquixot-Doflamingo/feat/HUB-343-per-operation-transformers · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
 - **Branch:** `contract/HUB-344-per-operation-transformers` (committed on `feat/HUB-343-per-operation-transformers`, as the first commit of the HUB-343 train)
 
 Contract change request from HUB-342 for the `contract-steward`: the admin integration-version target needs an optional per-operation transformer map next to the existing `transformer` pair, so HUB-343 can be configured, published, diffed and shown by the console and `hubctl` (additive, admin minor bump). The caller API is unchanged: `invokeIntegrationOperation` already exists.
@@ -2812,7 +2812,7 @@ Contract change request from HUB-342 for the `contract-steward`: the admin integ
 
 ### HUB-345 — Refuse multi-operation integrations whose single pair serves every operation
 - **Epic:** EP-12 · **Type:** fix · **Area:** backend
-- **Status:** in-review · **Depends on:** — · **Feature:** F-03 · **Stories:** US-0301
+- **Status:** done · **Merged:** Merge pull request #26 from Donquixot-Doflamingo/feat/HUB-343-per-operation-transformers · **Depends on:** — · **Feature:** F-03 · **Stories:** US-0301
 - **Branch:** `fix/HUB-345-multi-op-single-pair` (delivered on `feat/HUB-343-per-operation-transformers`: the HUB-343 check `operations_have_transformers` subsumes it)
 
 Found while building HUB-342. A capability with operations `send` and `verify`, bound to an integration whose target pair is compiled for `send` (`operation: send`), builds a snapshot without any problem. Invoking `verify` then runs the `send` transformers on a `verify` body and validates the result against the `send` response schema. Until HUB-343 lands, the registry should refuse such a version with a path-qualified error instead of failing at request time.
