@@ -18,7 +18,7 @@ One noisy tenant can exhaust a shared vendor account; one slow vendor can exhaus
 ## Goals / Non-goals
 **Goals**
 - Tenant limiter: local `x/time/rate` bucket per `(tenant, integration)` at the edge → 429 `UPSTREAM_RATE_LIMITED`.
-- Account limiter: Redis token bucket shared across nodes, drawn from in leases so a request makes no Redis call in steady state (HUB-408, ADR-0019); workers wait for tokens instead of collecting vendor 429s; live (sync/wait) traffic has priority over drain and retries.
+- Account limiter: Redis token bucket shared across nodes, drawn from in leases so a request makes no Redis call in steady state (HUB-408, ADR-0021); workers wait for tokens instead of collecting vendor 429s; live (sync/wait) traffic has priority over drain and retries.
 - Bulkhead: per-account HTTP pool and concurrency limit (default 64); LLM endpoints in a separate pool.
 - Retry budget: retries ≤ 20 % of the account's live traffic.
 - Daily quotas from account config (`quota.daily`).
@@ -41,7 +41,7 @@ One noisy tenant can exhaust a shared vendor account; one slow vendor can exhaus
 ## Behaviour & rules
 1. Edge order: auth → grant → **tenant rate limit** → body limit (DESIGN §18.4).
 2. Tenant limits are local per node (budget split by node count, or Redis; see open questions); the account limiter is always Redis-shared.
-2a. Account limiter leases (HUB-408, [ADR-0019](../tech/adr/0019-account-limiter-leases-tokens.md)): each node takes tokens from the shared bucket in blocks sized to its recent use over 200 ms (1 token to 10 % of the account rate), refills in the background at half the block, and serves calls from local memory. A node with no token that is not at the limit lets the call through and pays it back from the next lease, so cold and idle nodes never wait for Redis. Unused leased tokens are dropped after 1 s. The fleet may be ahead of the bucket by at most one token per node and traffic class.
+2a. Account limiter leases (HUB-408, [ADR-0021](../tech/adr/0021-account-limiter-leases-tokens.md)): each node takes tokens from the shared bucket in blocks sized to its recent use over 200 ms (1 token to 10 % of the account rate), refills in the background at half the block, and serves calls from local memory. A node with no token that is not at the limit lets the call through and pays it back from the next lease, so cold and idle nodes never wait for Redis. Unused leased tokens are dropped after 1 s. The fleet may be ahead of the bucket by at most one token per node and traffic class.
 3. Sync request when the account bucket is empty: short bounded wait (≤ 250 ms, ≤ remaining deadline), else 429 `UPSTREAM_RATE_LIMITED` reason `account_quota`. Only that wait is a deliberate wait (`StageWait`, `hub_wait_ms`); waiting for a lease reply counts as `admission` overhead.
 4. Priority: live > drain > retries on the account limiter (DESIGN §10.5).
 5. Bulkhead full on sync → 503 `UPSTREAM_UNAVAILABLE` (proposed) without calling the vendor; worker → requeue.
@@ -97,4 +97,4 @@ HUB-140 – HUB-169 (EP-06, filter `feature: F-13`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
-| 2026-11-07 | Account limiter leases tokens (HUB-408, ADR-0019) | backend-engineer |
+| 2026-11-07 | Account limiter leases tokens (HUB-408, ADR-0021) | backend-engineer |

@@ -1,4 +1,4 @@
-# ADR-0019: The account limiter leases tokens off the request path
+# ADR-0021: The account limiter leases tokens off the request path
 
 | | |
 | --- | --- |

@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(adr)` · Renumber the account limiter lease ADR to 0021 (HUB-408) · HUB-408 · F-13
+  - The account limiter lease decision is now ADR-0021 (`docs/tech/adr/0021-account-limiter-leases-tokens.md`); 0019 and 0020 are taken by other branches. References in TECH_SPEC, OBSERVABILITY, F-13, TICKETS, the limiter code comment and the HUB-408 changelog entry follow
+
 - 2026-11-07 · `test(edge)` · Prove audit, async accepts and callbacks stay off the request (HUB-413) · HUB-413 · F-18
   - A sync call answers while the audit store hangs and its buffer is full; the audit batch is dropped and counted, never awaited
   - async and async_callback answer 202 before the vendor is called (a 2 s vendor is paid by the worker, not the caller)
@@ -20,7 +23,7 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - The account quota still holds across nodes (two gateways measured at exactly the 40 rps quota); a node may be one token ahead of the shared bucket at most
   - A Redis outage or stall no longer delays callers: a failed lease lets that account's traffic through for 1 s, then retries
   - `hub_wait_ms{kind="account_limiter"}` now holds only real waits for tokens; a lease reply a call waited for counts in the `admission` stage (and in `hub_overhead_ms`)
-  - New metric `account_limiter_leases_total{result}` and `redis_op_duration_seconds{op="limiter_lease"}`; ADR-0019
+  - New metric `account_limiter_leases_total{result}` and `redis_op_duration_seconds{op="limiter_lease"}`; ADR-0021
 - 2026-11-07 · `docs(tickets)` · File the sync latency budget as HUB-413 (HUB-413) · HUB-413 · F-18
   - New ticket HUB-413 (EP-13): a CI gate that keeps a 100 ms vendor at ≤ 110 ms p99 through the Hub, tests that audit, async accepts and callbacks never delay a sync call, and `docs/tech/LATENCY.md`
   - New user story US-1808 (a sync call costs the vendor's time, not double); HUB-408 and HUB-401 in progress

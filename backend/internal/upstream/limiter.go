@@ -20,7 +20,7 @@ import (
 // requests are served first when both compete. Workers wait for tokens instead of collecting
 // 429s.
 //
-// Tokens are leased (HUB-408, ADR-0019): each node takes them from Redis in small blocks and
+// Tokens are leased (HUB-408, ADR-0021): each node takes them from Redis in small blocks and
 // serves calls from its local lease, refilling it in the background before it runs out, so a
 // request makes no Redis round trip in steady state (DESIGN §18.5 rule 6). A node that holds no
 // token and is not known to be at the limit lets one call through and pays it back from its
