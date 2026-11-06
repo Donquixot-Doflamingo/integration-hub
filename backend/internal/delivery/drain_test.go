@@ -22,7 +22,7 @@ func TestRampFactor(t *testing.T) {
 
 // TestDrainQuotaUsesElapsedTime (HUB-155): the quota follows the time that really passed, so a
 // late or dropped scheduler tick does not lower the drain rate, and a long stall is made up by at
-// most maxCatchUpTicks ticks so the vendor never sees a burst.
+// most one second of the rate (maxCatchUp) so the vendor never sees more than its account rate.
 func TestDrainQuotaUsesElapsedTime(t *testing.T) {
 	tick := 100 * time.Millisecond
 	for _, tc := range []struct {
@@ -35,7 +35,8 @@ func TestDrainQuotaUsesElapsedTime(t *testing.T) {
 	}{
 		{"on-time tick", 0, 50, tick, 5, 0},
 		{"late tick makes up the time that passed", 0, 50, 2 * tick, 10, 0},
-		{"long stall is capped at the catch-up limit", 0, 50, 10 * tick, 10, 0},
+		{"stall of several ticks is made up (scheduler pass slower than 2 ticks)", 0, 50, 5 * tick, 25, 0},
+		{"long stall is capped at one second of the rate", 0, 50, 30 * tick, 50, 0},
 		{"fraction is carried to the next tick", 0.5, 10, tick, 1, 0.5},
 		{"clock step backwards releases nothing new", 0.25, 50, -tick, 0, 0.25},
 	} {
@@ -57,5 +58,15 @@ func TestDrainQuotaUsesElapsedTime(t *testing.T) {
 	// 7 ticks of 150 ms cover 1.05 s: 52 at 50/s. The nominal-tick quota gave 7 × 5 = 35.
 	if total != 52 {
 		t.Fatalf("released %d over 1.05 s at 50/s with late ticks, want 52", total)
+	}
+}
+
+func TestMaxCatchUp(t *testing.T) {
+	for _, tc := range []struct{ tick, want time.Duration }{
+		{100 * time.Millisecond, time.Second}, {time.Second, 2 * time.Second},
+	} {
+		if got := maxCatchUp(tc.tick); got != tc.want {
+			t.Errorf("maxCatchUp(%s) = %s, want %s", tc.tick, got, tc.want)
+		}
 	}
 }

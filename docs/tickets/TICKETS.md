@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **208** · done: **157** · todo: **45** · other (in-progress/in-review/blocked): **6**
+Total tickets: **209** · done: **158** · todo: **45** · other (in-progress/in-review/blocked): **6**
 
 ## Epics
 
@@ -14,7 +14,7 @@ Total tickets: **208** · done: **157** · todo: **45** · other (in-progress/in
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
-| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 16 | 15 |
+| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 17 | 16 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 17 | 1 |
@@ -1287,7 +1287,7 @@ Scenario 5 plus the milestone wrap-up.
 
 ### HUB-155 — Drain quota follows elapsed time, not the nominal tick
 - **Epic:** EP-06 · **Type:** fix · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-149 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Merged:** Merge pull request #22 from Donquixot-Doflamingo/fix/HUB-155-drain-elapsed-time · **Depends on:** HUB-149 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `fix/HUB-155-drain-elapsed-time`
 
 `TestChaos2RecoveryAndRampedDrain` failed on two PRs that do not touch the drain (#18: ramp step 2 released 15/20; #19: step 4 released 39/50). Root cause: the drain released `rate × nominal tick` per scheduler tick. A `time.Ticker` drops ticks when the scheduler is busy (probes, expiry sweeps, slow Postgres), so the quota of a late or dropped tick was lost and the drain ran below the DESIGN §10.5 rate on a loaded node. This is a production behaviour bug, not only a test one.
@@ -1296,6 +1296,17 @@ Scenario 5 plus the milestone wrap-up.
 - [x] The quota uses the time elapsed since the key's previous drain, capped at 2 ticks so a stall never becomes a burst (`TestDrainQuotaUsesElapsedTime`)
 - [x] Late ticks over 1.05 s at 50/s release 52, where the nominal-tick quota released 35
 - [x] `TestChaos2RecoveryAndRampedDrain` and `TestChaos3ReopenMidDrain` pass 3/3 under load
+
+### HUB-156 — Drain catch-up cap: one second of the rate, not two ticks
+- **Epic:** EP-06 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-155 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `fix/HUB-156-drain-catch-up`
+
+After HUB-155, `TestChaos2RecoveryAndRampedDrain` still failed once on CI (#19: ramp step 2 released 15/20). With a 100 ms tick, a scheduler pass slower than 200 ms (probes, expiry, Postgres and Redis round trips on a slow runner) hit the 2-tick catch-up cap and the rest of its quota was lost again. One second of quota is the account's own per-second budget, so capping the catch-up there makes up any realistic stall without ever releasing above the ramped rate.
+
+**Acceptance criteria**
+- [x] `maxCatchUp(tick) = max(2 ticks, 1 s)` (`TestMaxCatchUp`); a 5-tick stall releases 5 ticks of quota, a 30-tick stall one second's (`TestDrainQuotaUsesElapsedTime`)
+- [x] `TestChaos2RecoveryAndRampedDrain` / `TestChaos3ReopenMidDrain` pass 3/3 with both CPUs saturated by busy loops (step 4: 50, 52, 50; it had dropped to 46 with the 2-tick cap)
 ## EP-07 — M6 Versioning & cutover
 
 ### HUB-170 — Publish pipeline with full validation

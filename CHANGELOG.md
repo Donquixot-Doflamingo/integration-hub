@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(delivery)` · Cap the drain catch-up at one second of the rate, not two ticks (HUB-156) · HUB-156 · F-12
+  - The ramped drain makes up scheduler passes slower than two ticks instead of losing their quota; it never releases above the ramped account rate
 - 2026-11-07 · `fix(delivery)` · Base the drain quota on elapsed time so late ticks don't slow the ramp (HUB-155) · HUB-155 · F-12
   - The ramped drain keeps its DESIGN §10.5 rate on a busy scheduler: a late or dropped tick is made up (at most 2 ticks' worth, so no burst)
   - Fixes the intermittent TestChaos2RecoveryAndRampedDrain failure on CI
