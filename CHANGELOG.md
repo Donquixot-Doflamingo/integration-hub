@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tech)` · Add the M8 load and soak test report (HUB-235, HUB-236) · HUB-235 · F-18
+  - `docs/tech/LOAD_TEST_REPORT.md` leads with direct vs through-the-Hub latency (vendor at 0/50/200 ms, mockvendor stand-in): the Hub adds about 1.1–1.4 ms typical and 2.5–3.5 ms at p99
+  - Sync: 500 RPS with 0 errors, ledger overhead p99 3.8 ms (6.5 ms with the limiter's Redis call); knee at about 600 RPS on 2 shared CPUs
+  - Async: about 950 accepts/s and 360–400 deliveries/s per worker here; 2,000 msg/s not reached
+  - Soak: 42,000 accepted through 5 random vendor outages, 42,000 succeeded, 0 lost, 0 duplicate callbacks
+  - HUB-235 and HUB-236 in review; new ticket HUB-411 (audit writer throughput)
 - 2026-11-07 · `docs(tickets)` · File the load and soak findings as tickets (HUB-235) · HUB-235 · F-18
   - HUB-405: the `hub_overhead_ms` metric is computed before the vendor call (negative at any real vendor latency); the audit ledger value is correct
   - HUB-406: a worker restarted with a backlog panics on a nil snapshot (claims before the registry loads)

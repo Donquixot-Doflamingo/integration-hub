@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **235** · done: **158** · todo: **55** · other (in-progress/in-review/blocked): **22**
+Total tickets: **236** · done: **158** · todo: **54** · other (in-progress/in-review/blocked): **24**
 
 ## Epics
 
@@ -21,7 +21,7 @@ Total tickets: **235** · done: **158** · todo: **55** · other (in-progress/in
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 0 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks and by the M8 load test) | M8+ | F-18, F-15, F-08, F-09, F-13 | HUB-400–HUB-429 | 11 | 0 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks and by the M8 load test) | M8+ | F-18, F-15, F-08, F-09, F-13 | HUB-400–HUB-429 | 12 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -1758,27 +1758,31 @@ Add `gosec` and `govulncheck` to CI, verify TLS 1.2+ and egress allowlist enforc
 
 ### HUB-235 — Load test: 500 sync RPS + 2 000 async msg/s
 - **Epic:** EP-09 · **Type:** perf · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-097, HUB-154 · **Feature:** F-18 · **Stories:** US-18xx
-- **Branch:** `perf/HUB-235-load-test`
+- **Status:** in-review · **Depends on:** HUB-097, HUB-154 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `perf/HUB-235-load-soak` (with HUB-236)
 
 k6 or vegeta scripts and a compose-based laptop-scale setup with mockvendor; profile and fix hotspots; report budgets vs §18.6 (DESIGN §19 M8).
 
+Built as `backend/cmd/hubload` + `deploy/load/` (`make load`, ADR-0016: an open-loop Go tool instead of k6). Results on the shared 2-CPU container: `docs/tech/LOAD_TEST_REPORT.md`. Hotspots were filed rather than fixed here (no production default changed): HUB-405, HUB-407, HUB-408, HUB-409, HUB-410, HUB-411.
+
 **Acceptance criteria**
-- [ ] Overhead p99 ≤ 5 ms at 500 sync RPS
-- [ ] 2 000 async msg/s sustained for 10 min with queue age < 2 min
-- [ ] Report with pprof findings committed under `docs/tech/`
+- [ ] Overhead p99 ≤ 5 ms at 500 sync RPS: not ticked. The audit-ledger p99 is 3.79 ms at 500 RPS (20 s steps), but the exported `hub_overhead_ms` metric is broken (HUB-405), counting the limiter's Redis call gives 6.51 ms (HUB-408), and no 10-minute run on proper hardware has been done
+- [ ] 2 000 async msg/s sustained for 10 min with queue age < 2 min: not met. At most about 950 accepted/s (machine 95 % busy) and 360–400/s delivered per worker process (HUB-407); the queue age grows above that
+- [x] Report with pprof findings committed under `docs/tech/` (`docs/tech/LOAD_TEST_REPORT.md`)
 
 ### HUB-236 — Soak test with random vendor outages
 - **Epic:** EP-09 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-235, HUB-152 · **Feature:** F-18 · **Stories:** US-18xx
-- **Branch:** `test/HUB-236-soak-test`
+- **Status:** in-review · **Depends on:** HUB-235, HUB-152 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `perf/HUB-235-load-soak` (with HUB-235)
 
 Multi-hour soak with randomised mockvendor outages and worker restarts; reconcile accepted vs terminal requests (DESIGN §19 M8 Accept).
 
+Built as `hubload soak` (`make soak`): chaos loop on the mockvendor control API (refused, reset, 503, timeouts), callback receiver, reconciliation against `hub.requests` and `hub.callback_deliveries`. Laptop runs: 4 min + 3 min (`docs/tech/LOAD_TEST_REPORT.md` §3.4); the multi-hour staging run uses the same command (`deploy/load/README.md`). Worker restarts are built (restart hook, SIGTERM and SIGKILL) but stay off until HUB-406, a nil-snapshot panic they exposed.
+
 **Acceptance criteria**
-- [ ] Zero lost async requests: every accepted request reaches a terminal state
-- [ ] No duplicate callbacks for any request
-- [ ] Results summarised with counts per terminal state
+- [x] Zero lost async requests: every accepted request reaches a terminal state (42,000 accepted, 42,000 `succeeded`, 0 missing, 0 non-terminal across 5 vendor outages; worker restarts pending HUB-406)
+- [x] No duplicate callbacks for any request (42,000 callbacks for 42,000 requests; 0 duplicate outcomes, 0 redeliveries)
+- [x] Results summarised with counts per terminal state (report §3.4; `hubload report`)
 
 ### HUB-237 — Runbooks and M8 summary
 - **Epic:** EP-09 · **Type:** docs · **Area:** docs
@@ -2970,7 +2974,7 @@ Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md`). One worker fi
 - **Status:** todo · **Depends on:** HUB-147 · **Feature:** F-13 · **Stories:** US-13xx
 - **Branch:** `perf/HUB-408-limiter-lease`
 
-Found by the HUB-235 sync ramp. `upstream.(*AccountLimiter).Wait` runs a Redis script for every vendor call, including sync ones. At 500 RPS on 2 CPUs its own time (stage `admission` = `wait`) has a p99 of 3.8 ms, the largest stage on the path. DESIGN §18.5 rule 6 allows only the idempotency check as a non-vendor network call on the sync path; the go-system-design skill says to cache a local token lease. The whole call is also added to `StageWait`, which `hub_overhead_ms` excludes as a deliberate wait, even when the token was granted at once. So the overhead the Hub reports leaves out its biggest stage: at 500 RPS the ledger p99 is 3.4 ms without it and 6.2 ms with it.
+Found by the HUB-235 sync ramp. `upstream.(*AccountLimiter).Wait` runs a Redis script for every vendor call, including sync ones. At 500 RPS on 2 CPUs its own time (stage `admission` = `wait`) has a p99 of 3.8 ms, the largest stage on the path. DESIGN §18.5 rule 6 allows only the idempotency check as a non-vendor network call on the sync path; the go-system-design skill says to cache a local token lease. The whole call is also added to `StageWait`, which `hub_overhead_ms` excludes as a deliberate wait, even when the token was granted at once. So the overhead the Hub reports leaves out its biggest stage: at 500 RPS the ledger p99 is 3.4 ms without it and 6.2 ms with it. A Redis stall also puts the sync path at risk: the limiter's 50 ms timeout fired 15 times within one second during a quiet 100 RPS run, giving that step a 20 ms p99 "Hub adds" tail (report §3.1).
 
 **Acceptance criteria**
 - [ ] A node leases tokens in blocks (for example 10 % of the account rate) and serves sync calls from the lease without a Redis call in steady state; the fleet-wide rate still holds (itest with two limiters)
@@ -3000,6 +3004,18 @@ Found by the HUB-235 async run at 1,000 msg/s on 2 CPUs. Postgres was saturated,
 - [ ] A failed batch is retried with jittered backoff (bounded attempts and time) before it is dropped; the buffer-full drop path is unchanged
 - [ ] Integration test: Postgres paused for 2 s during writes, then resumed, loses no audit events
 - [ ] `audit_write_failures_total` counts failed attempts and `audit_events_dropped_total{reason="write_error"}` only what was finally given up
+
+### HUB-411 — Audit writer falls behind Postgres at about 900 requests/s
+- **Epic:** EP-13 · **Type:** perf · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-091 · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `perf/HUB-411-audit-writer-throughput`
+
+Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md` §3.3). At about 930 accepted requests/s on 2 CPUs, the gateway's single audit writer cannot insert as fast as events arrive. Its 10,000-batch buffer fills, and `audit_events_dropped_total{reason="buffer_full"}` counted 19,158 events in 15 s (82,782 in a 25 s step). Requests are unaffected (the outbox commits before the 202), and dropping on a full buffer is by design (DESIGN §18.5 rule 3). But the audit trail DESIGN §13 calls lossless is lossy well below the M8 target rate.
+
+**Acceptance criteria**
+- [ ] Batched `COPY` (or multi-row insert) and a configurable number of writer goroutines; buffer size configurable (with HUB-403)
+- [ ] `hubload` async step at the gateway's accept limit shows no `buffer_full` drops on the same machine, or the report names the new limit
+- [ ] Benchmark of events/s per writer vs `main` (benchstat)
 
 ## Parallel tracks
 

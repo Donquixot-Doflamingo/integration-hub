@@ -60,7 +60,7 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-10 | Admin console (SvelteKit) | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 14 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 19 | 0 |
-| **Total** | | | | **235** | **158** |
+| **Total** | | | | **236** | **158** |
 
 ## Sizing
 
@@ -93,7 +93,7 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | F-05 | Tenant auth, grants & edge validation | EP-04 | 3 |
 | F-06 | Sync invoke path & canonical error envelope | EP-04 | 8 |
 | F-07 | Credentials & vendor auth schemes | EP-04 | 2 |
-| F-08 | Audit trail | EP-04, EP-05, EP-13 | 8 |
+| F-08 | Audit trail | EP-04, EP-05, EP-13 | 9 |
 | F-09 | Durable delivery: outbox, worker, wait/async/async_callback | EP-05, EP-13 | 11 |
 | F-10 | Idempotency | EP-05 | 1 |
 | F-11 | Outbound callbacks & registrar (signed webhooks, SSRF guard) | EP-05 | 4 |
