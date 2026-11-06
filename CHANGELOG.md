@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · File the backend bugs the console bug bash found (HUB-289) · HUB-289 · F-19
+  - New todo tickets HUB-417 to HUB-421: account DLQ counts, seeded version times, replayed request timelines, DLQ replay filter, dev registrar URL
 - 2026-11-07 · `docs(tickets)` · Mark the console real-backend tickets in review (HUB-286) · HUB-286 · F-19
   - HUB-286 and HUB-289 are in review with their acceptance criteria mapped to tests; `make dev-up` names the console's "Create API key" button in its hint
 - 2026-11-07 · `feat(frontend)` · Polish the console layout on phones and desktop (HUB-287) · HUB-287 · F-19

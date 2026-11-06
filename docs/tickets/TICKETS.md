@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **240** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **10**
+Total tickets: **245** · done: **177** · todo: **58** · other (in-progress/in-review/blocked): **10**
 
 ## Epics
 
@@ -21,7 +21,7 @@ Total tickets: **240** · done: **177** · todo: **53** · other (in-progress/in
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 40 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 4 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 12 | 0 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 17 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3072,6 +3072,58 @@ Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md` §3.3). At abou
 - [ ] Batched `COPY` (or multi-row insert) and a configurable number of writer goroutines; buffer size configurable (with HUB-403)
 - [ ] `hubload` async step at the gateway's accept limit shows no `buffer_full` drops on the same machine, or the report names the new limit
 - [ ] Benchmark of events/s per writer vs `main` (benchstat)
+
+### HUB-417 — listAccounts never fills dead_letter_count and dead_letter_oldest_at
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `fix/HUB-417-account-dlq-counts`
+
+Found by the console bug bash (HUB-289): `listAccounts` leaves `dead_letter_count` / `dead_letter_oldest_at` empty, so the health board shows "Unknown" for every account.
+
+**Acceptance criteria**
+- [ ] Both fields filled from the DLQ per account (indexed query); contract test with a dead letter present
+
+### HUB-418 — Versions seeded from the config tree report the request time as created_at and published_at
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `fix/HUB-418-seeded-version-times`
+
+Found by HUB-289: integration versions that came from the config tree (not published through the admin API) report `created_at` / `published_at` as the time of the request.
+
+**Acceptance criteria**
+- [ ] Seeded versions report the snapshot's publish time (or null where unknown, if the contract allows); test
+
+### HUB-419 — Timeline seq repeats and attempt numbers restart after a DLQ replay
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `fix/HUB-419-replay-timeline-seq`
+
+Found by HUB-289: after a DLQ replay, timeline `seq` values repeat and come back out of order (the contract says in seq order), attempt numbers restart at 1, and the dead-lettered attempt has `error_code: null`. Seen in the console's request page for a replayed request.
+
+**Acceptance criteria**
+- [ ] Replayed requests keep a strictly increasing seq and continue attempt numbering
+- [ ] The dead-lettered attempt carries its error code
+- [ ] Contract test on a replayed request's timeline
+
+### HUB-420 — DLQ replay by filter ignores filter.replayed: true
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `fix/HUB-420-dlq-replay-filter`
+
+Found by HUB-289: `adminapi/dlq.go` always adds `replayed_at IS NULL`, so replaying by filter with `filter.replayed: true` skips the entries it asked for, unlike the contract.
+
+**Acceptance criteria**
+- [ ] The filter honours `replayed` as the contract defines; table test for true/false/absent
+
+### HUB-421 — Seeded registrar endpoint has an http:// URL that breaks the contract's https pattern
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-11 · **Stories:** US-11xx
+- **Branch:** `fix/HUB-421-dev-registrar-https`
+
+Found by HUB-289: the dev seed's registrar endpoint returns an `http://` URL, which violates `^https://` in the contract, so contract validation of that response fails in dev.
+
+**Acceptance criteria**
+- [ ] Dev seed uses an https URL (or the contract documents the dev exception via the steward); contract test over the seeded data
 
 ## Parallel tracks
 
