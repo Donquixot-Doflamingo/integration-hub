@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · File the operability follow-ups the runbooks found (HUB-237) · HUB-237 · F-18
+  - New epic EP-13 (HUB-400–HUB-429): hubctl on-call commands, a SnapshotBehind false positive after restarts, the admin API credential minimum length, unwired ops settings (pprof, log level, worker concurrency), and OBSERVABILITY §9 drift
 - 2026-11-07 · `docs(runbooks)` · Add runbooks for every alert (HUB-237) · HUB-237 · F-18
   - Every `runbook_url` in `deploy/alerts/hub.rules.yaml` now resolves: `docs/runbooks/<AlertName>.md` for all ten alerts (six page, four warn), each with what fired, caller impact in canonical codes, first checks (dashboard panel, PromQL, hubctl or admin operationId), causes and fixes, and escalation
   - `docs/runbooks/README.md` indexes them with severity and meaning; `credential-rotation.md` is the add next, test, promote, watch, delete old procedure
