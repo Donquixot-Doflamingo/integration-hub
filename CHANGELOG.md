@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `test(edge)` · Raise the tenant quota in the overhead benchmark so it runs again (HUB-231) · HUB-231 · F-18
+  - BenchmarkInvokeOverhead no longer stops with 429 UPSTREAM_RATE_LIMITED after the dev tenant's 100 rps quota; the token bucket stays on the measured path
 - 2026-11-06 · `fix(deploy)` · Read /metrics fully in the M0 smoke test instead of piping to grep -q (HUB-230) · HUB-230 · F-01
   - smoke-m0 no longer fails when grep stops reading before curl has written the whole /metrics body (curl exit 23 under pipefail)
 - 2026-11-06 · `docs(tickets)` · Track the transformer time-budget flake seen in the full itest run (HUB-238) · HUB-238 · F-04
