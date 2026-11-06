@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(upstream)` · Prove vendor TLS handshakes below 1.2 fail · HUB-234 · F-18
+  - TestTLS now runs the real upstream client against vendors that speak only TLS 1.0 or 1.1 (with a positive control that they do) and against TLS 1.2-only and 1.3 vendors
+  - TestTLSFloorIsExplicit fails if the client's own TLS 1.2 floor or verification is removed
 - 2026-11-07 · `ci(backend)` · Gate merges on pinned gosec and govulncheck · HUB-234 · F-18
   - New blocking CI jobs gosec (any untriaged medium/high finding in non-test code fails) and govulncheck (any reachable known vulnerability fails); local: make gosec, make vuln, make security
   - Tool versions pinned in backend/Makefile: gosec v2.30.0, govulncheck v1.9.0

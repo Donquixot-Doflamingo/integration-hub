@@ -416,51 +416,108 @@ func TestPerAccountPoolsAndBulkhead(t *testing.T) {
 	}
 }
 
+// tlsVendor is an https vendor that speaks exactly TLS minVersion..maxVersion (0 = Go default).
+// MinVersion must be explicit for old versions: since Go 1.22 a server's default floor is TLS 1.2,
+// so a server with only MaxVersion TLS 1.1 speaks nothing and would refuse every client, which
+// proves nothing about ours. negotiated records the version each served request used.
+func tlsVendor(t *testing.T, minVersion, maxVersion uint16) (srv *httptest.Server, negotiated *atomic.Uint32) {
+	t.Helper()
+	negotiated = &atomic.Uint32{}
+	srv = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		negotiated.Store(uint32(r.TLS.Version))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	srv.TLS = &tls.Config{MinVersion: minVersion, MaxVersion: maxVersion}         // deliberately old TLS: the vendor under test
+	srv.Config.ErrorLog = slog.NewLogLogger(slog.DiscardHandler, slog.LevelError) // expected handshake failures
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+	return srv, negotiated
+}
+
+func trustedRoots(srv *httptest.Server) Options {
+	return Options{RootCAs: srv.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs}
+}
+
+// TestTLS is HUB-234's "TLS < 1.2 vendor handshake fails" (DESIGN §16.5, SECURITY.md §5): the
+// real upstream client completes TLS 1.2 and 1.3 handshakes with verification, and refuses a
+// vendor that offers only TLS 1.0 or 1.1 before any request is sent.
 func TestTLS(t *testing.T) {
-	newTLS := func(maxVersion uint16) *httptest.Server {
-		srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"ok":true}`))
-		}))
-		srv.TLS = &tls.Config{MaxVersion: maxVersion}
-		srv.Config.ErrorLog = slog.NewLogLogger(slog.DiscardHandler, slog.LevelError) // expected handshake failures
-		srv.StartTLS()
-		t.Cleanup(srv.Close)
-		return srv
-	}
-	modern, old := newTLS(0), newTLS(tls.VersionTLS11)
 	tests := []struct {
-		name    string
-		srv     *httptest.Server
-		trusted bool
-		wantErr error
+		name          string
+		min, max      uint16
+		untrusted     bool
+		wantErr       error
+		wantVersion   uint16
+		wantErrSubstr string
 	}{
-		{"verified", modern, true, nil},
-		{"untrusted certificate", modern, false, ErrConnect},
-		{"TLS 1.1 server", old, true, ErrConnect},
+		{name: "TLS 1.3 vendor", wantVersion: tls.VersionTLS13},
+		{name: "TLS 1.2-only vendor", min: tls.VersionTLS12, max: tls.VersionTLS12, wantVersion: tls.VersionTLS12},
+		{name: "untrusted certificate", untrusted: true, wantErr: ErrConnect, wantErrSubstr: "certificate"},
+		{name: "TLS 1.1-only vendor", min: tls.VersionTLS10, max: tls.VersionTLS11, wantErr: ErrConnect, wantErrSubstr: "protocol version"},
+		{name: "TLS 1.0-only vendor", min: tls.VersionTLS10, max: tls.VersionTLS10, wantErr: ErrConnect, wantErrSubstr: "protocol version"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := Options{}
-			if tt.trusted {
-				opts.RootCAs = tt.srv.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs
+			srv, negotiated := tlsVendor(t, tt.min, tt.max)
+			opts := trustedRoots(srv)
+			if tt.untrusted {
+				opts = Options{}
+			}
+			if tt.max != 0 && tt.max < tls.VersionTLS12 {
+				// Positive control: the vendor really completes an old handshake with a client
+				// that allows it, so the Hub client's failure below is its own floor at work.
+				d := &tls.Dialer{Config: &tls.Config{RootCAs: opts.RootCAs, ServerName: "example.com", MinVersion: tls.VersionTLS10}}
+				conn, err := d.DialContext(t.Context(), "tcp", srv.Listener.Addr().String())
+				if err != nil {
+					t.Fatalf("control: a TLS 1.0+ client cannot reach the old vendor: %v", err)
+				}
+				if v := conn.(*tls.Conn).ConnectionState().Version; v != tt.max {
+					t.Fatalf("control negotiated %x, want %x", v, tt.max)
+				}
+				_ = conn.Close()
 			}
 			e := newEnv(t, opts)
-			e.vendor.Regions["in"] = tt.srv.URL
+			e.vendor.Regions["in"] = srv.URL
 			tg := e.target(0, 0)
-			tg.BaseURL = tt.srv.URL
+			tg.BaseURL = srv.URL
 			resp, err := e.client.Do(t.Context(), tg, uploadReq())
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("err = %v, want %v", err, tt.wantErr)
 			}
-			if tt.wantErr == nil && resp.Status != 200 {
-				t.Fatalf("status %d", resp.Status)
+			if tt.wantErr == nil {
+				if resp.Status != 200 {
+					t.Fatalf("status %d", resp.Status)
+				}
+				if got := uint16(negotiated.Load()); got != tt.wantVersion { // TLS versions are 16-bit
+					t.Fatalf("negotiated %x, want %x", got, tt.wantVersion)
+				}
+				return
 			}
 			var te *TransportError
-			if tt.wantErr != nil && (!errors.As(err, &te) || te.Phase != "tls") {
-				t.Fatalf("err = %v, want a tls-phase failure", err)
+			if !errors.As(err, &te) || te.Phase != "tls" || !strings.Contains(err.Error(), tt.wantErrSubstr) {
+				t.Fatalf("err = %v, want a tls-phase failure mentioning %q", err, tt.wantErrSubstr)
+			}
+			if negotiated.Load() != 0 {
+				t.Fatal("the vendor served a request over a refused handshake")
 			}
 		})
+	}
+}
+
+// TestTLSFloorIsExplicit pins the client's own TLS policy instead of relying on Go's default
+// client floor (which a GODEBUG or a future default could lower): TLS 1.2 minimum, verification on.
+func TestTLSFloorIsExplicit(t *testing.T) {
+	c, err := New(telemetry.NewMetrics("test", "dev"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(c.Close)
+	if c.tlsBase.MinVersion != tls.VersionTLS12 {
+		t.Fatalf("MinVersion = %x, want TLS 1.2 (%x)", c.tlsBase.MinVersion, tls.VersionTLS12)
+	}
+	if c.tlsBase.InsecureSkipVerify {
+		t.Fatal("InsecureSkipVerify is set")
 	}
 }
 
