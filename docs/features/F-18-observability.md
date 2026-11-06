@@ -4,7 +4,7 @@
 Completes the metrics catalogue (DESIGN §16.2), alert rules as code (§16.3), OTel tracing (§16.4), tenant/vendor/platform dashboards, and the M8 load and soak tests that prove the latency and durability targets (§1, §18.6, §19 M8).
 
 ## Status
-`in-progress` — 2026-11-06 (HUB-230 metrics done; tracing, alerts, PII deletion, security, load and soak tests to come).
+`in-progress` — 2026-11-06 (HUB-230 metrics done; HUB-232 alert rules and dashboards in review; tracing, PII deletion, security, load and soak tests to come).
 
 ## Owner
 `backend-engineer`.
@@ -36,7 +36,7 @@ Without consistent metrics, labels and alerts, outages are found by callers and 
 | Surface | Item | Contract ref |
 | --- | --- | --- |
 | Metrics | `GET /metrics` (Prometheus) on every role | Ops endpoint, not in caller contract |
-| Files | `deploy/alerts/*.yaml`, `deploy/dashboards/{tenant,vendor,platform}.json`, `backend/loadtest/` | — |
+| Files | `deploy/alerts/hub.rules.yaml` + `deploy/alerts/*_test.yml`, `deploy/dashboards/{tenant,vendor,platform}.json`, `backend/loadtest/` | — |
 
 ## Behaviour & rules
 Alerts (DESIGN §16.3):
@@ -58,7 +58,8 @@ Alerts (DESIGN §16.3):
 2. `tenant` and `integration` labels allowed; `request_id` never a label.
 3. Logs are structured `slog` JSON via the redacting handler; every log line carries `request_id` and trace ids when present.
 4. **Metrics (HUB-230, done):** every §16.2 metric is registered; `TestDesignMetricsAreRegistered` (roles) enumerates the names from one registry wired like the data plane. `hub_requests_total` is counted once per request: in the gateway for requests that end there (dry-runs excluded) and in delivery for each committed terminal transition of a queued request. The outbox gauges (`queue_depth`, `queue_oldest_age_s`, `dlq_count`) come from `delivery.QueueSampler` on the scheduler leader every 10 s. `credential_expiry_days` is computed at scrape time. Capped metrics fold excess label combinations into `__overflow__` (OBSERVABILITY §3.1). `hub_overhead_ms` is broken down by stage in `hub_stage_duration_ms` (since HUB-027).
-5. Load-test acceptance: overhead p99 ≤ 5 ms at target load; async accept p99 ≤ 10 ms; soak: zero lost accepted requests (ledger reconciliation of accepted vs terminal).
+5. **Alerts and dashboards (HUB-232, in review):** `deploy/alerts/hub.rules.yaml` has one rule per alert above (names and expressions: OBSERVABILITY §11.1), each with `severity`, `summary`, `description` and `runbook_url` → `docs/runbooks/<AlertName>.md` (HUB-237). Rules query only exported metrics: auth and transform alerts read `hub_requests_total{code}` and the DLQ alert the growth of `dlq_count` until `vendor_attempts_total` / `dlq_entries_total` exist (ADR-0014, HUB-241). "Any X" rules also catch the first event of a new label set. The breaker alert fires when the circuit has not closed for 5 min (open or half-open), the parked alert reads the current scheduler leader only (HUB-242), the overhead alert covers sync and wait (S1). Dashboards `tenant.json`, `vendor.json`, `platform.json` (OBSERVABILITY §10) use the `${datasource}` variable; panels whose metric does not exist yet are left out and listed there.
+6. Load-test acceptance: overhead p99 ≤ 5 ms at target load; async accept p99 ≤ 10 ms; soak: zero lost accepted requests (ledger reconciliation of accepted vs terminal).
 
 ## Data model impact
 None.
@@ -67,6 +68,8 @@ None.
 `HUB_OTEL_ENDPOINT`, sampling ratio; alert thresholds as rule parameters.
 
 ## Observability
+Alerts: the ten rules in OBSERVABILITY §11.1. Dashboards: OBSERVABILITY §10. No new metrics, logs or spans in HUB-232.
+
 This feature *is* the observability layer; see table above and DESIGN §16.2 list: `hub_requests_total{mode,code}`, `hub_overhead_ms`, `vendor_latency_ms`, `breaker_state`, `breaker_transitions_total`, `queue_depth`, `queue_oldest_age_s`, `parked_count`, `parked_oldest_age_s`, `dlq_count`, `ratelimit_rejections_total{layer}`, `retry_budget_exhausted_total`, `snapshot_version`, `credential_expiry_days`, `llm_tokens_total`, `llm_cost_usd_total`, `audit_events_dropped_total`.
 
 ## Security & PII
@@ -79,12 +82,12 @@ No PII or secrets in labels, span attributes or logs; span attributes allowliste
 | Metric cardinality spike | Label allowlist prevents unbounded labels | — |
 
 ## Testing
-- **Unit**: alert rules tested with `promtool test rules`.
+- **Unit**: alert rules tested with `promtool test rules` (`deploy/alerts/*_test.yml`, a firing and a non-firing case per alert; `TestAlertRulesCoverDesign` enforces coverage of every §16.3 alert). `TestAlertRulesUseExportedMetrics` and `TestDashboardsAreValidAndUseExportedMetrics` parse every rule and panel query and fail on any metric or label name the registry does not export (ADR-0015). `make monitoring` runs all of it; CI job `monitoring`. Grafana import is not run in CI yet (HUB-243).
 - **Load**: k6/vegeta scenarios in CI-optional job; results recorded in the M8 summary.
 - **Soak**: random mockvendor outages over ≥ 1 h; reconciliation script.
 
 ## Rollout & migration
-Dashboards imported into the target Grafana once hosting is decided (PRD Q8).
+Dashboards imported into the target Grafana once hosting is decided (PRD Q8): pick the Prometheus data source in the `datasource` variable. Load `deploy/alerts/hub.rules.yaml` as a Prometheus rule file. With native histograms enabled, set `always_scrape_classic_histograms: true` (rules and panels use `_bucket`).
 
 ## Open questions
 - "Laptop-scale setup" target hardware for the load test is unspecified.
@@ -98,3 +101,4 @@ HUB-230 – HUB-249.
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-11-06 | HUB-230 shipped: full §16.2 metric set, cardinality guard, status in-progress | backend-engineer |
+| 2026-11-06 | HUB-232: alert rules with promtool tests, tenant/vendor/platform dashboards, exported-metrics check; ADR-0014, ADR-0015 | backend-engineer |
