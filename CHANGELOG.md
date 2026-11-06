@@ -25,6 +25,40 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - A worker restarted with a backlog no longer panics on a nil snapshot: it claims nothing until the first snapshot loads and logs `worker.waiting_for_snapshot` once
   - An envelope claimed without a snapshot is put back unattempted, so restarts no longer count crashes toward the poison detector (healthy envelopes could be dead-lettered as poison)
   - The scheduler's drain releases no parked envelope before its first snapshot (it used to release at a 10/s guess instead of the account rate)
+- 2026-11-07 · `test(upstream)` · Give every node the full second in the breaker force test (HUB-416) · HUB-416 · F-12
+  - TestForceReachesEveryNodeWithinOneSecond no longer fails when node B's Redis message lands a few ms after node A's; it still fails if the hold is not in force on B within 1 s
+- 2026-11-07 · `docs(skills)` · Fix the transformer skill and file the gaps the operator skill found (HUB-316) · HUB-316 · F-21
+  - hub-transformers skill: the header field is `docs_url` and `hubctl transform test` takes transformer IDs (`T1`, `T2@3`), matching the code
+  - New tickets: console pages for vendors, accounts with write-only credentials, integration authoring and transformer authoring (HUB-290 to HUB-293); `delivery.polling` contract mismatch (HUB-414); unchecked `requests_read` scope (HUB-415)
+- 2026-11-07 · `docs(clients)` · Document hubmcp setup for every MCP client (HUB-318) · HUB-318 · F-21
+  - `mcp-setup.md` now has verified configs for Claude Code, Claude Desktop, Codex CLI and Cursor, each reading the key from your environment or keychain instead of a committed file
+  - The tenant key and the admin token are separate profiles: the admin one runs on stdio only, with your own token, as its own server entry, and needs `HUB_ADMIN_BASE_URL` ending in `/admin/v1`
+  - Hosted Streamable HTTP per client, the full hubmcp-tools 1.1.0 list, and troubleshooting
+
+- 2026-11-07 · `docs(clients)` · Make the consumer skill work in any AI agent (HUB-317) · HUB-317 · F-21
+  - One `integration-hub` skill folder now installs unchanged in Claude Code, claude.ai / Claude Desktop, OpenAI Codex and Cursor; the README gives verified paths, commands and doc links per tool, plus a Cursor rule option
+  - New `PASTE-INTO-ANY-ASSISTANT.md`: the rules in one file for chat assistants, custom instructions or a repo `AGENTS.md`
+  - The skill now covers two-step flows (OTP `send_otp` then `verify_otp` with `X-Hub-Session`) with a failure table and curl + Go examples, the real `hubclient` API (`Result` / `Queued`, `WithOperation`, `WithSession`, `GetRequest`) and the `hub_invoke` parameters
+
+- 2026-11-07 · `docs(skills)` · Add the hub-operator skill (HUB-316) · HUB-316 · F-21
+  - New repo skill `.claude/skills/hub-operator/` for the people who run the Hub: tenants and API keys (scopes), vendors, endpoints and accounts with credentials, callback endpoints and signatures, safe vendor/account config changes, switching an integration to another vendor or account (draft, validate, diff, publish, weights, shadow, rollback, re-resolve vs pinned), transformers (canonical → vendor → canonical, error mapping, goldens, dry-run) and multi-step flows (operations, `X-Hub-Session`, Aadhaar OTP)
+  - Every task shows the console path, the `hubctl` command and the `hubmcp` tool call side by side, with the admin API where the others do not reach yet, and a matrix of which way can do what
+  - States the hard lines: MCP has no delete tools, destructive actions are console-only for roles that have them, and secrets never pass through an AI
+  - Works in OpenAI Codex too (`.agents/skills/hub-operator` symlink) and in Cursor (reads `.claude/skills/`)
+
+- 2026-11-07 · `feat(examples)` · Add a live latency demo on a public echo API (HUB-353) · HUB-353 · F-18
+  - `examples/latency-demo/run.sh` calls Postman Echo N times directly and N times through a local Hub (`int_latency_echo`) in alternating rounds, then prints p50/p95/p99 for both, the difference and the Hub's own `hub_overhead_ms`
+  - `LATENCY_TARGET=mock` runs the same comparison offline against mockvendor at 50 ms
+  - The README explains why internet jitter dominates and points to the controlled numbers
+- 2026-11-07 · `feat(examples)` · Add a PAN verification sandbox example (HUB-352) · HUB-352 · F-22
+  - `int_pan_verify` on the same provider and account as the Aadhaar example: one sync call with an `Idempotency-Key`, a masked PAN, a yes/no name match, the Aadhaar link, and an invalid PAN as a 200 business answer; sealed audit for 90 days
+  - `examples/pan-verify/run.sh` runs it against mockvendor (valid, invalid, provider down) or the provider's sandbox (`HUB_DEMO_TARGET=sandbox`), including a replay that does not call the provider again
+  - 20 golden cases; `TestExamplePANVerify` proves the provider request, the minimal response, sealed audit, the replay and the edge refusals
+- 2026-11-07 · `feat(examples)` · Add an Aadhaar OTP e-KYC sandbox example (HUB-351) · HUB-351 · F-22
+  - `examples/aadhaar-okyc/`: Aadhaar OTP-based offline e-KYC behind one integration id (`int_aadhaar_okyc`, operations `send_otp` and `verify_otp`), mapped to Cashfree Secure ID's documented API; the provider's reference travels only in the vendor session, the audit is sealed for 90 days, the response is minimal
+  - `run.sh` runs the two steps against mockvendor (six scenarios) or, with `HUB_DEMO_TARGET=sandbox` and test keys, against the provider's sandbox; `client/main.go` does the same with the Go SDK
+  - 43 golden cases cover success and every documented provider error; `TestExampleAadhaarOKYCFlow` runs the flow through the gateway with sealed-audit and no-vendor-leak checks
+  - The README states what is possible without a UIDAI AUA/KUA licence, how to get sandbox keys, and what the app shows between the steps
 - 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
   - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
   - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series

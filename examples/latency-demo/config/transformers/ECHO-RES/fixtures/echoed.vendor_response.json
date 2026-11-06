@@ -1,0 +1,6 @@
+{
+  "status": 200,
+  "body": {"args": {}, "data": {"message": "hello", "seq": 7}, "files": {}, "form": {},
+    "headers": {"host": "postman-echo.com", "content-type": "application/json", "x-hub-demo-client": "fixture-client-tag"},
+    "json": {"message": "hello", "seq": 7}, "url": "https://postman-echo.com/post"}
+}

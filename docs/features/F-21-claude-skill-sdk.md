@@ -26,6 +26,11 @@ Callers misuse async APIs (treating 202 as done), skip idempotency keys, and ver
 - Wiring `hubmcp` (config snippet, env vars, `confirm: true` semantics).
 - Go examples with `hubclient`; HTTP examples for other languages.
 
+**Goals — operator skill** (HUB-316)
+- One repo skill, `.claude/skills/hub-operator/`, for the people who run the Hub: tenants and keys, vendors, endpoints and accounts, callback endpoints, config changes, cutover (versions, weights, shadow, rollback, D10), transformers and goldens, multi-step flows.
+- Every task shown three ways (console, `hubctl`, `hubmcp`), plus the admin API where the others do not reach yet; gaps stated, never papered over.
+- MCP never deletes and never carries secrets; the skill sends those actions to the console.
+
 **Goals — SDK**
 - `Invoke(ctx, integrationID, body, opts) (Outcome, error)` where `Outcome` is `Result` or `Queued`, never both.
 - Typed `*hubclient.Error{Code, Retryable, RetryAfter, RequestID}`.
@@ -40,13 +45,17 @@ Callers misuse async APIs (treating 202 as done), skip idempotency keys, and ver
 - [US-2102](../product/USER_STORIES.md) — Callback verification sample
 - [US-2103](../product/USER_STORIES.md) — `Queued` is not success
 - [US-2104](../product/USER_STORIES.md) — Idempotency helper
+- [US-2105](../product/USER_STORIES.md) — Operator skill for any AI
+- [US-2106](../product/USER_STORIES.md) — Consumer skill in any assistant
+- [US-2107](../product/USER_STORIES.md) — hubmcp in my MCP client
 
 ## UX / API surface
 | Surface | Item | Contract ref |
 | --- | --- | --- |
 | SDK | `Client.Invoke` (with `WithOperation` for `/invoke/{op}`), `GetRequest`, `DryRun`, `ListIntegrations` / `AllIntegrations`, `GetIntegration`, `GetCapability` (shipped, HUB-094) | `contracts/openapi/hub-public.v1.yaml#invokeIntegration`, `#invokeIntegrationOperation`, `#getRequestStatus`, `#dryRunIntegration`, `#listIntegrations`, `#getIntegration`, `#getCapability` |
 | SDK | `VerifySignature` | `contracts/openapi/hub-public.v1.yaml#/components/parameters/CallbackSignature`; shared signature test vectors are not in `contracts/` yet (to be added via CCR) |
-| Skill | `clients/claude-skill/integration-hub/SKILL.md` (+ `references/` examples) | — |
+| Skill | `clients/claude-skill/integration-hub/SKILL.md` (+ `references/` examples); installs unchanged in Claude Code, claude.ai, Codex and Cursor; `clients/claude-skill/PASTE-INTO-ANY-ASSISTANT.md` for other assistants (HUB-317) | `contracts/openapi/hub-public.v1.yaml` |
+| Operator skill | `.claude/skills/hub-operator/SKILL.md` (+ `references/`), linked from `.agents/skills/hub-operator` for Codex (HUB-316) | `contracts/openapi/hub-admin.v1.yaml`, `contracts/mcp/hubmcp-tools.json` |
 
 ## Behaviour & rules
 1. The SDK decodes 202 into `Queued{RequestID, Status, Reason, Poll, IdempotentReplay}`; callers must type-switch. `Outcome` is sealed (an unexported method), so `*Result` and `*Queued` are its only implementations and a 202 cannot be observed as success. A 202 or 200 with a malformed body is an error, never an outcome.
@@ -85,7 +94,7 @@ Signature verification uses constant-time comparison; API key from env, never lo
 Skill versioned with the caller contract version in its front matter.
 
 ## Open questions
-- Distribution channel for the skill beyond copy (plugin marketplace?).
+- Distribution channel for the skill beyond copy (plugin marketplace?). Copy or symlink into each tool's skills folder works today (HUB-317).
 - Should the SDK be its own Go module so callers do not import the backend module?
 
 ## Tickets
@@ -96,3 +105,6 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-21`).
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-10-31 | SDK core shipped (HUB-094); status `in-progress`; behaviour rules 1a/1b; remaining SDK items listed in Status | backend-engineer |
+| 2026-11-07 | Operator skill `hub-operator` (HUB-316, US-2105) | docs agent |
+| 2026-11-07 | Consumer skill portable to Codex, Cursor and any assistant; two-step OTP flow; real hubclient API (HUB-317, US-2106) | docs agent |
+| 2026-11-07 | `references/mcp-setup.md` for Claude Code, Claude Desktop, Codex CLI and Cursor; tenant vs admin profile (HUB-318, US-2107) | docs agent |

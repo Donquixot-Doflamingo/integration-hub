@@ -1,0 +1,57 @@
+{
+  "description": "Aadhaar OKYC: the OTP is sent, then the right OTP returns the e-KYC data (the provider's documented VALID example).",
+  "routes": {
+    "okyc-otp": {
+      "match": {
+        "method": "POST",
+        "path": "/verification/offline-aadhaar/otp"
+      },
+      "behaviour": {
+        "status": 200,
+        "body": {
+          "status": "SUCCESS",
+          "message": "OTP sent successfully",
+          "ref_id": 21637861
+        }
+      }
+    },
+    "okyc-verify": {
+      "match": {
+        "method": "POST",
+        "path": "/verification/offline-aadhaar/verify"
+      },
+      "behaviour": {
+        "status": 200,
+        "body": {
+          "ref_id": "21637861",
+          "status": "VALID",
+          "message": "Aadhaar Card Exists",
+          "care_of": "S/O: Fakkirappa Dollin",
+          "address": "Shri Kanaka Nilaya,,Umashankar Nagar 1st Main 5th Cross,Ranebennur,Haveri-Karnataka,India",
+          "dob": "02-02-1995",
+          "email": "",
+          "gender": "M",
+          "name": "Mallesh Fakkirappa Dollin",
+          "split_address": {
+            "country": "India",
+            "dist": "Haveri",
+            "house": "Shri Kanaka Nilaya",
+            "landmark": "",
+            "pincode": 581115,
+            "po": "Ranebennur",
+            "state": "Karnataka",
+            "street": "Umashankar Nagar 1st Main 5th Cross",
+            "subdist": "Ranibennur",
+            "vtc": "Ranibennur",
+            "locality": "Pritam Pura"
+          },
+          "year_of_birth": 1995,
+          "mobile_hash": "ed189eb73247cb90b769e7e8d7dfd2efa4cd6a5ec27602f5d2721c035266568c",
+          "photo_link": "bW9jay1waG90bw==",
+          "share_code": "1234",
+          "xml_file": "https://mock.invalid/okyc.zip"
+        }
+      }
+    }
+  }
+}

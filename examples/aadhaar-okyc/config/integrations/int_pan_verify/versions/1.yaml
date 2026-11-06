@@ -1,0 +1,13 @@
+# EXAMPLE ONLY (HUB-352).
+integration: int_pan_verify
+version: 1
+targets:
+  - vendor: cashfree-sid
+    account: cf-sid-test
+    transformer: { request: CF-PAN-REQ@1, response: CF-PAN-RES@1 }
+    weight: 100
+delivery:
+  mode: sync                    # interactive: the person is on the PAN screen
+  on_circuit_open: fail_fast
+audit: { payloads: sealed, retention: 90d }   # D6: PAN payloads sealed, 90 days, unseal audited
+publish: { author: example, reason: "first version" }

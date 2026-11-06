@@ -1,0 +1,24 @@
+# EXAMPLE ONLY (HUB-351). Aadhaar OKYC step 2 on Cashfree Secure ID, checked on 2026-11-07 against
+# https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/submit-otp-to-verify-aadhaar
+# (operation VrsOfflineAadhaarVerifyOtp, AGENTS §3.3):
+#   POST {base}/offline-aadhaar/verify   headers x-client-id, x-client-secret
+#   body {"otp": "<6 digits>", "ref_id": "<ref_id from step 1>"}   (both strings, both required)
+# ref_id comes from the vendor session send_otp opened (session.vendor_txn_id, DESIGN §14): the
+# caller never sees or sends it; it only sends X-Hub-Session.
+transformer: CF-OKYC-VERIFY-REQ
+version: 1
+kind: request
+capability: demo.aadhaar_okyc@v1
+operation: verify_otp
+docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/submit-otp-to-verify-aadhaar
+vendor_endpoint: cashfree-sid.okyc_verify@1
+request:
+  method: POST
+  path: /offline-aadhaar/verify
+  headers:
+    Content-Type:    '"application/json"'
+    X-Client-Id:     creds.client_id
+    X-Client-Secret: creds.client_secret
+  body:
+    otp:    req.otp
+    ref_id: session.vendor_txn_id

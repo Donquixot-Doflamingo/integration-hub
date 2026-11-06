@@ -1,0 +1,4 @@
+{
+  "status": 400,
+  "body": {"type": "validation_error", "code": "x-client-secret_value_invalid", "message": "Client secret belongs to test environment"}
+}

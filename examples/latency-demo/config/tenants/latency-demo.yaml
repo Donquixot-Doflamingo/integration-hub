@@ -1,0 +1,10 @@
+# EXAMPLE ONLY (HUB-353). The caller of the latency demo. Its key is a test value for local use only:
+# hk_test_example_latency_demo_local_only (stored here only as its sha256, like every key).
+tenant: latency-demo
+display_name: Latency demo (example)
+api_keys:
+  - key_id: key_01JEXAMP1E0LATENCY0DEM000A
+    hash: sha256:3ea87bdc2c2c1bf15ae81d1e6c95a4d47fe778a65f6878c2e7f2e6429cfae0e8
+    scopes: [invoke]
+    state: active
+rate_limit: { rps: 200, burst: 200 }

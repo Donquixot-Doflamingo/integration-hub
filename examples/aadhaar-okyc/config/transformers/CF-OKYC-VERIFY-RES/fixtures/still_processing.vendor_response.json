@@ -1,0 +1,4 @@
+{
+  "status": 409,
+  "body": {"type": "validation_error", "code": "verification_pending", "message": "Processing request, please try after 30 sec"}
+}
