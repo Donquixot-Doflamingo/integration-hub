@@ -178,6 +178,9 @@ describe('integrations list', () => {
 		await screen.findByRole('table', { busy: false });
 		const nav = screen.getByRole('navigation', { name: 'Pagination' });
 		expect(within(nav).queryByRole('link')).toBeNull();
+		// HUB-287: a single page shows no inert Previous / Next at all.
+		expect(within(nav).queryByText('Previous')).toBeNull();
+		expect(within(nav).queryByText('Next')).toBeNull();
 		expect(nav).toHaveTextContent('Page 1: 1 integration.');
 	});
 

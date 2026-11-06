@@ -258,7 +258,8 @@
 	.timeline li {
 		position: relative;
 		display: grid;
-		grid-template-columns: 12rem 1fr;
+		grid-template-columns: 12rem minmax(0, 1fr);
+		min-width: 0;
 		gap: var(--space-3);
 		padding: var(--space-2) 0 var(--space-3) var(--space-4);
 	}
@@ -320,7 +321,7 @@
 	}
 	@media (max-width: 900px) {
 		.timeline li {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 </style>

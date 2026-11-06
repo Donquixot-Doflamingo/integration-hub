@@ -2492,16 +2492,16 @@ The console has only ever run on MSW contract mocks. Make it work end to end aga
 
 ### HUB-287 — Console visual polish against the real stack
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** in-progress · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1903, US-1904, US-1905, US-1906
+- **Status:** in-review · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1903, US-1904, US-1905, US-1906
 - **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-288, HUB-289)
 
 Walk every route with Playwright against the real stack (desktop and 390 px mobile) and fix what looks wrong: spacing, typography, empty/loading/error states, tables, forms, status colours and mobile width, consistently across screens (frontend-design and admin-console-ux skills).
 
 **Acceptance criteria**
-- [ ] No route scrolls sideways at 390 px; wide tables scroll inside their own container
-- [ ] The mobile header keeps breadcrumbs readable
-- [ ] Before/after screenshots of every route reviewed (kept outside the repo)
-- [ ] e2e green, axe clean (no serious/critical)
+- [x] No route scrolls sideways at 390 px; wide tables scroll inside their own container (`e2e/phone-and-roles.test.ts` "no page scrolls sideways", 14 routes)
+- [x] The mobile header keeps breadcrumbs readable (one back link; e2e "the breadcrumb is a single link back to the parent")
+- [x] Before/after screenshots of every route reviewed (kept outside the repo; admin, viewer and tenant viewer, desktop and 390 px)
+- [x] e2e green, axe clean (no serious/critical)
 
 ### HUB-288 — Destructive actions only for roles that may do them
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

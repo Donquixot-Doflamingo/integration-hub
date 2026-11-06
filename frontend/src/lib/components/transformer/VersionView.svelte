@@ -146,6 +146,10 @@
 		gap: var(--space-5);
 		max-width: 72rem;
 	}
+	/* Grid items default to their content width; keep wide fact lists and code inside the page. */
+	.version > :global(*) {
+		min-width: 0;
+	}
 	.wide {
 		grid-column: 1 / -1;
 	}

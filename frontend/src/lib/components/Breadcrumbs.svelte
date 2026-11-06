@@ -59,4 +59,17 @@
 		color: var(--ink);
 		font-weight: 600;
 	}
+	/* Phones: the page title already names the current page, so the trail becomes one "back to
+	   the parent" link (HUB-287: the full trail wrapped into a column beside the Sections button). */
+	@media (max-width: 640px) {
+		li:not(:nth-last-child(2)) {
+			display: none;
+		}
+		li :global(.icon) {
+			display: none;
+		}
+		li:nth-last-child(2) a::before {
+			content: '\2039\00a0' / '';
+		}
+	}
 </style>

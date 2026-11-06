@@ -301,6 +301,13 @@
 		padding-left: var(--space-3);
 		border-left: 1px solid var(--rule);
 	}
+	/* Narrow screens: the groups stack, so a divider on the left would dangle (HUB-287). */
+	@media (max-width: 640px) {
+		.group.danger {
+			padding-left: 0;
+			border-left: 0;
+		}
+	}
 	.actions button {
 		display: inline-flex;
 		align-items: center;

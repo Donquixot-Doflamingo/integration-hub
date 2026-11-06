@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(frontend)` · Polish the console layout on phones and desktop (HUB-287) · HUB-287 · F-19
+  - No console page scrolls sideways on a 390 px phone any more: wide tables scroll inside their frame and long request or change ids in titles wrap
+  - On phones the breadcrumb is a single link back to the parent page instead of a squeezed column next to the Sections button
+  - Lists that fit on one page no longer show inert Previous / Next buttons; example values in empty filter fields are italic so they do not look like active filters
 - 2026-11-07 · `fix(frontend)` · Fix console bugs found against a running Hub (HUB-289) · HUB-289 · F-19
   - The request and DLQ entry pages of a replayed request no longer crash (repeated attempt numbers and timeline sequence numbers)
   - Deleting a callback endpoint that is still subscribed, or creating a tenant or endpoint whose id is taken, shows the Hub's reason instead of "someone else changed it, reload"

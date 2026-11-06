@@ -21,6 +21,8 @@
 	h1 {
 		font-size: var(--text-xl);
 		letter-spacing: -0.01em;
+		/* Ids like req_01M6SFX4FP8PYDN0FB8FVX5C3A are one long word: break them on a phone. */
+		overflow-wrap: anywhere;
 	}
 	p {
 		margin: var(--space-1) 0 0;
