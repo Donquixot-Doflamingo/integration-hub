@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(edge)` · Prove audit, async accepts and callbacks stay off the request (HUB-413) · HUB-413 · F-18
+  - A sync call answers while the audit store hangs and its buffer is full; the audit batch is dropped and counted, never awaited
+  - async and async_callback answer 202 before the vendor is called (a 2 s vendor is paid by the worker, not the caller)
+  - A wait-mode caller gets its 200 while the tenant's callback receiver hangs; the dispatcher delivers the callback afterwards
+
 - 2026-11-07 · `fix(registry)` · Report the archive version as snapshot_version (HUB-401) · HUB-401 · F-18
   - `snapshot_version` (the gauge, the `integration.resolved` audit meta and `hub.requests.snapshot_version`) is the archive version `getLatestSnapshot` returns, so a node restarted after a publish reports the same number as its peers and `SnapshotBehind` no longer fires falsely
   - A node that built its config directory or booted from its cache reports 0 until it has confirmed the archive holds the same content (then the archive's version)

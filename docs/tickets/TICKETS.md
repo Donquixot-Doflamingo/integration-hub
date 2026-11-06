@@ -3027,7 +3027,7 @@ The user's requirement: if the vendor answers in 100 ms, a sync call through the
 **Acceptance criteria**
 - [ ] Gate test: mockvendor at a fixed 100 ms; sequential and modestly concurrent sync calls through the real gateway handler stack (auth, validate, resolve, transform, upstream, response map, audit, metrics, account limiter) over HTTP; caller-observed p99 ≤ 110 ms and p50 ≤ 102 ms, and the added latency against the same calls made directly to mockvendor is asserted too
 - [ ] The gate runs without `-race` in its own make target (`make latency-budget`) and CI job (`latency-budget`), with warm-up and enough samples to be stable on a 2-CPU runner; green 3 times in a row locally
-- [ ] Tests: audit is non-blocking on a sync request; async and async_callback answer 202 without waiting for the vendor; callback delivery never runs on the caller's request
+- [x] Tests: audit is non-blocking on a sync request; async and async_callback answer 202 without waiting for the vendor; callback delivery never runs on the caller's request (`TestSyncRequestDoesNotWaitForAudit`: real audit.Writer on a hung store with a one-batch buffer, 50 sync calls answer, drops counted, hangs if `Emit` blocks; `TestAsyncModesAcceptWithoutWaitingForTheVendor`: 202 before a 2 s vendor is called, the worker pays it; `TestCallbackDeliveryIsNotOnTheCallersRequest`: wait-mode 200 while the receiver hangs the callback, delivered by the dispatcher afterwards)
 - [ ] `docs/tech/LATENCY.md`: the budget, how it is measured and run, the I/O left on the sync path and why, and measured numbers (direct vs through the Hub, p50/p95/p99, vendor at 0/50/100/200 ms)
 
 ## Parallel tracks
