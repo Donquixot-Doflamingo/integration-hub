@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hub:capability:demo.mobile_otp@v1:verify_otp:request",
+  "title": "demo.mobile_otp@v1 verify_otp request (EXAMPLE ONLY, not a frozen contract)",
+  "description": "Send it with the X-Hub-Session header send_otp returned.",
+  "x-capability": "demo.mobile_otp@v1",
+  "x-capability-minor": 0,
+  "interactive": true,
+  "type": "object",
+  "required": ["mobile", "otp"],
+  "additionalProperties": false,
+  "properties": {
+    "mobile": {
+      "description": "The mobile number the OTP was sent to.",
+      "type": "string",
+      "pattern": "^\\+91[6-9][0-9]{9}$",
+      "x-pii": "phone"
+    },
+    "otp": {
+      "description": "The OTP the user typed.",
+      "type": "string",
+      "pattern": "^[0-9]{4,8}$",
+      "x-pii": "free_text"
+    }
+  },
+  "examples": [
+    { "mobile": "+919812345678", "otp": "482913" }
+  ]
+}

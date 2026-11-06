@@ -396,9 +396,11 @@ func pairedEndpoint(snap *registry.Snapshot, ref registry.TransformerRef) string
 		in := snap.Integrations[id]
 		for _, n := range slices.Sorted(maps.Keys(in.Versions)) {
 			for _, t := range targetsOf(in.Versions[n]) {
-				if t.Transformer.Response == ref {
-					if req := snap.Transformers[t.Transformer.Request]; req != nil && req.VendorEndpoint != "" {
-						return req.VendorEndpoint
+				for _, pair := range t.Pairs() {
+					if pair.Response == ref {
+						if req := snap.Transformers[pair.Request]; req != nil && req.VendorEndpoint != "" {
+							return req.VendorEndpoint
+						}
 					}
 				}
 			}
@@ -424,7 +426,7 @@ func usedByActive(snap *registry.Snapshot, id string) int {
 			continue
 		}
 		if slices.ContainsFunc(targetsOf(v), func(t registry.Target) bool {
-			return t.Transformer.Request.ID == id || t.Transformer.Response.ID == id
+			return slices.ContainsFunc(t.Pairs(), func(p registry.TransformerPair) bool { return p.Request.ID == id || p.Response.ID == id })
 		}) {
 			n++
 		}

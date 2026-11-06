@@ -136,7 +136,7 @@ func (c *Config) validateVersion(in *Integration, v *IntegrationVersion, file st
 	}
 	sum := 0
 	for i, t := range v.Targets {
-		c.validateTarget(in, t, file, fmt.Sprintf("targets[%d]", i), active, ps)
+		c.validateTarget(in, capability, t, file, fmt.Sprintf("targets[%d]", i), active, ps)
 		if t.Weight < 0 || t.Weight > 100 {
 			ps.add(file, fmt.Sprintf("targets[%d].weight", i), "must be 0..100")
 		}
@@ -149,13 +149,13 @@ func (c *Config) validateVersion(in *Integration, v *IntegrationVersion, file st
 		ps.add(file, "targets", "weights must total 100, got %d", sum)
 	}
 	for i, t := range v.Failover {
-		c.validateTarget(in, t, file, fmt.Sprintf("failover[%d]", i), active, ps)
+		c.validateTarget(in, capability, t, file, fmt.Sprintf("failover[%d]", i), active, ps)
 		if t.Weight != 0 {
 			ps.add(file, fmt.Sprintf("failover[%d].weight", i), "failover entries are tried in order and take no weight")
 		}
 	}
 	if sh := v.Shadow; sh != nil {
-		c.validateTarget(in, sh.Target, file, "shadow.target", active, ps)
+		c.validateTarget(in, capability, sh.Target, file, "shadow.target", active, ps)
 		if sh.Target.Weight != 0 {
 			ps.add(file, "shadow.target.weight", "a shadow target takes no weight")
 		}
@@ -167,9 +167,16 @@ func (c *Config) validateVersion(in *Integration, v *IntegrationVersion, file st
 		if r := sh.Ratio(); r < 0 || r > 1 {
 			ps.add(file, "shadow.sample_ratio", "must be 0..1")
 		}
-		// A copy must not cause a second side effect: only idempotent endpoints are sent for real.
-		if ref, ep, ok := c.requestEndpoint(sh.Target); ok && sh.Mode == ShadowSend && !ep.Idempotent {
-			ps.add(file, "shadow.mode", "%s is not idempotent (it has side effects): its shadow must be dry_run", ref)
+		// A copy must not cause a second side effect: only idempotent endpoints are sent for real,
+		// for every pair the shadow target uses (one per operation, HUB-343).
+		if sh.Mode == ShadowSend {
+			seen := map[string]bool{}
+			for _, pair := range sh.Target.Pairs() {
+				if ref, ep, ok := c.requestEndpoint(pair); ok && !ep.Idempotent && !seen[ref] {
+					seen[ref] = true
+					ps.add(file, "shadow.mode", "%s is not idempotent (it has side effects): its shadow must be dry_run", ref)
+				}
+			}
 		}
 	}
 
@@ -246,7 +253,7 @@ func (c *Config) validateVersion(in *Integration, v *IntegrationVersion, file st
 	}
 }
 
-func (c *Config) validateTarget(in *Integration, t Target, file, at string, active bool, ps *ConfigErrors) {
+func (c *Config) validateTarget(in *Integration, capability *Capability, t Target, file, at string, active bool, ps *ConfigErrors) {
 	a, ok := c.Accounts[t.Account]
 	if !ok {
 		ps.add(file, at+".account", "unknown account %q", t.Account)
@@ -261,12 +268,25 @@ func (c *Config) validateTarget(in *Integration, t Target, file, at string, acti
 	if _, ok := c.Vendors[t.Vendor]; !ok {
 		ps.add(file, at+".vendor", "unknown vendor %q", t.Vendor)
 	}
+	c.validatePair(in, t, t.Transformer, file, at+".transformer", ps)
+	if t.Operations != nil && len(t.Operations) == 0 {
+		ps.add(file, at+".operations", "name at least one operation, or omit operations")
+	}
+	for _, op := range sortedKeys(t.Operations) {
+		c.validatePair(in, t, t.Operations[op], file, at+".operations."+op, ps)
+	}
+	c.checkOperations(capability, t, file, at, ps)
+}
+
+// validatePair checks that both transformers of a pair exist, have the right kind, map the
+// integration's capability and (request) call an endpoint of the target's vendor.
+func (c *Config) validatePair(in *Integration, t Target, pair TransformerPair, file, at string, ps *ConfigErrors) {
 	for _, slot := range []struct {
 		name string
 		ref  TransformerRef
 		kind TransformerKind
-	}{{"request", t.Transformer.Request, KindRequest}, {"response", t.Transformer.Response, KindResponse}} {
-		p := at + ".transformer." + slot.name
+	}{{"request", pair.Request, KindRequest}, {"response", pair.Response, KindResponse}} {
+		p := at + "." + slot.name
 		if slot.ref.ID == "" {
 			ps.add(file, p, "required")
 			continue
@@ -288,9 +308,53 @@ func (c *Config) validateTarget(in *Integration, t Target, file, at string, acti
 	}
 }
 
-// requestEndpoint is the vendor endpoint the target's request transformer calls.
-func (c *Config) requestEndpoint(t Target) (string, Endpoint, bool) {
-	tr, ok := c.Transformers[t.Transformer.Request]
+// CheckOperationsHaveTransformers is the publish check (admin contract ValidationCheck) that
+// every operation of the capability is served by a pair compiled for it (HUB-343, HUB-345). Its
+// problems say "is not an operation of" or "compiled for operation".
+const CheckOperationsHaveTransformers = "operations_have_transformers"
+
+// checkOperations is the operations_have_transformers check for one target: every key of
+// Operations is an operation of the capability, and every operation of the capability is
+// served (by its own pair, or by the default pair) by transformers compiled for that operation.
+// A multi-operation capability whose only pair is compiled for one operation therefore fails
+// for every other operation, at <at>.transformer (HUB-345): without it the other operations
+// would run that operation's transformers. The registry build (config files, hubctl apply) and
+// the admin API's validate and publish all run this one check.
+func (c *Config) checkOperations(capability *Capability, t Target, file, at string, ps *ConfigErrors) {
+	if capability == nil {
+		return // unknown capability: reported on integration.yaml
+	}
+	for _, op := range sortedKeys(t.Operations) {
+		if _, ok := capability.Operations[op]; !ok {
+			ps.add(file, at+".operations."+op, "%q is not an operation of capability %s (it declares %s)",
+				op, capability.Key, strings.Join(sortedKeys(capability.Operations), ", "))
+		}
+	}
+	for _, op := range sortedKeys(capability.Operations) {
+		_, listed := t.Operations[op]
+		pair := t.Pair(op)
+		for _, ref := range []TransformerRef{pair.Request, pair.Response} {
+			tr, ok := c.Transformers[ref]
+			if !ok || tr.Capability != capability.Key {
+				continue // a missing or foreign transformer is reported by validatePair
+			}
+			got, err := c.operationFor(tr)
+			if err != nil || got.Name == op {
+				continue // an unusable operation: field is reported when the transformer compiles
+			}
+			if listed {
+				ps.add(file, at+".operations."+op, "%s is compiled for operation %s, not %s", ref, got.Name, op)
+				continue
+			}
+			ps.add(file, at+".transformer", "operation %s uses the default pair, but %s is compiled for operation %s: give %s its own pair under operations",
+				op, ref, got.Name, op)
+		}
+	}
+}
+
+// requestEndpoint is the vendor endpoint the pair's request transformer calls.
+func (c *Config) requestEndpoint(pair TransformerPair) (string, Endpoint, bool) {
+	tr, ok := c.Transformers[pair.Request]
 	if !ok {
 		return "", Endpoint{}, false
 	}

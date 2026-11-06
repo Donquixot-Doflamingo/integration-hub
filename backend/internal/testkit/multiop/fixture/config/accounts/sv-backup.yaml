@@ -1,0 +1,8 @@
+# TEST ONLY (HUB-343).
+account: sv-backup
+vendor: stepvendor
+region: in
+state: active
+credentials_ref: localfile://sv-backup
+config: { client_id: "SV-BACKUP" }
+quota: { rps: 50, daily: 100000 }

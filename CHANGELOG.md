@@ -42,6 +42,28 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - `hubmcp` starts over stdio and advertises exactly the tools of contracts/mcp/hubmcp-tools.json (admin tools only when HUB_ADMIN_TOKEN is set)
   - HUB_API_KEY and HUB_ADMIN_TOKEN come from the environment only and are redacted (`***`) in logs and tool output
   - Tool arguments are validated against the contract input schemas before any Hub call
+- 2026-11-07 · `chore(frontend)` · Regenerate the admin client for contract 1.2.0 (HUB-344) · HUB-344 · F-19
+  - The console's generated types and contract mocks include per-operation transformers on integration targets
+- 2026-11-07 · `test(edge)` · Move the OTP example to send_otp and verify_otp (HUB-343) · HUB-343 · F-14
+  - examples/otp-account-flow: `demo.mobile_otp@v1` has two operations, `send_otp` and `verify_otp`, on two demo-kyc endpoints (`/v1/otp/send`, `/v1/otp/verify`), each with its own transformer pair and goldens; callers use `invoke/send_otp` and `invoke/verify_otp` (the single-operation stand-in is gone)
+  - TestExampleOTPAccountFlow proves step 1 and step 2 hit different vendor endpoints in one session, pinned to v1 / account A across a publish; TestExampleOTPRefusesOnePairForBothOperations shows the build refusing the config without its verify_otp pair
+  - Use case 6 of the use-case catalogue: per-operation routing and the publish-time refusal are Works today, with their tests; HUB-343 in review; new todo tickets HUB-349 (publisher archives an unrebuildable snapshot when a draining account is targeted again) and HUB-350 (`hubctl dry-run --operation`)
+
+- 2026-11-07 · `fix(registry)` · Refuse one transformer pair serving every operation (HUB-345) · HUB-345 · F-03
+  - A multi-operation capability whose only transformer pair is compiled for one operation is refused when the snapshot is built (config files, `hubctl apply`, admin publish), naming the version file and `targets[i].transformer`, instead of running that operation's transformers for the others at request time
+  - Delivered by the HUB-343 check `operations_have_transformers`; registry rule documented in F-03
+
+- 2026-11-07 · `feat(registry)` · Select a transformer pair per operation (HUB-343) · HUB-343 · F-14
+  - An integration version target (also failover and shadow) may give operations of a multi-operation capability their own transformer pair (`operations: {<op>: {request, response}}`), so one integration can send each operation to a different vendor endpoint; other operations keep the default `transformer` pair
+  - Sync, wait, async (the worker re-resolves from the envelope's operation), dry-run, session steps, failover and shadow all run the invoked operation's pair; the audit `integration.resolved` / `request.transformed` meta names that pair and endpoint
+  - New publish check `operations_have_transformers` in the registry build (config files, `hubctl apply`, admin validate/publish, every node): an operation key the capability does not declare, or an operation served by a pair compiled for another operation, is refused with a file- and path-qualified error
+  - Admin API (hub-admin 1.2.0) accepts, stores, renders and diffs `TargetRef.operations`; rollback and weight changes keep it; validation reports carry the new check with contract pointers (`/targets/<i>/operations/<op>`, `/targets/<i>/transformer`); breakers and transformer usage count every per-operation endpoint
+
+- 2026-11-07 · `contract(admin)` · Add per-operation transformers to integration targets (HUB-344) · HUB-344 · F-22
+  - hub-admin 1.2.0: an integration version target (also failover and shadow) may set `operations: {<operation>: {request, response}}`; listed operations use their own transformer pair, the others the required default `transformer`
+  - New `TransformerPair` schema and known validation check `operations_have_transformers`; named examples for a two-operation OTP capability
+  - Caller API and MCP tools unchanged; backend implements in HUB-343, the console regenerates its client with `npm run gen:api`
+
 - 2026-11-07 · `fix(control)` · Regenerate sqlc models for the callback traceparent column (HUB-231) · HUB-231 · F-18
   - internal/control/db models match migration 00010, so the sqlc CI check passes
 - 2026-11-06 · `docs(adr)` · Renumber the trace-context ADR to 0013 and its story to US-1806 (HUB-231) · HUB-231 · F-18

@@ -3,6 +3,15 @@
 Contract versions, newest first. Each document has its own semver (see `README.md` § Versioning).
 Entry format: `- YYYY-MM-DD · <document> <version> · <CCR / HUB-###> · <summary>`.
 
+## 2026-11-07
+
+- 2026-11-07 · `hub-admin` 1.2.0 · HUB-344 · Per-operation transformer pairs on integration version targets (additive, minor)
+  - New schema `TransformerPair` (`request`, `response`: `TransformerRef`, both required). `TargetRef.transformer` now references it; its shape is unchanged and it stays required, as the default pair.
+  - New optional `TargetRef.operations`: map from operation name (`OperationName`) to `TransformerPair`, at least one entry. A listed operation uses its own pair; others use `transformer`. Applies to `targets[]`, `failover[]` and `shadow.target`, so `IntegrationSpec` in drafts, versions, validate, publish, diff and `Integration.active` carries it.
+  - `ValidationCheck.check` names the new known check `operations_have_transformers` (unknown operation key, or a pair compiled for another operation); clients must tolerate unknown check names.
+  - Examples: `createIntegrationDraft` request and `getIntegrationVersion` 200 move from `example` to named `examples` (the existing one stays first) and add `per_operation` for `kyc.aadhaar_otp@v1` (`generate` default, `verify` override).
+  - `hub-public` unchanged: callers never see transformers. `hubmcp-tools` unchanged: no tool exposes the target shape.
+
 ## 2026-10-31
 
 - 2026-10-31 · `hub-admin` 1.1.0 · CCR-003 / HUB-284 · Per-account dead-letter count and age on `AccountSummary` and `Account` (additive, minor; extends the pending 1.1.0)

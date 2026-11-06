@@ -1,0 +1,18 @@
+# TEST ONLY (HUB-343). Fictional vendor "stepvendor": no vendor documentation exists.
+transformer: TS-VERIFY-REQ
+version: 1
+kind: request
+capability: test.two_step@v1
+operation: verify
+vendor_endpoint: stepvendor.verify@1
+request:
+  method: POST
+  path: /v1/codes/verify
+  headers:
+    Content-Type: '"application/json"'
+    X-Client-Id:  account.config.client_id
+    X-Account-Id: creds.account_id
+    X-Api-Key:    creds.passcode
+  body:
+    phone: req.mobile
+    code:  req.code

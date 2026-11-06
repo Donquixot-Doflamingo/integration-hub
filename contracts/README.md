@@ -7,7 +7,7 @@ The documents here are the **only** interface between the backend (Go), the admi
 | Path | What | Version |
 | --- | --- | --- |
 | `openapi/hub-public.v1.yaml` | **Caller API**: invoke, request status, discovery, dry-run, inbound vendor webhooks (internal), hand-off return (planned), health, and the outbound callbacks (`webhooks:`) | 1.0.1 |
-| `openapi/hub-admin.v1.yaml` | **Control plane** `/admin/v1`: vendors, accounts, capabilities, transformers, integrations, tenants, api-keys, registrar endpoints, snapshots, requests, DLQ, breakers, change log, `me` | 1.1.0 |
+| `openapi/hub-admin.v1.yaml` | **Control plane** `/admin/v1`: vendors, accounts, capabilities, transformers, integrations, tenants, api-keys, registrar endpoints, snapshots, requests, DLQ, breakers, change log, `me` | 1.2.0 |
 | `openapi/mockvendor.v1.yaml` | Control API of `cmd/mockvendor` (test double for every vendor) | 1.0.0 |
 | `schemas/capabilities/` | Canonical capability request/response JSON Schemas (2020-12). See its `README.md` for `x-pii`, `interactive`, `operations` | per capability |
 | `schemas/events/` | Outbound callback payloads (`envelope.json`, `request.completed.json`, `request.failed.json`, `request.expired.json`, `delivery.status.json`) and `canonical-error.json`, the canonical error object shared with the public spec | with hub-public |

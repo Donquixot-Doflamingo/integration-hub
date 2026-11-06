@@ -1,0 +1,19 @@
+# TEST ONLY (HUB-343). Fictional vendor "stepvendor".
+transformer: TS-SEND-RES
+version: 1
+kind: response
+capability: test.two_step@v1
+operation: send
+response:
+  status: '"sent"'
+  ref:    res.body.id
+errors:
+  - when: res.status == 401 || res.status == 403
+    code: UPSTREAM_AUTH_FAILED
+    retryable: false
+  - when: res.status >= 500
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+  - when: res.status >= 400
+    code: UPSTREAM_REJECTED
+    retryable: false

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hub:capability:test.two_step@v1:verify:response",
+  "title": "test.two_step@v1 verify response (TEST ONLY)",
+  "type": "object",
+  "required": ["status"],
+  "properties": {
+    "status": { "type": "string", "enum": ["verified"] }
+  }
+}
