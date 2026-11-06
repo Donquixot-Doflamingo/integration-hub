@@ -1,0 +1,4 @@
+{
+  "status": 403,
+  "body": {"type": "validation_error", "code": "authentication_failed", "message": "x-cf-signature missing in the request header"}
+}

@@ -1,0 +1,6 @@
+{
+  "method": "POST",
+  "path": "/post",
+  "headers": {"Content-Type": "application/json", "X-Hub-Demo-Client": "fixture-client-tag"},
+  "body": {"message": "hello", "seq": 7}
+}

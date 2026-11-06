@@ -1,0 +1,4 @@
+{
+  "status": 401,
+  "body": {"type": "authentication_error", "code": "authentication_failed", "message": "Invalid clientId and clientSecret combination"}
+}

@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": {"pan": "TUVPP5678W", "type": "Individual", "reference_id": 164, "valid": false, "message": "PAN is deactivated", "pan_status": "DEACTIVATED"}
+}

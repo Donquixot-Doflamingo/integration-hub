@@ -1,0 +1,33 @@
+{
+  "description": "Aadhaar OKYC: the OTP is sent, then the provider's source is down during verify (502).",
+  "routes": {
+    "okyc-otp": {
+      "match": {
+        "method": "POST",
+        "path": "/verification/offline-aadhaar/otp"
+      },
+      "behaviour": {
+        "status": 200,
+        "body": {
+          "status": "SUCCESS",
+          "message": "OTP sent successfully",
+          "ref_id": 21637861
+        }
+      }
+    },
+    "okyc-verify": {
+      "match": {
+        "method": "POST",
+        "path": "/verification/offline-aadhaar/verify"
+      },
+      "behaviour": {
+        "status": 502,
+        "body": {
+          "type": "internal_error",
+          "code": "verification_failed",
+          "message": "Authorised source is temporarily unavailable, please try again shortly"
+        }
+      }
+    }
+  }
+}

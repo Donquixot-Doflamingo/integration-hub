@@ -8,6 +8,19 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 - 2026-11-07 · `test(upstream)` · Give every node the full second in the breaker force test (HUB-416) · HUB-416 · F-12
   - TestForceReachesEveryNodeWithinOneSecond no longer fails when node B's Redis message lands a few ms after node A's; it still fails if the hold is not in force on B within 1 s
+- 2026-11-07 · `feat(examples)` · Add a live latency demo on a public echo API (HUB-353) · HUB-353 · F-18
+  - `examples/latency-demo/run.sh` calls Postman Echo N times directly and N times through a local Hub (`int_latency_echo`) in alternating rounds, then prints p50/p95/p99 for both, the difference and the Hub's own `hub_overhead_ms`
+  - `LATENCY_TARGET=mock` runs the same comparison offline against mockvendor at 50 ms
+  - The README explains why internet jitter dominates and points to the controlled numbers
+- 2026-11-07 · `feat(examples)` · Add a PAN verification sandbox example (HUB-352) · HUB-352 · F-22
+  - `int_pan_verify` on the same provider and account as the Aadhaar example: one sync call with an `Idempotency-Key`, a masked PAN, a yes/no name match, the Aadhaar link, and an invalid PAN as a 200 business answer; sealed audit for 90 days
+  - `examples/pan-verify/run.sh` runs it against mockvendor (valid, invalid, provider down) or the provider's sandbox (`HUB_DEMO_TARGET=sandbox`), including a replay that does not call the provider again
+  - 20 golden cases; `TestExamplePANVerify` proves the provider request, the minimal response, sealed audit, the replay and the edge refusals
+- 2026-11-07 · `feat(examples)` · Add an Aadhaar OTP e-KYC sandbox example (HUB-351) · HUB-351 · F-22
+  - `examples/aadhaar-okyc/`: Aadhaar OTP-based offline e-KYC behind one integration id (`int_aadhaar_okyc`, operations `send_otp` and `verify_otp`), mapped to Cashfree Secure ID's documented API; the provider's reference travels only in the vendor session, the audit is sealed for 90 days, the response is minimal
+  - `run.sh` runs the two steps against mockvendor (six scenarios) or, with `HUB_DEMO_TARGET=sandbox` and test keys, against the provider's sandbox; `client/main.go` does the same with the Go SDK
+  - 43 golden cases cover success and every documented provider error; `TestExampleAadhaarOKYCFlow` runs the flow through the gateway with sealed-audit and no-vendor-leak checks
+  - The README states what is possible without a UIDAI AUA/KUA licence, how to get sandbox keys, and what the app shows between the steps
 - 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
   - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
   - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series

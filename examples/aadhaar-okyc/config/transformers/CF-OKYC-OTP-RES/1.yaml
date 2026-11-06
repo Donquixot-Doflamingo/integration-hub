@@ -1,0 +1,72 @@
+# EXAMPLE ONLY (HUB-351). Aadhaar OKYC step 1 response on Cashfree Secure ID, checked on 2026-11-07
+# against https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/generate-otp-to-verify-aadhaar
+# (every example body of that page has a golden in fixtures/):
+#   200 {"status": "SUCCESS", "message": "OTP sent successfully", "ref_id": 21637861}
+#   200 {"status": "SUCCESS", "message": "Aadhaar not linked to mobile number", ...}   (no OTP sent)
+#   200 {"status": "INVALID", "message": "Invalid Aadhaar Card", "ref_id": 208}
+#   400 aadhaar_invalid | aadhaar_empty | x-client-id_missing | x-client-secret_value_invalid
+#   401 authentication_failed · 403 ip_validation_failed · 409 verification_pending (same Aadhaar
+#   within 30 s) · 422 insufficient_balance · 429 too_many_requests_per_operation / _per_ip ·
+#   500 verification_failed | api_error · 502 verification_failed (source down)
+#
+# On success the session: section keeps ONLY the provider's ref_id; the Hub stores it for 10 min,
+# pinned to this version and account (DESIGN §14), and verify_otp sends it back. The Aadhaar number
+# is never kept (and the session store refuses any 12-digit number). ref_id is a number in the
+# examples and a string in the schema: replace(toJSON(x), "\"", "") turns both into "21637861".
+#
+# Messages are fixed, vendor-neutral texts: the provider's own messages can carry its name, the
+# caller's IP or links to its docs, so they never reach the caller (DESIGN §0).
+transformer: CF-OKYC-OTP-RES
+version: 1
+kind: response
+capability: demo.aadhaar_okyc@v1
+operation: send_otp
+docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/generate-otp-to-verify-aadhaar
+response:
+  status:     '"otp_sent"'
+  vendor_ref: 'replace(toJSON(res.body.ref_id), "\"", "")'
+session:
+  vendor_txn_id: 'replace(toJSON(res.body.ref_id), "\"", "")'
+errors:
+  # 200 answers that are not "OTP sent" (vendor quirk: errors with a 2xx status).
+  - when: 'res.status < 300 && res.body.status == "INVALID"'
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The Aadhaar number is not valid"'
+  - when: 'res.status < 300 && lower(res.body.message ?? "") matches "not linked"'
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"No mobile number is linked to this Aadhaar, so no OTP can be sent"'
+  - when: 'res.status < 300 && (res.body.status != "SUCCESS" || res.body.ref_id == nil)'
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+    message: '"The verification service returned an unexpected answer; try again"'
+  # Our credentials or IP whitelist: pages on-call, never the user's fault.
+  - when: 'res.status == 401 || res.status == 403 || (res.status == 400 && res.body.code in ["x-client-id_missing", "x-client-secret_value_invalid"])'
+    code: UPSTREAM_AUTH_FAILED
+    retryable: false
+  - when: 'res.status == 400 && res.body.code in ["aadhaar_invalid", "aadhaar_empty"]'
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The Aadhaar number is not valid"'
+  - when: res.status == 409
+    code: UPSTREAM_RATE_LIMITED
+    retryable: true
+    retry_after_ms: 30000
+    message: '"An OTP was requested for this Aadhaar less than 30 seconds ago; wait before asking again"'
+  # Prepaid balance of the account ran out: an operations problem, not the user's.
+  - when: 'res.status == 422 && res.body.code == "insufficient_balance"'
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+    message: '"The verification service is temporarily unavailable"'
+  - when: res.status == 429
+    code: UPSTREAM_RATE_LIMITED
+    retryable: true
+    retry_after_ms: int(header(res, "Retry-After") ?? "5") * 1000
+  - when: res.status >= 500
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+  - when: res.status >= 400
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The OTP could not be sent"'

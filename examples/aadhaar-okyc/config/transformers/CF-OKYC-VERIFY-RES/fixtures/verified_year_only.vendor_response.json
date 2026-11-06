@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": {"ref_id": 70472, "status": "VALID", "message": "Aadhaar Card Exists", "name": "Asha Verma", "dob": "", "year_of_birth": "1988", "gender": "F"}
+}

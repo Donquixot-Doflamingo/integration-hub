@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hub:capability:demo.aadhaar_okyc@v1:verify_otp:response",
+  "title": "demo.aadhaar_okyc@v1 verify_otp response (EXAMPLE ONLY, not a frozen contract)",
+  "description": "The OTP is correct and the Aadhaar exists: the minimal e-KYC data a verification needs. Not returned on purpose: the photo, the full address, care-of, e-mail, mobile hash, the offline XML and its share code. A wrong or expired OTP is a 422 UPSTREAM_REJECTED error, not a response. Callers must ignore unknown fields.",
+  "x-capability": "demo.aadhaar_okyc@v1",
+  "x-capability-minor": 0,
+  "interactive": true,
+  "type": "object",
+  "required": ["status"],
+  "properties": {
+    "status": { "type": "string", "enum": ["verified"] },
+    "name": {
+      "description": "Name as held by UIDAI.",
+      "type": ["string", "null"],
+      "maxLength": 256
+    },
+    "date_of_birth": {
+      "description": "Date of birth (YYYY-MM-DD) when UIDAI holds the full date, else null.",
+      "type": ["string", "null"],
+      "format": "date"
+    },
+    "year_of_birth": {
+      "type": ["integer", "null"],
+      "minimum": 1900,
+      "maximum": 2100
+    },
+    "gender": {
+      "type": ["string", "null"],
+      "enum": ["male", "female", "transgender", null]
+    },
+    "address": {
+      "description": "Only the coarse parts of the address: enough to check a state or pincode, nothing street-level.",
+      "type": ["object", "null"],
+      "properties": {
+        "state": { "type": ["string", "null"], "maxLength": 128 },
+        "district": { "type": ["string", "null"], "maxLength": 128 },
+        "pincode": { "type": ["string", "null"], "maxLength": 16 }
+      }
+    },
+    "vendor_ref": {
+      "description": "Opaque upstream reference for support correlation. Never parse it.",
+      "type": ["string", "null"],
+      "maxLength": 256
+    }
+  },
+  "examples": [
+    {
+      "status": "verified",
+      "name": "Mallesh Fakkirappa Dollin",
+      "date_of_birth": "1995-02-02",
+      "year_of_birth": 1995,
+      "gender": "male",
+      "address": { "state": "Karnataka", "district": "Haveri", "pincode": "581115" },
+      "vendor_ref": "70471"
+    }
+  ]
+}
