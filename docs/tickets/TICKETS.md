@@ -1307,6 +1307,7 @@ After HUB-155, `TestChaos2RecoveryAndRampedDrain` still failed once on CI (#19: 
 **Acceptance criteria**
 - [x] `maxCatchUp(tick) = max(2 ticks, 1 s)` (`TestMaxCatchUp`); a 5-tick stall releases 5 ticks of quota, a 30-tick stall one second's (`TestDrainQuotaUsesElapsedTime`)
 - [x] `TestChaos2RecoveryAndRampedDrain` / `TestChaos3ReopenMidDrain` pass 3/3 with both CPUs saturated by busy loops (step 4: 50, 52, 50; it had dropped to 46 with the 2-tick cap)
+- [x] The ramp test checks what DESIGN §10.5 needs instead of exact 1 s windows, which a delayed scheduler pass on a CI runner broke (#25: step 4 at 29/50, the quota released after the window): released by each step's end never ahead of the ramp (+10 %); owed quota out within one catch-up horizon; all 160 out by 5.8 s (a drain at 70 % of the rate fails it at 6.29 s)
 ## EP-07 — M6 Versioning & cutover
 
 ### HUB-170 — Publish pipeline with full validation
