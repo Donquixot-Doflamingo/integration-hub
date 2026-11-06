@@ -58,6 +58,7 @@ type exampleRig struct {
 	mv    *mockvendor.Instance
 	db    *pgxpool.Pool
 	store *registry.Store
+	snaps map[int]*registry.Snapshot // int_demo_otp v1 and v2 active, built once (goldens run per build)
 	spec  *contract.Spec
 	run   string // unique per rig, for idempotency keys
 }
@@ -82,7 +83,17 @@ func newExampleRig(t *testing.T) *exampleRig {
 	}
 	t.Cleanup(db.Close)
 	mv := mockvendor.Start(t)
-	r := &exampleRig{mv: mv, db: db, store: &registry.Store{}, spec: contract.Load(t, "hub-public.v1.yaml"), run: core.NewULID(time.Now())}
+	r := &exampleRig{mv: mv, db: db, store: &registry.Store{}, snaps: map[int]*registry.Snapshot{}, spec: contract.Load(t, "hub-public.v1.yaml"),
+		run: core.NewULID(time.Now())}
+	for _, active := range []int{1, 2} {
+		snap := exampleSnapshot(t, active)
+		for _, v := range snap.Vendors {
+			for region := range v.Regions {
+				v.Regions[region] = mv.VendorURL
+			}
+		}
+		r.snaps[active] = snap
+	}
 	r.publish(t, 1)
 	m := telemetry.NewMetrics("gateway", "example")
 	cache, _ := creds.NewCache(exampleCreds{}, telemetry.NewSecretSet(), m, creds.CacheOptions{})
@@ -103,13 +114,7 @@ func newExampleRig(t *testing.T) *exampleRig {
 // every vendor region pointed at mockvendor.
 func (r *exampleRig) publish(t *testing.T, active int) {
 	t.Helper()
-	snap := exampleSnapshot(t, active)
-	for _, v := range snap.Vendors {
-		for region := range v.Regions {
-			v.Regions[region] = r.mv.VendorURL
-		}
-	}
-	r.store.Swap(snap)
+	r.store.Swap(r.snaps[active])
 }
 
 // vendor makes mockvendor answer the next calls to path with status and body.

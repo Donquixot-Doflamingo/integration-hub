@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `test(edge)` · Build the example snapshots once per test rig (HUB-342) · HUB-342 · F-22
+  - TestExampleOTPAccountFlow builds the two example snapshots (and runs their goldens) once instead of nine times, so it is far less exposed to the transform time-budget flake under load (HUB-238)
 - 2026-11-06 · `test(edge)` · Add a runnable OTP to bank-account example flow (HUB-342) · HUB-342 · F-22
   - examples/otp-account-flow: an example registry overlay (two interactive capability schemas, fictional vendor demo-kyc on mockvendor, two accounts, tenant loan-onboarding, int_demo_otp v1/v2, int_demo_bank_verify, four transformers with goldens), kept out of backend/config and contracts/
   - TestExampleOTPConfigBuilds builds the overlay and runs its goldens; TestExampleOTPAccountFlow runs send OTP -> verify in the session (pinned to account A across a publish) -> bank verification through the real gateway, plus wrong OTP, expired session, double tap, vendor down and edge refusals
