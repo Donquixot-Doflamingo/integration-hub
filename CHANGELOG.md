@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `ci(backend)` · Check alert rules and dashboards in CI (HUB-232) · HUB-232 · F-18
+  - New backend CI job monitoring: installs promtool 3.4.2 from the release tarball (SHA-256 verified) and runs make monitoring
+  - deploy/README.md documents the rule file, dashboard import and the checks
 - 2026-11-06 · `test(roles)` · Check deploy queries against exported metrics (HUB-232) · HUB-232 · F-18
   - Every alert rule and dashboard query is parsed with the PromQL parser; an unknown metric, label matcher, by() or on() label fails the backend tests with the alert or panel name
   - Dashboards are linted: stable uid, unique panel ids, data source only through ${datasource}, every variable defined

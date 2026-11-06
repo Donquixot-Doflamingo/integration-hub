@@ -84,6 +84,31 @@ jobs:
           cache-dependency-path: backend/go.sum
       - run: make build
 
+  monitoring:
+    # HUB-232: alert rules pass promtool check + unit tests; alert rules and dashboards query only
+    # metric and label names the code exports (Go catalogue test). Grafana itself is not run.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PROMTOOL_VERSION: 3.4.2
+      PROMTOOL_SHA256: 630177c6ad011193987904f09ffafec29d531abfeb5e43fa3714e376e5f28ddc # prometheus-3.4.2.linux-amd64.tar.gz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Install promtool (pinned release, checksum verified)
+        run: |
+          tgz="$RUNNER_TEMP/prometheus.tar.gz"
+          curl -sSfL -o "$tgz" "https://github.com/prometheus/prometheus/releases/download/v${PROMTOOL_VERSION}/prometheus-${PROMTOOL_VERSION}.linux-amd64.tar.gz"
+          echo "${PROMTOOL_SHA256}  $tgz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$tgz" -C "$RUNNER_TEMP/bin" --strip-components=1 "prometheus-${PROMTOOL_VERSION}.linux-amd64/promtool"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Alert rules and dashboards (make monitoring)
+        run: make monitoring
+
   smoke-m0:
     runs-on: ubuntu-latest
     timeout-minutes: 10
