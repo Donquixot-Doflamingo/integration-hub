@@ -6,6 +6,13 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · File the load and soak findings as tickets (HUB-235) · HUB-235 · F-18
+  - HUB-405: the `hub_overhead_ms` metric is computed before the vendor call (negative at any real vendor latency); the audit ledger value is correct
+  - HUB-406: a worker restarted with a backlog panics on a nil snapshot (claims before the registry loads)
+  - HUB-407: one worker is capped near 16 / (vendor latency + Hub time) by its fixed concurrency and batch barrier
+  - HUB-408: the account limiter makes a Redis call per sync vendor call and hides it from the overhead
+  - HUB-409 / HUB-410: audit masking re-parses JSON on the request path; a failed audit write drops its batch without retry
+  - HUB-403 in progress: its pprof box is done on this branch
 - 2026-11-07 · `perf(load)` · Add hubload and the deploy/load harness (HUB-235) · HUB-235 · F-18
   - `make load` starts mockvendor, gateway, worker and scheduler on a dedicated load database and runs the comparison (direct to mockvendor vs through the Hub), the sync and async ramps with CPU profiles, and the soak, then writes a Markdown report
   - New `hubload` tool (`rate`, `soak`, `report`, `settle`): open-loop arrivals (latency from the intended send time), per-step metric deltas, audit-ledger overhead, outbox sampling and CPU per process

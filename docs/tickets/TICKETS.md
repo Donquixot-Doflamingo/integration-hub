@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **229** · done: **158** · todo: **50** · other (in-progress/in-review/blocked): **21**
+Total tickets: **235** · done: **158** · todo: **55** · other (in-progress/in-review/blocked): **22**
 
 ## Epics
 
@@ -21,7 +21,7 @@ Total tickets: **229** · done: **158** · todo: **50** · other (in-progress/in
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 0 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 5 | 0 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks and by the M8 load test) | M8+ | F-18, F-15, F-08, F-09, F-13 | HUB-400–HUB-429 | 11 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -2865,7 +2865,7 @@ Found while building HUB-343. `hubctl dry-run <integration> <body.json>` dry-run
 
 ## EP-13 — Operability follow-ups (found writing the M8 runbooks)
 
-Range HUB-400–HUB-429. The EP-09 range is full; these came out of HUB-237.
+Range HUB-400–HUB-429. The EP-09 range is full; HUB-400–404 came out of HUB-237, HUB-405–410 out of the HUB-235/236 load and soak runs.
 
 ### HUB-400 — hubctl on-call commands for the runbooks
 - **Epic:** EP-13 · **Type:** chore · **Area:** backend
@@ -2907,13 +2907,13 @@ The alert runbooks (HUB-237) fall back to curl for actions that have admin opera
 
 ### HUB-403 — Wire the promised ops settings: pprof, log level, worker concurrency
 - **Epic:** EP-13 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** — · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-progress · **Depends on:** — · **Feature:** F-18 · **Stories:** US-18xx
 - **Branch:** `feat/HUB-403-ops-settings`
 
 OBSERVABILITY §8.1 and TECH_SPEC §8.1 promise pprof on the ops port, `PUT /debug/loglevel`, and `HUB_WORKER_CONCURRENCY` / `HUB_WORKER_CLAIM_BATCH`. None of these is wired: workers are fixed at 16 in flight and 32 per claim. The audit buffer (10 000) cannot be configured, and "archive unreachable" is logged only at DEBUG.
 
 **Acceptance criteria**
-- [ ] pprof served on the internal ops port only (never the public port), with a test
+- [x] pprof served on the internal ops port only (never the public port), with a test (`TestPprofOnlyOnOpsPort`, commit "feat(roles): Serve pprof on the ops port only (HUB-403)" on `perf/HUB-235-load-soak`)
 - [ ] Runtime log-level change on the ops port
 - [ ] Worker concurrency, claim batch and audit buffer read from config, with defaults unchanged
 - [ ] "archive unreachable" logged at WARN
@@ -2928,6 +2928,78 @@ OBSERVABILITY §9 cites things that do not exist: the metrics `drain_release_rat
 **Acceptance criteria**
 - [ ] Every metric, log event and operation named in OBSERVABILITY.md exists in the code or contract (a check script lists none missing)
 - [ ] CCR filed if restoring the previous credential slot is kept
+
+### HUB-405 — `hub_overhead_ms` is computed before the vendor call
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-027 · **Feature:** F-18 · **Stories:** US-1802
+- **Branch:** `fix/HUB-405-overhead-metric-time`
+
+Found by the HUB-235 load test. `edge.(*Server).invoke` does `defer s.metrics.RecordTimings(&p.timings, s.deps.Now(), ...)`. Go evaluates `s.deps.Now()` when the `defer` statement runs, right after `prepare`, not when the handler returns. The exported histogram therefore records "prepare time minus vendor time minus wait". It is negative whenever the vendor is slower than auth + body + validate + resolve: 100 % of observations at mockvendor 20 ms in the load test. The stage histograms are fine (they read the pointer at return), and so is the audit ledger (`hub.requests.hub_overhead_ms`, computed in `record`). The S1 SLO, the `HubOverheadHigh` alert, the platform dashboard and the M3 "overhead p99 ≤ 5 ms" evidence all read the broken metric.
+
+**Acceptance criteria**
+- [ ] `RecordTimings` takes the time when the handler returns (closure or explicit call), for every mode
+- [ ] Edge unit test with a fake upstream that takes 20 ms: the recorded overhead is ≥ 0 and below 20 ms, and equals the ledger value within one bucket
+- [ ] `hubload` shows a 0 % negative share and metric p99 within 10 % of the ledger p99 at 500 RPS; HUB-235's first acceptance box is re-checked on the metric
+
+### HUB-406 — Worker claims before its snapshot is loaded and panics after a restart
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `fix/HUB-406-worker-snapshot-gate`
+
+Found by the HUB-236 soak harness. A worker restarted (SIGTERM or SIGKILL) while the outbox has due envelopes panics with a nil pointer dereference in `delivery.(*Worker).trail` (`worker.go:266`, `snap.Integrations` with `snap == nil`). `roles.Run` calls `dp.start` (which starts the claim loop) before `reg.load`, so the first claim can run before any snapshot exists. Each crash also leaves its claims to expire and bumps their `crashes` count: after `PoisonCrashes` (2) the envelopes would be dead-lettered as poison although they are fine. Without a supervisor restart the backlog just waits. The soak therefore runs without worker restarts (`SOAK_RESTARTS=0`).
+
+**Acceptance criteria**
+- [ ] The worker (and the scheduler's snapshot users) do not claim or tick until a snapshot is loaded; `/readyz` is already false until then
+- [ ] Integration test: envelopes due in the outbox, worker started, all of them delivered, no panic, `crashes` unchanged
+- [ ] `make soak` with `SOAK_RESTARTS=2` (one SIGTERM, one SIGKILL) reconciles with zero lost and zero duplicate callbacks; the default goes back to 2
+
+### HUB-407 — Worker throughput is capped by 16 attempts in flight and a batch barrier
+- **Epic:** EP-13 · **Type:** perf · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-112, HUB-403 · **Feature:** F-09 · **Stories:** US-09xx
+- **Branch:** `perf/HUB-407-worker-concurrency`
+
+Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md`). One worker finishes about 340 envelopes/s at mockvendor 20 ms while using 0.25 CPU cores: it is waiting, not working. `Worker.ProcessOnce` claims 32, runs them 16 at a time and waits for the whole batch before claiming again. Throughput is therefore at most 16 / (vendor latency + about 25 ms of Hub time) per process, and one slow envelope holds up the next claim. DESIGN §18.4 and the go-system-design skill say workers claim `n = free bulkhead slots` (64 per account). At 2,000 msg/s and 20 ms that takes about 6 worker processes today. HUB-403 makes the 16 and 32 configurable; this ticket changes the claim model itself.
+
+**Acceptance criteria**
+- [ ] Claiming is continuous: a new claim as soon as slots free up, up to a configurable in-flight limit (default sized to the bulkhead)
+- [ ] `hubload` async step on the same machine: one worker sustains at least 2× today's rate at mockvendor 20 ms, or the report shows the new limit (CPU or Postgres)
+- [ ] Shutdown still finishes in-flight attempts; goleak and the worker itests stay green
+
+### HUB-408 — Account limiter: a Redis round trip on every sync vendor call
+- **Epic:** EP-13 · **Type:** perf · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-147 · **Feature:** F-13 · **Stories:** US-13xx
+- **Branch:** `perf/HUB-408-limiter-lease`
+
+Found by the HUB-235 sync ramp. `upstream.(*AccountLimiter).Wait` runs a Redis script for every vendor call, including sync ones. At 500 RPS on 2 CPUs its own time (stage `admission` = `wait`) has a p99 of 3.8 ms, the largest stage on the path. DESIGN §18.5 rule 6 allows only the idempotency check as a non-vendor network call on the sync path; the go-system-design skill says to cache a local token lease. The whole call is also added to `StageWait`, which `hub_overhead_ms` excludes as a deliberate wait, even when the token was granted at once. So the overhead the Hub reports leaves out its biggest stage: at 500 RPS the ledger p99 is 3.4 ms without it and 6.2 ms with it.
+
+**Acceptance criteria**
+- [ ] A node leases tokens in blocks (for example 10 % of the account rate) and serves sync calls from the lease without a Redis call in steady state; the fleet-wide rate still holds (itest with two limiters)
+- [ ] Only time actually spent waiting for tokens counts as `StageWait`; the Redis call, when there is one, counts as `admission` overhead
+- [ ] `hubload` sync step at 500 RPS shows the admission stage p99 under 0.1 ms (DESIGN §18.6 budget)
+
+### HUB-409 — Audit masking re-parses JSON on the request goroutine
+- **Epic:** EP-13 · **Type:** perf · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-091 · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `perf/HUB-409-audit-masking-off-path`
+
+Found by the HUB-235 gateway CPU profile at 500 sync RPS (`docs/tech/LOAD_TEST_REPORT.md`). `audit.(*Trail).masked` costs 27 % of gateway CPU. 55 % of that is `json.Unmarshal` of bytes the edge already parsed, plus `json.Marshal` and a SHA-256 per summarised value, all on the caller's goroutine. That breaks DESIGN §18.5 rules 2 and 3 (one parse in, non-blocking audit). `audit/policy.go` also builds a `strings.Replacer` per JSON-pointer segment per request (2 %).
+
+**Acceptance criteria**
+- [ ] Masked payloads are built from the already-parsed tree, or the masking moves into the audit writer goroutine; the request path does no extra JSON parse per trail event
+- [ ] The pointer unescape uses a package-level replacer
+- [ ] A benchmark of a 4 KB `masked` sync request shows allocations and time down vs `main` (benchstat); stored masked bytes are unchanged (existing audit tests)
+
+### HUB-410 — Audit writer drops a whole batch on one failed write
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-091 · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `fix/HUB-410-audit-write-retry`
+
+Found by the HUB-235 async run at 1,000 msg/s on 2 CPUs. Postgres was saturated, the gateway's audit writes hit the 5 s `WriteTimeout`, and `audit.Writer.write` counted the batch as dropped (`audit_events_dropped_total{reason="write_error"}`): 1,014 events in about 10 s (three failed writes). The request rows were committed, so nothing was lost for the caller, but the audit trail DESIGN §13 calls lossless lost events with no retry. Drops for a full buffer are by design (§18.5 rule 3); drops for one transient write error are not.
+
+**Acceptance criteria**
+- [ ] A failed batch is retried with jittered backoff (bounded attempts and time) before it is dropped; the buffer-full drop path is unchanged
+- [ ] Integration test: Postgres paused for 2 s during writes, then resumed, loses no audit events
+- [ ] `audit_write_failures_total` counts failed attempts and `audit_events_dropped_total{reason="write_error"}` only what was finally given up
 
 ## Parallel tracks
 
