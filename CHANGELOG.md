@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · Mark the console real-backend tickets in review (HUB-286) · HUB-286 · F-19
+  - HUB-286 and HUB-289 are in review with their acceptance criteria mapped to tests; `make dev-up` names the console's "Create API key" button in its hint
 - 2026-11-07 · `feat(frontend)` · Polish the console layout on phones and desktop (HUB-287) · HUB-287 · F-19
   - No console page scrolls sideways on a 390 px phone any more: wide tables scroll inside their frame and long request or change ids in titles wrap
   - On phones the breadcrumb is a single link back to the parent page instead of a squeezed column next to the Sections button

@@ -2478,17 +2478,17 @@ Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits
 
 ### HUB-286 — Console against a running Hub with one command
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** in-progress · **Depends on:** HUB-253, HUB-207 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1906
+- **Status:** in-review · **Depends on:** HUB-253, HUB-207 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1906
 - **Branch:** `feat/HUB-286-console-real-backend`
 
 The console has only ever run on MSW contract mocks. Make it work end to end against the real admin API: dev sign-in through the admin's dev OIDC issuer (`hub admin -admin-dev-oidc`, M7), a same-origin `/admin/v1` proxy in the console server that adds the session token ([ADR-0022](../tech/adr/0022-console-same-origin-admin-proxy.md)), and SSR serialization of the admin response headers. Add `scripts/dev-up.sh` / `scripts/dev-down.sh` (and `make dev-up` / `make dev-down`) that start Postgres and Redis (docker compose when Docker or Colima runs, else the services the env names), migrations and the dev seed, mockvendor, the hub roles gateway, worker, scheduler and admin, and the console, then print the URLs, the dev login and a tenant API key.
 
 **Acceptance criteria**
-- [ ] Dev sign-in mints a real admin token through the dev issuer; the token stays in the httpOnly session (`dev-issuer.test.ts`)
-- [ ] `/admin/v1/**` is proxied with the session token, only contract headers pass each way, cross-origin mutations are refused (`admin-proxy.test.ts`)
-- [ ] Every page loads real data with SSR (no "Failed to get response header") and create/update flows work against the running Hub (walked with Playwright)
-- [ ] `scripts/dev-up.sh` brings the whole stack up with one command on macOS arm64 (Colima) and Linux, prints URLs, login and a tenant key; `scripts/dev-down.sh` stops it (`--purge` also removes state)
-- [ ] Documented in the root `README.md` and `frontend/README.md`
+- [x] Dev sign-in mints a real admin token through the dev issuer; the token stays in the httpOnly session (`dev-issuer.test.ts`)
+- [x] `/admin/v1/**` is proxied with the session token, only contract headers pass each way, cross-origin mutations are refused (`admin-proxy.test.ts`)
+- [x] Every page loads real data with SSR (no "Failed to get response header") and create/update flows work against the running Hub (walked with Playwright as admin, editor, viewer and tenant viewer: tenant create/edit/disable, API key create/rotate/revoke, endpoint edit and delete-in-use, pause/resume, draft and publish, breaker force open/clear)
+- [x] `scripts/dev-up.sh` brings the whole stack up with one command on macOS arm64 (Colima) and Linux, prints URLs, login and a tenant key; `scripts/dev-down.sh` stops it (`--purge` also removes state). Run here on Linux against local Postgres and Redis (no Docker in the container); the Docker/Colima path and macOS are not exercised in this environment
+- [x] Documented in the root `README.md` and `frontend/README.md`
 
 ### HUB-287 — Console visual polish against the real stack
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
@@ -2518,7 +2518,7 @@ Walk every route with Playwright against the real stack (desktop and 390 px mobi
 
 ### HUB-289 — Console bug bash against the real stack
 - **Epic:** EP-10 · **Type:** fix · **Area:** frontend
-- **Status:** in-progress · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1902, US-1906
+- **Status:** in-review · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1902, US-1906
 - **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-287, HUB-288)
 
 Bugs found running the console against a real Hub, each fixed with a test. Backend bugs are reported, not fixed here.
@@ -2530,7 +2530,7 @@ Bugs found running the console against a real Hub, each fixed with a test. Backe
 - [x] Editing a callback endpoint's description works when its stored URL is a dev `http://` one the Hub accepted (Save was disabled with no reason) (`endpoints.test.ts`, `callback-endpoints.test.ts`)
 - [x] Request and DLQ entry pages no longer crash on a replayed request: attempts restart at 1 and timeline `seq` values repeat (`AttemptsTable.test.ts`, `requests/[request_id]/page.test.ts`, `timeline.test.ts`)
 - [x] Publish check `operations_have_transformers` (hub-admin 1.2.0) has a label; unknown checks read as words (`publish/draft.test.ts`)
-- [ ] Every other bug found is listed in the PR with its test
+- [x] Every other bug found is listed in the PR with its test (backend bugs found are reported, not fixed here)
 
 ## EP-11 — MCP server + consumer skill + SDK
 

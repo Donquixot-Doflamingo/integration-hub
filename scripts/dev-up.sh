@@ -228,7 +228,7 @@ $(printf '\033[1m')Integration Hub dev stack is up.$(printf '\033[0m')
     curl -X POST $gw_url/v1/integrations/int_evt_brandA/invoke \\
       -H 'Authorization: Bearer $dev_key' -H 'Content-Type: application/json' \\
       -d '{"user":{"id":"u_1"},"event":{"name":"order_placed"}}'
-  Mint another key: Console > Tenants > orders-service > API keys > Create key (admin), shown once.
+  Mint another key: Console > Tenants > orders-service > API keys > Create API key (admin role); the key is shown once.
 
   Logs   $state/logs/<name>.log      Stop   scripts/dev-down.sh (or make dev-down)
 EOF
