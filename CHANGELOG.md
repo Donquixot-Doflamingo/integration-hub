@@ -19,6 +19,13 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Span attributes are allowlisted (telemetry.AllowedSpanAttributes); tests fail on any other key or on a credential, API key or body fragment in a value
 - 2026-11-06 · `test(edge)` · Raise the tenant quota in the overhead benchmark so it runs again (HUB-231) · HUB-231 · F-18
   - BenchmarkInvokeOverhead no longer stops with 429 UPSTREAM_RATE_LIMITED after the dev tenant's 100 rps quota; the token bucket stays on the measured path
+- 2026-11-07 · `docs(tickets)` · File the operability follow-ups the runbooks found (HUB-237) · HUB-237 · F-18
+  - New epic EP-13 (HUB-400–HUB-429): hubctl on-call commands, a SnapshotBehind false positive after restarts, the admin API credential minimum length, unwired ops settings (pprof, log level, worker concurrency), and OBSERVABILITY §9 drift
+- 2026-11-07 · `docs(runbooks)` · Add runbooks for every alert (HUB-237) · HUB-237 · F-18
+  - Every `runbook_url` in `deploy/alerts/hub.rules.yaml` now resolves: `docs/runbooks/<AlertName>.md` for all ten alerts (six page, four warn), each with what fired, caller impact in canonical codes, first checks (dashboard panel, PromQL, hubctl or admin operationId), causes and fixes, and escalation
+  - `docs/runbooks/README.md` indexes them with severity and meaning; `credential-rotation.md` is the add next, test, promote, watch, delete old procedure
+  - SnapshotBehind documents a known false positive: `snapshot_version` is a per-process swap counter, so a node restarted after a publish reports a lower number while serving the newest config
+  - Linked from OBSERVABILITY §9 and §11.1 and from F-18 (whose breaker alert row now says "not closed"); new story US-1807; HUB-237 in progress with its first criterion met
 - 2026-11-07 · `test(edge)` · Check the ramped drain by step boundaries, not 1 s windows (HUB-156) · HUB-156 · F-12
   - TestChaos2RecoveryAndRampedDrain no longer fails when a slow CI runner delays a scheduler pass: it asserts the drain is never ahead of the ramp, loses no quota (owed releases are out within one catch-up horizon) and empties the 160-envelope backlog by 5.8 s
 - 2026-11-07 · `fix(delivery)` · Cap the drain catch-up at one second of the rate, not two ticks (HUB-156) · HUB-156 · F-12
