@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -43,17 +44,28 @@ type config struct {
 	apiKey       secret
 	adminToken   secret
 	adminBaseURL string
+	// HTTP transport (HUB-301)
+	addr        string
+	allowRemote bool
 }
 
 const (
 	transportStdio = "stdio"
+	transportHTTP  = "http"
 )
 
 // String describes the configuration without its credentials (fmt does not call String on
 // unexported fields, so the secret type alone would not protect %v of a config).
 func (c config) String() string {
-	return fmt.Sprintf("hubmcp config{transport: %s, base_url: %s, admin_base_url: %s, api_key: ***, admin_token: %s}",
-		c.transport, c.baseURL, c.adminBaseURL, map[bool]string{true: "***", false: "(unset)"}[c.adminToken != ""])
+	return fmt.Sprintf("hubmcp config{transport: %s, addr: %s, base_url: %s, admin_base_url: %s, api_key: %s, admin_token: %s}",
+		c.transport, c.addr, c.baseURL, c.adminBaseURL, setOrUnset(c.apiKey), setOrUnset(c.adminToken))
+}
+
+func setOrUnset(s secret) string {
+	if s == "" {
+		return "(unset)"
+	}
+	return "***"
 }
 
 // GoString is String, so %#v hides the credentials too.
@@ -64,7 +76,9 @@ func loadConfig(args []string, getenv func(string) string, stderr io.Writer) (co
 	var level string
 	fs := flag.NewFlagSet("hubmcp", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.StringVar(&c.transport, "transport", transportStdio, "MCP transport: stdio")
+	fs.StringVar(&c.transport, "transport", transportStdio, "MCP transport: stdio or http (Streamable HTTP)")
+	fs.StringVar(&c.addr, "addr", "127.0.0.1:8090", "http transport: listen address")
+	fs.BoolVar(&c.allowRemote, "allow-remote", false, "http transport: allow a non-loopback listen address")
 	fs.StringVar(&level, "log-level", "info", "debug, info, warn or error (logs go to stderr)")
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
@@ -83,11 +97,23 @@ func loadConfig(args []string, getenv func(string) string, stderr io.Writer) (co
 	if c.baseURL == "" {
 		errs = append(errs, errors.New("HUB_BASE_URL is required"))
 	}
-	if strings.TrimSpace(string(c.apiKey)) == "" {
-		errs = append(errs, errors.New("HUB_API_KEY is required (environment only)"))
-	}
-	if c.transport != transportStdio {
-		errs = append(errs, fmt.Errorf("transport: want stdio, got %q", c.transport))
+	switch c.transport {
+	case transportStdio:
+		if strings.TrimSpace(string(c.apiKey)) == "" {
+			errs = append(errs, errors.New("HUB_API_KEY is required (environment only)"))
+		}
+	case transportHTTP:
+		// Each HTTP client authenticates with its own tenant key (SECURITY §2.5, ADR-0018);
+		// HUB_API_KEY is not used.
+		local := isLoopback(c.addr)
+		if !c.allowRemote && !local {
+			errs = append(errs, fmt.Errorf("addr %q is not a loopback address; pass -allow-remote to listen on it", c.addr))
+		}
+		if c.adminToken != "" && (c.allowRemote || !local) {
+			errs = append(errs, errors.New("HUB_ADMIN_TOKEN is refused with a remote-reachable http transport: every client would act with that admin token"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("transport: want stdio or http, got %q", c.transport))
 	}
 	if err := c.logLevel.UnmarshalText([]byte(level)); err != nil {
 		errs = append(errs, fmt.Errorf("log-level: %w", err))
@@ -98,11 +124,19 @@ func loadConfig(args []string, getenv func(string) string, stderr io.Writer) (co
 // newApp builds the tool dependencies from the configuration.
 func newApp(c config, log *slog.Logger, secrets *secretSet, hc *http.Client) (*app, error) {
 	ua := "hubmcp/" + version
-	hub, err := hubclient.New(c.baseURL, string(c.apiKey), hubclient.WithHTTPClient(hc), hubclient.WithUserAgent(ua))
-	if err != nil {
+	a := &app{log: log, secrets: secrets, now: time.Now}
+	a.newHub = func(key string) (*hubclient.Client, error) {
+		return hubclient.New(c.baseURL, key, hubclient.WithHTTPClient(hc), hubclient.WithUserAgent(ua))
+	}
+	if _, err := a.newHub("probe-key"); err != nil { // validates HUB_BASE_URL in every mode
 		return nil, err
 	}
-	a := &app{hub: hub, log: log, secrets: secrets, now: time.Now}
+	var err error
+	if c.transport == transportStdio {
+		if a.hub, err = a.newHub(string(c.apiKey)); err != nil {
+			return nil, err
+		}
+	}
 	if c.adminToken != "" {
 		if a.admin, err = newAdminClient(c.adminBaseURL, c.adminToken, hc, ua); err != nil {
 			return nil, err
@@ -142,10 +176,23 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdin i
 	if a.admin == nil {
 		log.InfoContext(ctx, "admin tools disabled: HUB_ADMIN_TOKEN is not set")
 	}
-	err = srv.Run(ctx, &mcp.IOTransport{Reader: nopReadCloser{stdin}, Writer: nopWriteCloser{stdout}})
-	if err != nil && ctx.Err() == nil && !errors.Is(err, io.EOF) {
-		log.ErrorContext(ctx, "MCP session ended", slog.String("error", err.Error()))
-		return 1
+	if cfg.transport == transportHTTP {
+		ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.addr)
+		if err != nil {
+			log.ErrorContext(ctx, "listen", slog.String("addr", cfg.addr), slog.String("error", err.Error()))
+			return 1
+		}
+		ha := &httpAuth{newClient: a.newHub, now: time.Now, verified: map[[32]byte]verifiedKey{}}
+		if err := serveHTTP(ctx, ln, httpHandler(srv, ha, log), log); err != nil {
+			log.ErrorContext(ctx, "http transport failed", slog.String("error", err.Error()))
+			return 1
+		}
+	} else {
+		err = srv.Run(ctx, &mcp.IOTransport{Reader: nopReadCloser{stdin}, Writer: nopWriteCloser{stdout}})
+		if err != nil && ctx.Err() == nil && !errors.Is(err, io.EOF) {
+			log.ErrorContext(ctx, "MCP session ended", slog.String("error", err.Error()))
+			return 1
+		}
 	}
 	log.InfoContext(ctx, "hubmcp stopped")
 	return 0

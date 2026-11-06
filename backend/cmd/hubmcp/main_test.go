@@ -192,7 +192,7 @@ func TestSecretsAreRedactedInLogsAndOutput(t *testing.T) {
 		t.Fatalf("logs not redacted: %s", s)
 	}
 	a := &app{secrets: secrets}
-	out, err := a.render(toolResult{structured: map[string]string{"echo": "Bearer " + testKey}, note: "token " + testAdminToken})
+	out, err := a.render(toolResult{structured: map[string]string{"echo": "Bearer " + testKey}, note: "token " + testAdminToken}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

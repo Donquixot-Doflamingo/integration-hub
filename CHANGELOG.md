@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(hubmcp)` · Serve hubmcp over Streamable HTTP with per-client key auth (HUB-301) · HUB-301 · F-20
+  - `hubmcp -transport http` serves the same tools at `/mcp` (default `127.0.0.1:8090`; `-allow-remote` needed for other addresses)
+  - Each HTTP client authenticates with its own tenant API key as bearer token; hubmcp checks it with the Hub and uses it for that client's calls; requests without a valid key get 401
+  - Cross-origin browser requests are refused; HUB_ADMIN_TOKEN is refused on a remote-reachable listener
+  - ADR-0018 records the HTTP auth, idempotency-key and layout choices
 - 2026-11-07 · `feat(hubmcp)` · Scaffold hubmcp on the official MCP Go SDK over stdio (HUB-300) · HUB-300 · F-20
   - `hubmcp` starts over stdio and advertises exactly the tools of contracts/mcp/hubmcp-tools.json (admin tools only when HUB_ADMIN_TOKEN is set)
   - HUB_API_KEY and HUB_ADMIN_TOKEN come from the environment only and are redacted (`***`) in logs and tool output

@@ -14,7 +14,15 @@ import (
 )
 
 // toolFunc runs one tool after its arguments passed the contract's input schema.
-type toolFunc func(ctx context.Context, args json.RawMessage) toolResult
+type toolFunc func(ctx context.Context, c *toolCall) toolResult
+
+// toolCall is one tool invocation: its validated arguments and the Hub client to use (the
+// process's HUB_API_KEY client over stdio, the HTTP client's own key over Streamable HTTP).
+type toolCall struct {
+	args   json.RawMessage
+	hub    *hubclient.Client
+	tenant string // cache partition: "" for stdio, the key fingerprint over HTTP
+}
 
 // toolResult is what a tool returns: the structured content (which must match the contract's
 // outputSchema unless isError is set) plus fields for the tool_called log line.
@@ -33,7 +41,8 @@ type toolResult struct {
 // app holds what tool handlers need. It never holds a database or snapshot handle: hubmcp is a
 // client of the Hub's contracted HTTP APIs only (F-20 rule 1).
 type app struct {
-	hub     *hubclient.Client
+	hub     *hubclient.Client // stdio: HUB_API_KEY; nil over HTTP, where each client brings its key
+	newHub  func(key string) (*hubclient.Client, error)
 	admin   *adminClient // nil when HUB_ADMIN_TOKEN is unset: admin tools are not registered
 	log     *slog.Logger
 	secrets *secretSet
@@ -96,17 +105,24 @@ func mcpTool(spec *toolSpec) *mcp.Tool {
 func (a *app) handle(spec *toolSpec, fn toolFunc) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := a.now()
-		var args json.RawMessage
+		call := &toolCall{hub: a.hub}
 		if req.Params != nil {
-			args = req.Params.Arguments
+			call.args = req.Params.Arguments
+		}
+		hub, keySecrets, tenant := sessionAuth(req)
+		if hub != nil {
+			call.hub, call.tenant = hub, tenant
 		}
 		var res toolResult
-		if err := spec.validateArgs(args); err != nil {
+		if call.hub == nil {
+			// Unreachable: the HTTP transport authenticates every request before the MCP layer.
+			res = failure(spec.Name, &errorObject{Code: string(hubclient.CodeUnauthorized), Message: "no tenant API key for this session"}, 0)
+		} else if err := spec.validateArgs(call.args); err != nil {
 			res = invalidArguments(spec.Name, err)
 		} else {
-			res = fn(ctx, args)
+			res = fn(ctx, call)
 		}
-		out, err := a.render(res)
+		out, err := a.render(res, keySecrets)
 		if err != nil {
 			return nil, err
 		}
@@ -131,12 +147,16 @@ func (a *app) handle(spec *toolSpec, fn toolFunc) mcp.ToolHandler {
 
 // render turns a toolResult into the MCP result: structuredContent plus the same JSON as text
 // (for clients that ignore structured content). Configured secrets are replaced by *** in both.
-func (a *app) render(res toolResult) (*mcp.CallToolResult, error) {
+func (a *app) render(res toolResult, extra *secretSet) (*mcp.CallToolResult, error) {
 	b, err := json.Marshal(res.structured)
 	if err != nil {
 		return nil, fmt.Errorf("encode tool result: %w", err)
 	}
 	b = a.secrets.redactJSON(b)
+	if extra != nil {
+		b = extra.redactJSON(b)
+		res.note = extra.redact(res.note)
+	}
 	var structured any
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.UseNumber()

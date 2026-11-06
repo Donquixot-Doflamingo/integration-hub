@@ -33,7 +33,7 @@ func (a *app) handlers() map[string]toolFunc {
 
 // notImplemented is the placeholder of a tool whose ticket has not landed yet.
 func (a *app) notImplemented(tool string) toolFunc {
-	return func(context.Context, json.RawMessage) toolResult {
+	return func(context.Context, *toolCall) toolResult {
 		return failure(tool, &errorObject{Code: "INTERNAL_ERROR", Message: tool + " is not implemented yet in this hubmcp build"}, 0)
 	}
 }

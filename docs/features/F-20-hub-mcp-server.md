@@ -63,13 +63,13 @@ Tool input/output JSON Schemas live in `contracts/mcp/hubmcp-tools.json` (owned 
 5. 202 responses are returned as `outcome: queued` with `accepted`, 200 as `outcome: completed` with `result`, errors as tool results with `isError: true` and the canonical error object (contract `hubmcp-tools.json` output schema).
 6. Tool annotations: list/describe/get/dry-run `readOnlyHint: true`; `hub_invoke` `destructiveHint: true`, `idempotentHint: false`, `openWorldHint: true`.
 7. Secrets: `HUB_API_KEY` and `HUB_ADMIN_TOKEN` never echoed in tool output or logs (redacting logger).
-8. Streamable HTTP mode binds to localhost by default; non-local binding requires explicit flag and its own auth (open question).
+8. Streamable HTTP mode (`/mcp`) binds to `127.0.0.1:8090` by default; a non-local address needs `-allow-remote`. Every request carries `Authorization: Bearer <tenant API key>`: hubmcp verifies it with the Hub and uses it for that client's tools, so each user acts with their own tenant permissions (ADR-0018). `HUB_ADMIN_TOKEN` is refused on a remote-reachable listener.
 
 ## Data model impact
 None.
 
 ## Config impact
-Env vars above; `--transport stdio|http`, `--addr`.
+Env vars above (`HUB_API_KEY` is used over stdio only); flags `-transport stdio|http`, `-addr` (default `127.0.0.1:8090`), `-allow-remote`, `-log-level`.
 
 ## Observability
 | Kind | Name | Notes |
@@ -97,7 +97,7 @@ Runs with the developer's tenant key: same permissions as their service. Guarded
 Distributed as a binary in releases; documented in the consumer skill (F-21).
 
 ## Open questions
-- Who hosts a shared streamable-HTTP deployment, and how are per-user keys passed (PRD Q11)?
+- Who hosts a shared streamable-HTTP deployment (PRD Q11)? ~~How are per-user keys passed?~~ Each client's bearer is its tenant key (ADR-0018).
 - ~~Source of the money/quota flag (PRD Q9)~~ Resolved by the contract: integration field `moves_money_or_quota`, exposed by discovery.
 
 ## Tickets
@@ -107,10 +107,12 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-20`).
 - **SDK:** official `github.com/modelcontextprotocol/go-sdk` v1.8.0, low-level `Server.AddTool`, so the advertised `inputSchema`/`outputSchema` are the contract's JSON verbatim. Arguments are validated against the contract input schema (santhosh-tekuri/jsonschema, formats asserted) before a handler runs; a violation is a tool result with `isError: true` and `VALIDATION_FAILED`, so the model can fix the call.
 - **Contract copy:** `go:embed` cannot reach `contracts/`, so `backend/cmd/hubmcp/hubmcp-tools.json` is a byte-for-byte copy (`go generate ./cmd/hubmcp` refreshes it). `TestEmbeddedContractIsTheFrozenOne` fails on any drift and `TestToolListEqualsFrozenContract` compares the advertised tools with `contracts/mcp/hubmcp-tools.json` itself.
 - **Isolation:** caller tools use `pkg/hubclient`; admin tools use a GET-only client. `internal/archtest` forbids `cmd/hubmcp` from importing `internal/`.
-- **Config:** `HUB_BASE_URL`, `HUB_API_KEY` (env only, no flag), optional `HUB_ADMIN_TOKEN` / `HUB_ADMIN_BASE_URL`; flags `-transport`, `-log-level`. Secrets print as `***` (`%v`, `%#v`, slog) and are redacted by value from logs and tool results.
+- **Config:** `HUB_BASE_URL`, `HUB_API_KEY` (env only, no flag; stdio), optional `HUB_ADMIN_TOKEN` / `HUB_ADMIN_BASE_URL`; flags `-transport`, `-addr`, `-allow-remote`, `-log-level`.
+- **HTTP transport:** SDK `StreamableHTTPHandler` behind `http.CrossOriginProtection` and the SDK's `auth.RequireBearerToken`; the verifier asks the Hub whether the key is valid (fail closed) and puts that key's `hubclient` in the request's token info, so tools run with the client's own key. Secrets print as `***` (`%v`, `%#v`, slog) and are redacted by value from logs and tool results.
 
 ## Changelog of this doc
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-11-07 | In progress: scaffold, implementation notes, observability (HUB-300) | backend-engineer |
+| 2026-11-07 | Streamable HTTP transport and per-client key auth (HUB-301, ADR-0018) | backend-engineer |

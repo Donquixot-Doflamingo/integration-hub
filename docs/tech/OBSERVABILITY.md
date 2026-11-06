@@ -195,11 +195,12 @@ Vendor sessions (HUB-175, F-14): session data is never logged either. The edge l
 | --- | --- | --- | --- |
 | `hubmcp started` | INFO | `transport`, `hub_base_url`, `admin_tools` (bool), `contract_version`, `version` | start-up |
 | `admin tools disabled: HUB_ADMIN_TOKEN is not set` | INFO | — | start-up without an admin token |
+| `hubmcp listening` | INFO | `addr`, `path` (`/mcp`) | HTTP transport ready |
 | `tool_called` | INFO | `tool`, `is_error`, `duration_ms`, and when known `integration_id`, `request_id`, `outcome` (`completed`/`queued`/`error`/`refused`) | every tool call |
 | `hubmcp stopped` | INFO | — | clean shutdown |
 
 - Every outbound call carries `User-Agent: hubclient-go/<sdk version> hubmcp/<version>` (admin calls: `hubmcp/<version>`), so the Hub's logs attribute MCP traffic.
-- Redaction: `HUB_API_KEY`, `HUB_ADMIN_TOKEN` (and the HTTP transport token) are redacted by value from every string attribute and from every tool result (`***`). Bodies are never logged; `tool_called` carries ids only.
+- Redaction: `HUB_API_KEY`, `HUB_ADMIN_TOKEN` and, over HTTP, each client's own key are redacted by value from every string attribute and from every tool result (`***`). Bodies are never logged; `tool_called` carries ids only.
 
 ---
 

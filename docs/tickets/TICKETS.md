@@ -2250,14 +2250,14 @@ Create `cmd/hubmcp` using the official MCP Go SDK with stdio transport, config (
 
 ### HUB-301 — Streamable HTTP transport
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-301-hubmcp-http`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2006
+- **Branch:** `feat/HUB-301-hubmcp-http` (delivered on `feat/HUB-300-hubmcp`)
 
 Add streamable HTTP transport with bearer auth for shared deployments.
 
 **Acceptance criteria**
-- [ ] Same tool list over HTTP and stdio
-- [ ] Unauthenticated HTTP clients rejected
+- [x] Same tool list over HTTP and stdio (`TestHTTPTransportServesSameToolsAsStdio`, `TestRunServesHTTPUntilCancelled`)
+- [x] Unauthenticated HTTP clients rejected (`TestHTTPTransportRejectsUnauthenticated`, `TestHTTPKeyVerificationIsCachedAndFailsClosed`; the bearer is the client's tenant key, ADR-0018)
 
 ### HUB-302 — Discovery tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
