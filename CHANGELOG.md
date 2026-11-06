@@ -19,6 +19,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Span attributes are allowlisted (telemetry.AllowedSpanAttributes); tests fail on any other key or on a credential, API key or body fragment in a value
 - 2026-11-06 · `test(edge)` · Raise the tenant quota in the overhead benchmark so it runs again (HUB-231) · HUB-231 · F-18
   - BenchmarkInvokeOverhead no longer stops with 429 UPSTREAM_RATE_LIMITED after the dev tenant's 100 rps quota; the token bucket stays on the measured path
+- 2026-11-07 · `fix(delivery)` · Base the drain quota on elapsed time so late ticks don't slow the ramp (HUB-155) · HUB-155 · F-12
+  - The ramped drain keeps its DESIGN §10.5 rate on a busy scheduler: a late or dropped tick is made up (at most 2 ticks' worth, so no burst)
+  - Fixes the intermittent TestChaos2RecoveryAndRampedDrain failure on CI
 - 2026-11-06 · `feat(control)` · Erase a data subject's stored payloads by identifier (HUB-233) · HUB-233 · F-18
   - New `hub erase-subject -tenant -actor -reason [-since] [-until] [-dry-run]` reads the identifier from stdin and purges every stored body of the tenant's requests that hold it in any stored form: raw, JSON-escaped, masked HMAC, or inside sealed payloads
   - Event payloads become `omitted` with `meta.pii_erased`; kept results, dead-letter canonical bodies and last vendor exchanges, delivered callback payloads and matching vendor sessions are removed. Hashes, sizes, timelines and metadata stay
