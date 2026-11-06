@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(edge)` · Cover body limits through the gateway handler · HUB-234 · F-18
+  - TestBodyLimitsAtTheEdge proves through the real handler and contract validation: up to 1 MB (4 MB for llm. capabilities) passes the body stage, one byte more is 413 PAYLOAD_TOO_LARGE, declared or chunked, with no vendor call and request.received,request.failed audited
 - 2026-11-07 · `fix(callbacks)` · Enforce an explicit TLS 1.2 floor on callbacks · HUB-234 · F-18
   - Signed callbacks to tenant endpoints refuse TLS below 1.2 by the guard's own configuration instead of relying on Go's default client floor
   - The guard's test seam can add trusted roots but can never lower the floor
