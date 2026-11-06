@@ -193,29 +193,32 @@ Vendor sessions (HUB-175, F-14): session data is never logged either. The edge l
 ## 5. Tracing
 
 - OpenTelemetry Go SDK, OTLP/gRPC to the collector, W3C `traceparent`/`tracestate` propagation.
-- **Sampling**: parent-based; root ratio `HUB_TRACE_SAMPLE_RATIO` (default 5 %). Caller's sampled flag is respected. Collector-side tail sampling keeps 100 % of traces with an error status or duration > 1 s.
-- **Async continuity**: the envelope stores `trace.traceparent` (DESIGN §11.3). The worker's attempt span is a new root **linked** (span link) to the accepting trace, so long-delayed retries do not create hour-long traces.
-- **To vendors**: forward `traceparent` only for vendors flagged to accept it (TECH_SPEC §22.9); `tracestate` is stripped.
+- **Sampling** (`telemetry.Sampler`): parent-based; root ratio `HUB_TRACE_SAMPLE_RATIO` (default 5 %). Caller's sampled flag is respected. A new root that is **linked** to a sampled span (worker attempt, callback delivery) is sampled too, so an async request sampled at the gateway keeps its worker and callback spans. Collector-side tail sampling keeps 100 % of traces with an error status or duration > 1 s.
+- **Async continuity** (HUB-231, ADR-0012): the edge opens a `hub.queue.enqueue` producer span and the envelope stores *its* `traceparent` in `trace.traceparent` (DESIGN §11.3), in the same transaction as the outbox row. The worker's attempt span is a new root **linked** (span link) to it, so long-delayed retries do not create hour-long traces. Terminal transitions write their span's `traceparent` on each `hub.callback_deliveries` row; the dispatcher's `hub.callback.deliver` span is a new root linked to it. One async request is therefore one linked chain, every span tagged with `hub.request_id`: caller → edge → enqueue ⇢ worker attempt → transform / upstream → vendor ⇢ callback.
+- **To vendors**: the upstream client injects the Hub's own `traceparent` (the upstream span) only for vendors listed in `HUB_TRACE_FORWARD_VENDORS` (comma-separated registry vendor names, default none; ADR-0012 until a vendor-definition field is contracted). `tracestate` is never sent, and a `traceparent`/`tracestate` mapped by a transformer is always dropped.
 - **Back to callers**: never return internal span attributes; `X-Hub-Request-Id` is the caller-facing correlation id.
+- **Request explorer**: `hub.requests.trace_id` is the edge span's trace id (sync, wait and async), so `/requests/{request_id}` links to the trace.
 
 ### 5.1 Spans
-| Span | Kind | Where | Key attributes |
-| --- | --- | --- | --- |
-| `hub.edge` | server | `edge` | `hub.request_id`, `hub.tenant`, `hub.integration_id`, `hub.mode`, `http.route`, `http.response.status_code`, `hub.code` |
-| `hub.validate` | internal | `edge` | `hub.capability` |
-| `hub.resolve` | internal | `resolve` | `hub.integration_version`, `hub.snapshot_version`, `hub.target_index`, `hub.failover` |
-| `hub.idempotency` | client | `edge` | `hub.idempotency.result` |
-| `hub.transform.request` / `hub.transform.response` | internal | `transform` | `hub.transformer`, `hub.transformer_version` |
-| `hub.upstream` | client | `upstream` | `hub.vendor`, `hub.account`, `hub.endpoint`, `hub.attempt`, `hub.breaker_state`, `server.address`, `http.response.status_code`, `hub.wait.limiter_ms`, `hub.wait.bulkhead_ms` |
-| `hub.queue.enqueue` | producer | `queue` | `hub.pool` |
-| `hub.worker.attempt` | consumer (linked) | `delivery` | `hub.attempt`, `hub.queue_wait_ms`, `hub.outcome` |
-| `hub.callback.deliver` | client | `callbacks` | `hub.endpoint_id`, `hub.callback.attempt`, `hub.callback.event`, `hub.request_id`, `http.response.status_code`, `hub.outcome` |
-| `hub.webhook.inbound` | server | `webhooks` | `hub.vendor`, `hub.account`, `hub.event_type`, `hub.correlated` |
-| `hub.snapshot.apply` | internal | `registry` | `hub.snapshot_version`, `hub.compile_ms` |
-| `hub.admin.*` | server | `control` | `hub.actor`, `hub.action` |
-| `hubmcp.tool` | server | `hubmcp` | `mcp.tool`, `mcp.transport` |
+| Span (name) | Kind | Where | Key attributes | Status |
+| --- | --- | --- | --- | --- |
+| `{method} {route}`, e.g. `POST /v1/integrations/{integration_id}/invoke` (edge server span) | server | `telemetry.HTTPHandler` (otelhttp) + `edge` | `hub.request_id`, `hub.tenant`, `hub.integration_id`, `hub.integration_version`, `hub.mode`, `hub.code`, `http.route`, `http.response.status_code` (+ otelhttp semconv keys below) | HUB-231 |
+| `hub.transform.request` / `hub.transform.response` | internal | `delivery` (Attempter) | `hub.transformer`, `hub.transformer_version`; status `transform_failed` / `time_budget` | HUB-231 |
+| `upstream {vendor}.{endpoint}` | client | `upstream` | `hub.vendor`, `hub.account`, `hub.endpoint`, `server.address`, `http.request.method`, `http.response.status_code`, `hub.transport_error` | HUB-088, forwarding HUB-231 |
+| `hub.queue.enqueue` | producer | `edge` (async, wait, park) | `hub.pool`; status `persist_failed` | HUB-231 |
+| `hub.worker.attempt` | consumer (new root, linked) | `delivery` (Worker) | `hub.request_id`, `hub.tenant`, `hub.integration_id`, `hub.pool`, `hub.attempt`, `hub.queue_wait_ms`, `hub.outcome` (final state or short reason); status `transition_failed` | HUB-231 |
+| `hub.callback.deliver` | client (new root, linked) | `callbacks` | `hub.endpoint_id`, `hub.callback.attempt`, `hub.callback.event`, `hub.request_id`, `http.response.status_code`, `hub.outcome` | HUB-120, link HUB-231 |
+| `hub.validate`, `hub.resolve`, `hub.idempotency` | internal / client | `edge` | `hub.capability`; `hub.snapshot_version`, `hub.target_index`, `hub.failover`; `hub.idempotency.result` | planned (HUB-240) |
+| upstream `hub.attempt`, `hub.breaker_state`, `hub.wait.limiter_ms`, `hub.wait.bulkhead_ms` | — | `upstream` | — | planned (HUB-240) |
+| `hub.webhook.inbound` | server | `webhooks` | `hub.vendor`, `hub.account`, `hub.event_type`, `hub.correlated` | planned (HUB-240) |
+| `hub.snapshot.apply` | internal | `registry` | `hub.snapshot_version`, `hub.compile_ms` | planned (HUB-240) |
+| `hub.admin.*` | server | `control` | `hub.actor`, `hub.action` | planned (HUB-240) |
+| `hubmcp.tool` | server | `hubmcp` | `mcp.tool`, `mcp.transport` | HUB-300 |
 
-Stage spans (`validate`, `resolve`, `transform.*`) are created only when the trace is sampled; unsampled requests pay only the histogram cost. Span attributes never include body content, header values, or credential material. `hub.vendor`/`hub.account` are internal attributes; the trace backend is internal-only.
+Stage spans (`transform.*`) are created only when the parent span is recording; unsampled requests pay a context lookup (0 allocations, `TestSpanHelpersDoNotAllocateUnsampled`, `TestTransformSpans`) plus the histogram cost. `hub.vendor`/`hub.account` are internal attributes; the trace backend is internal-only.
+
+### 5.2 Attribute allowlist
+Span attributes never include body content, credential material or header values, with one exception: otelhttp's `user_agent.original` (the client software string, never a credential). Every key the Hub may emit is listed in `telemetry.AllowedSpanAttributes`: the `hub.*` keys above plus the otelhttp semantic-convention keys (`http.route`, `http.request.method`, `http.request.method_original`, `http.response.status_code`, `url.scheme`, `url.path`, `server.address`, `server.port`, `network.protocol.version`, `network.peer.address`, `network.peer.port`, `client.address`, `user_agent.original`, `http.request.body.size`, `http.response.body.size`). `telemetry.SpanAttributeViolations` fails a test on any key outside the list, and on any attribute, event, link or status value that contains a forbidden string. `TestSyncSpans` and `TestAsyncTraceLinksCallerToCallback` run it over every span of a request with the tenant API key and its hash, the vendor credentials, the callback signing secret and body fragments as forbidden values. Error text never goes into a span (no `RecordError`): statuses carry a short class only. Adding an attribute means adding it to the list and to the table above.
 
 ---
 

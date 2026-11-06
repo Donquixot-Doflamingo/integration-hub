@@ -100,7 +100,11 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 	if err != nil {
 		return nil, err
 	}
-	client, err := upstream.New(m, upstream.Options{TracerProvider: tp})
+	forward := map[string]bool{}
+	for _, v := range cfg.TraceForwardVendors {
+		forward[v] = true
+	}
+	client, err := upstream.New(m, upstream.Options{TracerProvider: tp, ForwardTraceparent: forward})
 	if err != nil {
 		return nil, err
 	}
@@ -135,6 +139,7 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 		dp.worker = &delivery.Worker{
 			Name: dp.name, Pool: cfg.WorkerPool, DB: st.pg, Queue: q, Transitions: dp.transitions, Snapshots: &reg.store,
 			Attempter: attempter, Audit: dp.audit, Masker: masker, Sealer: sealer, Budget: budget, Metrics: m, Log: log,
+			TracerProvider: tp,
 		}
 		if dp.dispatcher, err = callbacks.NewDispatcher(callbacks.DispatcherDeps{
 			Pool: st.pg, Snapshots: &reg.store, Secrets: creds.RegistrarSecrets{Cache: cache}, Audit: dp.audit,

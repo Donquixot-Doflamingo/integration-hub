@@ -89,6 +89,7 @@ Contract change → `contracts/` commit → backend contract tests fail until im
   - Idempotency: duplicate submissions with the same key → one vendor call; concurrent duplicates (in-progress marker).
   - Wait mode: 200 within window; 202 + worker completion; gateway crash during wait → reclaimed.
   - Audit: full §13.1 timeline for sync and async; sha256/bytes present; masked policy via `x-pii`; **grep test: no registered secret anywhere in `request_events`**.
+  - Tracing (HUB-231): one async request through gateway, outbox, worker, mockvendor and callback dispatcher with an in-memory span recorder; asserts the caller → edge → enqueue ⇢ worker attempt → upstream (vendor got its `traceparent`) ⇢ callback chain and runs the span attribute allowlist (`telemetry.SpanAttributeViolations`: no key outside `AllowedSpanAttributes`, no credential, API key or body fragment in any value).
   - Partitions: point lookup by ULID hits one partition (`EXPLAIN`); partition maintenance job idempotent.
   - Migrations: `goose up` from empty, `goose down` one step, and up again.
   - Cutover (§6.3): the six request situations × (account, vendor, transformer) change; retire refused while pinned requests or sessions exist; rollback = new version, history linear.

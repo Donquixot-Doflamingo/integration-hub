@@ -137,8 +137,8 @@ func (e *Enqueuer) skip(ctx context.Context, ev *Event, reason, endpoint string)
 
 const insertDelivery = `
 INSERT INTO hub.callback_deliveries (delivery_id, event_id, event_type, request_id, tenant_id,
-    integration_id, integration_version, endpoint_id, subscription, payload)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    integration_id, integration_version, endpoint_id, subscription, payload, traceparent)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (event_id, endpoint_id) DO NOTHING`
 
 // Enqueue writes one pending callback_deliveries row per subscription of ev's integration
@@ -172,10 +172,13 @@ func (e *Enqueuer) Enqueue(ctx context.Context, tx pgx.Tx, ev *Event) (int, erro
 			return 0, err
 		}
 	}
+	// The terminal transition's span (worker attempt or wait-mode edge): the delivery span links
+	// back to it.
+	traceparent := nullable(telemetry.Traceparent(ctx))
 	n := 0
 	for _, t := range ts {
 		tag, err := tx.Exec(ctx, insertDelivery, NewDeliveryID(), ev.EventID, string(typ), ev.RequestID, ev.TenantID,
-			ev.IntegrationID, ev.IntegrationVersion, t.endpoint, t.subscription, body)
+			ev.IntegrationID, ev.IntegrationVersion, t.endpoint, t.subscription, body, traceparent)
 		if err != nil {
 			return n, fmt.Errorf("callbacks: insert delivery for %s: %w", t.endpoint, err)
 		}

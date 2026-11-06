@@ -70,15 +70,18 @@ type Config struct {
 	LogLevel         slog.Level
 	OTLPEndpoint     string // empty disables trace export
 	TraceSampleRatio float64
-	ConfigDir        string // dev registry (backend/config); production nodes fetch snapshots instead (M7)
-	ContractsDir     string // repo-root contracts/, for capability schemas
-	ConfigWatch      bool   // dev only: rebuild and swap the snapshot when ConfigDir changes
-	DataDir          string // local cache of the last good snapshot (boot fallback)
-	BlobURL          string // snapshot blob store (file:// in phase 1)
-	CredSource       string // credential source: localfile://<path> in phase 1 (TECH_SPEC §8.1)
-	DevKeyFile       string // key of the localfile credential source
-	AuditMaskKey     Secret // master key for x-pii masking (environment only; random per process when unset)
-	DebugHeaders     bool   // gateway: add the debug-only X-Hub-Integration-Version header
+	// TraceForwardVendors names the vendors (registry vendor names) that receive the Hub's W3C
+	// traceparent; every other vendor gets none (DESIGN §16.4, ADR-0012).
+	TraceForwardVendors []string
+	ConfigDir           string // dev registry (backend/config); production nodes fetch snapshots instead (M7)
+	ContractsDir        string // repo-root contracts/, for capability schemas
+	ConfigWatch         bool   // dev only: rebuild and swap the snapshot when ConfigDir changes
+	DataDir             string // local cache of the last good snapshot (boot fallback)
+	BlobURL             string // snapshot blob store (file:// in phase 1)
+	CredSource          string // credential source: localfile://<path> in phase 1 (TECH_SPEC §8.1)
+	DevKeyFile          string // key of the localfile credential source
+	AuditMaskKey        Secret // master key for x-pii masking (environment only; random per process when unset)
+	DebugHeaders        bool   // gateway: add the debug-only X-Hub-Integration-Version header
 	// CallbackAllowLoopback lets callbacks reach loopback registrar endpoints over http (dev
 	// receivers only; production leaves it false, DESIGN §12.1 SSRF guard).
 	CallbackAllowLoopback bool
@@ -138,17 +141,14 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	fs.StringVar(&c.OIDCAudience, "oidc-audience", env("HUB_OIDC_AUDIENCE", ""), "admin: required token audience (optional)")
 	fs.BoolVar(&devID, "admin-dev-oidc", env("HUB_ADMIN_DEV_OIDC", "false") == "true", "dev only: run the admin OIDC issuer stub")
 	fs.StringVar(&c.AdminPublicURL, "admin-public-url", env("HUB_ADMIN_PUBLIC_URL", "http://localhost:8081"), "admin: external base URL (dev issuer iss)")
-	var callbackHosts string
+	var callbackHosts, traceVendors string
+	fs.StringVar(&traceVendors, "trace-forward-vendors", env("HUB_TRACE_FORWARD_VENDORS", ""), "comma-separated vendor names that receive traceparent (default none)")
 	fs.StringVar(&callbackHosts, "callback-hosts", env("HUB_CALLBACK_HOSTS", ""), "admin: comma-separated registrar host allowlist (host or .suffix)")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
 	c.ConfigWatch, c.DebugHeaders, c.CallbackAllowLoopback, c.AdminDevOIDC = watch, debugHeaders, cbLoopback, devID
-	for _, h := range strings.Split(callbackHosts, ",") {
-		if h = strings.TrimSpace(h); h != "" {
-			c.CallbackHosts = append(c.CallbackHosts, h)
-		}
-	}
+	c.CallbackHosts, c.TraceForwardVendors = splitList(callbackHosts), splitList(traceVendors)
 	if fs.NArg() > 0 {
 		return Config{}, fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}
@@ -189,4 +189,15 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 		return Config{}, err
 	}
 	return c, nil
+}
+
+// splitList splits a comma-separated flag value, dropping blanks.
+func splitList(v string) []string {
+	var out []string
+	for _, h := range strings.Split(v, ",") {
+		if h = strings.TrimSpace(h); h != "" {
+			out = append(out, h)
+		}
+	}
+	return out
 }

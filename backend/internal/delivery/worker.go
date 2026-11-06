@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
@@ -45,10 +47,13 @@ type Worker struct {
 	Budget      *Budget
 	Metrics     *telemetry.Metrics
 	Log         *slog.Logger
-	Now         func() time.Time
-	Batch       int           // envelopes per claim (default 32)
-	Concurrency int           // attempts in flight (default 16)
-	Idle        time.Duration // wait when nothing was due (default 200 ms)
+	// TracerProvider makes the hub.worker.attempt spans (a new root per attempt, linked to the
+	// accepting trace stored in the envelope). nil: no spans.
+	TracerProvider trace.TracerProvider
+	Now            func() time.Time
+	Batch          int           // envelopes per claim (default 32)
+	Concurrency    int           // attempts in flight (default 16)
+	Idle           time.Duration // wait when nothing was due (default 200 ms)
 }
 
 func (w *Worker) now() time.Time {
@@ -113,12 +118,15 @@ func (w *Worker) ProcessOnce(ctx context.Context) (int, error) {
 
 func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 	env := c.Envelope
+	ctx, span := w.startAttempt(ctx, c)
+	defer span.End()
 	log := w.Log.With(slog.String("request_id", env.RequestID), slog.String("integration", env.IntegrationID))
 	snap := w.Snapshots.Snapshot()
 	timings := telemetry.NewTimings(w.now())
 	trail := w.trail(snap, env, c.Attempt)
 	emit := func() { w.Audit.Emit(audit.Batch{Events: trail.Events()}) }
 	report := func(err error, what string) {
+		endAttempt(span, err, what)
 		if IsLost(err) {
 			log.InfoContext(ctx, "outcome dropped: another actor finished the request", slog.String("outcome", what))
 		} else if err != nil {
@@ -227,6 +235,9 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 	}
 	state, err := w.Settler().Settle(ctx, env, w.Name, c.Attempt, account, out, final)
 	report(err, "settle")
+	if err == nil {
+		span.SetAttributes(attribute.String("hub.outcome", string(state)))
+	}
 	TerminalAudit(trail, c.Attempt, state, err, out.Err)
 	w.Audit.Emit(audit.Batch{Events: trail.Events(), Attempts: out.Attempts})
 }
