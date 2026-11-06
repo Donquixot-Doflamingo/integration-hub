@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · Track the hubmcp admin write tools (HUB-314, HUB-315) · HUB-314 · F-20
+  - HUB-314 (contract, in review) carries the contract notice for hubmcp-tools 1.1.0
+  - New HUB-315 (todo): implement the tools in hubmcp, with stdio-only registration, the no-DELETE/forbidden test, the confirm guard, secret-free inputs, per-tool contract tests and an e2e run against a live Hub
 - 2026-11-07 · `contract(mcp)` · Add admin write tools with no delete path (HUB-314) · HUB-314 · F-20
   - `hubmcp-tools` 1.1.0: a team's Claude can onboard and change tenants, API keys, vendors, endpoints, account config and quota, transformers, integrations (drafts, validate, publish, weights, rollback) and callback endpoints, signed in as the user, with the Hub's RBAC deciding
   - No MCP tool can delete, purge, replay, unseal, retire, pause, force a breaker, revoke or rotate keys, or accept a credential; deleting stays manual in the console

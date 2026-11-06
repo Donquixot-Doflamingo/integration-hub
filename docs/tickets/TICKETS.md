@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **236** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **6**
+Total tickets: **238** · done: **177** · todo: **54** · other (in-progress/in-review/blocked): **7**
 
 ## Epics
 
@@ -19,7 +19,7 @@ Total tickets: **236** · done: **177** · todo: **53** · other (in-progress/in
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
-| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 8 |
+| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 16 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 4 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 12 | 0 |
 
@@ -2639,6 +2639,47 @@ Run `@modelcontextprotocol/inspector` (CLI mode) against `bin/hubmcp` in CI or a
 
 **Acceptance criteria**
 - [ ] Scripted Inspector run lists the contract tools and calls one tool successfully
+
+### HUB-314 — CCR: hubmcp admin write tools with no delete path
+- **Epic:** EP-11 · **Type:** contract · **Area:** contracts
+- **Status:** in-review · **Depends on:** HUB-305 · **Feature:** F-20 · **Stories:** US-2005, US-20xx (new story for admin write tools, docs-keeper)
+- **Branch:** `feat/HUB-314-mcp-write-tools`
+
+User requirement: a team's Claude can create whatever the team needs on the panel through hubmcp, using the user's own authentication and authorization. It must not be able to delete a tenant or anything else: no delete API through MCP. Deleting stays manual in the console, for people whose role allows it. Contract-only: `contracts/mcp/hubmcp-tools.json` 1.0.0 → 1.1.0. Each new tool maps to one existing hub-admin operation, so there is no new HTTP endpoint.
+
+**Acceptance criteria**
+- [x] Admin tools for tenants, API keys, vendors and endpoints, accounts (config and quota), transformers, integrations (drafts, validate, publish, weights, rollback) and registrar endpoints, named `hub_admin_<verb>_<noun>`, each mapped to exactly one existing operationId (34 new tools; `contracts/mcp/README.md` tables)
+- [x] No tool maps to an HTTP DELETE or to a purge, retire, unseal, delete-old-credential, breaker force, pause or replay operation; `forbidden_operations` names them (17), and `check.mjs` §7b fails otherwise
+- [x] No tool accepts a secret value (`forbidden_input_properties`, checked recursively); kill switches (`disabled`, `paused`, `state`) are absent from mutating tools
+- [x] `http_method` on every `maps_to` entry, checked against the spec
+- [x] README documents user-token, stdio-only write tools, RBAC as the authority (403 as an `isError` result), the change log with required `reason`, `confirm: true` for live-traffic tools, annotations (no `destructiveHint: true` on admin tools) and sensitive output
+- [x] Version bumped (minor), `contracts/CHANGELOG.md` entry, `make contracts-check` and `make contracts-version-check` clean; 15 deliberately broken copies each fail the checker
+
+#### Contract notice — HUB-314 — hubmcp-tools 1.0.0 → 1.1.0 (minor)
+- Changed: 34 new `hub_admin_*` tools; `maps_to[].http_method`; `requires.transport`, `requires_confirm`, `sensitive_output`; top-level `forbidden_operations`, `not_exposed_operations`, `forbidden_input_properties`, `forbidden_mutation_input_properties`, `secret_patterns`; new MCP-only refusal code `SECRET_IN_INPUT`; rewritten `rules`. `hub-admin` and `hub-public` are unchanged.
+- Backend (hubmcp): implement HUB-315. Until it lands, `TestEmbeddedContractIsTheFrozenOne`, `TestToolListEqualsFrozenContract` and `TestAdminToolsAreReadOnly` fail, and backend CI runs on `contracts/**`, so merge HUB-314 and HUB-315 together (or HUB-315 directly on top, in one PR).
+- Frontend: no change (`hub-admin.v1.yaml` untouched, no `npm run gen:api` needed).
+- Consumer skill: mention the admin tools when HUB-309 is done.
+
+### HUB-315 — hubmcp admin write tools (implement hubmcp-tools 1.1.0)
+- **Epic:** EP-11 · **Type:** feat · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-314 · **Feature:** F-20 · **Stories:** US-2005, US-20xx (new story for admin write tools, docs-keeper)
+- **Branch:** `feat/HUB-315-hubmcp-admin-write-tools` (or on top of `feat/HUB-314-mcp-write-tools`, merged together)
+
+Implement the 34 new admin tools of `contracts/mcp/hubmcp-tools.json` 1.1.0 (README "Admin write tools"). The admin client grows from GET-only to exactly the mapped methods, called with the user's own `HUB_ADMIN_TOKEN`. Refresh the embedded copy (`go generate ./cmd/hubmcp`).
+
+**Acceptance criteria**
+- [ ] Registration: no `hub_admin_*` tool without `HUB_ADMIN_TOKEN`; read tools follow the existing transport rule; write tools (`requires.transport: ["stdio"]`) are registered only on stdio, never on streamable HTTP (loopback included). Test both transports with and without the token
+- [ ] Forbidden/no-DELETE test driven by the contract: no registered tool maps to an HTTP DELETE or to any `forbidden_operations` entry; every forbidden operationId is absent from all `maps_to`; `maps_to[].http_method` equals the method the fake admin API declares. Exercising every tool sends only its declared method and path (`TestAdminToolsAreReadOnly` is replaced by this)
+- [ ] The admin HTTP client can only send the methods/paths the contract maps (allowlist built from `maps_to`); a DELETE is impossible by construction (unit test)
+- [ ] Confirm guard: every `requires_confirm` tool without `confirm: true` returns an `isError` result with `error.code` `CONFIRMATION_REQUIRED` and makes **no** Hub call (fake records zero requests); with `confirm: true` it calls once
+- [ ] Secret-free inputs: no tool input property is in `forbidden_input_properties` (test over the loaded contract); any tool call whose arguments match `secret_patterns` is refused with `SECRET_IN_INPUT` (for `hub_invoke`, `outcome: refused`) and no Hub call
+- [ ] Sensitive output: `sensitive_output` fields appear in that tool result only, never in logs (log capture asserts absence of the minted secret, including the `tool_called` line) and never in error text
+- [ ] `reason` is forwarded with ` (via hubmcp)` appended; `if_match` is sent as `If-Match`; get tools return `etag` from the `ETag` header
+- [ ] Per-tool contract tests against a contract-validated fake admin API (requests and responses validated against `hub-admin.v1.yaml`): success, 403 `FORBIDDEN` from a viewer token surfaced as an `isError` result, and one Hub error per tool (`TestEveryToolSuccessAndError` covers all 42)
+- [ ] `TestToolListEqualsFrozenContract` and `TestEmbeddedContractIsTheFrozenOne` green with 1.1.0
+- [ ] e2e against a running hub (extend `TestMCPEndToEnd`, tag `integration`) with an admin dev token (`hubctl login -dev -role admin`): create tenant → create API key (secret returned once) → create vendor + endpoint → create transformer version → create integration → draft → validate → publish with confirm → set weights → rollback, each visible in the change log with the user's subject and the "(via hubmcp)" reason; a viewer token gets FORBIDDEN on a write tool; nothing is deleted
+- [ ] Docs: ADR amending ADR-0006/ADR-0018 (admin tools are no longer read-only; user token, stdio-only writes), SECURITY.md §2.5 rows, TECH_SPEC §18, F-20 and OBSERVABILITY (tool log fields for write tools; no secret values)
 
 ## EP-12 — Release 2 (DESIGN §19 Phase 2)
 
