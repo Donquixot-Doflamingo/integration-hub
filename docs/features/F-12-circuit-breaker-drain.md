@@ -58,6 +58,7 @@ During a vendor outage every caller today discovers it separately, keeps hammeri
 4. Parked envelopes keep arrival order per `(account, endpoint)`; scheduler (leader-elected) runs `Queue.Release` at the ramp rate.
 5. Drain starts ≤ 60 s after breaker close (success metric).
 6. Health probe uses the vendor's `health_probe` definition (dry where possible, DESIGN §8.3).
+7. The scheduler's drain releases nothing before its first registry snapshot (it would not know the account rate; HUB-406).
 
 ## Data model impact
 `outbox.status = parked` with `(status, account_id, endpoint_id)` index. Breaker state in Redis only.
@@ -85,6 +86,7 @@ Force-open/close and pause are admin mutations in `change_log` with reason.
 
 ## Testing
 - **Chaos** (mockvendor; DESIGN §19 M5 accept 1–5): open within window; 503/202/park per mode; recovery drain ≤ 60 s with 20 → 100 % ramp; re-open mid-drain; two integrations on one account trip together, pausing one leaves the other; failover header.
+- **Integration**: `TestDrainWaitsForSnapshot` (HUB-406).
 - **Unit**: breaker state machine table; ramp schedule.
 
 ## Rollout & migration
@@ -101,3 +103,4 @@ HUB-140 – HUB-169 (EP-06, filter `feature: F-12`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-07 | Rule 7: the drain waits for a snapshot (HUB-406) | backend-engineer |

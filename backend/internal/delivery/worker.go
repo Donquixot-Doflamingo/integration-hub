@@ -54,6 +54,9 @@ type Worker struct {
 	Batch          int           // envelopes per claim (default 32)
 	Concurrency    int           // attempts in flight (default 16)
 	Idle           time.Duration // wait when nothing was due (default 200 ms)
+
+	mu     sync.Mutex
+	waited bool // the no-snapshot wait was logged
 }
 
 func (w *Worker) now() time.Time {
@@ -70,11 +73,44 @@ func (w *Worker) batch() int {
 	return w.Batch
 }
 
-// Run claims and delivers until ctx ends; in-flight attempts finish first.
+// sleep waits d or until ctx ends.
+func sleep(ctx context.Context, d time.Duration) {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
+}
+
+// ready reports whether a registry snapshot is loaded. Before the first one a worker must not
+// claim: it could not resolve anything, and a claim it cannot finish would expire and count as a
+// crash (HUB-406).
+func (w *Worker) ready(ctx context.Context) bool {
+	if w.Snapshots.Snapshot() != nil {
+		return true
+	}
+	w.mu.Lock()
+	first := !w.waited
+	w.waited = true
+	w.mu.Unlock()
+	if first {
+		w.Log.InfoContext(ctx, "worker.waiting_for_snapshot", slog.String("pool", w.Pool))
+	}
+	return false
+}
+
+// Run claims and delivers until ctx ends; in-flight attempts finish first. It claims nothing
+// before the first registry snapshot is loaded.
 func (w *Worker) Run(ctx context.Context) {
 	idle := w.Idle
 	if idle <= 0 {
 		idle = 200 * time.Millisecond
+	}
+	for !w.ready(ctx) {
+		if sleep(ctx, idle); ctx.Err() != nil {
+			return
+		}
 	}
 	for ctx.Err() == nil {
 		n, err := w.ProcessOnce(ctx)
@@ -82,18 +118,17 @@ func (w *Worker) Run(ctx context.Context) {
 			w.Log.ErrorContext(ctx, "claim failed", slog.String("pool", w.Pool), slog.String("error", err.Error()))
 		}
 		if n == 0 || err != nil {
-			t := time.NewTimer(idle)
-			select {
-			case <-ctx.Done():
-				t.Stop()
-			case <-t.C:
-			}
+			sleep(ctx, idle)
 		}
 	}
 }
 
-// ProcessOnce claims one batch and handles it; it returns how many envelopes it handled.
+// ProcessOnce claims one batch and handles it; it returns how many envelopes it handled (none
+// before a snapshot exists).
 func (w *Worker) ProcessOnce(ctx context.Context) (int, error) {
+	if !w.ready(ctx) {
+		return 0, nil
+	}
 	claimed, err := w.Queue.Claim(ctx, w.DB, w.Name, w.Pool, w.batch())
 	if err != nil {
 		return 0, err
@@ -121,10 +156,6 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 	ctx, span := w.startAttempt(ctx, c)
 	defer span.End()
 	log := w.Log.With(slog.String("request_id", env.RequestID), slog.String("integration", env.IntegrationID))
-	snap := w.Snapshots.Snapshot()
-	timings := telemetry.NewTimings(w.now())
-	trail := w.trail(snap, env, c.Attempt)
-	emit := func() { w.Audit.Emit(audit.Batch{Events: trail.Events()}) }
 	report := func(err error, what string) {
 		endAttempt(span, err, what)
 		if IsLost(err) {
@@ -133,6 +164,14 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 			log.ErrorContext(ctx, "transition failed", slog.String("outcome", what), slog.String("error", err.Error()))
 		}
 	}
+	snap := w.Snapshots.Snapshot()
+	if snap == nil { // claimed before any snapshot (HUB-406): put back, not an attempt, not a crash
+		report(w.Transitions.Hold(ctx, env, w.Name, w.now().Add(time.Second), "no registry snapshot yet"), "no snapshot")
+		return
+	}
+	timings := telemetry.NewTimings(w.now())
+	trail := w.trail(snap, env, c.Attempt)
+	emit := func() { w.Audit.Emit(audit.Batch{Events: trail.Events()}) }
 
 	if c.Crashes >= PoisonCrashes {
 		trail.Add(audit.RequestDeadLettered, c.Attempt, nil, map[string]any{"reason": "poison", "crashes": c.Crashes})

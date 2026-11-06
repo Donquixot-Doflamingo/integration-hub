@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **236** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **6**
+Total tickets: **236** · done: **177** · todo: **52** · other (in-progress/in-review/blocked): **7**
 
 ## Epics
 
@@ -2947,15 +2947,15 @@ Found by the HUB-235 load test. `edge.(*Server).invoke` does `defer s.metrics.Re
 
 ### HUB-406 — Worker claims before its snapshot is loaded and panics after a restart
 - **Epic:** EP-13 · **Type:** fix · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** in-review · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `fix/HUB-406-worker-snapshot-gate`
 
 Found by the HUB-236 soak harness. A worker restarted (SIGTERM or SIGKILL) while the outbox has due envelopes panics with a nil pointer dereference in `delivery.(*Worker).trail` (`worker.go:266`, `snap.Integrations` with `snap == nil`). `roles.Run` calls `dp.start` (which starts the claim loop) before `reg.load`, so the first claim can run before any snapshot exists. Each crash also leaves its claims to expire and bumps their `crashes` count: after `PoisonCrashes` (2) the envelopes would be dead-lettered as poison although they are fine. Without a supervisor restart the backlog just waits. The soak therefore runs without worker restarts (`SOAK_RESTARTS=0`).
 
 **Acceptance criteria**
-- [ ] The worker (and the scheduler's snapshot users) do not claim or tick until a snapshot is loaded; `/readyz` is already false until then
-- [ ] Integration test: envelopes due in the outbox, worker started, all of them delivered, no panic, `crashes` unchanged
-- [ ] `make soak` with `SOAK_RESTARTS=2` (one SIGTERM, one SIGKILL) reconciles with zero lost and zero duplicate callbacks; the default goes back to 2
+- [x] The worker (and the scheduler's snapshot users) do not claim or tick until a snapshot is loaded; `/readyz` is already false until then. The worker waits in `Run` and `ProcessOnce` and logs `worker.waiting_for_snapshot` once; an envelope claimed without a snapshot is put back (no attempt, no crash). The scheduler's drain releases nothing without a snapshot (its probes already skipped). Done on branch `fix/HUB-412-worker-isolation`
+- [x] Integration test: envelopes due in the outbox, worker started, all of them delivered, no panic, `crashes` unchanged (`TestWorkerWaitsForSnapshot`; plus `TestWorkerReleasesClaimWithoutSnapshot` and `TestDrainWaitsForSnapshot`, `worker_snapshot_integration_test.go`. The first two panicked at `worker.go:284` before the fix, the drain test released at a 10/s guess)
+- [ ] `make soak` with `SOAK_RESTARTS=2` (one SIGTERM, one SIGKILL) reconciles with zero lost and zero duplicate callbacks; the default goes back to 2 (not run: the brief forbids load generators on the shared machine; `SOAK_RESTARTS` default left as is)
 
 ### HUB-407 — Worker throughput is capped by 16 attempts in flight and a batch barrier
 - **Epic:** EP-13 · **Type:** perf · **Area:** backend

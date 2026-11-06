@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(delivery)` · Wait for the first registry snapshot before claiming (HUB-406) · HUB-406 · F-09
+  - A worker restarted with a backlog no longer panics on a nil snapshot: it claims nothing until the first snapshot loads and logs `worker.waiting_for_snapshot` once
+  - An envelope claimed without a snapshot is put back unattempted, so restarts no longer count crashes toward the poison detector (healthy envelopes could be dead-lettered as poison)
+  - The scheduler's drain releases no parked envelope before its first snapshot (it used to release at a 10/s guess instead of the account rate)
 - 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
   - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
   - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series
