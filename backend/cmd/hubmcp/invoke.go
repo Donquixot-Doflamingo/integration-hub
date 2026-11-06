@@ -111,6 +111,12 @@ func (a *app) invokeChecked(ctx context.Context, c *toolCall, in *invokeInput) t
 		}, 0)
 	}
 
+	if d.MovesMoneyOrQuota {
+		if res, refused := confirmGuard(in); refused {
+			return res
+		}
+	}
+
 	opts := operationOption(in.Operation)
 	if in.IdempotencyKey != "" {
 		opts = append(opts, hubclient.WithIdempotencyKey(in.IdempotencyKey))
@@ -136,6 +142,47 @@ func (a *app) invokeChecked(ctx context.Context, c *toolCall, in *invokeInput) t
 		return failure(toolInvoke, e, status)
 	}
 	return invokeResult(out)
+}
+
+// confirmGuard enforces contract rule 2 (HUB-304) for an integration that moves money or quota:
+// without confirm=true, or without an idempotency_key, the call is refused locally and the Hub is
+// not called. The refusal echoes what would be sent so the model can show it to the user.
+func confirmGuard(in *invokeInput) (toolResult, bool) {
+	var code, msg, pointer string
+	switch {
+	case !in.Confirm:
+		code, pointer = codeConfirmationRequired, "/confirm"
+		msg = "Integration " + in.IntegrationID + " moves money or quota. Nothing was sent. Show the user exactly what will be sent " +
+			"(see the summary) and get explicit approval, then call hub_invoke again with confirm=true and an idempotency_key."
+	case in.IdempotencyKey == "":
+		code, pointer = codeIdempotencyKeyRequired, "/idempotency_key"
+		msg = "Integration " + in.IntegrationID + " moves money or quota and needs an idempotency_key (a stable id for this " +
+			"logical action, e.g. 'payout-8821'), so a retry cannot pay twice. Nothing was sent."
+	default:
+		return toolResult{}, false
+	}
+	return toolResult{
+		isError: true, outcome: "refused",
+		note: "REFUSED by hubmcp, the Hub was not called. Summary of the requested call: " + invokeSummary(in),
+		structured: invokeOutput{Outcome: "refused", Error: &errorObject{
+			Code: code, Message: msg, Retryable: false,
+			Details: []errorDetail{{Pointer: pointer, Keyword: "required", Message: msg}},
+		}},
+	}, true
+}
+
+// invokeSummary describes the call a refusal held back: integration, operation, idempotency key
+// and the canonical body the model built (already in its context; nothing new is disclosed).
+func invokeSummary(in *invokeInput) string {
+	op := in.Operation
+	if op == "" {
+		op = "default"
+	}
+	key := in.IdempotencyKey
+	if key == "" {
+		key = "(none)"
+	}
+	return "integration_id=" + in.IntegrationID + " operation=" + op + " idempotency_key=" + key + " body=" + string(in.Body)
 }
 
 // autoRetry reports whether err may be retried once and after how long.

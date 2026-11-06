@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(hubmcp)` · Refuse money/quota invokes without confirm and idempotency key (HUB-304) · HUB-304 · F-20
+  - hub_invoke on an integration with `moves_money_or_quota` returns `outcome: refused` (`CONFIRMATION_REQUIRED` or `IDEMPOTENCY_KEY_REQUIRED`) and does not call the Hub until the input has `confirm: true` and an `idempotency_key`
+  - The refusal echoes a summary of the held-back call so the assistant can show the user what would be sent
 - 2026-11-07 · `feat(hubmcp)` · Add the hub_invoke, hub_get_request and hub_dry_run tools (HUB-303) · HUB-303 · F-20
   - hub_invoke reports 200 as `completed`, 202 as `queued` with the poll URL (never as success) and Hub errors as `error` with the canonical envelope (code, retryable, retry_after_ms, ...)
   - hub_invoke checks the integration first (cached ≤ 60 s) and does not call a paused one; it retries at most once, only retryable errors, only with an idempotency key

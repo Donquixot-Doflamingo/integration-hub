@@ -205,6 +205,12 @@ type errorDetail struct {
 	Message string `json:"message"`
 }
 
+// MCP-only refusal codes of hub_invoke (contract rule 2). They never come from the Hub.
+const (
+	codeConfirmationRequired   = "CONFIRMATION_REQUIRED"
+	codeIdempotencyKeyRequired = "IDEMPOTENCY_KEY_REQUIRED"
+)
+
 // hubErrorObject converts a hubclient error into the canonical error object. A transport failure
 // (the Hub is unreachable) becomes a local INTERNAL_ERROR naming the base URL, not the API key.
 func (a *app) hubErrorObject(err error) (*errorObject, int) {

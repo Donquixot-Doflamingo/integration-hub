@@ -2283,14 +2283,14 @@ Tools to invoke an integration (returning Result vs Queued explicitly), get requ
 
 ### HUB-304 — Confirm guard for money/quota integrations
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-303 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-304-mcp-confirm-guard`
+- **Status:** in-review · **Depends on:** HUB-303 · **Feature:** F-20 · **Stories:** US-2003
+- **Branch:** `feat/HUB-304-mcp-confirm-guard` (delivered on `feat/HUB-300-hubmcp`)
 
 For integrations with `moves_money_or_quota: true` (read via `getIntegration`), the invoke tool requires an explicit `confirm: true` and an idempotency key, and echoes a summary before calling.
 
 **Acceptance criteria**
-- [ ] Invoke without confirm returns a confirmation request and makes no Hub call
-- [ ] Missing idempotency key rejected client-side
+- [x] Invoke without confirm returns a confirmation request and makes no Hub call (`TestConfirmGuard`: `outcome: refused`, `CONFIRMATION_REQUIRED`, zero invoke calls, summary of the held-back call in the text; only the `getIntegration` read happens)
+- [x] Missing idempotency key rejected client-side (`TestConfirmGuard/confirm_but_no_key`: `IDEMPOTENCY_KEY_REQUIRED`, zero invoke calls; `TestConfirmGuardFailsClosed`: an unreadable flag invokes nothing)
 
 ### HUB-305 — Admin read-only tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
