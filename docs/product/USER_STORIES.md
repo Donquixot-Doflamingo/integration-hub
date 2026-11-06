@@ -460,6 +460,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-1802 — Overhead breakdown
 **As a** platform engineer, **I want** each middleware stage to publish its own duration, **so that** I can find latency regressions. · **Must**
 - **Given** a sync request, **when** metrics are scraped, **then** `hub_overhead_ms` has a stage label for every §18.4 stage.
+- **Given** the live latency demo (`examples/latency-demo/run.sh`, HUB-353), **when** I run it against a public API, **then** I see p50/p95/p99 directly and through a local Hub, their difference, and the Hub's own `hub_overhead_ms` for the same requests.
 
 ### US-1803 — Load and soak tests
 **As a** platform engineer, **I want** k6/vegeta load tests at 500 sync RPS + 2,000 async msg/s and a soak with random outages, **so that** we prove the budgets. · **Must**

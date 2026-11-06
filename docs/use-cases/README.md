@@ -2,7 +2,7 @@
 
 **Audience:** product owners, their seniors, and any team that wants to know "can the Hub do X for me, and how would my service call it?"
 **State described:** `main` on 2026-11-06. Milestones M0–M7 are done (gateway, transformers, audit, durable delivery, resilience, versioning, control plane). M8 (observability and load tests) is in progress. Release 2 (EP-12) is planned, not built.
-**Ticket:** HUB-342. Runnable examples: [`examples/otp-account-flow/`](../../examples/otp-account-flow/README.md) (fictional vendor), [`examples/aadhaar-okyc/`](../../examples/aadhaar-okyc/README.md) (Aadhaar OTP e-KYC on a real provider's sandbox, HUB-351), [`examples/pan-verify/`](../../examples/pan-verify/README.md) (PAN verification, HUB-352).
+**Ticket:** HUB-342. Runnable examples: [`examples/otp-account-flow/`](../../examples/otp-account-flow/README.md) (fictional vendor), [`examples/aadhaar-okyc/`](../../examples/aadhaar-okyc/README.md) (Aadhaar OTP e-KYC on a real provider's sandbox, HUB-351), [`examples/pan-verify/`](../../examples/pan-verify/README.md) (PAN verification, HUB-352), [`examples/latency-demo/`](../../examples/latency-demo/README.md) (live latency against a public API, HUB-353).
 
 Every use case below has a status line:
 
@@ -79,6 +79,8 @@ DESIGN §18.6 budgets the Hub's own overhead on a synchronous call (p99, 4 KB bo
 | **Total Hub overhead** | **≈ 3.4 ms (target ≤ 5 ms)** |
 
 Measured so far: `BenchmarkInvokeOverhead` (M3, 4 KB body, mock vendor answering in 0 ms) gave **p99 0.42–0.51 ms** ([M3 summary](../milestones/M3.md)). The full-load check (500 sync RPS + 2,000 async msg/s) is HUB-235 in M8.
+
+**Measure it yourself:** [`examples/latency-demo/run.sh`](../../examples/latency-demo/README.md) (HUB-353) calls a public echo API directly and through a local Hub and prints both sets of percentiles, the difference, and the Hub's own `hub_overhead_ms`. Over the internet the jitter is larger than the Hub's overhead, so read the deltas and the Hub's own line.
 
 The sync path never reads the database: configuration comes from an in-memory snapshot, and audit writes are buffered (`TestE2ENoDatabaseOnTheRequestPath` keeps answering at full speed with a stalled database). The one documented exception is step 2 of a vendor session (use case 6): one primary-key read, only when the request carries `X-Hub-Session`.
 

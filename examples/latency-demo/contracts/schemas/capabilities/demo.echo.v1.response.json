@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hub:capability:demo.echo@v1:default:response",
+  "title": "demo.echo@v1 response (EXAMPLE ONLY, not a frozen contract)",
+  "description": "The message as the echo service returned it. Callers must ignore unknown fields.",
+  "x-capability": "demo.echo@v1",
+  "x-capability-minor": 0,
+  "interactive": false,
+  "type": "object",
+  "required": ["status"],
+  "properties": {
+    "status": { "type": "string", "enum": ["echoed"] },
+    "message": { "type": ["string", "null"], "maxLength": 4096 },
+    "seq": { "type": ["integer", "null"] }
+  },
+  "examples": [
+    { "status": "echoed", "message": "hello", "seq": 1 }
+  ]
+}

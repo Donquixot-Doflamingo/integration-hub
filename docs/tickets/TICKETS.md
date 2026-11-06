@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **238** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **8**
+Total tickets: **239** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **9**
 
 ## Epics
 
@@ -20,7 +20,7 @@ Total tickets: **238** · done: **177** · todo: **53** · other (in-progress/in
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 8 |
-| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 21 | 4 |
+| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 4 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 12 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
@@ -2898,6 +2898,19 @@ The single-step sibling of HUB-351: PAN verification on the same provider and ac
 - [x] mockvendor scenario files `pan-valid`, `pan-invalid`, `pan-provider-down` (checked by `TestExampleKYCScenarioFiles`)
 - [x] Integration test `TestExamplePANVerify`: exact provider request, masked response, sealed audit, invalid PAN, replay with the same key (one provider call), provider down, edge refusals with no provider call, no vendor name in responses
 - [x] `examples/pan-verify/README.md` and `run.sh` (mock scenarios and `HUB_DEMO_TARGET=sandbox`); linked from `docs/use-cases/README.md` (7.1)
+
+### HUB-353 — Live latency demo against an open public API
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-235 · **Feature:** F-18 · **Stories:** US-1802
+- **Branch:** `feat/HUB-351-aadhaar-pan-examples`
+
+The user wants to measure, on their own machine, what the Hub adds to a real internet call. Pick a free, open, no-auth HTTP API that is up (Postman Echo `POST /post`, checked 2026-11-07; httpbin.org also answered), configure a vendor and integration for it as an example overlay, and write `examples/latency-demo/run.sh`: N calls directly and N through a local Hub, p50/p95/p99 for both and the difference, with sensible defaults, plus a README on reading the numbers (jitter dominates; compare deltas; controlled numbers in `docs/tech/LATENCY.md`).
+
+**Acceptance criteria**
+- [x] `examples/latency-demo/` overlay: vendor `postman-echo` (regions `public`, `mock`), account, tenant, example capability `demo.echo@v1`, integration `int_latency_echo` (sync), `ECHO-REQ@1` / `ECHO-RES@1` with goldens (`TestExampleLatencyConfigBuilds`)
+- [x] `run.sh`: defaults N=200, C=4, 4 alternating rounds, 2 warm-up requests per worker; kept-alive connections on both paths; prints n, errors, p50/p95/p99, mean for direct and via Hub, the difference, and the gateway's own `hub_overhead_ms` (before/after scrape); `LATENCY_TARGET=mock` runs offline against mockvendor (run here: p50 +0.7 ms, Hub's own mean 0.28 ms)
+- [x] Integration test `TestExampleLatencyEcho`: the integration through the gateway against mockvendor with the same scenario file; echoed headers and the demo credential never reach the caller
+- [x] README: how to read the numbers (internet jitter, deltas, p99 needs samples, the Hub's own line), link to `docs/tech/LATENCY.md` and `docs/tech/LOAD_TEST_REPORT.md`; linked from `docs/use-cases/README.md` (section 0)
 
 ## EP-13 — Operability follow-ups (found writing the M8 runbooks)
 

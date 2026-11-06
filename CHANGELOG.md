@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(examples)` · Add a live latency demo on a public echo API (HUB-353) · HUB-353 · F-18
+  - `examples/latency-demo/run.sh` calls Postman Echo N times directly and N times through a local Hub (`int_latency_echo`) in alternating rounds, then prints p50/p95/p99 for both, the difference and the Hub's own `hub_overhead_ms`
+  - `LATENCY_TARGET=mock` runs the same comparison offline against mockvendor at 50 ms
+  - The README explains why internet jitter dominates and points to the controlled numbers
 - 2026-11-07 · `feat(examples)` · Add a PAN verification sandbox example (HUB-352) · HUB-352 · F-22
   - `int_pan_verify` on the same provider and account as the Aadhaar example: one sync call with an `Idempotency-Key`, a masked PAN, a yes/no name match, the Aadhaar link, and an invalid PAN as a 200 business answer; sealed audit for 90 days
   - `examples/pan-verify/run.sh` runs it against mockvendor (valid, invalid, provider down) or the provider's sandbox (`HUB_DEMO_TARGET=sandbox`), including a replay that does not call the provider again
