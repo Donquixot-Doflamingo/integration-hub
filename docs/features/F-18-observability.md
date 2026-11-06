@@ -4,7 +4,7 @@
 Completes the metrics catalogue (DESIGN §16.2), alert rules as code (§16.3), OTel tracing (§16.4), tenant/vendor/platform dashboards, and the M8 load and soak tests that prove the latency and durability targets (§1, §18.6, §19 M8).
 
 ## Status
-`in-progress` — 2026-11-07 (HUB-230 metrics, HUB-232 alerts/dashboards, HUB-233 PII deletion and HUB-234 security checks done; HUB-231 tracing in review; HUB-235/236 load and soak harness and first laptop-scale report in review; pprof part of HUB-403 done).
+`in-progress` — 2026-11-07. HUB-230 to HUB-237 are done: metrics, tracing, alerts and dashboards, PII deletion, security checks, load and soak tests, and runbooks. M8 summary: [docs/milestones/M8.md](../milestones/M8.md). Two items stay open before `shipped`: the 2,000 async msg/s target (HUB-407, HUB-411, staging hardware) and the overhead metric fix (HUB-405).
 
 ## Owner
 `backend-engineer`.
