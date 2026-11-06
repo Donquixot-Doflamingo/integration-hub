@@ -1,0 +1,9 @@
+{
+  "account_number": "50100123456789",
+  "ifsc": "DEMO0001234",
+  "name": "Asha Verma",
+  "_context": {
+    "account": {"id": "demo-kyc-a", "config": {"client_id": "DEMO-CLIENT-A"}},
+    "hdr": {"idempotency_key": "bank-verify-app-77"}
+  }
+}

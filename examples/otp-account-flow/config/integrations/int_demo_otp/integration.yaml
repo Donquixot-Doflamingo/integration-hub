@@ -1,0 +1,10 @@
+# EXAMPLE ONLY (HUB-342). Step 1 sends an OTP and opens a vendor session; step 2 verifies the OTP
+# inside that session (X-Hub-Session). Sending an OTP consumes vendor quota, so every call needs an
+# Idempotency-Key (DESIGN §4.2).
+integration: int_demo_otp
+owner_tenant: loan-onboarding
+capability: demo.mobile_otp@v1
+grants: []
+active_version: 1
+description: Mobile OTP send + verify (example)
+moves_money_or_quota: true

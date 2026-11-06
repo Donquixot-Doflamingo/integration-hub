@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hub:capability:demo.bank_account_verify@v1:default:response",
+  "title": "demo.bank_account_verify@v1 response (EXAMPLE ONLY, not a frozen contract)",
+  "description": "`valid` with the name at the bank, or `invalid` when the account does not exist or cannot receive credits. Callers must ignore unknown fields.",
+  "x-capability": "demo.bank_account_verify@v1",
+  "x-capability-minor": 0,
+  "interactive": true,
+  "type": "object",
+  "required": ["account_status"],
+  "properties": {
+    "account_status": {
+      "type": "string",
+      "enum": ["valid", "invalid"]
+    },
+    "name_at_bank": {
+      "type": ["string", "null"],
+      "maxLength": 256
+    },
+    "name_match": {
+      "description": "Whether `name_at_bank` matches the request's `name` (null when no name was sent or the account is invalid).",
+      "type": ["boolean", "null"]
+    },
+    "vendor_ref": {
+      "description": "Opaque upstream reference for support correlation. Never parse it.",
+      "type": ["string", "null"],
+      "maxLength": 256
+    }
+  },
+  "examples": [
+    { "account_status": "valid", "name_at_bank": "ASHA VERMA", "name_match": true, "vendor_ref": "dk_ref_0003" },
+    { "account_status": "invalid", "name_at_bank": null, "name_match": null, "vendor_ref": "dk_ref_0004" }
+  ]
+}

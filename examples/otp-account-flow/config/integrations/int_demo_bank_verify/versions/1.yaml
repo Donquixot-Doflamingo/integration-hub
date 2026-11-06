@@ -1,0 +1,13 @@
+# EXAMPLE ONLY (HUB-342).
+integration: int_demo_bank_verify
+version: 1
+targets:
+  - vendor: demo-kyc
+    account: demo-kyc-a
+    transformer: { request: DEMO-BANK-REQ@1, response: DEMO-BANK-RES@1 }
+    weight: 100
+delivery:
+  mode: sync
+  on_circuit_open: fail_fast
+audit: { payloads: masked, retention: 30d }
+publish: { author: example, reason: "first version" }

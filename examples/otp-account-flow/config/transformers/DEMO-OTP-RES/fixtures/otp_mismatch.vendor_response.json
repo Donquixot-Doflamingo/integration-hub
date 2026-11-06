@@ -1,0 +1,4 @@
+{
+  "status": 422,
+  "body": {"error": "OTP_MISMATCH", "message": "otp mismatch, 2 attempts left"}
+}
