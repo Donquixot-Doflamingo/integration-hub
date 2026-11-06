@@ -30,8 +30,8 @@ const maxCachedKeys = 1024
 // TokenInfo.Extra entries of an authenticated HTTP request: the client's hubclient and a
 // redactor for its key (the raw key itself is not kept there).
 const (
-	tokenExtraClient  = "hubmcp.hubclient" //nolint:gosec // G101 false positive: a map key, not a credential
-	tokenExtraSecrets = "hubmcp.secrets"   //nolint:gosec // G101 false positive: a map key, not a credential
+	tokenExtraClient  = "hubmcp.hubclient" // #nosec G101 -- a context map key naming the client, not a credential
+	tokenExtraSecrets = "hubmcp.secrets"   // #nosec G101 -- a context map key, not a credential value
 )
 
 // httpAuth authenticates Streamable HTTP clients (HUB-301, SECURITY §2.5): every request carries

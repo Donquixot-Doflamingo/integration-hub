@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(hubmcp)` · Triage the hubmcp context keys for gosec with #nosec (HUB-300) · HUB-300 · F-20
+  - The gosec CI gate (HUB-234) passes on hubmcp: the two context map key names flagged as G101 carry reviewed `#nosec` annotations and are listed in SECURITY.md §8.1
 - 2026-11-07 · `fix(hubmcp)` · Refuse idempotency keys the Idempotency-Key header cannot carry (HUB-303) · HUB-303 · F-20
   - hub_invoke answers VALIDATION_FAILED for an idempotency_key with spaces or non-ASCII characters instead of a misleading "could not reach the Hub"
   - The HUB_BASE_URL hint now appears only for real connection failures

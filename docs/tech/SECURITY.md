@@ -209,7 +209,7 @@ Both tools run with `go run <module>@<version>` (pinned in the Makefile; bump de
 | G705 (XSS via `Write`) | `control/adminapi/snapshots.go` (`getSnapshot`) | archived registry JSON served with `Content-Type: application/json`, never HTML; `nosniff` hardening tracked in HUB-248 |
 | G107 / G704 (request to variable URL) | `testkit/contract/contract.go` | test helper calling the test's own server |
 | G404 (math/rand) | `delivery/backoff.go`, `testkit/mockvendor/server.go` | retry jitter and a deterministic test double, not security |
-| G101 (hardcoded credentials) | `cmd/hubctl/creds.go` | usage text that mentions `signing_secret=`; no credential |
+| G101 (hardcoded credentials) | `cmd/hubctl/creds.go`, `cmd/hubmcp/httpserve.go` (`tokenExtra*`) | usage text that mentions `signing_secret=`; context map key names; no credential |
 
 ## 9. Security testing
 SSRF, signature, redaction and secret-grep tests (TESTING_STRATEGY §2, §3, §5); the role-log secret grep (HUB-234, below); fuzzing of parsers (§8); RBAC table test generated from §7 (every role × action → expected 2xx/403); dependency and image scans (§8); a pre-production review of the threat model before the first real vendor account is created.
