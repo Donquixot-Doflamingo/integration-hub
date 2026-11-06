@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `chore(frontend)` · Regenerate the admin client for contract 1.2.0 (HUB-344) · HUB-344 · F-19
+  - The console's generated types and contract mocks include per-operation transformers on integration targets
 - 2026-11-07 · `test(edge)` · Move the OTP example to send_otp and verify_otp (HUB-343) · HUB-343 · F-14
   - examples/otp-account-flow: `demo.mobile_otp@v1` has two operations, `send_otp` and `verify_otp`, on two demo-kyc endpoints (`/v1/otp/send`, `/v1/otp/verify`), each with its own transformer pair and goldens; callers use `invoke/send_otp` and `invoke/verify_otp` (the single-operation stand-in is gone)
   - TestExampleOTPAccountFlow proves step 1 and step 2 hit different vendor endpoints in one session, pinned to v1 / account A across a publish; TestExampleOTPRefusesOnePairForBothOperations shows the build refusing the config without its verify_otp pair

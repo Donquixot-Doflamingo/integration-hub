@@ -2179,12 +2179,33 @@ export interface components {
             }[];
             duration_ms?: number;
         };
+        /** @description The request and response transformers a target uses for one operation (or, as `transformer`, for every operation not listed in `operations`). */
+        TransformerPair: {
+            request: components["schemas"]["TransformerRef"];
+            response: components["schemas"]["TransformerRef"];
+        };
         TargetRef: {
             vendor_id: components["schemas"]["Slug"];
             account_id: components["schemas"]["Slug"];
-            transformer: {
-                request: components["schemas"]["TransformerRef"];
-                response: components["schemas"]["TransformerRef"];
+            /** @description Default pair. Used for every operation of the capability that `operations` does not list (for a single-operation capability, the only pair). */
+            transformer: components["schemas"]["TransformerPair"];
+            /**
+             * @description Optional per-operation pairs for a multi-operation capability whose operations go to
+             *     different vendor endpoints (DESIGN §3.1, e.g. `kyc.aadhaar_otp@v1` with `generate` and
+             *     `verify`). Keys are operation names of the integration's capability. The pair of a listed
+             *     operation replaces `transformer` for that operation, both request and response; operations
+             *     not listed use `transformer`. The same selection applies wherever the target is used:
+             *     weighted targets, the failover chain, shadow, sync/wait/async delivery, session steps and
+             *     dry-run. Omit it for single-operation capabilities. Listing every operation is allowed;
+             *     `transformer` is still required and must still reference existing transformers of the
+             *     capability. Validation and publish fail check `operations_have_transformers` (pointer
+             *     `/targets/<i>/operations/<operation>`, or `/targets/<i>/transformer` for a defaulted
+             *     operation; `/failover/<i>/...` and `/shadow/target/...` likewise) for a key the
+             *     capability does not declare, and for any operation whose selected pair is compiled for
+             *     another operation. Added in 1.2.0.
+             */
+            operations?: {
+                [key: string]: components["schemas"]["TransformerPair"];
             };
             /** @description Target-level parameters (e.g. LLM `model`). */
             params?: Record<string, unknown>;
@@ -2362,7 +2383,7 @@ export interface components {
             reason: components["schemas"]["Reason"];
         };
         ValidationCheck: {
-            /** @description Known: schemas_compile, expressions_typecheck, goldens_pass, response_conforms, references_exist, accounts_not_retired, interactive_sync_only, weights_sum_100, delivery_path_declared, failover_requires_idempotency, supports_features. */
+            /** @description Known: schemas_compile, expressions_typecheck, goldens_pass, response_conforms, references_exist, accounts_not_retired, interactive_sync_only, weights_sum_100, delivery_path_declared, failover_requires_idempotency, supports_features, operations_have_transformers (1.2.0). Clients must tolerate unknown check names. */
             check: string;
             /** @enum {string} */
             status: "pass" | "fail" | "warn" | "skipped";
@@ -5796,57 +5817,6 @@ export interface operations {
         };
         requestBody: {
             content: {
-                /**
-                 * @example {
-                 *       "based_on": 7,
-                 *       "spec": {
-                 *         "targets": [
-                 *           {
-                 *             "vendor_id": "clevertap",
-                 *             "account_id": "ct-brandA-in",
-                 *             "transformer": {
-                 *               "request": "T1@7",
-                 *               "response": "R1@2"
-                 *             },
-                 *             "weight": 90
-                 *           },
-                 *           {
-                 *             "vendor_id": "clevertap",
-                 *             "account_id": "ct-brandA-in-v2",
-                 *             "transformer": {
-                 *               "request": "T1@8",
-                 *               "response": "R1@2"
-                 *             },
-                 *             "weight": 10
-                 *           }
-                 *         ],
-                 *         "failover": [],
-                 *         "delivery": {
-                 *           "mode": "wait",
-                 *           "wait_ms": 3000,
-                 *           "ttl_ms": 21600000,
-                 *           "on_circuit_open": "queue_if_allowed",
-                 *           "pending": "re_resolve"
-                 *         },
-                 *         "breaker": {
-                 *           "override": {
-                 *             "open_after_consecutive_timeouts": 3
-                 *           }
-                 *         },
-                 *         "webhooks": [
-                 *           {
-                 *             "event": "delivery.status",
-                 *             "endpoint_id": "reg_orders_cb"
-                 *           }
-                 *         ],
-                 *         "audit": {
-                 *           "payloads": "masked",
-                 *           "retention_ms": 2592000000
-                 *         }
-                 *       },
-                 *       "reason": "Canary 10% to the new workspace"
-                 *     }
-                 */
                 "application/json": components["schemas"]["IntegrationDraftCreate"];
             };
         };
@@ -5953,51 +5923,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    /**
-                     * @example {
-                     *       "integration_id": "int_evt_brandA",
-                     *       "version": 7,
-                     *       "state": "published",
-                     *       "spec": {
-                     *         "targets": [
-                     *           {
-                     *             "vendor_id": "clevertap",
-                     *             "account_id": "ct-brandA-in",
-                     *             "transformer": {
-                     *               "request": "T1@7",
-                     *               "response": "R1@2"
-                     *             },
-                     *             "weight": 100
-                     *           }
-                     *         ],
-                     *         "failover": [],
-                     *         "delivery": {
-                     *           "mode": "wait",
-                     *           "wait_ms": 3000,
-                     *           "ttl_ms": 21600000,
-                     *           "on_circuit_open": "queue_if_allowed",
-                     *           "pending": "re_resolve"
-                     *         },
-                     *         "webhooks": [
-                     *           {
-                     *             "event": "delivery.status",
-                     *             "endpoint_id": "reg_orders_cb"
-                     *           }
-                     *         ],
-                     *         "audit": {
-                     *           "payloads": "masked",
-                     *           "retention_ms": 2592000000
-                     *         }
-                     *       },
-                     *       "based_on": 6,
-                     *       "author": "priya@example.com",
-                     *       "reason": "Add breaker override",
-                     *       "created_at": "2026-10-29T08:00:00Z",
-                     *       "published_at": "2026-10-29T08:05:00Z",
-                     *       "published_by": "priya@example.com",
-                     *       "snapshot_version": 412
-                     *     }
-                     */
                     "application/json": components["schemas"]["IntegrationVersion"];
                 };
             };
