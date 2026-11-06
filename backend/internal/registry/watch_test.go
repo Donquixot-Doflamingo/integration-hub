@@ -44,7 +44,19 @@ func editFile(t *testing.T, path, old, repl string) {
 	if !strings.Contains(string(b), old) {
 		t.Fatalf("%s has no %q", path, old)
 	}
-	if err := os.WriteFile(path, []byte(strings.Replace(string(b), old, repl, 1)), 0o600); err != nil {
+	writeAtomic(t, path, []byte(strings.Replace(string(b), old, repl, 1)))
+}
+
+// writeAtomic replaces path by renaming a fully written temp file over it, as editors do. A plain
+// os.WriteFile truncates first, so the 50 ms watcher could read the empty file and report "EOF"
+// instead of the edit under test (HUB-239).
+func writeAtomic(t *testing.T, path string, b []byte) {
+	t.Helper()
+	tmp := filepath.Join(t.TempDir(), filepath.Base(path)) // outside the watched tree, same filesystem
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -112,9 +124,7 @@ func TestWatchSwapsValidEditsAndKeepsLastGoodOnInvalid(t *testing.T) {
 	// would not swap: the checksum is unchanged.)
 	b, _ := os.ReadFile(account)
 	fixed := strings.NewReplacer("vendor: nobody", "vendor: clevertap", "rps: 75", "rps: 80").Replace(string(b))
-	if err := os.WriteFile(account, []byte(fixed), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeAtomic(t, account, []byte(fixed))
 	select {
 	case s := <-swapped:
 		if s.Version != 3 || s.Accounts["ct-brandA-in"].Quota.RPS != 80 {

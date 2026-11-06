@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **206** · done: **156** · todo: **47** · other (in-progress/in-review/blocked): **3**
+Total tickets: **207** · done: **157** · todo: **46** · other (in-progress/in-review/blocked): **4**
 
 ## Epics
 
@@ -17,7 +17,7 @@ Total tickets: **206** · done: **156** · todo: **47** · other (in-progress/in
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
-| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 9 | 0 |
+| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 10 | 1 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 18 | 0 |
@@ -1660,7 +1660,7 @@ Prove the M7 Accept line and post the wrap-up.
 
 ### HUB-230 — Metrics: full §16.2 set
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-027, HUB-154, HUB-123 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** done · **Merged:** Merge pull request #16 from Donquixot-Doflamingo/feat/HUB-230-metrics-full · **Depends on:** HUB-027, HUB-154, HUB-123 · **Feature:** F-18 · **Stories:** US-18xx
 - **Branch:** `feat/HUB-230-metrics-full`
 
 Export every §16.2 metric with labels tenant, integration, vendor, account, version, with a cardinality guard; incl. `credential_expiry_days`, `queue_oldest_age_s`, `llm_*` placeholders.
@@ -1754,17 +1754,28 @@ Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`
 
 ### HUB-238 — Transformer time budget flakes under -race in the full itest run
 - **Epic:** EP-09 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** — · **Feature:** F-04 · **Stories:** US-04xx
+- **Status:** in-review · **Depends on:** — · **Feature:** F-04 · **Stories:** US-04xx
 - **Branch:** `test/HUB-238-transform-budget-flake`
 
 During the HUB-230 `make itest` run, `TestCutoverCompletedAndNewRequests/transformer` failed once: the publish check ran goldens for `R2@1` (`fixtures/partial`), which took 8.08 ms against the 5 ms transform time budget under `-race` on a loaded machine. It passed 5/5 in isolation. The publish-time golden run should not be sensitive to scheduler load.
 
 **Acceptance criteria**
-- [ ] Publish-time goldens either measure CPU time, apply the budget only outside `-race`, or retry once before failing on time alone
+- [x] Publish-time goldens either measure CPU time, apply the budget only outside `-race`, or retry once before failing on time alone: RunGoldens re-runs a case once on ErrTimeBudget (`TestGoldensRetryTimeBudgetOnce`)
 - [ ] `make itest` passes 10 consecutive full runs on CI hardware
 
 ## EP-10 — Admin console (SvelteKit)
 
+
+### HUB-239 — Registry watch test reads a half-written config file
+- **Epic:** EP-09 · **Type:** test · **Area:** backend
+- **Status:** in-review · **Depends on:** — · **Feature:** F-03 · **Stories:** US-03xx
+- **Branch:** `test/HUB-238-timing-flakes`
+
+`TestWatchSwapsValidEditsAndKeepsLastGoodOnInvalid` failed on `main` (run 41415977028) with `accounts/ct-brandA-in.yaml: EOF`: the test edits files with `os.WriteFile`, which truncates before writing, and the 50 ms watcher sometimes read the empty file. The product behaviour is right (an unreadable edit is rejected and the last good snapshot keeps serving); the test raced its own write.
+
+**Acceptance criteria**
+- [x] The test writes config edits atomically (temp file outside the watched tree + rename), as editors do
+- [x] 20 consecutive `-race` runs pass on a loaded machine
 ### HUB-250 — Scaffold SvelteKit admin console
 - **Epic:** EP-10 · **Type:** chore · **Area:** frontend
 - **Status:** done · **Depends on:** HUB-012 · **Feature:** F-19 · **Stories:** US-19xx

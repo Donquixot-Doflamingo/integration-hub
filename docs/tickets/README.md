@@ -56,11 +56,11 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-06 | M5 Resilience | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
 | EP-07 | M6 Versioning & cutover | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
 | EP-08 | M7 Control plane & hubctl | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
-| EP-09 | M8 Observability & hardening | F-18 | HUB-230–HUB-249 | 9 | 0 |
+| EP-09 | M8 Observability & hardening | F-18 | HUB-230–HUB-249 | 10 | 1 |
 | EP-10 | Admin console (SvelteKit) | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 18 | 0 |
-| **Total** | | | | **206** | **156** |
+| **Total** | | | | **207** | **157** |
 
 ## Sizing
 
@@ -86,7 +86,7 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | --- | --- | --- | --- |
 | F-01 | Repo foundation, dev environment & CI | EP-00, EP-01 | 27 |
 | F-02 | Mock vendor (programmable fake vendor) | EP-01 | 3 |
-| F-03 | Config registry & snapshots | EP-02 | 11 |
+| F-03 | Config registry & snapshots | EP-02 | 12 |
 | F-04 | Transformation engine & golden fixtures | EP-03 | 14 |
 | F-05 | Tenant auth, grants & edge validation | EP-04 | 3 |
 | F-06 | Sync invoke path & canonical error envelope | EP-04 | 8 |
