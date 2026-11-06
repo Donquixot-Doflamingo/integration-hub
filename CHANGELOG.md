@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(hubmcp)` · Resolve the leftover merge markers in the MCP setup guide and F-20 (HUB-315) · HUB-315 · F-20
+  - mcp-setup.md keeps the per-client guide and adds the role requirements, the dev token commands and the local refusal codes; F-20 keeps both history rows
 - 2026-11-07 · `test(hubmcp)` · Wait for the asynchronous audit trail in the hubmcp e2e test (HUB-315) · HUB-315 · F-20
   - TestMCPEndToEnd polls the request timeline until the worker's attempt events land, instead of reading it once right after the request succeeds
 - 2026-11-07 · `docs(hubmcp)` · Document the hubmcp admin write tools and ADR-0020 (HUB-315) · HUB-315 · F-20
