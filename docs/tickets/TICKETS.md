@@ -2272,14 +2272,14 @@ Tools to list integrations, describe one, and fetch a capability's schemas, back
 
 ### HUB-303 — Invoke, request status and dry-run tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-303-mcp-invoke-tools`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2002, US-2003, US-2004
+- **Branch:** `feat/HUB-303-mcp-invoke-tools` (delivered on `feat/HUB-300-hubmcp`)
 
 Tools to invoke an integration (returning Result vs Queued explicitly), get request status, and dry-run.
 
 **Acceptance criteria**
-- [ ] A 202 is reported as queued with the poll id, never as success
-- [ ] Error envelope surfaced with code, retryable, retry_after_ms
+- [x] A 202 is reported as queued with the poll id, never as success (`TestInvoke/202_queued_is_not_success`, `/202_in_flight`: `outcome: queued`, `accepted.poll`, `request_id`, `result: null`, text tells the model it is pending)
+- [x] Error envelope surfaced with code, retryable, retry_after_ms (`TestInvoke` error cases incl. circuit, reason, upstream and details; `TestGetRequest`, `TestDryRun` error cases; auto-retry at most once, retryable only, only with an idempotency key)
 
 ### HUB-304 — Confirm guard for money/quota integrations
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp

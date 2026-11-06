@@ -22,9 +22,9 @@ func (a *app) handlers() map[string]toolFunc {
 	return map[string]toolFunc{
 		toolListIntegrations:   a.listIntegrations,
 		toolDescribe:           a.describeIntegration,
-		toolDryRun:             a.notImplemented(toolDryRun),
-		toolInvoke:             a.notImplemented(toolInvoke),
-		toolGetRequest:         a.notImplemented(toolGetRequest),
+		toolDryRun:             a.dryRun,
+		toolInvoke:             a.invoke,
+		toolGetRequest:         a.getRequest,
 		toolAdminSearch:        a.notImplemented(toolAdminSearch),
 		toolAdminTimeline:      a.notImplemented(toolAdminTimeline),
 		toolAdminBreakerStates: a.notImplemented(toolAdminBreakerStates),

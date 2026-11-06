@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(hubmcp)` · Add the hub_invoke, hub_get_request and hub_dry_run tools (HUB-303) · HUB-303 · F-20
+  - hub_invoke reports 200 as `completed`, 202 as `queued` with the poll URL (never as success) and Hub errors as `error` with the canonical envelope (code, retryable, retry_after_ms, ...)
+  - hub_invoke checks the integration first (cached ≤ 60 s) and does not call a paused one; it retries at most once, only retryable errors, only with an idempotency key
+  - hub_get_request returns a request's status, result or error; hub_dry_run shows the upstream request with every redacted header forced to `***`
 - 2026-11-07 · `feat(hubmcp)` · Add the hub_list_integrations and hub_describe_integration tools (HUB-302) · HUB-302 · F-20
   - An assistant can list the integrations its tenant may invoke and get each operation's canonical request and response schemas
   - Outputs carry only caller-API fields; vendor, account and version never appear, even if a Hub response carried them

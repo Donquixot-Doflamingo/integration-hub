@@ -48,6 +48,10 @@ type app struct {
 	log     *slog.Logger
 	secrets *secretSet
 	now     func() time.Time
+	// sleep waits d or until ctx ends (hub_invoke's single auto-retry); tests make it instant.
+	sleep func(ctx context.Context, d time.Duration) error
+	// integrations caches getIntegration for hub_invoke's pre-check (≤ 60 s, contract rule 2).
+	integrations *integrationCache
 }
 
 // newMCPServer builds the MCP server with the contract's tools. Admin tools are registered only

@@ -124,7 +124,7 @@ func loadConfig(args []string, getenv func(string) string, stderr io.Writer) (co
 // newApp builds the tool dependencies from the configuration.
 func newApp(c config, log *slog.Logger, secrets *secretSet, hc *http.Client) (*app, error) {
 	ua := "hubmcp/" + version
-	a := &app{log: log, secrets: secrets, now: time.Now}
+	a := &app{log: log, secrets: secrets, now: time.Now, sleep: sleepCtx, integrations: newIntegrationCache(time.Now)}
 	a.newHub = func(key string) (*hubclient.Client, error) {
 		return hubclient.New(c.baseURL, key, hubclient.WithHTTPClient(hc), hubclient.WithUserAgent(ua))
 	}
@@ -196,6 +196,18 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdin i
 	}
 	log.InfoContext(ctx, "hubmcp stopped")
 	return 0
+}
+
+// sleepCtx waits d or until ctx ends.
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 type nopReadCloser struct{ io.Reader }

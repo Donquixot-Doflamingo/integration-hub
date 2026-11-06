@@ -59,7 +59,7 @@ Tool input/output JSON Schemas live in `contracts/mcp/hubmcp-tools.json` (owned 
 1. `hubmcp` uses only endpoints in `contracts/`; it has no private API.
 2. Tenant tools pass through Hub responses; they never add vendor, account or version, and strip `X-Hub-Integration-Version`.
 3. `hub_invoke`: if the integration has `moves_money_or_quota: true` (checked via `getIntegration`, cached ≤ 60 s) and the input lacks `confirm: true` or `idempotency_key`, the tool returns `outcome: refused` **without calling the Hub**.
-4. `hub_invoke` sets an `Idempotency-Key` (caller-supplied or generated UUIDv7) and returns it, so a retried tool call is safe.
+4. `hub_invoke` forwards the caller's `idempotency_key` as `Idempotency-Key` and never generates one: the frozen contract has no output field to return a generated key (ADR-0018). The tool description tells the model to always pass one; money/quota integrations refuse to run without it.
 5. 202 responses are returned as `outcome: queued` with `accepted`, 200 as `outcome: completed` with `result`, errors as tool results with `isError: true` and the canonical error object (contract `hubmcp-tools.json` output schema).
 6. Tool annotations: list/describe/get/dry-run `readOnlyHint: true`; `hub_invoke` `destructiveHint: true`, `idempotentHint: false`, `openWorldHint: true`.
 7. Secrets: `HUB_API_KEY` and `HUB_ADMIN_TOKEN` never echoed in tool output or logs (redacting logger).
@@ -109,6 +109,8 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-20`).
 - **Isolation:** caller tools use `pkg/hubclient`; admin tools use a GET-only client. `internal/archtest` forbids `cmd/hubmcp` from importing `internal/`.
 - **Config:** `HUB_BASE_URL`, `HUB_API_KEY` (env only, no flag; stdio), optional `HUB_ADMIN_TOKEN` / `HUB_ADMIN_BASE_URL`; flags `-transport`, `-addr`, `-allow-remote`, `-log-level`.
 - **Outputs:** built field by field from `pkg/hubclient` types, never by passing Hub JSON through, so a field outside the contract's output schema (vendor, account, version, debug headers) cannot reach a tenant tool. Hub errors become `isError` results carrying the canonical error object (`code`, `message`, `retryable`, `retry_after_ms`, `reason`, `circuit`, `upstream`, `details`, `request_id`); `UNAUTHORIZED` adds a hint to check `HUB_API_KEY`, an unreachable Hub a hint to check `HUB_BASE_URL`.
+- **hub_invoke:** pre-check `getIntegration` (cached ≤ 60 s per tenant key and integration); a paused integration returns `INTEGRATION_PAUSED` (`http_status: null`) without invoking; the `default` operation uses `invokeIntegration`, others `invokeIntegrationOperation`. One automatic retry only for a retryable error, only with an `idempotency_key`, and only when `retry_after_ms` ≤ 2 s (a longer wait goes back to the model). `X-Hub-Integration-Version` / `X-Hub-Served-By` never reach the output (hubclient ignores them; the output is built field by field).
+- **hub_dry_run:** besides the Hub's redaction, hubmcp forces `***` on every header listed in `redacted` and adds a warning if it had to.
 - **HTTP transport:** SDK `StreamableHTTPHandler` behind `http.CrossOriginProtection` and the SDK's `auth.RequireBearerToken`; the verifier asks the Hub whether the key is valid (fail closed) and puts that key's `hubclient` in the request's token info, so tools run with the client's own key. Secrets print as `***` (`%v`, `%#v`, slog) and are redacted by value from logs and tool results.
 
 ## Changelog of this doc
@@ -118,3 +120,4 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-20`).
 | 2026-11-07 | In progress: scaffold, implementation notes, observability (HUB-300) | backend-engineer |
 | 2026-11-07 | Streamable HTTP transport and per-client key auth (HUB-301, ADR-0018) | backend-engineer |
 | 2026-11-07 | Discovery tools (HUB-302) | backend-engineer |
+| 2026-11-07 | Invoke, request status and dry-run tools; idempotency rule 4 aligned with the contract (HUB-303, ADR-0018) | backend-engineer |
