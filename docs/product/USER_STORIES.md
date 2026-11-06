@@ -476,6 +476,11 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** an erasure, **when** it finishes, **then** `change_log` has one row with actor, reason, counts and a subject reference, never the identifier.
 - **Given** a request still queued or with a callback to deliver, **when** the erasure runs, **then** it is deferred and reported, and a re-run after it is terminal erases it.
 
+### US-1807 — Runbook for every alert
+**As an** on-call SRE, **I want** every alert to link a short runbook with the checks, likely causes, fixes and escalation rules, **so that** I can act on a page at night without reading the code. · **Must**
+- **Given** any rule in `deploy/alerts/hub.rules.yaml`, **when** I open its `runbook_url`, **then** `docs/runbooks/<AlertName>.md` exists and lists what fired, the caller impact in canonical codes, the first checks (dashboard panel, query, command), causes with fixes, and when to escalate.
+- **Given** a runbook step that acts on the Hub, **when** I follow it, **then** it uses a real `hubctl` command or an admin `operationId` from `contracts/openapi/hub-admin.v1.yaml`.
+
 ## F-19 Admin console
 
 ### US-1901 — Request explorer with timeline

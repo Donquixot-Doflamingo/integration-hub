@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **221** · done: **158** · todo: **47** · other (in-progress/in-review/blocked): **16**
+Total tickets: **226** · done: **158** · todo: **51** · other (in-progress/in-review/blocked): **17**
 
 ## Epics
 
@@ -21,6 +21,7 @@ Total tickets: **221** · done: **158** · todo: **47** · other (in-progress/in
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 18 | 0 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 5 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -1771,13 +1772,15 @@ Multi-hour soak with randomised mockvendor outages and worker restarts; reconcil
 
 ### HUB-237 — Runbooks and M8 summary
 - **Epic:** EP-09 · **Type:** docs · **Area:** docs
-- **Status:** todo · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-progress · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-1807
 - **Branch:** `docs/HUB-237-runbooks-m8`
 
 Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`, credential rotation, snapshot lag; post the M8 wrap-up. The alert rules (HUB-232) link `docs/runbooks/<AlertName>.md` for all ten alerts in `deploy/alerts/hub.rules.yaml` (six page, four warn).
 
+Part 1 done: `docs/runbooks/` has one runbook per alert (all ten, page and warn), the index `README.md` and `credential-rotation.md`, linked from OBSERVABILITY §9/§11.1 and F-18. Part 2: M8 summary and v1.0.0 release notes.
+
 **Acceptance criteria**
-- [ ] Each paging alert links a runbook
+- [x] Each paging alert links a runbook: `docs/runbooks/<AlertName>.md` exists for every `runbook_url` in `deploy/alerts/hub.rules.yaml` (the four warn alerts too)
 - [ ] Milestone summary posted; F-18 doc updated
 - [ ] Release notes for v1.0.0 prepared per `docs/process/RELEASE.md`
 
@@ -2819,6 +2822,72 @@ Coarse placeholder for Release 2, found while writing the HUB-342 use-case catal
 **Acceptance criteria**
 - [ ] Split into ~1-day tickets in this range before work starts
 - [ ] Feature doc F-22 gains the item, with the contract changes it needs (upload size limits, job status) listed as CCRs
+
+## EP-13 — Operability follow-ups (found writing the M8 runbooks)
+
+Range HUB-400–HUB-429. The EP-09 range is full; these came out of HUB-237.
+
+### HUB-400 — hubctl on-call commands for the runbooks
+- **Epic:** EP-13 · **Type:** chore · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-18 · **Stories:** US-1807
+- **Branch:** `chore/HUB-400-hubctl-oncall`
+
+The alert runbooks (HUB-237) fall back to curl for actions that have admin operations but no `hubctl` command. Add thin `hubctl` wrappers over the existing admin operationIds, so no contract change is needed. Also fix `hubctl replay`'s usage text, which leaves out its `-vendor` flag.
+
+**Acceptance criteria**
+- [ ] `hubctl breakers list|get|force-open|force-close|clear-force`
+- [ ] `hubctl pause|resume <integration> -reason`
+- [ ] `hubctl dlq list` (replay exists)
+- [ ] `hubctl account get|test-connection|rotate` (add-next, promote, delete-old)
+- [ ] `hubctl snapshot latest`
+- [ ] Runbooks switched from curl to these commands; table-driven tests against a contract-validated fake admin API
+
+### HUB-401 — SnapshotBehind fires falsely after a restart: snapshot_version is per process
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-18 · **Stories:** US-1807
+- **Branch:** `fix/HUB-401-snapshot-version`
+
+`registry.Store.Swap` counts versions per process from 1, so a node restarted after any publish reports a lower `snapshot_version` than its peers forever, and `SnapshotBehind` fires falsely. Audit rows store the same local number, so it cannot be compared across nodes. Use the published archive version (or checksum) for the gauge and the audit field.
+
+**Acceptance criteria**
+- [ ] The gauge and audit `snapshot_version` carry the archive version; a restarted node matches its peers
+- [ ] Alert test (promtool) for a restart after a publish: no `SnapshotBehind`
+- [ ] Runbook SnapshotBehind.md: false-positive section removed
+
+### HUB-402 — Enforce the credential minimum length on the admin API
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-15 · **Stories:** US-15xx
+- **Branch:** `fix/HUB-402-cred-min-length`
+
+`addNextCredential` does not enforce the 6-byte minimum that `hubctl creds set` does, yet TECH_SPEC §9 says it is validated at save. Values shorter than the redaction minimum would not be redacted from logs. Return the existing validation error code from the admin API, matching the contract's 422 shape.
+
+**Acceptance criteria**
+- [ ] `addNextCredential` refuses a value under 6 bytes with the contract's validation error (contract test)
+- [ ] Unit test: every credential write path shares one validator
+
+### HUB-403 — Wire the promised ops settings: pprof, log level, worker concurrency
+- **Epic:** EP-13 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `feat/HUB-403-ops-settings`
+
+OBSERVABILITY §8.1 and TECH_SPEC §8.1 promise pprof on the ops port, `PUT /debug/loglevel`, and `HUB_WORKER_CONCURRENCY` / `HUB_WORKER_CLAIM_BATCH`. None of these is wired: workers are fixed at 16 in flight and 32 per claim. The audit buffer (10 000) cannot be configured, and "archive unreachable" is logged only at DEBUG.
+
+**Acceptance criteria**
+- [ ] pprof served on the internal ops port only (never the public port), with a test
+- [ ] Runtime log-level change on the ops port
+- [ ] Worker concurrency, claim batch and audit buffer read from config, with defaults unchanged
+- [ ] "archive unreachable" logged at WARN
+
+### HUB-404 — Reconcile OBSERVABILITY §9 with the code
+- **Epic:** EP-13 · **Type:** docs · **Area:** docs
+- **Status:** todo · **Depends on:** — · **Feature:** F-18 · **Stories:** US-1807
+- **Branch:** `docs/HUB-404-observability-drift`
+
+OBSERVABILITY §9 cites things that do not exist: the metrics `drain_release_rate`, `worker_inflight`, `outbox_*` and `http_request_size_bytes`; the log events `envelope.poisoned` and `snapshot.apply_failed`; a "promote previous" credential step; and `audit_events_dropped_total{reason="encode_error"}`. Fix the doc to match the code, or file the missing pieces as tickets. Restoring the `previous` credential slot needs a contract change request.
+
+**Acceptance criteria**
+- [ ] Every metric, log event and operation named in OBSERVABILITY.md exists in the code or contract (a check script lists none missing)
+- [ ] CCR filed if restoring the previous credential slot is kept
 
 ## Parallel tracks
 
