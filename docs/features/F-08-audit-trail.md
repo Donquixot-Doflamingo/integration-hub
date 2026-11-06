@@ -24,7 +24,7 @@ Nobody can answer "what exactly did we send to the bureau for this loan, and wha
 - Read model for timelines (consumed by F-16 admin API and F-19 console).
 
 **Non-goals**
-- `sealed` + unseal (F-22); cold storage tiering to object storage (M8 hardening or Release 2); subject deletion job (TECH_SPEC).
+- `sealed` + unseal (F-22); cold storage tiering to object storage (M8 hardening or Release 2); subject deletion job (F-18, HUB-233, ADR-0012: it purges event payloads to `omitted` and keeps sha256, bytes and meta).
 
 ## User stories
 - [US-0801](../product/USER_STORIES.md) — Complete timeline per request

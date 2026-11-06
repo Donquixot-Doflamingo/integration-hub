@@ -9,7 +9,7 @@ COMPOSE := docker compose -f ../deploy/docker-compose.yml
 export HUB_PG_DSN ?= postgres://hub:hub@localhost:5432/hub?sslmode=disable
 export HUB_REDIS_ADDR ?= localhost:6379
 
-.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check goldens
+.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check goldens monitoring
 
 all: lint test build
 
@@ -36,6 +36,12 @@ fmt: ## Format code
 
 goldens: ## Run every transformer's golden fixtures (hubctl transform test)
 	$(GO) run ./cmd/hubctl transform test -config-dir config -contracts-dir ../contracts
+
+PROMTOOL ?= promtool
+monitoring: ## Alert rules (promtool check + unit tests) and dashboards query only exported metrics (HUB-232)
+	$(PROMTOOL) check rules ../deploy/alerts/*.rules.yaml
+	cd ../deploy/alerts && $(PROMTOOL) test rules *_test.yml
+	$(GO) test -count=1 -run 'TestAlertRules|TestDashboards|TestQueryChecker|TestExpandVars|TestDesignMetrics' ./cmd/hub/internal/roles/
 
 bench: ## Benchmarks with allocations
 	$(GO) test -run '^$$' -bench . -benchmem ./...
