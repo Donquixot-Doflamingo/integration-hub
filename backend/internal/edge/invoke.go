@@ -48,7 +48,12 @@ func (s *Server) invoke(w http.ResponseWriter, r *http.Request) {
 	p, ce := s.prepare(r, ScopeInvoke, op)
 	tagIntegration(r.Context(), p)
 	if p != nil {
-		defer s.metrics.RecordTimings(&p.timings, s.deps.Now(), p.integration.Integration, string(p.integration.Active().Delivery.Mode))
+		// A closure, so the clock is read when the handler returns: deferred call arguments are
+		// evaluated at the defer statement, which made hub_overhead_ms "prepare minus vendor
+		// time" and negative on almost every request (HUB-405).
+		defer func() {
+			s.metrics.RecordTimings(&p.timings, s.deps.Now(), p.integration.Integration, string(p.integration.Active().Delivery.Mode))
+		}()
 	}
 	if ce == nil {
 		ce = admit(r, p)

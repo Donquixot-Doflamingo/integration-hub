@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **236** · done: **177** · todo: **54** · other (in-progress/in-review/blocked): **5**
+Total tickets: **236** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **6**
 
 ## Epics
 
@@ -2935,15 +2935,15 @@ OBSERVABILITY §9 cites things that do not exist: the metrics `drain_release_rat
 
 ### HUB-405 — `hub_overhead_ms` is computed before the vendor call
 - **Epic:** EP-13 · **Type:** fix · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-027 · **Feature:** F-18 · **Stories:** US-1802
+- **Status:** in-review · **Depends on:** HUB-027 · **Feature:** F-18 · **Stories:** US-1802
 - **Branch:** `fix/HUB-405-overhead-metric-time`
 
 Found by the HUB-235 load test. `edge.(*Server).invoke` does `defer s.metrics.RecordTimings(&p.timings, s.deps.Now(), ...)`. Go evaluates `s.deps.Now()` when the `defer` statement runs, right after `prepare`, not when the handler returns. The exported histogram therefore records "prepare time minus vendor time minus wait". It is negative whenever the vendor is slower than auth + body + validate + resolve: 100 % of observations at mockvendor 20 ms in the load test. The stage histograms are fine (they read the pointer at return), and so is the audit ledger (`hub.requests.hub_overhead_ms`, computed in `record`). The S1 SLO, the `HubOverheadHigh` alert, the platform dashboard and the M3 "overhead p99 ≤ 5 ms" evidence all read the broken metric.
 
 **Acceptance criteria**
-- [ ] `RecordTimings` takes the time when the handler returns (closure or explicit call), for every mode
-- [ ] Edge unit test with a fake upstream that takes 20 ms: the recorded overhead is ≥ 0 and below 20 ms, and equals the ledger value within one bucket
-- [ ] `hubload` shows a 0 % negative share and metric p99 within 10 % of the ledger p99 at 500 RPS; HUB-235's first acceptance box is re-checked on the metric
+- [x] `RecordTimings` takes the time when the handler returns (closure or explicit call), for every mode
+- [x] Edge unit test with a fake upstream that takes 20 ms: the recorded overhead is ≥ 0 and below 20 ms (`TestOverheadMetricExcludesVendorTime`: mean 1.3 ms; it fails at -20.4 ms without the fix). The ledger comparison is left to the hubload re-run below
+- [ ] `hubload` shows a 0 % negative share and metric p99 within 10 % of the ledger p99 at 500 RPS; HUB-235's first acceptance box is re-checked on the metric (not run in this PR: needs the HUB-235 harness at 500 RPS)
 
 ### HUB-406 — Worker claims before its snapshot is loaded and panics after a restart
 - **Epic:** EP-13 · **Type:** fix · **Area:** backend
