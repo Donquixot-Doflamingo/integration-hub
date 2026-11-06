@@ -2,14 +2,14 @@
 SHELL := /bin/bash
 GO ?= go
 BIN := bin
-CMDS := hub hubctl mockvendor hubmcp
+CMDS := hub hubctl mockvendor hubmcp hubload
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GOLANGCI_LINT_VERSION := 2.15.0
 COMPOSE := docker compose -f ../deploy/docker-compose.yml
 export HUB_PG_DSN ?= postgres://hub:hub@localhost:5432/hub?sslmode=disable
 export HUB_REDIS_ADDR ?= localhost:6379
 
-.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check goldens monitoring gosec vuln security
+.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check goldens monitoring gosec vuln security load soak
 
 all: lint test build
 
@@ -57,6 +57,12 @@ monitoring: ## Alert rules (promtool check + unit tests) and dashboards query on
 
 bench: ## Benchmarks with allocations
 	$(GO) test -run '^$$' -bench . -benchmem ./...
+
+load: ## M8 load + soak against local roles and mockvendor (deploy/load/run.sh; HUB_PG_DSN must name a *load* database)
+	../deploy/load/run.sh
+
+soak: ## Only the HUB-236 soak with random vendor outages (deploy/load/run.sh soak)
+	PHASES=soak ../deploy/load/run.sh
 
 run: build ## Run the gateway locally
 	$(BIN)/hub gateway

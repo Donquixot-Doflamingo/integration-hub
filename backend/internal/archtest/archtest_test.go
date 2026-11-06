@@ -105,8 +105,9 @@ func TestInternalImportsFollowLayering(t *testing.T) {
 
 func TestPublicAndIsolatedPackagesAvoidInternal(t *testing.T) {
 	// pkg/hubclient is a public SDK; mockvendor must behave like an outside vendor;
-	// hubmcp talks to the Hub only through the contracted HTTP API.
-	isolated := []string{module + "/pkg/", module + "/cmd/mockvendor", module + "/cmd/hubmcp"}
+	// hubmcp talks to the Hub only through the contracted HTTP API; hubload is an outside caller
+	// (contracted HTTP, /metrics, and read-only SQL for the soak reconciliation).
+	isolated := []string{module + "/pkg/", module + "/cmd/mockvendor", module + "/cmd/hubmcp", module + "/cmd/hubload"}
 	for _, p := range listPackages(t) {
 		if !slices.ContainsFunc(isolated, func(prefix string) bool { return strings.HasPrefix(p.ImportPath, prefix) }) {
 			continue

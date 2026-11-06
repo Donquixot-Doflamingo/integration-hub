@@ -1,0 +1,9 @@
+# Load-test account (deploy/load). Credentials are generated per run by deploy/load/run.sh
+# into the run's state directory (hubctl creds set); nothing secret lives here.
+account: ct-load
+vendor: clevertap
+region: in
+state: active
+credentials_ref: localfile://ct-load
+config: { project_id: "LOAD-PROJECT", brand_code: "L" }
+quota: { rps: 100000, daily: 1000000000 }

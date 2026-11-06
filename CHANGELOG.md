@@ -6,6 +6,29 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(load)` · Triage hubload for gosec with #nosec annotations (HUB-235) · HUB-235 · F-18
+  - The gosec CI gate passes on `cmd/hubload`: seven flagged lines (G304, G404, G204) carry reviewed `#nosec` annotations and are listed in SECURITY.md §8.1
+- 2026-11-07 · `docs(tech)` · Add the M8 load and soak test report (HUB-235, HUB-236) · HUB-235 · F-18
+  - `docs/tech/LOAD_TEST_REPORT.md` leads with direct vs through-the-Hub latency (vendor at 0/50/200 ms, mockvendor stand-in): the Hub adds about 1.1–1.4 ms typical and 2.5–3.5 ms at p99
+  - Sync: 500 RPS with 0 errors, ledger overhead p99 3.8 ms (6.5 ms with the limiter's Redis call); knee at about 600 RPS on 2 shared CPUs
+  - Async: about 950 accepts/s and 360–400 deliveries/s per worker here; 2,000 msg/s not reached
+  - Soak: 42,000 accepted through 5 random vendor outages, 42,000 succeeded, 0 lost, 0 duplicate callbacks
+  - HUB-235 and HUB-236 in review; new ticket HUB-411 (audit writer throughput)
+- 2026-11-07 · `docs(tickets)` · File the load and soak findings as tickets (HUB-235) · HUB-235 · F-18
+  - HUB-405: the `hub_overhead_ms` metric is computed before the vendor call (negative at any real vendor latency); the audit ledger value is correct
+  - HUB-406: a worker restarted with a backlog panics on a nil snapshot (claims before the registry loads)
+  - HUB-407: one worker is capped near 16 / (vendor latency + Hub time) by its fixed concurrency and batch barrier
+  - HUB-408: the account limiter makes a Redis call per sync vendor call and hides it from the overhead
+  - HUB-409 / HUB-410: audit masking re-parses JSON on the request path; a failed audit write drops its batch without retry
+  - HUB-403 in progress: its pprof box is done on this branch
+- 2026-11-07 · `perf(load)` · Add hubload and the deploy/load harness (HUB-235) · HUB-235 · F-18
+  - `make load` starts mockvendor, gateway, worker and scheduler on a dedicated load database and runs the comparison (direct to mockvendor vs through the Hub), the sync and async ramps with CPU profiles, and the soak, then writes a Markdown report
+  - New `hubload` tool (`rate`, `soak`, `report`, `settle`): open-loop arrivals (latency from the intended send time), per-step metric deltas, audit-ledger overhead, outbox sampling and CPU per process
+  - The soak injects random vendor outages (refused, reset, 503, timeouts) and reconciles every accepted request against `hub.requests` and the callbacks received: lost, non-terminal, duplicate outcomes, redeliveries
+  - Measurements wait for a quiet machine (1-minute load average below 1.0) and record the load average next to every number; the run refuses databases whose name does not contain `load`
+- 2026-11-07 · `feat(roles)` · Serve pprof on the ops port only (HUB-403) · HUB-403 · F-18
+  - Every role serves `/debug/pprof/*` on its ops port (TECH_SPEC §2, OBSERVABILITY §8.1), so a running gateway or worker can be CPU- and heap-profiled
+  - The public gateway and admin listeners still answer 404 on `/debug/pprof/`
 - 2026-11-07 · `docs(milestones)` · Add the M8 summary and v1.0.0 release notes (HUB-237) · HUB-237 · F-18
   - docs/milestones/M8.md: acceptance per DESIGN §19 M8 with evidence (500 sync RPS and the zero-loss soak met; 2,000 async msg/s not met on the 2-CPU box), the latency the Hub adds, deviations and deferred tickets
   - docs/releases/v1.0.0.md: draft release notes with contract versions and the blockers before tagging (HUB-406, HUB-401, HUB-405, staging load runs)

@@ -1,0 +1,6 @@
+integration: int_load_async
+owner_tenant: load-tenant
+capability: events.track@v1
+grants: []
+active_version: 1
+description: Load test, async mode with polling (L2)
