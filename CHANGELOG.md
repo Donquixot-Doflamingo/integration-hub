@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `contract(mcp)` · Add admin write tools with no delete path (HUB-314) · HUB-314 · F-20
+  - `hubmcp-tools` 1.1.0: a team's Claude can onboard and change tenants, API keys, vendors, endpoints, account config and quota, transformers, integrations (drafts, validate, publish, weights, rollback) and callback endpoints, signed in as the user, with the Hub's RBAC deciding
+  - No MCP tool can delete, purge, replay, unseal, retire, pause, force a breaker, revoke or rotate keys, or accept a credential; deleting stays manual in the console
+  - Live-traffic changes and secret-minting tools need `confirm: true`; minted keys and signing secrets are marked sensitive and shown once
+  - `make contracts-check` now fails if any tool maps to a DELETE or forbidden operation, accepts a secret input, or leaves a hub-admin operation unclassified
+  - hubmcp must implement the new tools in HUB-315; until then its frozen-contract drift tests fail on this branch
 - 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
   - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
   - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series
