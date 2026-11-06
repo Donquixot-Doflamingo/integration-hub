@@ -47,6 +47,7 @@ One noisy tenant can exhaust a shared vendor account; one slow vendor can exhaus
 6. Retry budget exhausted → retry deferred (not dropped), metric incremented.
 7. The breaker counts vendor 429 at half weight (F-12).
 8. Combined breaker + limiter + bulkhead budget 0.1 ms p99 (DESIGN §18.6).
+9. **Worker slots per target (HUB-412, ADR-0019).** The async worker claims continuously, `min(HUB_WORKER_CLAIM_BATCH, free slots)` as soon as a slot frees, and no `(account, endpoint)` may hold more than `HUB_WORKER_TARGET_CAP` of its `HUB_WORKER_CONCURRENCY` slots (default a quarter, at most the 64-connection bulkhead). A claim takes no more of a target's backlog than that target's free slots (none at its cap); an envelope that still finds its target full is put back unattempted (no attempt counted, no breaker outcome, no retry-budget token). A slow or hanging vendor therefore fills only its own share of the worker, the same way the connection bulkhead contains it on the sync path. Full picture: `docs/tech/ISOLATION.md`.
 
 ## Data model impact
 `api_keys.rate_limit` / tenant limits; account `quota` in config. Redis buckets.
@@ -61,6 +62,9 @@ Vendor `defaults.rate_limit.per_account_rps`; account `quota: { rps, daily }`; t
 | Metric | `retry_budget_exhausted_total` | |
 | Metric | `bulkhead_in_flight{account}`, `bulkhead_rejections_total` | |
 | Metric | `ratelimit_wait_ms` | recorded in `vendor.sent` audit too |
+| Metric | `worker_inflight{pool}`, `worker_target_inflight{account, endpoint}` | worker slots in use, per target (HUB-412) |
+| Metric | `worker_target_cap_deferred_total{account, endpoint}` | envelopes put back over their target's cap (HUB-412) |
+| Log | `worker.target_at_cap` (DEBUG) | one per put-back; the counter carries the rate |
 
 ## Security & PII
 Limits protect vendor accounts from abuse by compromised tenant keys.
@@ -70,10 +74,12 @@ Limits protect vendor accounts from abuse by compromised tenant keys.
 | --- | --- | --- |
 | Redis down | Account limiter falls back to local per-node share (proposed) | Possibly vendor 429s |
 | Slow vendor saturates bulkhead | Only that account affected | 503 for that account |
+| Slow or hanging vendor with an async backlog | Holds at most its target cap of worker slots; the rest of its backlog waits in the outbox, unclaimed until it has a free slot | That vendor's async requests take longer; other vendors' latency unchanged (`TestNoisyNeighbour`) |
 
 ## Testing
 - **Integration**: 4 workers, 50 rps quota, 1,000 envelopes → ≤ 50 rps, zero 429s at mockvendor.
-- **Chaos**: slow-drip account does not affect another account's p99.
+- **Chaos**: `TestNoisyNeighbour` (`backend/internal/edge/isolation_integration_test.go`, HUB-412): account A slow (1.3 s answers), hanging until its timeout, refusing connections, or answering 503 while callers keep sending it 20/s; account B's async p99 stays within 300 ms of its baseline (bound justified in the test), B's sync p99 within 100 ms, B and A lose nothing. Before/after numbers: `docs/tech/ISOLATION.md`.
+- **Integration**: `TestWorkerTargetCap`, `TestWorkerClaimsContinuously`, `TestWorkerShutdownFinishesInFlight` (`backend/internal/delivery`), `TestClaimWithinTargetRoom`, `TestDeferTarget` (`backend/internal/queue`).
 - **Unit**: priority ordering; retry budget math.
 
 ## Rollout & migration
@@ -91,3 +97,4 @@ HUB-140 – HUB-169 (EP-06, filter `feature: F-13`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-07 | Worker slots per target (rule 9), worker settings, metrics, noisy-neighbour tests (HUB-412) | backend-engineer |

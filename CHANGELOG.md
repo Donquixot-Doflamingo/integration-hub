@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(delivery)` · Claim continuously and cap worker slots per vendor account (HUB-412) · HUB-412 · F-13
+  - One slow or hanging vendor no longer delays other vendors' async deliveries: the worker claims as soon as a slot frees instead of waiting for its whole batch, and one (account, endpoint) may hold at most a quarter of the worker's slots (64 of 256 by default)
+  - A claim takes no more of a vendor's backlog than its free slots, so a large backlog for a slow vendor never crowds others out; an envelope that still finds its vendor full is put back without counting an attempt, a breaker failure or a retry token
+  - Worker concurrency defaults to 256 (messaging) and 64 (LLM) per process, as TECH_SPEC promised, instead of 16
+  - New metrics `worker_inflight{pool}`, `worker_target_inflight{account, endpoint}`, `worker_target_cap_deferred_total{account, endpoint}`; ADR-0019
 - 2026-11-07 · `fix(delivery)` · Wait for the first registry snapshot before claiming (HUB-406) · HUB-406 · F-09
   - A worker restarted with a backlog no longer panics on a nil snapshot: it claims nothing until the first snapshot loads and logs `worker.waiting_for_snapshot` once
   - An envelope claimed without a snapshot is put back unattempted, so restarts no longer count crashes toward the poison detector (healthy envelopes could be dead-lettered as poison)

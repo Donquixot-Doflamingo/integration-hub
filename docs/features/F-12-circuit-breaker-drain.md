@@ -58,7 +58,8 @@ During a vendor outage every caller today discovers it separately, keeps hammeri
 4. Parked envelopes keep arrival order per `(account, endpoint)`; scheduler (leader-elected) runs `Queue.Release` at the ramp rate.
 5. Drain starts ≤ 60 s after breaker close (success metric).
 6. Health probe uses the vendor's `health_probe` definition (dry where possible, DESIGN §8.3).
-7. The scheduler's drain releases nothing before its first registry snapshot (it would not know the account rate; HUB-406).
+7. **What the breaker does not cover, and what does (HUB-412).** The breaker parks a vendor that fails (5xx, connection errors, timeouts), but only after its threshold, and never a vendor that is slow but still answers 2xx. Until it opens, and for slow vendors always, the worker's per-`(account, endpoint)` in-flight cap (F-13 rule 9, ADR-0019) keeps that vendor's attempts to its share of the worker's slots. Envelopes over the cap are put back without counting as attempts or breaker outcomes, so the cap never trips or skews a breaker. Probes in half-open hold at most cap slots too. Full picture with tests: `docs/tech/ISOLATION.md`.
+8. The scheduler's drain releases nothing before its first registry snapshot (it would not know the account rate; HUB-406).
 
 ## Data model impact
 `outbox.status = parked` with `(status, account_id, endpoint_id)` index. Breaker state in Redis only.
@@ -71,6 +72,7 @@ Vendor `defaults.breaker`, `health_probe`; integration `breaker.override`, `deli
 | --- | --- | --- |
 | Metric | `breaker_state`, `breaker_transitions_total` | per account/endpoint |
 | Metric | `parked_count`, `parked_oldest_age_s`, `drain_rate` | |
+| Metric | `worker_target_inflight`, `worker_target_cap_deferred_total` | per breaker key: how much of the worker a misbehaving vendor holds (HUB-412) |
 | Alert | breaker open > 5 min | page |
 | Alert | `parked_oldest_age_s` > 10 min | page |
 
@@ -83,9 +85,12 @@ Force-open/close and pause are admin mutations in `change_log` with reason.
 | Redis down | Nodes use local breaker state only | Possibly slower agreement |
 | Scheduler leader lost | Standby takes over; drain resumes | Slight delay |
 | Re-open mid-drain | Remaining stay parked | 202s continue |
+| Vendor slow but answering (never trips) | Contained by the worker's per-target cap; its backlog waits in the outbox | Its async requests slow down; other accounts unaffected (`TestNoisyNeighbour/a_slow_but_successful`) |
+| Vendor hangs until timeout, before the breaker opens | At most cap worker slots wait on it; then it trips and parks | Other accounts unaffected (`TestNoisyNeighbour/b_hangs_until_timeout`) |
 
 ## Testing
 - **Chaos** (mockvendor; DESIGN §19 M5 accept 1–5): open within window; 503/202/park per mode; recovery drain ≤ 60 s with 20 → 100 % ramp; re-open mid-drain; two integrations on one account trip together, pausing one leaves the other; failover header.
+- **Chaos (isolation, HUB-412)**: `TestNoisyNeighbour`: another account's async and sync latency and delivery while one account is slow, hanging, refusing or answering 503; the misbehaving account's requests all succeed after recovery (retried or parked and drained).
 - **Integration**: `TestDrainWaitsForSnapshot` (HUB-406).
 - **Unit**: breaker state machine table; ramp schedule.
 
@@ -103,4 +108,4 @@ HUB-140 – HUB-169 (EP-06, filter `feature: F-12`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
-| 2026-11-07 | Rule 7: the drain waits for a snapshot (HUB-406) | backend-engineer |
+| 2026-11-07 | Rules 7–8: what the breaker does not cover (worker per-target cap), drain waits for a snapshot (HUB-412, HUB-406) | backend-engineer |

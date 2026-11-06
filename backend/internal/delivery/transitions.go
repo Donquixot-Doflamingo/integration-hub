@@ -171,5 +171,11 @@ func (t *Transitions) Hold(ctx context.Context, env core.Envelope, worker string
 	return t.Queue.Defer(ctx, t.DB, env.RequestID, worker, at, reason)
 }
 
+// HoldForTarget puts a claimed envelope back unattempted because the worker's in-flight cap for
+// target is reached (HUB-412); the row remembers target so the next claims can skip it.
+func (t *Transitions) HoldForTarget(ctx context.Context, env core.Envelope, worker string, at time.Time, target queue.Target) error {
+	return t.Queue.DeferTarget(ctx, t.DB, env.RequestID, worker, at, "target at cap", target)
+}
+
 // IsLost reports a lost race (the caller drops its result).
 func IsLost(err error) bool { return errors.Is(err, queue.ErrLost) }

@@ -141,6 +141,7 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 			Attempter: attempter, Audit: dp.audit, Masker: masker, Sealer: sealer, Budget: budget, Metrics: m, Log: log,
 			TracerProvider: tp,
 		}
+		dp.worker.RegisterMetrics(m.Registry)
 		if dp.dispatcher, err = callbacks.NewDispatcher(callbacks.DispatcherDeps{
 			Pool: st.pg, Snapshots: &reg.store, Secrets: creds.RegistrarSecrets{Cache: cache}, Audit: dp.audit,
 			Metrics: m, Log: log, TracerProvider: tp,
