@@ -1,0 +1,6 @@
+{
+  "method": "POST",
+  "path": "/offline-aadhaar/otp",
+  "headers": {"Content-Type": "application/json", "X-Client-Id": "fixture-client-id", "X-Client-Secret": "fixture-client-secret"},
+  "body": {"aadhaar_number": "655675523712"}
+}

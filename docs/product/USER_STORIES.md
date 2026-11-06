@@ -460,6 +460,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-1802 — Overhead breakdown
 **As a** platform engineer, **I want** each middleware stage to publish its own duration, **so that** I can find latency regressions. · **Must**
 - **Given** a sync request, **when** metrics are scraped, **then** `hub_overhead_ms` has a stage label for every §18.4 stage.
+- **Given** the live latency demo (`examples/latency-demo/run.sh`, HUB-353), **when** I run it against a public API, **then** I see p50/p95/p99 directly and through a local Hub, their difference, and the Hub's own `hub_overhead_ms` for the same requests.
 
 ### US-1803 — Load and soak tests
 **As a** platform engineer, **I want** k6/vegeta load tests at 500 sync RPS + 2,000 async msg/s and a soak with random outages, **so that** we prove the budgets. · **Must**
@@ -602,6 +603,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-2205 — Vendor sessions and hand-offs
 **As a** service developer, **I want** two-step flows (Aadhaar OTP) via `X-Hub-Session` and redirect hand-offs (DigiLocker, eSign, eNACH), **so that** multi-step KYC works through one contract. · **Must**
 - **Given** step 1 `generate`, **when** it returns, **then** I receive `X-Hub-Session`; step 2 `verify` with it is routed to the same account + version within 10 min; after expiry → `SESSION_NOT_FOUND`.
+- **Given** the Aadhaar OTP e-KYC example (`int_aadhaar_okyc`, HUB-351), **when** I call `send_otp` with an Aadhaar number and consent and then `verify_otp` with the OTP and `X-Hub-Session`, **then** I get minimal e-KYC data, the provider's reference never reaches me, the Hub keeps no Aadhaar number in the session and the audit is sealed; switching from mockvendor to the provider's sandbox changes no request or response.
 
 ### US-2206 — Account Aggregator long-running requests
 **As a** service developer, **I want** AA consent → notification → FI fetch handled as one long-running request with a callback, **so that** I receive FI data without orchestrating the AA flow. · **Should**
@@ -611,6 +613,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 **As a** compliance officer, **I want** bureau/Aadhaar/PAN payloads sealed with a per-tenant key and readable only via an audited unseal, **so that** sensitive data is protected but provable. · **Must**
 - **Given** a sealed request, **when** a viewer opens it, **then** only sha256, size and metadata are shown.
 - **Given** a user with unseal permission and a reason, **when** they unseal, **then** the payload is shown and a `change_log` / audit event records who, when, why.
+- **Given** the PAN and Aadhaar examples (`int_pan_verify`, `int_aadhaar_okyc`, HUB-351, HUB-352), **when** a call completes, **then** its audit record has policy `sealed`, no payload holds the PAN, Aadhaar number, OTP or name in clear, and the sealed copies open only with the tenant key.
 
 ### US-2208 — KMS / Vault credential sources
 **As a** platform engineer, **I want** KMS and Vault `CredentialSource` implementations, **so that** production secrets use managed envelope encryption. · **Must**

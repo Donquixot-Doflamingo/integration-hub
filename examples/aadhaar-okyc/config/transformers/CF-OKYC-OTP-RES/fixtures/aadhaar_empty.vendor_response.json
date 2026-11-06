@@ -1,0 +1,4 @@
+{
+  "status": 400,
+  "body": {"type": "validation_error", "code": "aadhaar_empty", "message": "Please enter aadhaar number in the request"}
+}

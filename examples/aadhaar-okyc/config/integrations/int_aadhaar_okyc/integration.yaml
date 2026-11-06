@@ -1,0 +1,13 @@
+# EXAMPLE ONLY (HUB-351). Aadhaar OTP-based offline e-KYC behind ONE integration id:
+#   operation send_otp   (step 1) sends an OTP to the mobile linked to the Aadhaar and opens a
+#                        vendor session (X-Hub-Session) holding only the provider's ref_id;
+#   operation verify_otp (step 2) verifies the OTP inside that session and returns minimal e-KYC data.
+# Each OTP is billed by the provider and counts against UIDAI's OTP limits, so every call needs an
+# Idempotency-Key (DESIGN §4.2): a double tap sends one SMS.
+integration: int_aadhaar_okyc
+owner_tenant: kyc-onboarding
+capability: demo.aadhaar_okyc@v1
+grants: []
+active_version: 1
+description: Aadhaar OTP e-KYC (example)
+moves_money_or_quota: true

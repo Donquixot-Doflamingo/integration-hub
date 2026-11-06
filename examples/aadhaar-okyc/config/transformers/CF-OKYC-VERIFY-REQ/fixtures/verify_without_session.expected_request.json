@@ -1,0 +1,6 @@
+{
+  "method": "POST",
+  "path": "/offline-aadhaar/verify",
+  "headers": {"Content-Type": "application/json", "X-Client-Id": "fixture-client-id", "X-Client-Secret": "fixture-client-secret"},
+  "body": {"otp": "111000"}
+}

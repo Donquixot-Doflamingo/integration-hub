@@ -1,0 +1,16 @@
+# EXAMPLE ONLY (HUB-351). One target, two operations, two vendor endpoints: send_otp uses the
+# default pair (transformer), verify_otp its own pair under operations (HUB-343).
+integration: int_aadhaar_okyc
+version: 1
+targets:
+  - vendor: cashfree-sid
+    account: cf-sid-test
+    transformer: { request: CF-OKYC-OTP-REQ@1, response: CF-OKYC-OTP-RES@1 }
+    operations:
+      verify_otp: { request: CF-OKYC-VERIFY-REQ@1, response: CF-OKYC-VERIFY-RES@1 }
+    weight: 100
+delivery:
+  mode: sync                    # interactive capability: a person is waiting (DESIGN §5.4)
+  on_circuit_open: fail_fast    # never queue an OTP
+audit: { payloads: sealed, retention: 90d }   # D6: Aadhaar payloads sealed, 90 days, unseal audited
+publish: { author: example, reason: "first version" }
