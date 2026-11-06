@@ -1,0 +1,1 @@
+{"method": "POST", "path": "/v1/codes", "headers": {"Content-Type": "application/json", "X-Client-Id": "SV-PRIMARY", "X-Account-Id": "fixture-account-id", "X-Api-Key": "fixture-passcode"}, "body": {"phone": "+919812345678", "channel": "sms"}}

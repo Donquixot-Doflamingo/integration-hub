@@ -48,6 +48,7 @@ Routing, limits, transformers and policies must be readable in microseconds on e
 5. Nodes report their `snapshot_version`; a node > 60 s behind raises a warn alert (DESIGN §16.3).
 6. Snapshots retained 90 days (DESIGN §8.2).
 7. Secrets are never in the snapshot blob; accounts carry `credentials_ref` only (F-07).
+8. Every operation of an integration's capability must be served by transformers compiled for it (check `operations_have_transformers`, HUB-343/HUB-345): a target's default pair serves the operations its `operations` map does not list, so a multi-operation capability with a single pair compiled for one operation is refused at `targets[i].transformer` (file-qualified), and an `operations` key the capability does not declare is refused at `targets[i].operations.<op>`. The build runs it for config files, `hubctl apply`, the admin publish and every node alike. Details: F-14 "Per-operation transformers".
 
 ## Data model impact
 `config_snapshots(version, checksum, blob_ref, author, diff)`; registry tables from DESIGN §18.2 (`tenants`, `api_keys`, `vendors`, `vendor_endpoints`, `accounts`, `capabilities`, `transformers`, `integrations`, `integration_versions`, `integration_grants`, `registrar_endpoints`).

@@ -33,6 +33,12 @@ type adminRig struct {
 
 func newAdminRig(t *testing.T) *adminRig {
 	t.Helper()
+	return newAdminRigFrom(t, registry.Sources{Config: os.DirFS("../../../config"), Contracts: os.DirFS("../../../../contracts")})
+}
+
+// newAdminRigFrom is newAdminRig starting from the bootstrap tree.
+func newAdminRigFrom(t *testing.T, bootstrap registry.Sources) *adminRig {
+	t.Helper()
 	pool := testPool(t)
 	// The archive is global: every rig starts from the dev config tree.
 	if _, err := pool.Exec(t.Context(), `TRUNCATE hub.config_snapshots`); err != nil {
@@ -42,7 +48,7 @@ func newAdminRig(t *testing.T) *adminRig {
 	t.Cleanup(func() { _ = rdb.Close() })
 	archive := control.NewArchive(pool, control.DirBlobStore{Root: t.TempDir()})
 	pub := &control.Publisher{Pool: pool, Archive: archive, Guard: control.RetireGuard(pool),
-		Bootstrap: registry.Sources{Config: os.DirFS("../../../config"), Contracts: os.DirFS("../../../../contracts")},
+		Bootstrap: bootstrap,
 		Notify:    func(ctx context.Context, v int64) { rdb.Publish(ctx, control.SnapshotChannel, v) }}
 	snapshot := func() *registry.Snapshot {
 		_, snap, err := pub.Current(context.Background())

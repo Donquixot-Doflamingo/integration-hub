@@ -97,7 +97,7 @@ func newM5(t *testing.T, tune m5Tune, snapTune ...func(*registry.Snapshot)) *m5 
 	}
 
 	mv := mockvendor.Start(t)
-	snap := queuedSnapshot(t, mv.VendorURL, tune)
+	snap := queuedSnapshot(t, e2eSnapshot, mv.VendorURL, tune)
 	for name, v := range snap.Vendors {
 		vc := *v
 		vc.Defaults.Breaker = registry.BreakerConfig{WindowS: 10, MinCalls: 4, FailureRatio: 0.5, ConsecutiveTimeouts: 5, OpenS: 5, OpenMaxS: 40, HalfOpenProbes: 2}

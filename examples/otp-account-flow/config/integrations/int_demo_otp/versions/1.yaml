@@ -1,11 +1,15 @@
-# EXAMPLE ONLY (HUB-342). v2 differs from v1 only in the account: the example test publishes v2
-# between step 1 and step 2 to show that a session stays on the version + account that opened it.
+# EXAMPLE ONLY (HUB-342, HUB-343). v2 differs from v1 only in the account: the example test
+# publishes v2 between step 1 and step 2 to show that a session stays on the version + account
+# that opened it. Each operation has its own transformer pair, so its own vendor endpoint:
+# send_otp uses the default pair (transformer), verify_otp its pair under operations.
 integration: int_demo_otp
 version: 1
 targets:
   - vendor: demo-kyc
     account: demo-kyc-a
-    transformer: { request: DEMO-OTP-REQ@1, response: DEMO-OTP-RES@1 }
+    transformer: { request: DEMO-OTP-SEND-REQ@1, response: DEMO-OTP-SEND-RES@1 }
+    operations:
+      verify_otp: { request: DEMO-OTP-VERIFY-REQ@1, response: DEMO-OTP-VERIFY-RES@1 }
     weight: 100
 delivery:
   mode: sync                    # interactive capability: sync only (DESIGN §5.4)

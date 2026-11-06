@@ -69,6 +69,8 @@ func pointer(path string) string {
 func checkOf(p registry.Problem) string {
 	m, path := strings.ToLower(p.Message), strings.ToLower(p.Path)
 	switch {
+	case strings.Contains(m, "compiled for operation") || strings.Contains(m, "is not an operation of"):
+		return registry.CheckOperationsHaveTransformers // registry checkOperations (HUB-343)
 	case strings.Contains(m, "golden"):
 		return "goldens_pass"
 	case strings.Contains(m, "retired"):

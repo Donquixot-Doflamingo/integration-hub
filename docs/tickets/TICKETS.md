@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **224** · done: **158** · todo: **56** · other (in-progress/in-review/blocked): **10**
+Total tickets: **226** · done: **158** · todo: **55** · other (in-progress/in-review/blocked): **13**
 
 ## Epics
 
@@ -15,12 +15,12 @@ Total tickets: **224** · done: **158** · todo: **56** · other (in-progress/in
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 17 | 16 |
-| EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
+| EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 17 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 1 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
-| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 18 | 0 |
+| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 0 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 5 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
@@ -1500,7 +1500,17 @@ Golden fixtures live in `transformers/<ID>/fixtures/`, shared by every version o
 - [x] Versions without one keep using the shared fixtures
 - [x] A failing per-version golden names `fixtures/v<N>/<case>`
 
-## EP-08 — M7 Control plane & hubctl
+### HUB-349 — Publisher archives a snapshot that does not rebuild when a draining account is targeted again
+- **Epic:** EP-07 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-15 · **Stories:** US-15xx
+- **Branch:** `fix/HUB-349-reactivate-rebuild`
+
+Found while building HUB-343 (`TestPerOperationSpecs`). `control.(*tree).drainUnreferenced` moves an account that is targeted again from `draining` back to `active` by rewriting its file in the edit tree, but returns only the accounts it *drained*. `commit` rebuilds the snapshot only when that list is non-empty, so on a re-activation it archives the edited tree with the checksum of the tree *before* the rewrite. Every later `Current()` / `Latest()` then fails with `corrupt snapshot blob: content rebuilds to …` and the admin API answers 500. Reproduce: publish a version that drops an account (it drains), then roll back to a version that targets it again.
+
+**Acceptance criteria**
+- [ ] `commit` rebuilds the snapshot whenever `drainUnreferenced` changed any account state (drained or re-activated)
+- [ ] Integration test in `internal/control`: drop an account, roll back, then `Current()` succeeds and the account is `active`
+
 
 ### HUB-200 — Admin server, OIDC dev stub, RBAC and /me
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
@@ -2728,40 +2738,47 @@ The product owner asked how calls work and how UX-style flows ("first an OTP, th
 
 ### HUB-343 — Per-operation transformers on integration version targets
 - **Epic:** EP-12 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-344 · **Feature:** F-22 · **Stories:** US-2205
+- **Status:** in-review · **Depends on:** HUB-344 · **Feature:** F-22 (built in F-14) · **Stories:** US-2205
 - **Branch:** `feat/HUB-343-per-operation-transformers`
 
 Found while building HUB-342. A target has one transformer pair (`transformer: {request, response}`), and the attempter uses it for every operation (`internal/delivery/attempter.go`). Because a request transformer names one `vendor_endpoint` and is compiled against one operation's schema, a multi-operation capability (DESIGN §3.1 `kyc.aadhaar_otp@v1` with `generate` and `verify`, each on its own vendor endpoint) cannot be expressed today. Let a target map each operation to its own pair, keeping the current single pair for single-operation capabilities. Needs the admin contract change in HUB-344 first (integration versions are created and shown through `/admin/v1`).
 
 **Acceptance criteria**
-- [ ] A target may set `operations: {<op>: {request, response}}`; the publish check refuses a version that leaves an operation of its capability without a pair, or pairs a transformer compiled for another operation
-- [ ] Sync, wait, async and dry-run select the pair of the invoked operation (envelope `operation`), including session steps and the failover chain
-- [ ] Integration test: `generate` and `verify` on two mockvendor endpoints in one session; goldens per transformer
-- [ ] `examples/otp-account-flow` moves to two operations (`send_otp`, `verify_otp`) and `docs/use-cases/README.md` drops the "one operation" note
+- [x] A target may set `operations: {<op>: {request, response}}`; the publish check refuses a version that leaves an operation of its capability without a pair, or pairs a transformer compiled for another operation (every operation always has a pair, the default `transformer` is required by the contract; the check `operations_have_transformers` refuses an undeclared key and any operation whose selected pair is compiled for another operation): `TestOperationsHaveTransformers`, `TestPerOperationSpecs` (admin validate and publish, contract pointers)
+- [x] Sync, wait, async and dry-run select the pair of the invoked operation (envelope `operation`), including session steps and the failover chain: `TestPerOperationSyncSelectsThePair`, `TestPerOperationFailoverSelectsThePair`, `TestPerOperationDryRunSelectsThePair`, `TestPerOperationShadowSelectsThePair`, `TestPerOperationWaitMode`, `TestPerOperationAsyncWorker`, session steps in `TestExampleOTPAccountFlow`
+- [x] Integration test: `generate` and `verify` on two mockvendor endpoints in one session; goldens per transformer: `TestExampleOTPAccountFlow` (`send_otp` → `/v1/otp/send`, `verify_otp` → `/v1/otp/verify` in one session, pinned to v1 / account A across a publish), goldens for all four OTP transformers and the four `internal/testkit/multiop` transformers
+- [x] `examples/otp-account-flow` moves to two operations (`send_otp`, `verify_otp`) and `docs/use-cases/README.md` drops the "one operation" note
 
 ### HUB-344 — Contract: per-operation transformers in admin integration versions
 - **Epic:** EP-12 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
-- **Branch:** `contract/HUB-344-per-operation-transformers`
+- **Status:** in-review · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
+- **Branch:** `contract/HUB-344-per-operation-transformers` (committed on `feat/HUB-343-per-operation-transformers`, as the first commit of the HUB-343 train)
 
 Contract change request from HUB-342 for the `contract-steward`: the admin integration-version target needs an optional per-operation transformer map next to the existing `transformer` pair, so HUB-343 can be configured, published, diffed and shown by the console and `hubctl` (additive, admin minor bump). The caller API is unchanged: `invokeIntegrationOperation` already exists.
 
 **Acceptance criteria**
-- [ ] `hub-admin.v1.yaml` target schema gains optional `operations: {<operation name>: {request, response}}` (refs `^[A-Za-z][A-Za-z0-9_-]{0,63}@[1-9][0-9]*$`), with an example
-- [ ] `info.version` minor bump, `contracts/CHANGELOG.md` entry, validation clean
-- [ ] Backend and frontend notified
+- [x] `hub-admin.v1.yaml` target schema gains optional `operations: {<operation name>: {request, response}}` (refs `^[A-Za-z][A-Za-z0-9_-]{0,63}@[1-9][0-9]*$`), with an example
+- [x] `info.version` minor bump, `contracts/CHANGELOG.md` entry, validation clean
+- [x] Backend and frontend notified (contract notice below)
+
+#### Contract notice — HUB-344 — hub-admin.v1.yaml 1.1.0 → 1.2.0 (minor)
+- Changed: new schema `TransformerPair` (`request`, `response`: `TransformerRef`, both required); `TargetRef.transformer` now `$ref`s it (same shape, still required: the default pair). New optional `TargetRef.operations`: object, `minProperties: 1`, keys `OperationName` (`^[a-z][a-z0-9_]{0,31}$`), values `TransformerPair`. `TargetRef` is used by `Target` (`targets[]`), `failover[]` and `ShadowPolicy.target`, so it appears in every `IntegrationSpec`. `ValidationCheck.check` lists the new known check `operations_have_transformers`.
+- operationIds whose bodies carry `IntegrationSpec`: `createIntegrationDraft`, `updateIntegrationDraft`, `validateIntegrationVersion`, `getIntegrationVersion`, `getIntegration` (`active`), `publishIntegrationVersion`, `rollbackIntegration`, `updateIntegrationWeights`, `diffIntegrationVersions` (generic diff ops). Named examples `per_operation` on `createIntegrationDraft` (request) and `getIntegrationVersion` (200).
+- Backend (HUB-343): accept, store, round-trip and render `operations` in the admin spec conversion (`internal/control/adminapi/integration_spec.go`) and the registry version file; select the pair by the invoked operation (listed → its pair, otherwise `transformer`) for targets, failover and shadow; report `operations_have_transformers` failures with pointer `/targets/<i>/operations/<op>` (or `/targets/<i>/transformer` for a defaulted operation); extend contract tests with a spec that has `operations`.
+- Frontend: `npm run gen:api` (schema.d.ts gains `TransformerPair` and `operations`; contract.gen.ts version string changes, so the CI freshness check fails until regenerated); show per-operation pairs in the integration version view and draft editor.
+- hubmcp / caller skill: no change (no tool exposes the target; callers never see transformers).
 
 ### HUB-345 — Refuse multi-operation integrations whose single pair serves every operation
 - **Epic:** EP-12 · **Type:** fix · **Area:** backend
-- **Status:** todo · **Depends on:** — · **Feature:** F-03 · **Stories:** US-0301
-- **Branch:** `fix/HUB-345-multi-op-single-pair`
+- **Status:** in-review · **Depends on:** — · **Feature:** F-03 · **Stories:** US-0301
+- **Branch:** `fix/HUB-345-multi-op-single-pair` (delivered on `feat/HUB-343-per-operation-transformers`: the HUB-343 check `operations_have_transformers` subsumes it)
 
 Found while building HUB-342. A capability with operations `send` and `verify`, bound to an integration whose target pair is compiled for `send` (`operation: send`), builds a snapshot without any problem. Invoking `verify` then runs the `send` transformers on a `verify` body and validates the result against the `send` response schema. Until HUB-343 lands, the registry should refuse such a version with a path-qualified error instead of failing at request time.
 
 **Acceptance criteria**
-- [ ] `registry.Build` refuses an integration version whose target transformers are compiled for a different operation than one the capability declares, or whose capability has more than one operation, naming the file and `targets[i].transformer`
-- [ ] Table test in `internal/registry` (two-operation capability, one pair) fails before the fix and passes after
-- [ ] `go test -race ./internal/registry/...` green
+- [x] `registry.Build` refuses an integration version whose target transformers are compiled for a different operation than one the capability declares, naming the file and `targets[i].transformer` (registry `checkOperations`, check `operations_have_transformers`). With HUB-343 a multi-operation capability is no longer refused as such: it is refused when its default pair would serve an operation it is not compiled for, which is exactly the one-pair case this ticket is about
+- [x] Table test in `internal/registry` (two-operation capability, one pair) fails before the fix and passes after: `TestOperationsHaveTransformers/two-operation_capability,_one_pair_(HUB-345)` (verified by disabling the check); the example config proves it too (`TestExampleOTPRefusesOnePairForBothOperations`)
+- [x] `go test -race ./internal/registry/...` green
 
 ### HUB-346 — Transformer error rules map a canonical `reason`
 - **Epic:** EP-12 · **Type:** feat · **Area:** backend
@@ -2796,6 +2813,17 @@ Coarse placeholder for Release 2, found while writing the HUB-342 use-case catal
 **Acceptance criteria**
 - [ ] Split into ~1-day tickets in this range before work starts
 - [ ] Feature doc F-22 gains the item, with the contract changes it needs (upload size limits, job status) listed as CCRs
+
+### HUB-350 — `hubctl dry-run` for one operation of a multi-operation integration
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-343 · **Feature:** F-17 · **Stories:** US-17xx
+- **Branch:** `feat/HUB-350-hubctl-dry-run-operation`
+
+Found while building HUB-343. `hubctl dry-run <integration> <body.json>` dry-runs the default request transformer of the heaviest target (`cmd/hubctl/ops.go`). For an integration whose target has per-operation pairs, the operator cannot see the request of another operation (e.g. `verify_otp`). Add `--operation <name>` that picks `operations.<name>.request` when the target lists it (else the default), through the existing `POST /admin/v1/transformers/dry-run` (no contract change: the client reads `operations` from `getIntegration`, hub-admin 1.2.0).
+
+**Acceptance criteria**
+- [ ] `hubctl dry-run --operation verify_otp int_demo_otp body.json` dry-runs the verify pair's request transformer; without the flag, behaviour is unchanged
+- [ ] Unit test with a fake admin server
 
 ## EP-13 — Operability follow-ups (found writing the M8 runbooks)
 

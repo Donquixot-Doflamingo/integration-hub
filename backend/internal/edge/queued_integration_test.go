@@ -41,9 +41,10 @@ type queuedRig struct {
 	spec   *contract.Spec
 }
 
-// queuedSnapshot points vendors at mv and lets each test tune integrations.
-func queuedSnapshot(t *testing.T, vendorURL string, tune func(id string, in *registry.Integration, v *registry.IntegrationVersion)) *registry.Snapshot {
-	snap := e2eSnapshot(t, vendorURL)
+// queuedSnapshot points vendors at mv and lets each test tune integrations. base builds the
+// registry (default e2eSnapshot, the dev config).
+func queuedSnapshot(t *testing.T, base func(*testing.T, string) *registry.Snapshot, vendorURL string, tune func(id string, in *registry.Integration, v *registry.IntegrationVersion)) *registry.Snapshot {
+	snap := base(t, vendorURL)
 	for _, v := range snap.Vendors { // e2eSnapshot lowers timeouts to 300 ms; queued tests need room
 		for name, ep := range v.Endpoints {
 			ep.TimeoutMS = 3000
@@ -69,6 +70,12 @@ func queuedSnapshot(t *testing.T, vendorURL string, tune func(id string, in *reg
 
 func newQueuedRig(t *testing.T, redisAddr string, tune func(string, *registry.Integration, *registry.IntegrationVersion), cfg ...func(*Deps, *delivery.Worker)) *queuedRig {
 	t.Helper()
+	return newQueuedRigFrom(t, e2eSnapshot, redisAddr, tune, cfg...)
+}
+
+// newQueuedRigFrom is newQueuedRig on the registry base builds.
+func newQueuedRigFrom(t *testing.T, base func(*testing.T, string) *registry.Snapshot, redisAddr string, tune func(string, *registry.Integration, *registry.IntegrationVersion), cfg ...func(*Deps, *delivery.Worker)) *queuedRig {
+	t.Helper()
 	dsn := os.Getenv("HUB_PG_DSN")
 	if dsn == "" {
 		t.Fatal("HUB_PG_DSN not set; run via `make itest`")
@@ -93,7 +100,7 @@ func newQueuedRig(t *testing.T, redisAddr string, tune func(string, *registry.In
 		t.Fatal(err)
 	}
 	mv := mockvendor.Start(t)
-	snap := queuedSnapshot(t, mv.VendorURL, tune)
+	snap := queuedSnapshot(t, base, mv.VendorURL, tune)
 	m := telemetry.NewMetrics("gateway", "itest")
 	log := slog.New(slog.DiscardHandler)
 	cache, _ := creds.NewCache(staticLoader(fakeCreds), telemetry.NewSecretSet(), m, creds.CacheOptions{})

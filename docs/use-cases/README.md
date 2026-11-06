@@ -405,14 +405,14 @@ This is the product owner's question: *"In a UX flow, first an OTP comes, then t
 - **The Hub handles each call; your backend owns the journey.** The Hub is not a workflow engine (PRD non-goal: "not a multi-step workflow/orchestration engine across vendors"). Your onboarding backend knows which screen the user is on and decides what to call next. The Hub makes each call vendor-neutral, safe to retry, audited, and resilient.
 - **Where the vendor needs continuity between two calls** (an OTP is generated and must be verified against the same vendor transaction), the Hub keeps a **vendor session**: step 1 returns an `X-Hub-Session` header; your backend sends it back on step 2. The Hub stores only the vendor's transaction id, for 10 minutes, pinned to the exact account and version that sent the OTP. That works today.
 - **The bank account check is a separate integration** (a sync lookup, often a different vendor). It needs no session. Your backend calls it after it has seen "OTP verified".
-- **What is not possible yet:** one integration whose steps go to *different vendor endpoints* (e.g. `send_otp` and `verify_otp` as two operations). Today an integration version has one request transformer, so one vendor endpoint, for all operations (HUB-343). The runnable example works around this with a demo vendor that has one OTP endpoint for both steps. The production Aadhaar OTP capability, with a licensed KUA/ASA, is Release 2 (HUB-334).
+- **Each step is its own operation, on its own vendor endpoint.** `send_otp` and `verify_otp` are two operations of one integration (`POST .../invoke/send_otp`, `POST .../invoke/verify_otp`). The platform team gives each operation its own transformer pair, so its own vendor endpoint (per-operation transformers, HUB-343); a configuration that would let one operation's mapping serve the other is refused at publish (HUB-345). That works today. The production Aadhaar OTP capability, with a licensed KUA/ASA, is Release 2 (HUB-334).
 
 ### The UX journey, step by step
 
 | UX screen | Your backend does | The Hub does | Your backend gets |
 | --- | --- | --- | --- |
-| "Enter mobile number" → **Send OTP** | `POST /v1/integrations/int_demo_otp/invoke` with `{"mobile"}` and an `Idempotency-Key` | Validates, resolves the active version (say v1, account A), asks the vendor to send the OTP, keeps the vendor txn id in a new session (10 min) | 200 `{"status": "otp_sent", "expires_in_s": 300}` + header `X-Hub-Session: ses_…`. Store it with the user's onboarding attempt. |
-| "Enter the OTP" → **Verify** | `POST /v1/integrations/int_demo_otp/invoke/default` with `X-Hub-Session` and `{"mobile", "otp"}` | Loads the session, sends the call to **the same account and version** with the stored txn id, even if the platform team published v2 meanwhile | 200 `{"status": "verified"}`, or 422 `UPSTREAM_REJECTED` "The OTP does not match" |
+| "Enter mobile number" → **Send OTP** | `POST /v1/integrations/int_demo_otp/invoke/send_otp` with `{"mobile"}` and an `Idempotency-Key` | Validates, resolves the active version (say v1, account A), calls the vendor's send-OTP endpoint, keeps the vendor txn id in a new session (10 min) | 200 `{"status": "otp_sent", "expires_in_s": 300}` + header `X-Hub-Session: ses_…`. Store it with the user's onboarding attempt. |
+| "Enter the OTP" → **Verify** | `POST /v1/integrations/int_demo_otp/invoke/verify_otp` with `X-Hub-Session` and `{"mobile", "otp"}` | Loads the session, calls the vendor's verify-OTP endpoint on **the same account and version** with the stored txn id, even if the platform team published v2 meanwhile | 200 `{"status": "verified"}`, or 422 `UPSTREAM_REJECTED` "The OTP does not match" |
 | "Enter bank account" → **Continue** | Checks its own state ("OTP verified"), then `POST /v1/integrations/int_demo_bank_verify/invoke` with `{"account_number", "ifsc", "name"}` | A plain sync lookup (penny-drop style) | 200 `{"account_status": "valid", "name_at_bank", "name_match"}` |
 
 ```mermaid
@@ -423,17 +423,17 @@ sequenceDiagram
   participant DB as Hub session store
   participant V as KYC vendor (account A)
   U->>B: mobile number, tap Send OTP
-  B->>H: POST /v1/integrations/int_demo_otp/invoke {"mobile"} + Idempotency-Key
-  H->>V: send OTP (vendor format, account A credentials)
+  B->>H: POST /v1/integrations/int_demo_otp/invoke/send_otp {"mobile"} + Idempotency-Key
+  H->>V: send-OTP endpoint (vendor format, account A credentials)
   V-->>H: 200 OTP_SENT, txn_id
   H->>DB: session = {vendor_txn_id}, version 1, account A, expires in 10 min
   H-->>B: 200 {"status":"otp_sent"} + X-Hub-Session
   B-->>U: show OTP screen
   Note over H: platform team may publish v2 (account B) here, the session stays on v1 + account A
   U->>B: types OTP
-  B->>H: POST .../invoke/default + X-Hub-Session {"mobile","otp"}
+  B->>H: POST .../invoke/verify_otp + X-Hub-Session {"mobile","otp"}
   H->>DB: load session (one primary-key read)
-  H->>V: verify OTP with txn_id (account A)
+  H->>V: verify-OTP endpoint with txn_id (account A)
   V-->>H: 200 VERIFIED
   H-->>B: 200 {"status":"verified"}
   B-->>U: show bank account screen
@@ -451,7 +451,7 @@ Captured from `TestExampleOTPAccountFlow` (request ids and session ids differ pe
 Step 1, send the OTP:
 
 ```http
-POST /v1/integrations/int_demo_otp/invoke
+POST /v1/integrations/int_demo_otp/invoke/send_otp
 Authorization: Bearer hk_test_example_loan_onboarding_local_only
 Content-Type: application/json
 Idempotency-Key: otp-send-app-77
@@ -469,7 +469,7 @@ X-Hub-Served-By: primary
 Step 2, verify the OTP inside the session:
 
 ```http
-POST /v1/integrations/int_demo_otp/invoke/default
+POST /v1/integrations/int_demo_otp/invoke/verify_otp
 Authorization: Bearer hk_test_example_loan_onboarding_local_only
 Content-Type: application/json
 Idempotency-Key: otp-verify-app-77-2
@@ -545,7 +545,8 @@ For Aadhaar OTP eKYC, step 1 carries the Aadhaar number in the canonical body. T
 | Sealed audit (encrypted payloads, audited unseal) | **Works today**, production key management planned | `TestSealedPolicyIsEncryptedAtTheEdge`; KMS-backed keys: HUB-337 |
 | Wrong OTP / expired OTP / vendor down / double tap / edge refusals | **Works today** | `TestExampleOTPAccountFlow` subtests |
 | Bank account verification as a sync lookup | **Works today** (pattern) | `TestExampleOTPAccountFlow`, demo vendor only |
-| Steps on **different vendor endpoints** (`send_otp`, `verify_otp` as operations of one integration) | **Not possible today** | HUB-343 (backend) after HUB-344 (admin contract). Until then the registry should refuse such a config instead of misrouting it: HUB-345 |
+| Steps on **different vendor endpoints** (`send_otp`, `verify_otp` as operations of one integration, each with its own transformer pair), in one session, also through failover, wait, async and dry-run | **Works today** | `TestExampleOTPAccountFlow` (step 1 hits `/v1/otp/send`, step 2 `/v1/otp/verify`, session pinned to v1 / account A across a publish), `TestPerOperationSyncSelectsThePair`, `TestPerOperationFailoverSelectsThePair`, `TestPerOperationDryRunSelectsThePair`, `TestPerOperationShadowSelectsThePair`, `TestPerOperationWaitMode`, `TestPerOperationAsyncWorker` (`backend/internal/edge/`); configured through the admin API: `TestPerOperationSpecs` (HUB-343, HUB-344) |
+| A config where one operation's mapping would serve another is refused at publish (check `operations_have_transformers`), never misrouted at request time | **Works today** | `TestOperationsHaveTransformers` (`backend/internal/registry/`), `TestExampleOTPRefusesOnePairForBothOperations` (HUB-345) |
 | Machine-readable reason for wrong vs expired OTP | **Partly** (message text only) | HUB-346 |
 | Production Aadhaar OTP capability (`kyc.aadhaar_otp@v1`) with a licensed KUA/ASA, UIDAI OTP limits as account quota | **Planned** | HUB-334; the capability schema goes through the contract-steward |
 
@@ -558,7 +559,7 @@ DESIGN §14 groups lending integrations into seven patterns. No production lendi
 | Pattern | Examples | Status | What exists / what is missing |
 | --- | --- | --- | --- |
 | Sync lookup | Bureau pull, PAN verify, PAN–Aadhaar link, GST/Udyam/MCA, penny drop, CKYC search | **Partly** | Works: sync mode, transformers with goldens, mandatory `Idempotency-Key` for money/quota, sealed audit (example: `int_demo_bank_verify`). Missing: capability schemas (CCR each), auth schemes many of these vendors use (OAuth2, HMAC signing, mTLS: HUB-332), the optional 24 h result cache (HUB-347), KMS-managed seal keys (HUB-337) |
-| Two-step with vendor txn id | Aadhaar OTP eKYC | **Partly** | Use case 6. HUB-343, HUB-344, HUB-334 |
+| Two-step with vendor txn id | Aadhaar OTP eKYC | **Partly** | Use case 6. Works: vendor sessions, one operation per vendor endpoint (HUB-343). Missing: the `kyc.aadhaar_otp@v1` capability with a licensed KUA/ASA (HUB-334), a canonical reason for wrong vs expired OTP (HUB-346) |
 | Consent + async fetch | Account Aggregator | **Planned** | HUB-336 (long-running requests, consent store), HUB-330 (inbound notifications) |
 | Redirect + callback | DigiLocker, eSign, eNACH, reverse penny drop | **Planned** | HUB-335; the return endpoint is reserved in the contract (`GET /handoff/return/{session_id}`, `x-status: planned`, answers 404 today) |
 | Upload + job | Bank statement analysis, bulk CKYC | **Planned** | HUB-348 (needs object storage for large payloads, HUB-098) |
@@ -672,9 +673,9 @@ sequenceDiagram
 
 | Ticket | Gap | Why it matters |
 | --- | --- | --- |
-| HUB-343 | An integration version has one transformer pair for every operation, so multi-operation capabilities with different vendor endpoints (`generate` / `verify`) cannot be configured | Blocks the clean OTP shape and Aadhaar OTP (HUB-334) |
-| HUB-344 | Admin contract change (contract-steward) for the per-operation transformer map | HUB-343 needs it first |
-| HUB-345 | Today such a config is *accepted* and the second operation silently runs the first operation's transformers | A misconfiguration should fail at publish, not at request time |
+| HUB-343 | An integration version had one transformer pair for every operation, so multi-operation capabilities with different vendor endpoints (`generate` / `verify`) could not be configured | **Closed (in review, 2026-11-07):** per-operation transformer pairs; use case 6 uses them |
+| HUB-344 | Admin contract change (contract-steward) for the per-operation transformer map | **Closed (in review):** hub-admin 1.2.0 `TargetRef.operations` |
+| HUB-345 | Such a config was *accepted* and the second operation silently ran the first operation's transformers | **Closed (in review):** refused at publish by the check `operations_have_transformers` |
 | HUB-346 | Error rules cannot set a machine-readable `reason` (e.g. wrong vs expired OTP) | UX branching on free text is fragile |
 | HUB-347 | The 24 h result cache for sync lookups (DESIGN §14) has no implementation and had no ticket | Cost of repeated PAN/bureau lookups |
 | HUB-348 | The upload + job pattern (bank statements) had no Release 2 item | Lending catalogue coverage |

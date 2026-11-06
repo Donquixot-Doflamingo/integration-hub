@@ -155,10 +155,11 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 		return r
 	}
 	in.Session = j.Session
-	reqProg := j.Snap.Programs[j.Res.Target.Transformer.Request]
-	respProg := j.Snap.Programs[j.Res.Target.Transformer.Response]
+	pair := j.Res.Pair() // the invoked operation's pair (HUB-343)
+	reqProg := j.Snap.Programs[pair.Request]
+	respProg := j.Snap.Programs[pair.Response]
 	integration := j.Res.Integration.Integration
-	ref := j.Res.Target.Transformer.Request
+	ref := pair.Request
 	tf := j.Snap.Transformers[ref]
 	target, err := upstream.TargetFor(j.Snap, c.AccountID, tf.VendorEndpoint)
 	if err != nil {
