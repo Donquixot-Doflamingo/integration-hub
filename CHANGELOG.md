@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `docs(tickets)` · Add HUB-342 and gap tickets HUB-343 to HUB-348 (HUB-342) · HUB-342 · F-22
+  - New ticket HUB-342 (use-case catalogue and runnable OTP example), in progress
+  - Gaps found while scoping it: per-operation transformers (HUB-343) and their admin contract change (HUB-344), refusing multi-operation configs that would misroute today (HUB-345), a canonical reason on error rules (HUB-346), the lookup result cache (HUB-347) and the upload + job pattern (HUB-348)
+  - Ticket counters recomputed (they were one ticket behind for EP-09)
 - 2026-11-06 · `fix(deploy)` · Read /metrics fully in the M0 smoke test instead of piping to grep -q (HUB-230) · HUB-230 · F-01
   - smoke-m0 no longer fails when grep stops reading before curl has written the whole /metrics body (curl exit 23 under pipefail)
 - 2026-11-06 · `docs(tickets)` · Track the transformer time-budget flake seen in the full itest run (HUB-238) · HUB-238 · F-04
