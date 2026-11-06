@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(hubmcp)` · Add the read-only hub_admin_* tools for on-call (HUB-305) · HUB-305 · F-20
+  - With HUB_ADMIN_TOKEN set, an assistant can search requests (default: last hour), read a request's timeline and attempts (payloads only on request) and list breaker states
+  - Admin tools only send GETs; they never unseal, replay, purge, pause or force; without a token they are not registered and the server says why
 - 2026-11-07 · `feat(hubmcp)` · Refuse money/quota invokes without confirm and idempotency key (HUB-304) · HUB-304 · F-20
   - hub_invoke on an integration with `moves_money_or_quota` returns `outcome: refused` (`CONFIRMATION_REQUIRED` or `IDEMPOTENCY_KEY_REQUIRED`) and does not call the Hub until the input has `confirm: true` and an `idempotency_key`
   - The refusal echoes a summary of the held-back call so the assistant can show the user what would be sent

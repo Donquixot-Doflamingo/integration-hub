@@ -2294,14 +2294,16 @@ For integrations with `moves_money_or_quota: true` (read via `getIntegration`), 
 
 ### HUB-305 — Admin read-only tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-305-mcp-admin-readonly`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2005
+- **Branch:** `feat/HUB-305-mcp-admin-readonly` (delivered on `feat/HUB-300-hubmcp`)
 
 Read-only admin tools (request search/timeline, breaker states, DLQ list, integration versions) using a viewer token against `contracts/openapi/hub-admin.v1.yaml`; no mutating tools.
 
+Delivered: the three admin tools of the frozen tool contract (`hub_admin_search_requests`, `hub_admin_request_timeline`, `hub_admin_breaker_states`). DLQ list and integration versions are not in `contracts/mcp/hubmcp-tools.json` 1.0.0; they need a CCR first (tracked in HUB-312).
+
 **Acceptance criteria**
-- [ ] Tool set contains no mutating operation (test)
-- [ ] Fails clearly when no admin token is configured
+- [x] Tool set contains no mutating operation (test) (`TestAdminToolsAreReadOnly`: every admin `maps_to` is a hub-admin GET and exercising every tool sends only those GETs; the admin client has only a GET method)
+- [x] Fails clearly when no admin token is configured (`TestAdminToolsWithoutToken`: tools not registered, a call fails with an unknown-tool error naming the tool, server instructions and the start-up log say HUB_ADMIN_TOKEN is not set)
 
 ### HUB-306 — MCP tests
 - **Epic:** EP-11 · **Type:** test · **Area:** mcp

@@ -112,6 +112,7 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-20`).
 - **hub_invoke:** pre-check `getIntegration` (cached ≤ 60 s per tenant key and integration); a paused integration returns `INTEGRATION_PAUSED` (`http_status: null`) without invoking; the `default` operation uses `invokeIntegration`, others `invokeIntegrationOperation`. One automatic retry only for a retryable error, only with an `idempotency_key`, and only when `retry_after_ms` ≤ 2 s (a longer wait goes back to the model). `X-Hub-Integration-Version` / `X-Hub-Served-By` never reach the output (hubclient ignores them; the output is built field by field).
 - **Confirm guard (rule 3):** checked after the paused check: no `confirm: true` → `CONFIRMATION_REQUIRED` (checked first), then no `idempotency_key` → `IDEMPOTENCY_KEY_REQUIRED`; `outcome: refused`, `http_status`/`request_id` null, `isError: true`, `error.details[0].pointer` names the missing argument, and the text content starts with a summary of the held-back call (integration, operation, key, body) for the model to show the user. If the flag cannot be read the call fails without invoking (fail closed).
 - **hub_dry_run:** besides the Hub's redaction, hubmcp forces `***` on every header listed in `redacted` and adds a warning if it had to.
+- **Admin tools:** GET-only client (`Authorization: Bearer $HUB_ADMIN_TOKEN`, base `HUB_ADMIN_BASE_URL` or `HUB_BASE_URL/admin/v1`). `hub_admin_search_requests` defaults `from` to one hour before `to` (or now) and drops any body field from rows; `hub_admin_request_timeline` combines timeline and attempts and drops event payloads unless `include_payloads` is true (masking/sealing stays the Hub's job); admin errors are passed through verbatim as `isError` results.
 - **HTTP transport:** SDK `StreamableHTTPHandler` behind `http.CrossOriginProtection` and the SDK's `auth.RequireBearerToken`; the verifier asks the Hub whether the key is valid (fail closed) and puts that key's `hubclient` in the request's token info, so tools run with the client's own key. Secrets print as `***` (`%v`, `%#v`, slog) and are redacted by value from logs and tool results.
 
 ## Changelog of this doc
@@ -123,3 +124,4 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-20`).
 | 2026-11-07 | Discovery tools (HUB-302) | backend-engineer |
 | 2026-11-07 | Invoke, request status and dry-run tools; idempotency rule 4 aligned with the contract (HUB-303, ADR-0018) | backend-engineer |
 | 2026-11-07 | Money/quota confirm guard (HUB-304) | backend-engineer |
+| 2026-11-07 | Admin read-only tools (HUB-305) | backend-engineer |

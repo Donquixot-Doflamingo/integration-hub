@@ -163,3 +163,8 @@ func mutated(t testing.TB, b []byte, mutate ...func(map[string]any)) []byte {
 	}
 	return mustJSON(t, m)
 }
+
+// adm returns a reply with a hub-admin example body.
+func (h *fakeHub) adm(opID string, status int, name string, mutate ...func(map[string]any)) reply {
+	return reply{status: status, body: mutated(h.t, h.admin.Example(h.t, opID, status, name), mutate...)}
+}

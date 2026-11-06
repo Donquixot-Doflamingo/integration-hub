@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 )
 
@@ -25,16 +24,9 @@ func (a *app) handlers() map[string]toolFunc {
 		toolDryRun:             a.dryRun,
 		toolInvoke:             a.invoke,
 		toolGetRequest:         a.getRequest,
-		toolAdminSearch:        a.notImplemented(toolAdminSearch),
-		toolAdminTimeline:      a.notImplemented(toolAdminTimeline),
-		toolAdminBreakerStates: a.notImplemented(toolAdminBreakerStates),
-	}
-}
-
-// notImplemented is the placeholder of a tool whose ticket has not landed yet.
-func (a *app) notImplemented(tool string) toolFunc {
-	return func(context.Context, *toolCall) toolResult {
-		return failure(tool, &errorObject{Code: "INTERNAL_ERROR", Message: tool + " is not implemented yet in this hubmcp build"}, 0)
+		toolAdminSearch:        a.adminSearchRequests,
+		toolAdminTimeline:      a.adminRequestTimeline,
+		toolAdminBreakerStates: a.adminBreakerStates,
 	}
 }
 
