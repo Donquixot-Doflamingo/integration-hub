@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Accepted |
+| Status | Accepted (amended by ADR-0020: admin write tools as the signed-in user, stdio only, no delete path) |
 | Date | 2026-10-31 |
 | Deciders | lead |
 | DESIGN refs | §4, §16.1, D12 |

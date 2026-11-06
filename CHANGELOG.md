@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(hubmcp)` · Document the hubmcp admin write tools and ADR-0020 (HUB-315) · HUB-315 · F-20
+  - ADR-0020 amends ADR-0006 and ADR-0018: admin tools act as the signed-in user, writes exist on stdio only, the Hub's RBAC decides, and no MCP path can delete
+  - SECURITY §2.5 has rows for the no-delete path, the confirm guard, secret inputs and minted secrets; TECH_SPEC §18, TESTING_STRATEGY §13, OBSERVABILITY §4.6 (`mutating`, `change_id`, minted-secret redaction), F-20 and the PRD scope lines (DV-4, FR-48, NFR-13) match
+  - The consumer skill's `mcp-setup.md` explains how to get and pass your own admin token, lists the admin tools and refusals, and has snippets (marked unverified) for the Codex CLI, Cursor and Claude Desktop
+  - HUB-315 in review
 - 2026-11-07 · `test(hubmcp)` · Onboard a team through hubmcp against a live Hub (HUB-315) · HUB-315 · F-20
   - `TestMCPEndToEnd` now creates a tenant, an API key (secret returned once), a vendor and endpoint, a transformer version, an integration and its draft, validates, publishes with confirm, invokes it with the minted key, sets weights and rolls back, all through hubmcp with a `hubctl login -dev -role admin` token
   - Each change is checked in the change log under the user's subject with the " (via hubmcp)" reason; nothing is deleted; a publish without confirm changes nothing; a viewer token gets FORBIDDEN on a write tool; the minted key never reaches hubmcp's logs

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **238** · done: **177** · todo: **54** · other (in-progress/in-review/blocked): **7**
+Total tickets: **238** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **8**
 
 ## Epics
 
@@ -2663,23 +2663,25 @@ User requirement: a team's Claude can create whatever the team needs on the pane
 
 ### HUB-315 — hubmcp admin write tools (implement hubmcp-tools 1.1.0)
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-314 · **Feature:** F-20 · **Stories:** US-2005, US-20xx (new story for admin write tools, docs-keeper)
-- **Branch:** `feat/HUB-315-hubmcp-admin-write-tools` (or on top of `feat/HUB-314-mcp-write-tools`, merged together)
+- **Status:** in-review · **Depends on:** HUB-314 · **Feature:** F-20 · **Stories:** US-2005, US-20xx (new story for admin write tools, docs-keeper)
+- **Branch:** `feat/HUB-314-mcp-write-tools` (on top of the HUB-314 contract commits, merged together)
 
 Implement the 34 new admin tools of `contracts/mcp/hubmcp-tools.json` 1.1.0 (README "Admin write tools"). The admin client grows from GET-only to exactly the mapped methods, called with the user's own `HUB_ADMIN_TOKEN`. Refresh the embedded copy (`go generate ./cmd/hubmcp`).
 
 **Acceptance criteria**
-- [ ] Registration: no `hub_admin_*` tool without `HUB_ADMIN_TOKEN`; read tools follow the existing transport rule; write tools (`requires.transport: ["stdio"]`) are registered only on stdio, never on streamable HTTP (loopback included). Test both transports with and without the token
-- [ ] Forbidden/no-DELETE test driven by the contract: no registered tool maps to an HTTP DELETE or to any `forbidden_operations` entry; every forbidden operationId is absent from all `maps_to`; `maps_to[].http_method` equals the method the fake admin API declares. Exercising every tool sends only its declared method and path (`TestAdminToolsAreReadOnly` is replaced by this)
-- [ ] The admin HTTP client can only send the methods/paths the contract maps (allowlist built from `maps_to`); a DELETE is impossible by construction (unit test)
-- [ ] Confirm guard: every `requires_confirm` tool without `confirm: true` returns an `isError` result with `error.code` `CONFIRMATION_REQUIRED` and makes **no** Hub call (fake records zero requests); with `confirm: true` it calls once
-- [ ] Secret-free inputs: no tool input property is in `forbidden_input_properties` (test over the loaded contract); any tool call whose arguments match `secret_patterns` is refused with `SECRET_IN_INPUT` (for `hub_invoke`, `outcome: refused`) and no Hub call
-- [ ] Sensitive output: `sensitive_output` fields appear in that tool result only, never in logs (log capture asserts absence of the minted secret, including the `tool_called` line) and never in error text
-- [ ] `reason` is forwarded with ` (via hubmcp)` appended; `if_match` is sent as `If-Match`; get tools return `etag` from the `ETag` header
-- [ ] Per-tool contract tests against a contract-validated fake admin API (requests and responses validated against `hub-admin.v1.yaml`): success, 403 `FORBIDDEN` from a viewer token surfaced as an `isError` result, and one Hub error per tool (`TestEveryToolSuccessAndError` covers all 42)
-- [ ] `TestToolListEqualsFrozenContract` and `TestEmbeddedContractIsTheFrozenOne` green with 1.1.0
-- [ ] e2e against a running hub (extend `TestMCPEndToEnd`, tag `integration`) with an admin dev token (`hubctl login -dev -role admin`): create tenant → create API key (secret returned once) → create vendor + endpoint → create transformer version → create integration → draft → validate → publish with confirm → set weights → rollback, each visible in the change log with the user's subject and the "(via hubmcp)" reason; a viewer token gets FORBIDDEN on a write tool; nothing is deleted
-- [ ] Docs: ADR amending ADR-0006/ADR-0018 (admin tools are no longer read-only; user token, stdio-only writes), SECURITY.md §2.5 rows, TECH_SPEC §18, F-20 and OBSERVABILITY (tool log fields for write tools; no secret values)
+- [x] Registration: no `hub_admin_*` tool without `HUB_ADMIN_TOKEN`; read tools follow the existing transport rule; write tools (`requires.transport: ["stdio"]`) are registered only on stdio, never on streamable HTTP (loopback included). Test both transports with and without the token
+- [x] Forbidden/no-DELETE test driven by the contract: no registered tool maps to an HTTP DELETE or to any `forbidden_operations` entry; every forbidden operationId is absent from all `maps_to`; `maps_to[].http_method` equals the method the fake admin API declares. Exercising every tool sends only its declared method and path (`TestAdminToolsAreReadOnly` is replaced by this)
+- [x] The admin HTTP client can only send the methods/paths the contract maps (allowlist built from `maps_to`); a DELETE is impossible by construction (unit test)
+- [x] Confirm guard: every `requires_confirm` tool without `confirm: true` returns an `isError` result with `error.code` `CONFIRMATION_REQUIRED` and makes **no** Hub call (fake records zero requests); with `confirm: true` it calls once
+- [x] Secret-free inputs: no tool input property is in `forbidden_input_properties` (test over the loaded contract); any tool call whose arguments match `secret_patterns` is refused with `SECRET_IN_INPUT` (for `hub_invoke`, `outcome: refused`) and no Hub call
+- [x] Sensitive output: `sensitive_output` fields appear in that tool result only, never in logs (log capture asserts absence of the minted secret, including the `tool_called` line) and never in error text
+- [x] `reason` is forwarded with ` (via hubmcp)` appended; `if_match` is sent as `If-Match`; get tools return `etag` from the `ETag` header
+- [x] Per-tool contract tests against a contract-validated fake admin API (requests and responses validated against `hub-admin.v1.yaml`): success, 403 `FORBIDDEN` from a viewer token surfaced as an `isError` result, and one Hub error per tool (`TestEveryToolSuccessAndError` covers all 42)
+- [x] `TestToolListEqualsFrozenContract` and `TestEmbeddedContractIsTheFrozenOne` green with 1.1.0
+- [x] e2e against a running hub (extend `TestMCPEndToEnd`, tag `integration`) with an admin dev token (`hubctl login -dev -role admin`): create tenant → create API key (secret returned once) → create vendor + endpoint → create transformer version → create integration → draft → validate → publish with confirm → set weights → rollback, each visible in the change log with the user's subject and the "(via hubmcp)" reason; a viewer token gets FORBIDDEN on a write tool; nothing is deleted
+- [x] Docs: ADR amending ADR-0006/ADR-0018 (admin tools are no longer read-only; user token, stdio-only writes), SECURITY.md §2.5 rows, TECH_SPEC §18, F-20 and OBSERVABILITY (tool log fields for write tools; no secret values)
+
+Built (in review): `admintools.go` (contract-driven handlers), `guard.go` (`SECRET_IN_INPUT`, `CONFIRMATION_REQUIRED`), allowlisted and method-guarded admin client (`adminclient.go`), stdio-only registration of write tools (`server.go`), sensitive output redacted after the one result. Tests: `TestToolRegistrationByTransport`, `TestNoToolMapsToDeleteOrForbidden`, `TestAdminClientCannotDelete`, `TestSourceHasNoDeletePath`, `TestLoadContractRefusesUnsafeTools`, `TestAdminRoutesMatchTheContract`, `TestWriteToolConfirmGuard`, `TestNoSecretInputProperties`, `TestSecretInInputIsRefused`, `TestSensitiveOutputIsReturnedOnceAndNeverLogged`, `TestReasonIfMatchAndETag`, `TestEveryToolSuccessAndError` (42 tools), `TestMCPEndToEnd` (integration). ADR-0020. The new user story (US-20xx) is left to docs-keeper. The e2e's invoke targets the dev `clevertap` account, because accounts cannot be created through MCP (`createAccount` is forbidden: it needs credentials); the vendor and endpoint created through MCP are checked but not invoked.
 
 ## EP-12 — Release 2 (DESIGN §19 Phase 2)
 

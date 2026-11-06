@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Accepted |
+| Status | Accepted (amended by ADR-0020: admin write tools as the signed-in user, stdio only, no delete path) |
 | Date | 2026-11-07 |
 | Deciders | backend-engineer (for lead review) |
 | DESIGN refs | §4.5, §16.1, D12; ADR-0006; TECH_SPEC §18; SECURITY §2.5; contracts/mcp/hubmcp-tools.json 1.0.0 |
