@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **237** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **7**
+Total tickets: **238** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **8**
 
 ## Epics
 
@@ -19,7 +19,7 @@ Total tickets: **237** · done: **177** · todo: **53** · other (in-progress/in
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
-| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 15 | 8 |
+| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 16 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 4 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 12 | 0 |
 
@@ -2653,6 +2653,19 @@ So nobody has to guess how to run the Hub, whatever AI they use: one repo-wide s
 - [x] States that MCP has no delete tools and that deletes and other destructive actions are console-only for roles that have them; secrets never go through MCP
 - [x] Every cited `hubctl` command and flag, MCP tool name (hubmcp-tools 1.1.0), admin `operationId` and relative link checked by a script against the code and contracts (0 errors)
 - [x] Codex discovery: `.agents/skills/hub-operator` symlink (Codex follows symlinked skill folders)
+
+### HUB-317 — Consumer skill for any AI agent
+- **Epic:** EP-11 · **Type:** docs · **Area:** docs
+- **Status:** in-review · **Depends on:** HUB-303, HUB-316 · **Feature:** F-21 · **Stories:** US-2106
+- **Branch:** `docs/HUB-316-operator-skills`
+
+Make `clients/claude-skill/` usable from whatever assistant a calling team has. Research (2026-11-07) showed one `SKILL.md` folder serves Claude Code (`~/.claude/skills/`, `.claude/skills/`), claude.ai / Claude Desktop (ZIP upload), OpenAI Codex (`~/.agents/skills/`, `.agents/skills/`; needs `name` + `description`) and Cursor (`.cursor/skills/`, `.agents/skills/`, also reads `.claude/skills/`; `name` must equal the folder), so there is no per-tool copy. README with verified install steps and doc URLs per tool, a Cursor `.mdc` rule option, and `PASTE-INTO-ANY-ASSISTANT.md` for chat assistants and `AGENTS.md`. Skill content: two-step OTP flow (`send_otp` → `verify_otp` with `X-Hub-Session`) with its failure table, the real `hubclient` API (`Result` / `Queued`, `WithOperation`, `WithSession`, `GetRequest`), `hub_invoke` parameters, `send_otp`/`verify_otp` in the quick reference. The folder keeps its name: renaming would break 25 links across the repo and collide with the parallel hubmcp branch editing `references/mcp-setup.md`; the README says it is tool-neutral.
+
+**Acceptance criteria**
+- [x] Install instructions per tool (Claude Code, claude.ai / Desktop, Codex, Cursor, any assistant) checked against current docs, with URLs; one shared `SKILL.md`, no duplicates
+- [x] Caller flows covered: discover → dry-run → invoke with `Idempotency-Key` → 200 vs 202 → poll or callback; two-step OTP; error handling; never moving money or quota without confirmation
+- [x] Go snippets compile against `pkg/hubclient` (`go vet` on a scratch copy); cited MCP tools, operationIds, links and paths pass the check script
+- [ ] Rename to a neutral folder name: deferred (see above); a follow-up can rename with a symlink once the hubmcp branch has merged
 
 ## EP-12 — Release 2 (DESIGN §19 Phase 2)
 

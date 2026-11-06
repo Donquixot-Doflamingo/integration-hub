@@ -18,7 +18,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish. C
 | `contracts/` | **Frozen API contracts**: OpenAPI 3.1 YAML + JSON Schemas for capabilities and webhook events | `contract-steward` |
 | `backend/` | Go module `github.com/Donquixot-Doflamingo/integration-hub/backend`: `hub`, `hubctl`, `mockvendor`, `hubmcp` binaries | `backend-engineer` |
 | `frontend/` | SvelteKit admin console (control plane UI) | `frontend-engineer` |
-| `clients/claude-skill/` | Distributable Claude skill for teams that *use* the Hub | `contract-steward` + docs |
+| `clients/claude-skill/` | Distributable consumer skill for teams that *use* the Hub (works in Claude, Codex, Cursor and other agents) | `contract-steward` + docs |
 | `deploy/` | docker-compose, k8s manifests, alert rules, dashboards | `backend-engineer` |
 | `.claude/agents/` | Sub-agent definitions | lead |
 | `.claude/skills/`, `backend/.claude/skills/`, `frontend/.claude/skills/` | Skills. Repo-wide skills at the root; backend/frontend skills **inside their folder** | owner of the folder |

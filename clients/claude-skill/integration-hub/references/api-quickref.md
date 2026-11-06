@@ -9,9 +9,9 @@ The authoritative spec is `contracts/openapi/hub-public.v1.yaml` in the Hub repo
 | `GET /v1/integrations` | Integrations your tenant owns or is granted (`integration_id`, capability, operations, delivery mode, interactive, paused, `moves_money_or_quota`, `idempotency_key_required`, description) |
 | `GET /v1/integrations/{id}` | One integration's caller-visible details |
 | `GET /v1/capabilities/{capability}` | Canonical request/response JSON Schemas per operation, e.g. `events.track@v1` |
-| `POST /v1/integrations/{id}/dry-run` | Validate + show the exact upstream request the Hub would send (secrets `***`); sends nothing. Needs key scope `dry_run`. Never build logic on it |
+| `POST /v1/integrations/{id}/dry-run[?operation=op]` | Validate + show the exact upstream request the Hub would send (secrets `***`); sends nothing. Needs key scope `dry_run`. Add `X-Hub-Session` for a later step. Never build logic on it |
 | `POST /v1/integrations/{id}/invoke` | Invoke a single-operation capability |
-| `POST /v1/integrations/{id}/invoke/{op}` | Invoke one operation of a multi-operation capability (`generate`, `verify`) |
+| `POST /v1/integrations/{id}/invoke/{op}` | Invoke one operation of a multi-operation capability (e.g. `send_otp`, `verify_otp`) |
 | `GET /v1/requests/{request_id}` | Status and final canonical result (wait/async modes) |
 
 Discovery endpoints never return vendor, account or version. There is no way to pick them.
@@ -32,6 +32,7 @@ Discovery endpoints never return vendor, account or version. There is no way to 
 | --- | --- |
 | `X-Hub-Request-Id` | Always present. Log it; quote it to support |
 | `X-Hub-Idempotent-Replay: true` | Stored result returned for a repeated Idempotency-Key |
+| `X-Hub-Session` | Returned by step 1 of a multi-step operation; send it on later steps (valid 10 min) |
 | `X-Hub-Served-By: failover:N` | Served by a failover target (informational) |
 | `X-Hub-Integration-Version` | Debug only. Do not branch on it |
 

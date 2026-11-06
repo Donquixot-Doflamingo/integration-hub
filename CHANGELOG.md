@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(clients)` · Make the consumer skill work in any AI agent (HUB-317) · HUB-317 · F-21
+  - One `integration-hub` skill folder now installs unchanged in Claude Code, claude.ai / Claude Desktop, OpenAI Codex and Cursor; the README gives verified paths, commands and doc links per tool, plus a Cursor rule option
+  - New `PASTE-INTO-ANY-ASSISTANT.md`: the rules in one file for chat assistants, custom instructions or a repo `AGENTS.md`
+  - The skill now covers two-step flows (OTP `send_otp` then `verify_otp` with `X-Hub-Session`) with a failure table and curl + Go examples, the real `hubclient` API (`Result` / `Queued`, `WithOperation`, `WithSession`, `GetRequest`) and the `hub_invoke` parameters
+
 - 2026-11-07 · `docs(skills)` · Add the hub-operator skill (HUB-316) · HUB-316 · F-21
   - New repo skill `.claude/skills/hub-operator/` for the people who run the Hub: tenants and API keys (scopes), vendors, endpoints and accounts with credentials, callback endpoints and signatures, safe vendor/account config changes, switching an integration to another vendor or account (draft, validate, diff, publish, weights, shadow, rollback, re-resolve vs pinned), transformers (canonical → vendor → canonical, error mapping, goldens, dry-run) and multi-step flows (operations, `X-Hub-Session`, Aadhaar OTP)
   - Every task shows the console path, the `hubctl` command and the `hubmcp` tool call side by side, with the admin API where the others do not reach yet, and a matrix of which way can do what

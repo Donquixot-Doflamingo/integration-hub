@@ -570,6 +570,11 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** a request to delete, pause, rotate a secret or create an account with credentials through MCP, **when** the assistant answers, **then** it says MCP cannot do it and gives the console (or hubctl / admin API) path instead.
 - **Given** "Aadhaar is get-OTP then verify: two calls?", **when** answered, **then** the assistant explains one integration, two operations, `X-Hub-Session`, and what the operator configures (one transformer pair per operation, `session:` section, sync).
 
+### US-2106 — Consumer skill in any assistant
+**As an** AI-assisted developer on a calling team, **I want** to install the Hub skill in the assistant I already use (Claude Code, claude.ai, Codex, Cursor) or paste one file into any other, **so that** my assistant calls the Hub correctly without a vendor SDK. · **Must**
+- **Given** the README, **when** I follow the steps for my tool, **then** the same `integration-hub` folder loads, with no tool-specific copy.
+- **Given** "verify the user's mobile with an OTP", **when** my assistant writes code, **then** it calls `send_otp`, keeps `X-Hub-Session`, calls `verify_otp` with it and a new `Idempotency-Key`, handles wrong OTP, expired session and retryable errors, and asks me before sending a real OTP.
+
 ## F-22 Release-2 capabilities
 
 ### US-2201 — Inbound vendor webhooks
