@@ -596,6 +596,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 **As a** compliance officer, **I want** bureau/Aadhaar/PAN payloads sealed with a per-tenant key and readable only via an audited unseal, **so that** sensitive data is protected but provable. · **Must**
 - **Given** a sealed request, **when** a viewer opens it, **then** only sha256, size and metadata are shown.
 - **Given** a user with unseal permission and a reason, **when** they unseal, **then** the payload is shown and a `change_log` / audit event records who, when, why.
+- **Given** the PAN and Aadhaar examples (`int_pan_verify`, `int_aadhaar_okyc`, HUB-351, HUB-352), **when** a call completes, **then** its audit record has policy `sealed`, no payload holds the PAN, Aadhaar number, OTP or name in clear, and the sealed copies open only with the tenant key.
 
 ### US-2208 — KMS / Vault credential sources
 **As a** platform engineer, **I want** KMS and Vault `CredentialSource` implementations, **so that** production secrets use managed envelope encryption. · **Must**

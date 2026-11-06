@@ -248,6 +248,9 @@ const (
 	okycOTPPath    = "/verification/offline-aadhaar/otp"
 	okycVerifyPath = "/verification/offline-aadhaar/verify"
 
+	panCheck = "/v1/integrations/int_pan_verify/invoke"
+	panPath  = "/verification/pan"
+
 	aadhaarNumber   = "655675523712" // the provider's documented sandbox test number
 	aadhaarSendBody = `{"aadhaar_number": "655675523712", "consent": true, "purpose": "KYC for a personal loan application"}`
 	aadhaarOTPBody  = `{"otp": "111000"}`
@@ -433,6 +436,83 @@ func TestExampleAadhaarOKYCFlow(t *testing.T) {
 			}
 			if strings.Contains(rec.Body.String(), aadhaarNumber) {
 				t.Errorf("%s: the error echoes the Aadhaar number: %s", name, rec.Body)
+			}
+		}
+		if n := len(r.calls(t)); n != 0 {
+			t.Fatalf("%d provider calls for refused requests", n)
+		}
+	})
+}
+
+func TestExamplePANVerify(t *testing.T) {
+	r := newKYCRig(t)
+
+	t.Run("valid PAN with a name: masked PAN, name match, Aadhaar link, sealed audit", func(t *testing.T) {
+		r.scenario(t, "pan-valid")
+		rec, body := r.call(t, panCheck, "pan-valid", "", `{"pan": "ABCPV1234D", "name": "John Doe"}`)
+		want := `{"aadhaar_linked":true,"name_match":true,"pan_masked":"XXXXXX234D","pan_status":"valid","pan_type":"individual","registered_name":"JOHN DOE","vendor_ref":"161"}`
+		if got, _ := json.Marshal(body); rec.Code != 200 || string(got) != want {
+			t.Fatalf("valid PAN: %d\n got %s\nwant %s", rec.Code, got, want)
+		}
+		// The caller sees only the masked PAN; the score and ITD codes are dropped.
+		for _, dropped := range []string{"ABCPV1234D", "name_match_score", "pan_status_code", "Existing and Valid"} {
+			if strings.Contains(rec.Body.String(), dropped) {
+				t.Fatalf("response carries %q: %s", dropped, rec.Body)
+			}
+		}
+		h, vb := r.only(t, panPath)
+		if len(vb) != 2 || vb["pan"] != "ABCPV1234D" || vb["name"] != "John Doe" ||
+			h.Get("X-Api-Version") != "2024-08-01" || h.Get("X-Client-Id") != "fake-client-id-cf-sid-test" {
+			t.Fatalf("vendor call %v %v", h, vb)
+		}
+		r.requireSealed(t, rec, "ABCPV1234D", "John Doe")
+	})
+
+	t.Run("invalid PAN is a business answer, not an error", func(t *testing.T) {
+		r.scenario(t, "pan-invalid")
+		rec, body := r.call(t, panCheck, "pan-invalid", "", `{"pan": "DEFPV0126D"}`)
+		if rec.Code != 200 || body["pan_status"] != "invalid" || body["pan_masked"] != "XXXXXX126D" || body["name_match"] != nil {
+			t.Fatalf("invalid PAN: %d %s", rec.Code, rec.Body)
+		}
+		if _, vb := r.only(t, panPath); len(vb) != 1 || vb["pan"] != "DEFPV0126D" {
+			t.Fatalf("vendor body %v (no name sent: no name field)", vb)
+		}
+	})
+
+	t.Run("a retry with the same key replays the stored answer: the provider is paid once", func(t *testing.T) {
+		r.scenario(t, "pan-valid")
+		first, _ := r.call(t, panCheck, "pan-replay", "", `{"pan": "ABCPV1234D"}`)
+		second, _ := r.call(t, panCheck, "pan-replay", "", `{"pan": "ABCPV1234D"}`)
+		if first.Code != 200 || second.Code != 200 || second.Header().Get("X-Hub-Idempotent-Replay") != "true" || first.Body.String() != second.Body.String() {
+			t.Fatalf("replay: %d / %d %q", first.Code, second.Code, second.Header().Get("X-Hub-Idempotent-Replay"))
+		}
+		if n := len(r.calls(t)); n != 1 {
+			t.Fatalf("%d provider calls, want 1", n)
+		}
+	})
+
+	t.Run("provider down is a retryable 503", func(t *testing.T) {
+		r.scenario(t, "pan-provider-down")
+		rec, body := r.call(t, panCheck, "pan-down", "", `{"pan": "ABCPV1234D"}`)
+		if e := errorOf(body); rec.Code != 503 || e["code"] != "UPSTREAM_UNAVAILABLE" || e["retryable"] != true {
+			t.Fatalf("provider down: %d %s", rec.Code, rec.Body)
+		}
+	})
+
+	t.Run("caller mistakes are refused at the edge without a provider call", func(t *testing.T) {
+		r.scenario(t, "pan-valid")
+		for name, c := range map[string]struct {
+			key, body, code string
+			status          int
+		}{
+			"no Idempotency-Key": {"", `{"pan": "ABCPV1234D"}`, "IDEMPOTENCY_KEY_REQUIRED", 400},
+			"lower-case PAN":     {"pan-lower", `{"pan": "abcpv1234d"}`, "VALIDATION_FAILED", 400},
+			"short PAN":          {"pan-short", `{"pan": "ABCPV1234"}`, "VALIDATION_FAILED", 400},
+			"unknown field":      {"pan-extra", `{"pan": "ABCPV1234D", "dob": "1990-01-01"}`, "VALIDATION_FAILED", 400},
+		} {
+			rec, body := r.call(t, panCheck, c.key, "", c.body)
+			if e := errorOf(body); rec.Code != c.status || e["code"] != c.code {
+				t.Errorf("%s: %d %s", name, rec.Code, rec.Body)
 			}
 		}
 		if n := len(r.calls(t)); n != 0 {

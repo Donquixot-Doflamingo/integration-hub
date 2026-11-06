@@ -96,6 +96,18 @@ func TestExampleKYCConfigBuilds(t *testing.T) {
 			t.Errorf("%s: request transformer %+v, want endpoint %s", op, tf, endpoint)
 		}
 	}
+	// HUB-352: PAN is a single-operation sync lookup on the same vendor and account, also sealed.
+	pan := snap.Integrations["int_pan_verify"]
+	if pan == nil {
+		t.Fatal("int_pan_verify missing")
+	}
+	pv := pan.Active()
+	if pv.Delivery.Mode != registry.ModeSync || !pan.MovesMoneyOrQuota || pv.Audit.Payloads != registry.PayloadSealed || pv.Audit.Retention.Std() != 90*24*time.Hour {
+		t.Errorf("int_pan_verify: delivery %+v audit %+v moves_money_or_quota %v", pv.Delivery, pv.Audit, pan.MovesMoneyOrQuota)
+	}
+	if tf := snap.Transformers[pv.Targets[0].Pair("default").Request]; tf == nil || tf.VendorEndpoint != "cashfree-sid.pan_verify@1" {
+		t.Errorf("int_pan_verify request transformer %+v", tf)
+	}
 	vendor := snap.Vendors["cashfree-sid"]
 	if vendor.Regions["sandbox"] != "https://sandbox.cashfree.com/verification" || !strings.HasPrefix(vendor.Regions["mock"], "http://127.0.0.1:") {
 		t.Errorf("regions %v", vendor.Regions)

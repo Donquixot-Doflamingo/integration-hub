@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(examples)` · Add a PAN verification sandbox example (HUB-352) · HUB-352 · F-22
+  - `int_pan_verify` on the same provider and account as the Aadhaar example: one sync call with an `Idempotency-Key`, a masked PAN, a yes/no name match, the Aadhaar link, and an invalid PAN as a 200 business answer; sealed audit for 90 days
+  - `examples/pan-verify/run.sh` runs it against mockvendor (valid, invalid, provider down) or the provider's sandbox (`HUB_DEMO_TARGET=sandbox`), including a replay that does not call the provider again
+  - 20 golden cases; `TestExamplePANVerify` proves the provider request, the minimal response, sealed audit, the replay and the edge refusals
 - 2026-11-07 · `feat(examples)` · Add an Aadhaar OTP e-KYC sandbox example (HUB-351) · HUB-351 · F-22
   - `examples/aadhaar-okyc/`: Aadhaar OTP-based offline e-KYC behind one integration id (`int_aadhaar_okyc`, operations `send_otp` and `verify_otp`), mapped to Cashfree Secure ID's documented API; the provider's reference travels only in the vendor session, the audit is sealed for 90 days, the response is minimal
   - `run.sh` runs the two steps against mockvendor (six scenarios) or, with `HUB_DEMO_TARGET=sandbox` and test keys, against the provider's sandbox; `client/main.go` does the same with the Go SDK

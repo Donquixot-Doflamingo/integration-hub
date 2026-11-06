@@ -31,6 +31,8 @@ endpoints:
   # blindly (idempotent: false; the caller's Idempotency-Key dedupes a double tap).
   okyc_otp@1:    { method: POST, path: /offline-aadhaar/otp,    timeout_ms: 10000, connect_timeout_ms: 1000, idempotent: false }
   okyc_verify@1: { method: POST, path: /offline-aadhaar/verify, timeout_ms: 10000, connect_timeout_ms: 1000, idempotent: false }
+  # PAN lookup: one sync call, billed per call (idempotent: false; the caller's key dedupes).
+  pan_verify@1:  { method: POST, path: /pan,                    timeout_ms: 5000,  connect_timeout_ms: 1000, idempotent: false }
 defaults:
   # The sandbox and production rate limits are not published; 429s carry codes
   # too_many_requests_per_operation / too_many_requests_per_ip and map to UPSTREAM_RATE_LIMITED.

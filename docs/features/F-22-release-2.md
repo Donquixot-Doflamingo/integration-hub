@@ -52,6 +52,8 @@ v1 covers engagement-style traffic (CleverTap pilot). Lending capabilities (bure
 
 **Runnable real-provider examples (2026-11-07, HUB-351).** [`examples/aadhaar-okyc/`](../../examples/aadhaar-okyc/README.md) runs R2-5 against a real KYC provider's documented API (Aadhaar OTP-based offline e-KYC through a licensed provider; UIDAI's own APIs need an AUA/KUA licence): one integration, `int_aadhaar_okyc`, operations `send_otp` and `verify_otp`, the provider's reference only in the vendor session, R2-8 `sealed` audit for 90 days, minimal response. A demo script switches from mockvendor to the provider's sandbox with `HUB_DEMO_TARGET=sandbox`. The capability is an example overlay (`demo.aadhaar_okyc@v1`); the production `kyc.aadhaar_otp@v1` stays HUB-334. No new metric, log or span: the example uses the existing session, audit and upstream telemetry.
 
+**PAN verification example (2026-11-07, HUB-352).** [`examples/pan-verify/`](../../examples/pan-verify/README.md): the DESIGN §14 sync lookup on the same provider and account, `int_pan_verify` (`demo.pan_verify@v1`), sealed audit, masked PAN, invalid PAN as a business answer.
+
 ## Behaviour & rules
 Defined per item in DESIGN; key invariants carried into each item's doc:
 1. Inbound webhooks are vendor-scoped URLs but tenants only ever see canonical events (DESIGN §0).
@@ -93,3 +95,4 @@ HUB-330 – HUB-399.
 | 2026-10-31 | Created | docs agent |
 | 2026-11-06 | R2-5 status after HUB-342; R2-11 (HUB-347) and R2-12 (HUB-348) added; link to the use-case catalogue | backend-engineer |
 | 2026-11-07 | Runnable Aadhaar OTP e-KYC example on a real provider's sandbox (HUB-351) | backend-engineer |
+| 2026-11-07 | PAN verification example (HUB-352) | backend-engineer |

@@ -229,6 +229,7 @@ Messages are fixed, vendor-neutral texts: the provider's own messages can name i
 | `config/integrations/int_aadhaar_okyc/` | `sync`, `fail_fast`, `moves_money_or_quota: true`, audit `sealed` for `90d` (D6). `send_otp` uses the default pair, `verify_otp` its own |
 | `config/transformers/CF-OKYC-*` | Four transformers with goldens for success and every documented error (43 cases) |
 | `mockvendor/aadhaar-*.json` | Scenario files: the provider's two endpoints as mockvendor routes. `run.sh` and the integration test load the same files |
+| `config/integrations/int_pan_verify/`, `config/transformers/CF-PAN-*`, `mockvendor/pan-*.json`, `demo.pan_verify.v1.*` | PAN verification on the same vendor and account: see [`../pan-verify/`](../pan-verify/README.md) (HUB-352) |
 | `run.sh`, `client/main.go` | The demo (curl) and the Go SDK client |
 
 ## Tests

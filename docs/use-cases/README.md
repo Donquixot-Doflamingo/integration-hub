@@ -2,7 +2,7 @@
 
 **Audience:** product owners, their seniors, and any team that wants to know "can the Hub do X for me, and how would my service call it?"
 **State described:** `main` on 2026-11-06. Milestones M0–M7 are done (gateway, transformers, audit, durable delivery, resilience, versioning, control plane). M8 (observability and load tests) is in progress. Release 2 (EP-12) is planned, not built.
-**Ticket:** HUB-342. Runnable examples: [`examples/otp-account-flow/`](../../examples/otp-account-flow/README.md) (fictional vendor), [`examples/aadhaar-okyc/`](../../examples/aadhaar-okyc/README.md) (Aadhaar OTP e-KYC on a real provider's sandbox, HUB-351).
+**Ticket:** HUB-342. Runnable examples: [`examples/otp-account-flow/`](../../examples/otp-account-flow/README.md) (fictional vendor), [`examples/aadhaar-okyc/`](../../examples/aadhaar-okyc/README.md) (Aadhaar OTP e-KYC on a real provider's sandbox, HUB-351), [`examples/pan-verify/`](../../examples/pan-verify/README.md) (PAN verification, HUB-352).
 
 Every use case below has a status line:
 
@@ -586,6 +586,8 @@ sequenceDiagram
 ```
 
 **On failure.** Vendor down → 503 at once (`fail_fast`) or the next vendor (`failover`, safe because the call carries a key). A retry with the same key after success replays the stored answer: the bureau is not hit twice.
+
+**Try it: PAN verification.** [`examples/pan-verify/`](../../examples/pan-verify/README.md) (HUB-352) is this pattern on a real KYC provider's documented API, against mockvendor or the provider's sandbox: `int_pan_verify`, one sync call with an `Idempotency-Key`, an invalid PAN as a 200 business answer, the PAN masked in the response, `sealed` audit. Proof: `TestExamplePANVerify`.
 **Status: Partly**, see the table above.
 
 ### 7.2 Consent + async fetch (Account Aggregator)
