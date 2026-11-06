@@ -31,6 +31,25 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Live-traffic changes and secret-minting tools need `confirm: true`; minted keys and signing secrets are marked sensitive and shown once
   - `make contracts-check` now fails if any tool maps to a DELETE or forbidden operation, accepts a secret input, or leaves a hub-admin operation unclassified
   - hubmcp must implement the new tools in HUB-315; until then its frozen-contract drift tests fail on this branch
+- 2026-11-07 · `test(edge)` · Take a last drain sample when the ramp test stops (HUB-412) · HUB-412 · F-12
+  - `TestChaos2RecoveryAndRampedDrain` no longer fails intermittently with "all 160 released -2562047h after the close": with continuous claiming the worker delivers the last released envelopes between two 100 ms samples, so the sampler now records the counter once more when the test stops it
+- 2026-11-07 · `test(edge)` · Prove vendor isolation with noisy-neighbour chaos tests (HUB-412) · HUB-412 · F-13
+  - `TestNoisyNeighbour`: while one vendor account is slow, hangs, refuses connections or answers 503 under steady caller traffic, another account's async p99 stays within 300 ms of its baseline, its sync p99 within 100 ms, and neither account loses a request
+  - On the old worker the slow and hanging scenarios fail (B's async p99 3.83 s and 2.33 s); with HUB-412 B stays at 51–129 ms
+  - New `docs/tech/ISOLATION.md`: what happens to other vendors when one vendor is down or slow, layer by layer, with the test that proves each claim
+  - HUB-412, HUB-407 and HUB-406 in review
+- 2026-11-07 · `feat(hub)` · Read worker concurrency, claim batch and target cap from config (HUB-407) · HUB-407 · F-09
+  - `HUB_WORKER_CONCURRENCY`, `HUB_WORKER_CLAIM_BATCH` and `HUB_WORKER_TARGET_CAP` (or `-worker-concurrency`, `-worker-claim-batch`, `-worker-target-cap`) size the worker; `0` keeps the defaults (256 / 64 llm, 32, concurrency / 4 up to 64)
+  - Non-integers, negative values or a target cap above the concurrency stop the process at start with a clear error
+- 2026-11-07 · `fix(delivery)` · Claim continuously and cap worker slots per vendor account (HUB-412) · HUB-412 · F-13
+  - One slow or hanging vendor no longer delays other vendors' async deliveries: the worker claims as soon as a slot frees instead of waiting for its whole batch, and one (account, endpoint) may hold at most a quarter of the worker's slots (64 of 256 by default)
+  - A claim takes no more of a vendor's backlog than its free slots, so a large backlog for a slow vendor never crowds others out; an envelope that still finds its vendor full is put back without counting an attempt, a breaker failure or a retry token
+  - Worker concurrency defaults to 256 (messaging) and 64 (LLM) per process, as TECH_SPEC promised, instead of 16
+  - New metrics `worker_inflight{pool}`, `worker_target_inflight{account, endpoint}`, `worker_target_cap_deferred_total{account, endpoint}`; ADR-0019
+- 2026-11-07 · `fix(delivery)` · Wait for the first registry snapshot before claiming (HUB-406) · HUB-406 · F-09
+  - A worker restarted with a backlog no longer panics on a nil snapshot: it claims nothing until the first snapshot loads and logs `worker.waiting_for_snapshot` once
+  - An envelope claimed without a snapshot is put back unattempted, so restarts no longer count crashes toward the poison detector (healthy envelopes could be dead-lettered as poison)
+  - The scheduler's drain releases no parked envelope before its first snapshot (it used to release at a 10/s guess instead of the account rate)
 - 2026-11-07 · `test(upstream)` · Give every node the full second in the breaker force test (HUB-416) · HUB-416 · F-12
   - TestForceReachesEveryNodeWithinOneSecond no longer fails when node B's Redis message lands a few ms after node A's; it still fails if the hold is not in force on B within 1 s
 - 2026-11-07 · `docs(skills)` · Fix the transformer skill and file the gaps the operator skill found (HUB-316) · HUB-316 · F-21

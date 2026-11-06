@@ -353,15 +353,21 @@ func (r *m5) sampleReleases(stop <-chan struct{}) (*[]sample, <-chan struct{}) {
 		defer close(done)
 		t := time.NewTicker(100 * time.Millisecond)
 		defer t.Stop()
+		take := func() {
+			v := testutil.ToFloat64(r.res.ReleasedCounter().WithLabelValues(acctB, "clevertap.upload@1"))
+			mu.Lock()
+			*out = append(*out, sample{time.Now(), v})
+			mu.Unlock()
+		}
 		for {
 			select {
 			case <-stop:
+				// A last sample: the worker can deliver the final releases between two ticks and
+				// the caller stops as soon as they succeed (faster since HUB-412's continuous claims).
+				take()
 				return
 			case <-t.C:
-				v := testutil.ToFloat64(r.res.ReleasedCounter().WithLabelValues(acctB, "clevertap.upload@1"))
-				mu.Lock()
-				*out = append(*out, sample{time.Now(), v})
-				mu.Unlock()
+				take()
 			}
 		}
 	}()

@@ -114,6 +114,7 @@ Contract change → `contracts/` commit → backend contract tests fail until im
 | C9 | Auth failure | `UPSTREAM_AUTH_FAILED`, async dead-lettered immediately, alert metric incremented |
 | C10 | Redis outage | breaker local cache continues; idempotency behaviour per TECH_SPEC §22.5; recovery resyncs state |
 | C11 | Postgres failover/restart | gateway accept returns 503 (not 202) when the TX fails; no 202 without commit |
+| C12 | Noisy neighbour (HUB-412) | `TestNoisyNeighbour` (`internal/edge/isolation_integration_test.go`): account A slow (just under its timeout), hanging until its timeout, refusing connections, or answering 503 while callers keep sending it 20/s. Account B's async p99 stays ≤ its baseline p99 (capped at 200 ms) + 300 ms, its sync p99 ≤ baseline (capped at 100 ms) + 100 ms, and nothing of A or B is lost. A and B use separate mockvendor instances, so "refuse" closes only A's listener. Numbers and rationale: `docs/tech/ISOLATION.md` |
 
 ## 7. End-to-end tests
 - **Backend e2e** (`e2e` tag): compose stack (all roles + mockvendor) driven through `pkg/hubclient`. One test per canonical error class (M3 acceptance), per delivery mode, callback signature verified by a test receiver (M4), TTL expiry → `expired` + callback.

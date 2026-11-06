@@ -60,7 +60,7 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-10 | Admin console (SvelteKit) | F-19 | HUB-250–HUB-299 | 40 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 19 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 22 | 4 |
-| **Total** | | | | **251** | **177** |
+| **Total** | | | | **252** | **177** |
 
 ## Sizing
 
@@ -94,11 +94,11 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | F-06 | Sync invoke path & canonical error envelope | EP-04 | 8 |
 | F-07 | Credentials & vendor auth schemes | EP-04 | 2 |
 | F-08 | Audit trail | EP-04, EP-05, EP-13 | 9 |
-| F-09 | Durable delivery: outbox, worker, wait/async/async_callback | EP-05, EP-13 | 11 |
+| F-09 | Durable delivery: outbox, worker, wait/async/async_callback | EP-05, EP-13 | 12 |
 | F-10 | Idempotency | EP-05 | 1 |
 | F-11 | Outbound callbacks & registrar (signed webhooks, SSRF guard) | EP-05 | 4 |
-| F-12 | Circuit breaker, parking & ramped drain | EP-06 | 16 |
-| F-13 | Rate limits & bulkheads | EP-06, EP-13 | 4 |
+| F-12 | Circuit breaker, parking & ramped drain | EP-06 | 17 |
+| F-13 | Rate limits & bulkheads | EP-06, EP-13 | 5 |
 | F-14 | Integration versioning & cutover (weights, shadow, rollback) | EP-07 | 14 |
 | F-15 | Account lifecycle & credential rotation | EP-07, EP-13 | 5 |
 | F-16 | Admin API, RBAC & change log | EP-08 | 12 |

@@ -58,18 +58,24 @@ func (Secret) String() string { return "***" }
 // Config is the immutable process configuration of one role.
 // Registry config (vendors, integrations, ...) never comes from here; it comes from snapshots.
 type Config struct {
-	Role             Role
-	HTTPAddr         string // public listener (gateway /v1, admin /admin/v1); unused by worker and scheduler
-	OpsAddr          string // /healthz, /readyz, /metrics, /debug/pprof; never exposed outside the cluster
-	PGDSN            Secret
-	RedisAddr        string
-	AdminURL         string // where data-plane roles fetch snapshots
-	WorkerPool       string
-	ShutdownGrace    time.Duration // total budget for graceful shutdown
-	ReadyDrain       time.Duration // time between /readyz=503 and closing listeners
-	LogLevel         slog.Level
-	OTLPEndpoint     string // empty disables trace export
-	TraceSampleRatio float64
+	Role       Role
+	HTTPAddr   string // public listener (gateway /v1, admin /admin/v1); unused by worker and scheduler
+	OpsAddr    string // /healthz, /readyz, /metrics, /debug/pprof; never exposed outside the cluster
+	PGDSN      Secret
+	RedisAddr  string
+	AdminURL   string // where data-plane roles fetch snapshots
+	WorkerPool string
+	// Worker limits (TECH_SPEC §8.1, HUB-412). 0 means the delivery package default:
+	// concurrency 256 (messaging) or 64 (llm), claim batch 32, target cap a quarter of the
+	// concurrency up to the 64-connection bulkhead.
+	WorkerConcurrency int           // attempts in flight
+	WorkerClaimBatch  int           // most envelopes per claim
+	WorkerTargetCap   int           // most attempts in flight per (account, endpoint)
+	ShutdownGrace     time.Duration // total budget for graceful shutdown
+	ReadyDrain        time.Duration // time between /readyz=503 and closing listeners
+	LogLevel          slog.Level
+	OTLPEndpoint      string // empty disables trace export
+	TraceSampleRatio  float64
 	// TraceForwardVendors names the vendors (registry vendor names) that receive the Hub's W3C
 	// traceparent; every other vendor gets none (DESIGN §16.4, ADR-0013).
 	TraceForwardVendors []string
@@ -141,7 +147,10 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	fs.StringVar(&c.OIDCAudience, "oidc-audience", env("HUB_OIDC_AUDIENCE", ""), "admin: required token audience (optional)")
 	fs.BoolVar(&devID, "admin-dev-oidc", env("HUB_ADMIN_DEV_OIDC", "false") == "true", "dev only: run the admin OIDC issuer stub")
 	fs.StringVar(&c.AdminPublicURL, "admin-public-url", env("HUB_ADMIN_PUBLIC_URL", "http://localhost:8081"), "admin: external base URL (dev issuer iss)")
-	var callbackHosts, traceVendors string
+	var callbackHosts, traceVendors, concurrency, claimBatch, targetCap string
+	fs.StringVar(&concurrency, "worker-concurrency", env("HUB_WORKER_CONCURRENCY", "0"), "worker: attempts in flight (0: 256 messaging, 64 llm)")
+	fs.StringVar(&claimBatch, "worker-claim-batch", env("HUB_WORKER_CLAIM_BATCH", "0"), "worker: most envelopes per claim (0: 32)")
+	fs.StringVar(&targetCap, "worker-target-cap", env("HUB_WORKER_TARGET_CAP", "0"), "worker: most attempts in flight per account and endpoint (0: concurrency/4, at most 64)")
 	fs.StringVar(&traceVendors, "trace-forward-vendors", env("HUB_TRACE_FORWARD_VENDORS", ""), "comma-separated vendor names that receive traceparent (default none)")
 	fs.StringVar(&callbackHosts, "callback-hosts", env("HUB_CALLBACK_HOSTS", ""), "admin: comma-separated registrar host allowlist (host or .suffix)")
 	if err := fs.Parse(args); err != nil {
@@ -181,6 +190,18 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	}
 	if role == Worker && c.WorkerPool != "messaging" && c.WorkerPool != "llm" {
 		errs = append(errs, fmt.Errorf("pool: want messaging or llm, got %q", c.WorkerPool))
+	}
+	for _, f := range []struct {
+		name string
+		raw  string
+		dst  *int
+	}{{"worker-concurrency", concurrency, &c.WorkerConcurrency}, {"worker-claim-batch", claimBatch, &c.WorkerClaimBatch}, {"worker-target-cap", targetCap, &c.WorkerTargetCap}} {
+		if *f.dst, err = strconv.Atoi(f.raw); err != nil || *f.dst < 0 {
+			errs = append(errs, fmt.Errorf("%s: want an integer >= 0 (0 = default), got %q", f.name, f.raw))
+		}
+	}
+	if c.WorkerConcurrency > 0 && c.WorkerTargetCap > c.WorkerConcurrency {
+		errs = append(errs, fmt.Errorf("worker-target-cap (%d) must not exceed worker-concurrency (%d)", c.WorkerTargetCap, c.WorkerConcurrency))
 	}
 	if c.AdminDevOIDC && c.OIDCIssuer != "" {
 		errs = append(errs, errors.New("admin-dev-oidc and oidc-issuer are exclusive: the stub would shadow the real issuer"))

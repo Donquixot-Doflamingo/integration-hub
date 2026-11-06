@@ -327,3 +327,125 @@ func TestPoolsAreSeparate(t *testing.T) {
 		t.Fatalf("messaging claim behind an LLM backlog: %+v %v", got, err)
 	}
 }
+
+// TestDeferTarget is HUB-412: an envelope put back over its target's cap is not an attempt,
+// keeps the target as its hint, and the put-back is guarded by the claim.
+func TestDeferTarget(t *testing.T) {
+	p := pool(t)
+	isolate(t, p, queue.PoolMessaging)
+	q := &queue.Outbox{}
+	now := time.Now().Add(-time.Second)
+	a := env("events.track@v1", now)
+	cleanup(t, p, a.RequestID)
+	if err := q.Enqueue(t.Context(), p, a); err != nil {
+		t.Fatal(err)
+	}
+	got, err := q.Claim(t.Context(), p, "w1", queue.PoolMessaging, 1)
+	if err != nil || len(got) != 1 || got[0].RequestID != a.RequestID {
+		t.Fatalf("claim %+v %v", got, err)
+	}
+	full := queue.Target{Account: "acct-a", Endpoint: "vendor.send@1"}
+	if err := q.DeferTarget(t.Context(), p, a.RequestID, "w1", now, "target at cap", full); err != nil {
+		t.Fatal(err)
+	}
+	var status, account, endpoint string
+	var attempt, crashes int
+	if err := p.QueryRow(t.Context(), `SELECT status, attempt, crashes, account_id, endpoint_id FROM hub.outbox WHERE request_id = $1`, a.RequestID).
+		Scan(&status, &attempt, &crashes, &account, &endpoint); err != nil {
+		t.Fatal(err)
+	}
+	if status != "accepted" || attempt != 0 || crashes != 0 || account != full.Account || endpoint != full.Endpoint {
+		t.Fatalf("after DeferTarget: %s attempt %d crashes %d hint %s/%s", status, attempt, crashes, account, endpoint)
+	}
+	if err := q.DeferTarget(t.Context(), p, a.RequestID, "w1", now, "again", full); !errors.Is(err, queue.ErrLost) {
+		t.Fatalf("second DeferTarget: %v, want ErrLost (guarded by the claim)", err)
+	}
+	got, err = q.Claim(t.Context(), p, "w1", queue.PoolMessaging, 1)
+	if err != nil || len(got) != 1 || got[0].Attempt != 1 {
+		t.Fatalf("claim after the put-back: %+v %v, want the envelope on its first attempt", got, err)
+	}
+}
+
+// TestClaimWithinTargetRoom is HUB-412: a claim takes no more of a hinted target's backlog than
+// the worker's free slots for it (none at its cap, the rows are left alone), no more than
+// perTarget of a target it has nothing in flight for, and unhinted envelopes as usual. A slow
+// target at its cap is left out before the LIMIT, so its older backlog does not keep other
+// targets' envelopes out of the claim.
+func TestClaimWithinTargetRoom(t *testing.T) {
+	slow := queue.Target{Account: "acct-slow", Endpoint: "vendor.send@1"}
+	idle := queue.Target{Account: "acct-idle", Endpoint: "vendor.send@1"}
+	tests := []struct {
+		name         string
+		n, perTarget int
+		rooms        []queue.TargetRoom
+		slow         int // slow's envelopes claimed (of 5, all older than the rest)
+		idle         int // idle's envelopes claimed (of 3)
+		unhinted     int // of 2, the newest
+	}{
+		{"no limits: oldest first", 10, 0, nil, 5, 3, 2},
+		{"no limits, short claim: the oldest backlog wins", 3, 0, nil, 3, 0, 0},
+		{"slow at its cap", 10, 2, []queue.TargetRoom{{Target: slow, Slots: 0}}, 0, 2, 2},
+		{"slow at its cap, short claim: its backlog is skipped", 3, 0, []queue.TargetRoom{{Target: slow, Slots: 0}}, 0, 3, 0},
+		{"slow has one free slot", 10, 2, []queue.TargetRoom{{Target: slow, Slots: 1}}, 1, 2, 2},
+		{"room beats perTarget", 10, 1, []queue.TargetRoom{{Target: slow, Slots: 3}, {Target: idle, Slots: 2}}, 3, 2, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := pool(t)
+			isolate(t, p, queue.PoolMessaging)
+			q := &queue.Outbox{}
+			base := time.Now().Add(-time.Minute)
+			hinted := map[string]queue.Target{}
+			var ids, plain []string
+			add := func(target *queue.Target) {
+				e := env("events.track@v1", base.Add(time.Duration(len(ids))*time.Millisecond))
+				ids = append(ids, e.RequestID)
+				if err := q.Enqueue(t.Context(), p, e); err != nil {
+					t.Fatal(err)
+				}
+				if target == nil {
+					plain = append(plain, e.RequestID)
+					return
+				}
+				hinted[e.RequestID] = *target
+				if _, err := p.Exec(t.Context(), `UPDATE hub.outbox SET account_id = $2, endpoint_id = $3 WHERE request_id = $1`,
+					e.RequestID, target.Account, target.Endpoint); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for range 5 {
+				add(&slow)
+			}
+			for range 3 {
+				add(&idle)
+			}
+			add(nil)
+			add(nil)
+			cleanup(t, p, ids...)
+			got, err := q.ClaimWithin(t.Context(), p, "w1", queue.PoolMessaging, tt.n, tt.perTarget, tt.rooms)
+			if err != nil {
+				t.Fatal(err)
+			}
+			count := map[queue.Target]int{}
+			var unhinted int
+			for _, c := range got {
+				if target, ok := hinted[c.RequestID]; ok {
+					count[target]++
+				} else if slices.Contains(plain, c.RequestID) {
+					unhinted++
+				}
+			}
+			if count[slow] != tt.slow || count[idle] != tt.idle || unhinted != tt.unhinted {
+				t.Fatalf("claimed slow %d idle %d unhinted %d, want %d %d %d", count[slow], count[idle], unhinted, tt.slow, tt.idle, tt.unhinted)
+			}
+			var left int
+			if err := p.QueryRow(t.Context(), `SELECT count(*) FROM hub.outbox WHERE request_id = ANY($1) AND status = 'accepted' AND attempt = 0`, ids).
+				Scan(&left); err != nil {
+				t.Fatal(err)
+			}
+			if left != len(ids)-len(got) {
+				t.Fatalf("%d rows left untouched, want %d (rows over the room are not claimed)", left, len(ids)-len(got))
+			}
+		})
+	}
+}
