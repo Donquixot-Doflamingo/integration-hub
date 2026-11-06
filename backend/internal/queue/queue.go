@@ -248,6 +248,82 @@ func (o *Outbox) Parked(ctx context.Context, db DB) ([]ParkedGroup, error) {
 	})
 }
 
+// DepthRow is the number of envelopes in one pool and status (queue_depth).
+type DepthRow struct {
+	Pool, Status string
+	Count        int
+}
+
+// Depth counts the accepted, retry_scheduled and in_flight envelopes per pool and status.
+// Parked envelopes are reported per breaker by Parked.
+func (o *Outbox) Depth(ctx context.Context, db DB) ([]DepthRow, error) {
+	rows, err := db.Query(ctx, `SELECT pool, status, count(*) FROM hub.outbox
+		WHERE status IN ('accepted', 'retry_scheduled', 'in_flight') GROUP BY pool, status`)
+	if err != nil {
+		return nil, fmt.Errorf("queue: depth: %w", err)
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (DepthRow, error) {
+		var d DepthRow
+		err := r.Scan(&d.Pool, &d.Status, &d.Count)
+		return d, err
+	})
+}
+
+// OldestDue returns, per pool, the earliest next_attempt_at among envelopes that are due now
+// and not yet claimed (queue_oldest_age_s). Envelopes waiting out a backoff are not due, so a
+// long retry schedule never looks like a stuck queue; only work the workers have not picked up
+// does. Pools with nothing due are absent.
+func (o *Outbox) OldestDue(ctx context.Context, db DB, now time.Time) (map[string]time.Time, error) {
+	rows, err := db.Query(ctx, `SELECT pool, min(next_attempt_at) FROM hub.outbox
+		WHERE status IN ('accepted', 'retry_scheduled') AND next_attempt_at <= $1 GROUP BY pool`, now)
+	if err != nil {
+		return nil, fmt.Errorf("queue: oldest due: %w", err)
+	}
+	out := map[string]time.Time{}
+	var pool string
+	var at time.Time
+	_, err = pgx.ForEachRow(rows, []any{&pool, &at}, func() error {
+		out[pool] = at
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("queue: oldest due: %w", err)
+	}
+	return out, nil
+}
+
+// DeadLetterGroup is the unreplayed dead letters of one tenant, integration, account and reason
+// (dlq_count).
+type DeadLetterGroup struct {
+	Tenant, Integration, Account, Reason string
+	Count                                int
+}
+
+// DeadLetterCounts groups the dead letters not yet replayed, largest groups first, at most
+// limit groups (the caller folds the rest into an overflow group with DeadLetterTotal).
+func (o *Outbox) DeadLetterCounts(ctx context.Context, db DB, limit int) ([]DeadLetterGroup, error) {
+	rows, err := db.Query(ctx, `SELECT tenant_id, integration_id, COALESCE(account_id, ''), reason, count(*) AS n
+		FROM hub.dead_letters WHERE replayed_at IS NULL
+		GROUP BY tenant_id, integration_id, account_id, reason ORDER BY n DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("queue: dead-letter counts: %w", err)
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (DeadLetterGroup, error) {
+		var g DeadLetterGroup
+		err := r.Scan(&g.Tenant, &g.Integration, &g.Account, &g.Reason, &g.Count)
+		return g, err
+	})
+}
+
+// DeadLetterTotal counts the dead letters not yet replayed.
+func (o *Outbox) DeadLetterTotal(ctx context.Context, db DB) (int, error) {
+	var n int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM hub.dead_letters WHERE replayed_at IS NULL`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("queue: dead-letter total: %w", err)
+	}
+	return n, nil
+}
+
 // DeadLetter is the information kept for a dead letter (DESIGN §10.6).
 type DeadLetter struct {
 	Reason             string // canonical code, or "poison"

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,6 +14,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 )
 
 // TerminalEvent is a queued request reaching a terminal state. OnTerminal runs inside the
@@ -39,6 +41,8 @@ type Transitions struct {
 	Ledger     audit.Ledger
 	OnTerminal OnTerminal // may be nil
 	Now        func() time.Time
+	// Metrics counts each committed terminal transition in hub_requests_total (may be nil).
+	Metrics *telemetry.Metrics
 }
 
 func (t *Transitions) now() time.Time {
@@ -57,6 +61,9 @@ type Outcome struct {
 	Result json.RawMessage
 	Err    *core.CanonicalError
 	DL     queue.DeadLetter
+	// Account and Endpoint name the target of the last attempt, for hub_requests_total
+	// (empty when nothing was attempted, e.g. expiry of a never-claimed envelope).
+	Account, Endpoint string
 }
 
 // Succeed acks the envelope, finishes the request as succeeded, keeps the result and fires
@@ -90,7 +97,7 @@ func (t *Transitions) Expire(ctx context.Context, env core.Envelope, worker stri
 func (t *Transitions) terminal(ctx context.Context, env core.Envelope, o Outcome, queueOp func(pgx.Tx) error) error {
 	now := t.now()
 	o.Final.At = now
-	return pgx.BeginFunc(ctx, t.DB, func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(ctx, t.DB, func(tx pgx.Tx) error {
 		if err := queueOp(tx); err != nil {
 			return err // ErrLost: another actor won; nothing else is written
 		}
@@ -111,6 +118,31 @@ func (t *Transitions) terminal(ctx context.Context, env core.Envelope, o Outcome
 			}
 		}
 		return nil
+	})
+	if err == nil {
+		t.count(env, o)
+	}
+	return err
+}
+
+// count adds a committed terminal transition to hub_requests_total (once: a lost race returns
+// before commit and the winner counts).
+func (t *Transitions) count(env core.Envelope, o Outcome) {
+	if t.Metrics == nil {
+		return
+	}
+	version := o.Final.IntegrationVersion
+	if version == 0 {
+		version = env.ResolvedVersion
+	}
+	account := o.Account
+	if account == "" {
+		account = o.DL.AccountID
+	}
+	vendor, _, _ := strings.Cut(o.Endpoint, ".")
+	t.Metrics.CountRequest(telemetry.RequestLabels{
+		Tenant: env.Tenant, Integration: env.IntegrationID, Vendor: vendor, Account: account,
+		Version: version, Mode: env.Mode, Code: o.Final.ErrorCode,
 	})
 }
 

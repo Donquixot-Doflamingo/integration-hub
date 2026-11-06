@@ -40,7 +40,10 @@ readyz="$(curl -fsS "http://$ops/readyz")" || fail "/readyz not 200"
 echo "/readyz  -> $readyz"
 [[ "$readyz" == *'"postgres":"ok"'* && "$readyz" == *'"redis":"ok"'* && "$readyz" == *'"snapshot":"ok"'* ]] || fail "/readyz checks"
 
-curl -fsS "http://$ops/metrics" | grep -q '^hub_build_info' || fail "/metrics missing hub_build_info"
+# Read the whole body first: `curl | grep -q` under pipefail fails whenever grep exits on its
+# match before curl has written the rest (curl exit 23), so it flakes as /metrics grows.
+metrics="$(curl -fsS "http://$ops/metrics")" || fail "/metrics not 200"
+grep -q '^hub_build_info' <<<"$metrics" || fail "/metrics missing hub_build_info"
 
 kill -TERM "$pid"
 for _ in $(seq 1 100); do

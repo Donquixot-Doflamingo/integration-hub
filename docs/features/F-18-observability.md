@@ -4,7 +4,7 @@
 Completes the metrics catalogue (DESIGN §16.2), alert rules as code (§16.3), OTel tracing (§16.4), tenant/vendor/platform dashboards, and the M8 load and soak tests that prove the latency and durability targets (§1, §18.6, §19 M8).
 
 ## Status
-`proposed` — 2026-10-31.
+`in-progress` — 2026-11-06 (HUB-230 metrics done; tracing, alerts, PII deletion, security, load and soak tests to come).
 
 ## Owner
 `backend-engineer`.
@@ -57,7 +57,8 @@ Alerts (DESIGN §16.3):
 1. Metric names and labels follow `docs/tech/OBSERVABILITY.md`; each feature doc lists its additions.
 2. `tenant` and `integration` labels allowed; `request_id` never a label.
 3. Logs are structured `slog` JSON via the redacting handler; every log line carries `request_id` and trace ids when present.
-4. Load-test acceptance: overhead p99 ≤ 5 ms at target load; async accept p99 ≤ 10 ms; soak: zero lost accepted requests (ledger reconciliation of accepted vs terminal).
+4. **Metrics (HUB-230, done):** every §16.2 metric is registered; `TestDesignMetricsAreRegistered` (roles) enumerates the names from one registry wired like the data plane. `hub_requests_total` is counted once per request: in the gateway for requests that end there (dry-runs excluded) and in delivery for each committed terminal transition of a queued request. The outbox gauges (`queue_depth`, `queue_oldest_age_s`, `dlq_count`) come from `delivery.QueueSampler` on the scheduler leader every 10 s. `credential_expiry_days` is computed at scrape time. Capped metrics fold excess label combinations into `__overflow__` (OBSERVABILITY §3.1). `hub_overhead_ms` is broken down by stage in `hub_stage_duration_ms` (since HUB-027).
+5. Load-test acceptance: overhead p99 ≤ 5 ms at target load; async accept p99 ≤ 10 ms; soak: zero lost accepted requests (ledger reconciliation of accepted vs terminal).
 
 ## Data model impact
 None.
@@ -96,3 +97,4 @@ HUB-230 – HUB-249.
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-06 | HUB-230 shipped: full §16.2 metric set, cardinality guard, status in-progress | backend-engineer |

@@ -54,6 +54,18 @@ type Metrics struct {
 	// shared by every package that talks to Redis (idempotency now; breakers and limiters later).
 	// op values are constants of the owning package, never built at runtime.
 	RedisOpDuration *prometheus.HistogramVec
+	// Requests is hub_requests_total (CountRequest); LLMTokens and LLMCost are llm_tokens_total
+	// and llm_cost_usd_total (RecordLLMUsage). Each is behind a series cap; SeriesOverflow
+	// counts observations that hit it.
+	Requests       *prometheus.CounterVec
+	LLMTokens      *prometheus.CounterVec
+	LLMCost        *prometheus.CounterVec
+	SeriesOverflow *prometheus.CounterVec
+
+	caps           seriesCaps
+	requestsGuard  *LabelGuard
+	llmTokensGuard *LabelGuard
+	llmCostGuard   *LabelGuard
 }
 
 // NewMetrics creates the registry with Go runtime and process collectors and the Hub-wide
@@ -95,6 +107,8 @@ func NewMetrics(role, version string) *Metrics {
 	})
 	build.Set(1)
 	reg.MustRegister(m.Overhead, m.StageDuration, m.RedisOpDuration, build)
+	m.caps = seriesCaps{RequestsSeriesCap, LLMTokensSeriesCap, LLMCostSeriesCap}
+	m.registerRequestMetrics()
 	return m
 }
 

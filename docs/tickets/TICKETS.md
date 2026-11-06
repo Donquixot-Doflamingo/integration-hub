@@ -17,7 +17,7 @@ Total tickets: **198** · done: **156** · todo: **41** · other (in-progress/in
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
-| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 8 | 0 |
+| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 9 | 0 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
@@ -1660,15 +1660,15 @@ Prove the M7 Accept line and post the wrap-up.
 
 ### HUB-230 — Metrics: full §16.2 set
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-027, HUB-154, HUB-123 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-review · **Depends on:** HUB-027, HUB-154, HUB-123 · **Feature:** F-18 · **Stories:** US-18xx
 - **Branch:** `feat/HUB-230-metrics-full`
 
 Export every §16.2 metric with labels tenant, integration, vendor, account, version, with a cardinality guard; incl. `credential_expiry_days`, `queue_oldest_age_s`, `llm_*` placeholders.
 
 **Acceptance criteria**
-- [ ] Every metric in §16.2 present on `/metrics` (test enumerates names)
-- [ ] Label cardinality capped with an overflow bucket
-- [ ] `hub_overhead_ms` broken down by stage
+- [x] Every metric in §16.2 present on `/metrics` (test enumerates names): `TestDesignMetricsAreRegistered`
+- [x] Label cardinality capped with an overflow bucket: `TestRequestsOverflow`, `TestQueueSampler` (`__overflow__`, `metric_series_overflow_total`)
+- [x] `hub_overhead_ms` broken down by stage: `hub_stage_duration_ms{stage}` (HUB-027), unchanged
 
 ### HUB-231 — Tracing: edge, transform, upstream, callback spans
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
@@ -1751,6 +1751,17 @@ Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`
 - [ ] Each paging alert links a runbook
 - [ ] Milestone summary posted; F-18 doc updated
 - [ ] Release notes for v1.0.0 prepared per `docs/process/RELEASE.md`
+
+### HUB-238 — Transformer time budget flakes under -race in the full itest run
+- **Epic:** EP-09 · **Type:** test · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `test/HUB-238-transform-budget-flake`
+
+During the HUB-230 `make itest` run, `TestCutoverCompletedAndNewRequests/transformer` failed once: the publish check ran goldens for `R2@1` (`fixtures/partial`), which took 8.08 ms against the 5 ms transform time budget under `-race` on a loaded machine. It passed 5/5 in isolation. The publish-time golden run should not be sensitive to scheduler load.
+
+**Acceptance criteria**
+- [ ] Publish-time goldens either measure CPU time, apply the budget only outside `-race`, or retry once before failing on time alone
+- [ ] `make itest` passes 10 consecutive full runs on CI hardware
 
 ## EP-10 — Admin console (SvelteKit)
 

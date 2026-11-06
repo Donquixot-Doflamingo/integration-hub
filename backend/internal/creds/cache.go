@@ -87,6 +87,9 @@ type entry struct {
 	// until is the slot's own expiry (Slot.ExpiresAt; zero = none). Slots honours it for the
 	// next slot, which ends a registrar secret's rotation overlap on time.
 	until time.Time
+	// credExpiry is Slot.ExpiresAt of active and next alike, for credential_expiry_days only
+	// (an active slot's expiry is reported, never enforced here).
+	credExpiry time.Time
 }
 
 // generation is one immutable cache state, published with a single pointer store.
@@ -119,7 +122,7 @@ func NewCache(loader Loader, secrets *telemetry.SecretSet, m *telemetry.Metrics,
 			Help: "Calls to the decrypting credential loader (warm-up and background refresh only).",
 		}),
 	}
-	for _, col := range []prometheus.Collector{c.misses, c.decrypts} {
+	for _, col := range []prometheus.Collector{c.misses, c.decrypts, expiryCollector{c}} {
 		if err := m.Registry.Register(col); err != nil {
 			return nil, fmt.Errorf("creds: register metrics: %w", err)
 		}
@@ -257,13 +260,16 @@ func (c *Cache) reloadLocked(ctx context.Context) error {
 			continue
 		}
 		act := &entry{creds: Credentials{AccountID: id, Version: s.Active.Version, Values: s.Active.Values}, expires: expires}
+		if s.Active.ExpiresAt != nil {
+			act.credExpiry = *s.Active.ExpiresAt
+		}
 		next.active[id] = act
 		next.byVersion[versionKey{id, s.Active.Version}] = act
 		secrets = appendSecrets(secrets, s.Active.Values)
 		if s.Next != nil {
 			n := &entry{creds: Credentials{AccountID: id, Version: s.Next.Version, Values: s.Next.Values}, expires: expires}
 			if s.Next.ExpiresAt != nil {
-				n.until = *s.Next.ExpiresAt
+				n.until, n.credExpiry = *s.Next.ExpiresAt, *s.Next.ExpiresAt
 			}
 			next.next[id] = n
 			next.byVersion[versionKey{id, s.Next.Version}] = n
@@ -301,4 +307,35 @@ func appendSecrets(dst []string, values map[string]string) []string {
 
 func basicToken(username, password string) string {
 	return base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+}
+
+// expiryDesc is credential_expiry_days{account,slot} (DESIGN §16.2, alert "expiring < 7 days").
+var expiryDesc = prometheus.NewDesc("credential_expiry_days",
+	"Days until a credential slot expires (negative once expired); only slots with an expiry are reported.",
+	[]string{"account", "slot"}, nil)
+
+// expiryCollector computes credential_expiry_days at scrape time from the current generation,
+// so the value counts down between reloads and a rotated or removed slot disappears with it.
+type expiryCollector struct{ c *Cache }
+
+func (e expiryCollector) Describe(ch chan<- *prometheus.Desc) { ch <- expiryDesc }
+
+func (e expiryCollector) Collect(ch chan<- prometheus.Metric) {
+	g := e.c.gen.Load()
+	if g == nil {
+		return
+	}
+	now := e.c.opts.Now()
+	emit := func(account, slot string, en *entry) {
+		if en == nil || en.credExpiry.IsZero() {
+			return
+		}
+		ch <- prometheus.MustNewConstMetric(expiryDesc, prometheus.GaugeValue, en.credExpiry.Sub(now).Hours()/24, account, slot)
+	}
+	for id, en := range g.active {
+		emit(id, "active", en)
+	}
+	for id, en := range g.next {
+		emit(id, "next", en)
+	}
 }
