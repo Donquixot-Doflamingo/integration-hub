@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(callbacks)` · Enforce an explicit TLS 1.2 floor on callbacks · HUB-234 · F-18
+  - Signed callbacks to tenant endpoints refuse TLS below 1.2 by the guard's own configuration instead of relying on Go's default client floor
+  - The guard's test seam can add trusted roots but can never lower the floor
 - 2026-11-07 · `test(upstream)` · Prove vendor TLS handshakes below 1.2 fail · HUB-234 · F-18
   - TestTLS now runs the real upstream client against vendors that speak only TLS 1.0 or 1.1 (with a positive control that they do) and against TLS 1.2-only and 1.3 vendors
   - TestTLSFloorIsExplicit fails if the client's own TLS 1.2 floor or verification is removed
