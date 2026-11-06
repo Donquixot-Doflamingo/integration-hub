@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **209** · done: **157** · todo: **46** · other (in-progress/in-review/blocked): **6**
+Total tickets: **210** · done: **157** · todo: **46** · other (in-progress/in-review/blocked): **7**
 
 ## Epics
 
@@ -14,7 +14,7 @@ Total tickets: **209** · done: **157** · todo: **46** · other (in-progress/in
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
-| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
+| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 16 | 15 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 19 | 1 |
@@ -1284,6 +1284,18 @@ Scenario 5 plus the milestone wrap-up.
 - [x] All five chaos tests green in `make itest`
 - [x] Milestone summary posted; F-12, F-13 docs updated
 
+
+### HUB-155 — Drain quota follows elapsed time, not the nominal tick
+- **Epic:** EP-06 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-149 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `fix/HUB-155-drain-elapsed-time`
+
+`TestChaos2RecoveryAndRampedDrain` failed on two PRs that do not touch the drain (#18: ramp step 2 released 15/20; #19: step 4 released 39/50). Root cause: the drain released `rate × nominal tick` per scheduler tick. A `time.Ticker` drops ticks when the scheduler is busy (probes, expiry sweeps, slow Postgres), so the quota of a late or dropped tick was lost and the drain ran below the DESIGN §10.5 rate on a loaded node. This is a production behaviour bug, not only a test one.
+
+**Acceptance criteria**
+- [x] The quota uses the time elapsed since the key's previous drain, capped at 2 ticks so a stall never becomes a burst (`TestDrainQuotaUsesElapsedTime`)
+- [x] Late ticks over 1.05 s at 50/s release 52, where the nominal-tick quota released 35
+- [x] `TestChaos2RecoveryAndRampedDrain` and `TestChaos3ReopenMidDrain` pass 3/3 under load
 ## EP-07 — M6 Versioning & cutover
 
 ### HUB-170 — Publish pipeline with full validation

@@ -34,6 +34,7 @@ type Resilience struct {
 	mu        sync.Mutex
 	lastProbe map[upstream.BreakerKey]time.Time
 	carry     map[upstream.BreakerKey]float64
+	lastDrain map[upstream.BreakerKey]time.Time
 	parked    *prometheus.GaugeVec
 	oldest    *prometheus.GaugeVec
 	released  *prometheus.CounterVec
@@ -65,6 +66,7 @@ func (r *Resilience) Tick(ctx context.Context, db queue.DB, tick time.Duration) 
 	r.mu.Lock()
 	if r.lastProbe == nil {
 		r.lastProbe, r.carry = map[upstream.BreakerKey]time.Time{}, map[upstream.BreakerKey]float64{}
+		r.lastDrain = map[upstream.BreakerKey]time.Time{}
 	}
 	r.mu.Unlock()
 	r.probeOpen(ctx)
@@ -187,6 +189,7 @@ func (r *Resilience) drain(ctx context.Context, db queue.DB, tick time.Duration)
 		if ok && state.State != upstream.Closed {
 			r.mu.Lock()
 			delete(r.carry, key)
+			delete(r.lastDrain, key)
 			r.mu.Unlock()
 			continue
 		}
@@ -196,10 +199,15 @@ func (r *Resilience) drain(ctx context.Context, db queue.DB, tick time.Duration)
 		}
 		factor := RampFactor(r.now().Sub(closedAt), step)
 		rate := float64(accountRPS(snap, g.Account, g.Endpoint)) * factor
+		now := r.now()
 		r.mu.Lock()
-		want := r.carry[key] + rate*tick.Seconds()
-		n := int(math.Floor(want))
-		r.carry[key] = want - float64(n)
+		elapsed := tick // first drain of this key since it closed: one nominal tick
+		if last, seen := r.lastDrain[key]; seen {
+			elapsed = now.Sub(last)
+		}
+		r.lastDrain[key] = now
+		var n int
+		n, r.carry[key] = drainQuota(r.carry[key], rate, elapsed, tick)
 		r.mu.Unlock()
 		if n <= 0 {
 			continue
@@ -215,6 +223,22 @@ func (r *Resilience) drain(ctx context.Context, db queue.DB, tick time.Duration)
 				slog.Int("count", released), slog.Float64("rate_factor", factor))
 		}
 	}
+}
+
+// maxCatchUpTicks bounds how much of a late tick the drain makes up at once (HUB-155).
+const maxCatchUpTicks = 2
+
+// drainQuota returns how many envelopes to release for elapsed time at rate (per second), and
+// the fractional remainder to carry. It uses the time that actually passed since the previous
+// drain of the key, not the nominal tick: a time.Ticker drops ticks when the scheduler is busy
+// (probes, expiry sweeps, slow Postgres), and quota computed per nominal tick was then lost for
+// good, so the drain ran below the DESIGN §10.5 rate on a loaded node. The catch-up is capped at
+// maxCatchUpTicks ticks so a long stall never turns into one burst at the recovering vendor.
+func drainQuota(carry, rate float64, elapsed, tick time.Duration) (int, float64) {
+	elapsed = min(max(elapsed, 0), maxCatchUpTicks*tick)
+	want := carry + rate*elapsed.Seconds()
+	n := int(math.Floor(want))
+	return n, want - float64(n)
 }
 
 // RampFactor is the drain rate as a share of the account rate after a close: 0.2, 0.4, 0.8 then
