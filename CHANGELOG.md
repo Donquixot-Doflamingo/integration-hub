@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(edge)` · Take a last drain sample when the ramp test stops (HUB-412) · HUB-412 · F-12
+  - `TestChaos2RecoveryAndRampedDrain` no longer fails intermittently with "all 160 released -2562047h after the close": with continuous claiming the worker delivers the last released envelopes between two 100 ms samples, so the sampler now records the counter once more when the test stops it
 - 2026-11-07 · `test(edge)` · Prove vendor isolation with noisy-neighbour chaos tests (HUB-412) · HUB-412 · F-13
   - `TestNoisyNeighbour`: while one vendor account is slow, hangs, refuses connections or answers 503 under steady caller traffic, another account's async p99 stays within 300 ms of its baseline, its sync p99 within 100 ms, and neither account loses a request
   - On the old worker the slow and hanging scenarios fail (B's async p99 3.83 s and 2.33 s); with HUB-412 B stays at 51–129 ms
