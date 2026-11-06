@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -38,6 +40,7 @@ type toolResult struct {
 	integrationID string
 	requestID     string
 	outcome       string
+	changeID      string // admin write tools: the change-log entry of the mutation
 }
 
 // app holds what tool handlers need. It never holds a database or snapshot handle: hubmcp is a
@@ -53,17 +56,58 @@ type app struct {
 	sleep func(ctx context.Context, d time.Duration) error
 	// integrations caches getIntegration for hub_invoke's pre-check (≤ 60 s, contract rule 2).
 	integrations *integrationCache
+	// transport is stdio or http; write tools are registered on stdio only.
+	transport string
+	// secretRes are the contract's secret_patterns: arguments matching one are refused.
+	secretRes []*regexp.Regexp
+	// http is the method-guarded client every Hub call goes through (no DELETE can leave).
+	http *http.Client
 }
 
-// newMCPServer builds the MCP server with the contract's tools. Admin tools are registered only
-// when an admin client is configured (contract config: HUB_ADMIN_TOKEN). It fails if a contract
-// tool has no handler or a handler has no contract tool, so the advertised set always equals the
-// contract.
+// registeredTools is the tool set a server offers (contracts/mcp/README.md): tenant tools always;
+// admin tools only with HUB_ADMIN_TOKEN; tools with requires.transport (the write tools: stdio)
+// only on those transports, so Streamable HTTP never offers a write tool, loopback included.
+func registeredTools(c *toolContract, transport string, admin bool) []*toolSpec {
+	var out []*toolSpec
+	for i := range c.Tools {
+		spec := &c.Tools[i]
+		if spec.Audience == audienceAdmin && !admin {
+			continue
+		}
+		if !spec.allowedOn(transport) {
+			continue
+		}
+		out = append(out, spec)
+	}
+	return out
+}
+
+// adminOperations is the admin client's allowlist: operationId -> the HTTP method maps_to
+// declares, for the admin operations of the registered tools only.
+func adminOperations(tools []*toolSpec) map[string]string {
+	ops := map[string]string{}
+	for _, t := range tools {
+		for _, m := range t.MapsTo {
+			if m.Spec == adminSpec {
+				ops[m.OperationID] = m.HTTPMethod
+			}
+		}
+	}
+	return ops
+}
+
+// newMCPServer builds the MCP server with the contract's tools (registeredTools decides which).
+// It fails if a contract tool has no handler or a handler has no contract tool, so the advertised
+// set always equals the contract.
 func newMCPServer(c *toolContract, a *app, version string) (*mcp.Server, error) {
-	handlers := a.handlers()
+	handlers := a.handlers(c)
 	instructions := c.Server.Description
-	if a.admin == nil {
+	switch {
+	case a.admin == nil:
 		instructions += " Admin tools (hub_admin_*) are disabled: HUB_ADMIN_TOKEN is not set."
+	case a.transport == transportHTTP:
+		instructions += " Admin write tools are not available over Streamable HTTP: to create or change control-plane objects, " +
+			"run hubmcp over stdio with your own HUB_ADMIN_TOKEN."
 	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: c.Server.Name, Title: c.Server.Title, Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
@@ -71,14 +115,12 @@ func newMCPServer(c *toolContract, a *app, version string) (*mcp.Server, error) 
 	for i := range c.Tools {
 		spec := &c.Tools[i]
 		known[spec.Name] = true
-		fn, ok := handlers[spec.Name]
-		if !ok {
+		if _, ok := handlers[spec.Name]; !ok {
 			return nil, fmt.Errorf("contract tool %s has no handler", spec.Name)
 		}
-		if spec.Audience == audienceAdmin && a.admin == nil {
-			continue
-		}
-		srv.AddTool(mcpTool(spec), a.handle(spec, fn))
+	}
+	for _, spec := range registeredTools(c, a.transport, a.admin != nil) {
+		srv.AddTool(mcpTool(spec), a.handle(spec, handlers[spec.Name]))
 	}
 	for name := range handlers {
 		if !known[name] {
@@ -106,8 +148,9 @@ func mcpTool(spec *toolSpec) *mcp.Tool {
 	}
 }
 
-// handle wraps a toolFunc: input validation, secret redaction, rendering and the tool_called log.
-// Tool failures are results with isError set, never protocol errors (contract rule 5).
+// handle wraps a toolFunc: the secret-in-input refusal, input validation, the confirm guard,
+// secret redaction, rendering and the tool_called log. Refusals make no Hub call. Tool failures
+// are results with isError set, never protocol errors (contract rule 5).
 func (a *app) handle(spec *toolSpec, fn toolFunc) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := a.now()
@@ -123,12 +166,24 @@ func (a *app) handle(spec *toolSpec, fn toolFunc) mcp.ToolHandler {
 		if call.hub == nil {
 			// Unreachable: the HTTP transport authenticates every request before the MCP layer.
 			res = failure(spec.Name, &errorObject{Code: string(hubclient.CodeUnauthorized), Message: "no tenant API key for this session"}, 0)
+		} else if ptr := findSecret(call.args, a.secretRes); ptr != "" {
+			res = secretRefusal(spec.Name, ptr) // before the schema check, whose errors may quote values
 		} else if err := spec.validateArgs(call.args); err != nil {
 			res = invalidArguments(spec.Name, err)
+		} else if spec.RequiresConfirm != "" && !confirmGiven(call.args) {
+			res = confirmRefusal(spec)
 		} else {
 			res = fn(ctx, call)
 		}
+		var minted []secret
+		if !res.isError && len(spec.SensitiveOutput) > 0 {
+			minted = sensitiveValues(res.structured, spec.SensitiveOutput)
+			res.note = sensitiveNote(spec.SensitiveOutput)
+		}
 		out, err := a.render(res, keySecrets)
+		// From now on the minted secret is redacted by value from every log line and every later
+		// result: it is returned in this one result only.
+		a.secrets.add(minted...)
 		if err != nil {
 			return nil, err
 		}
@@ -146,9 +201,41 @@ func (a *app) handle(spec *toolSpec, fn toolFunc) mcp.ToolHandler {
 		if res.outcome != "" {
 			attrs = append(attrs, slog.String("outcome", res.outcome))
 		}
+		if spec.mutating() {
+			attrs = append(attrs, slog.Bool("mutating", true))
+		}
+		if res.changeID != "" {
+			attrs = append(attrs, slog.String("change_id", res.changeID))
+		}
 		a.log.LogAttrs(ctx, slog.LevelInfo, "tool_called", attrs...)
 		return out, nil
 	}
+}
+
+// sensitiveValues returns the write-once secrets at the given top-level JSON pointers of a result.
+func sensitiveValues(structured any, pointers []string) []secret {
+	b, err := json.Marshal(structured)
+	if err != nil {
+		return nil
+	}
+	var m map[string]any
+	if json.Unmarshal(b, &m) != nil {
+		return nil
+	}
+	var out []secret
+	for _, p := range pointers {
+		if s, ok := m[p[1:]].(string); ok && s != "" {
+			out = append(out, secret(s))
+		}
+	}
+	return out
+}
+
+// sensitiveNote is the line shown before a result that carries a write-once secret.
+func sensitiveNote(pointers []string) string {
+	return "SENSITIVE OUTPUT, shown once: " + fmt.Sprint(pointers) + ". Give it to the user verbatim, once, to store in their secret " +
+		"manager now. Never repeat it, never put it in another tool call, file, code sample, commit or memory; afterwards refer " +
+		"to it by its id or prefix. hubmcp redacts it from everything after this result."
 }
 
 // render turns a toolResult into the MCP result: structuredContent plus the same JSON as text

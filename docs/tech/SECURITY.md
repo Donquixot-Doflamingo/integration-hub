@@ -208,6 +208,7 @@ Both tools run with `go run <module>@<version>` (pinned in the Makefile; bump de
 | G301 / G306 (dir 0755 / file 0644) | `cmd/hubctl/config.go` | writes registry config pulled from a snapshot: readable by design, no secrets (snapshots contain none) |
 | G705 (XSS via `Write`) | `control/adminapi/snapshots.go` (`getSnapshot`) | archived registry JSON served with `Content-Type: application/json`, never HTML; `nosniff` hardening tracked in HUB-248 |
 | G107 / G704 (request to variable URL) | `testkit/contract/contract.go` | test helper calling the test's own server |
+| G704 (SSRF via taint analysis) | `cmd/hubmcp/adminclient.go` (`adminClient.do`, two lines; HUB-315) | the host is `HUB_ADMIN_BASE_URL` (operator configuration, validated at start); tool arguments only fill `url.PathEscape`d path segments (dot segments refused) of an allowlisted route and query values; the client is method-guarded (no DELETE) |
 | G404 (math/rand) | `delivery/backoff.go`, `testkit/mockvendor/server.go`, `cmd/hubload/soak.go` (seeded chaos schedule) | retry jitter and a deterministic test double, not security |
 | G101 (hardcoded credentials) | `cmd/hubctl/creds.go`, `cmd/hubmcp/httpserve.go` (`tokenExtra*`) | usage text that mentions `signing_secret=`; context map key names; no credential |
 | G204 (subprocess with variable input) | `cmd/hubload/soak.go` | the soak's restart hook is a path the operator passes to the load-test tool; never part of the Hub binaries |

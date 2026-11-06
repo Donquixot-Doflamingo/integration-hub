@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -15,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -34,12 +34,16 @@ import (
 const devKey = "hk_test_dev_orders_service_local_only"
 
 type hubStack struct {
-	gatewayURL string
-	adminURL   string // admin base, without /admin/v1
-	vendorURL  string
-	adminToken string
-	logs       map[string]*syncBuffer
+	gatewayURL  string
+	adminURL    string // admin base, without /admin/v1
+	vendorURL   string
+	adminToken  string // the signed-in user's own token: role admin (hubctl login -dev -role admin)
+	viewerToken string // another user with role viewer
+	logs        map[string]*syncBuffer
 }
+
+// e2eActor is the subject and e-mail of the admin token; the change log records it as the actor.
+const e2eActor = "mcp-e2e@example.com"
 
 func TestMCPEndToEnd(t *testing.T) {
 	st := startHubStack(t)
@@ -58,8 +62,12 @@ func TestMCPEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	var logs syncBuffer
+	tc, err := loadContract(toolContractJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
 	secrets := newSecretSet(cfg.apiKey, cfg.adminToken)
-	a, err := newApp(cfg, newLogger(&logs, 0, secrets), secrets, &http.Client{Timeout: 30 * time.Second})
+	a, err := newApp(cfg, tc, newLogger(&logs, 0, secrets), secrets, &http.Client{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,23 +301,23 @@ func startHubStack(t *testing.T) *hubStack {
 	waitHTTP(t, "http://"+wkOps+"/readyz", 30*time.Second)
 	st.gatewayURL = "http://" + gwHTTP
 
-	// A viewer token from the admin's dev OIDC stub (local only).
-	tokReq, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, st.adminURL+"/oidc/dev-token",
-		strings.NewReader(`{"sub":"oncall@example.com","roles":["viewer"],"ttl_s":3600}`))
-	tokReq.Header.Set("Content-Type", "application/json")
-	tr, err := http.DefaultClient.Do(tokReq)
-	if err != nil {
-		t.Fatal(err)
+	// The users' own tokens, as a developer gets them locally: hubctl login -dev (dev OIDC stub).
+	login := func(role, sub string) string {
+		t.Helper()
+		file := filepath.Join(work, "token-"+role)
+		cmd := exec.CommandContext(t.Context(), filepath.Join(bin, "hubctl"), "login", "-dev", "-admin-url", st.adminURL, "-role", role, "-sub", sub, "-email", sub)
+		cmd.Env = append(slices.Clone(baseEnv), "HUBCTL_TOKEN_FILE="+file)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("hubctl login -role %s: %v\n%s", role, err, out)
+		}
+		b, err := os.ReadFile(file)
+		if err != nil || len(bytes.TrimSpace(b)) == 0 {
+			t.Fatalf("token file: %v", err)
+		}
+		return string(bytes.TrimSpace(b))
 	}
-	var tok struct {
-		AccessToken string `json:"access_token"`
-	}
-	err = json.NewDecoder(tr.Body).Decode(&tok)
-	_ = tr.Body.Close()
-	if err != nil || tok.AccessToken == "" {
-		t.Fatalf("dev token: %v", err)
-	}
-	st.adminToken = tok.AccessToken
+	st.adminToken = login("admin", e2eActor)
+	st.viewerToken = login("viewer", "oncall@example.com")
 	return st
 }
 

@@ -1,18 +1,18 @@
 {
   "$comment": "MCP tool contract for hubmcp (backend/cmd/hubmcp). Frozen; edit only via a CCR to contract-steward. JSON Schemas are 2020-12. See README.md in this folder.",
   "contract": "hubmcp-tools",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "server": {
     "name": "hubmcp",
     "title": "Integration Hub",
-    "description": "Lets an AI assistant discover and call Integration Hub integrations as a tenant, and (optionally) read operational state as an admin viewer.",
+    "description": "Lets an AI assistant discover and call Integration Hub integrations as a tenant and, with the signed-in user's own admin token, read operational state and create or change what a team needs on the control plane (never delete).",
     "transport": ["stdio", "streamable-http"]
   },
   "config": {
     "env": [
       { "name": "HUB_BASE_URL", "required": true, "description": "Base URL of the Hub gateway, e.g. http://localhost:8080. The admin API is reached at HUB_ADMIN_BASE_URL or, if unset, HUB_BASE_URL with /admin/v1." },
       { "name": "HUB_API_KEY", "required": true, "secret": true, "description": "Tenant API key (scope `invoke`; add `dry_run` to enable hub_dry_run). Sent as `Authorization: Bearer`. Never logged or echoed." },
-      { "name": "HUB_ADMIN_TOKEN", "required": false, "secret": true, "description": "OIDC access token with role viewer (or tenant_viewer). When unset, the hub_admin_* tools are not registered at all." },
+      { "name": "HUB_ADMIN_TOKEN", "required": false, "secret": true, "description": "The signed-in user's own OIDC access token (from their identity provider; locally `hubctl login -dev`), never a shared or service token. When unset, no hub_admin_* tool is registered. Admin read tools follow the existing transport rule; admin write tools are registered only on stdio. The Hub's RBAC (x-required-role) decides what the user may do." },
       { "name": "HUB_ADMIN_BASE_URL", "required": false, "description": "Override for the control-plane base URL, e.g. http://localhost:8081/admin/v1." }
     ]
   },
@@ -20,17 +20,71 @@
     "Tenant tools (no `hub_admin_` prefix) MUST NOT reveal vendor names, account names, integration versions or transformer versions. The server strips the X-Hub-Integration-Version header and never puts it in tool output.",
     "The only exception is hub_dry_run, which returns the upstream request shape (secrets redacted) by design. Its description says so.",
     "hub_invoke MUST refuse (without calling the Hub) when the integration has moves_money_or_quota=true and the input lacks confirm=true or idempotency_key. The server checks the flag via getIntegration before every such invoke (cached ≤ 60 s).",
-    "Admin tools are read-only and never call mutating admin operations (no unseal, replay, purge, pause or force).",
+    "Admin read tools (readOnlyHint=true) call only GET operations or the non-mutating POST checks (validate, run goldens, transformer dry-run). They never unseal.",
+    "Admin write tools (readOnlyHint=false) act as the signed-in user with that user's own HUB_ADMIN_TOKEN and are registered only on the stdio transport, never on streamable-http (a token there would serve every client). The Hub's RBAC (x-required-role) is the authority; FORBIDDEN comes back as an isError result.",
+    "No tool maps to an HTTP DELETE or to any operation in forbidden_operations (deletes, purge, replay, unseal, account lifecycle, credential and signing-secret operations, breaker force, pause and resume, key revoke and rotate). Destructive actions stay manual in the console for people whose role allows them. Every hub-admin operation is listed exactly once: mapped by a tool, in forbidden_operations, or in not_exposed_operations.",
+    "No admin tool input has a property named in forbidden_input_properties, and no mutating admin tool input has one named in forbidden_mutation_input_properties. Credentials and signing secrets are set in the console or with hubctl, never through an LLM.",
+    "Every mutating admin tool requires reason (3-1000 characters). hubmcp sends it with ' (via hubmcp)' appended, so the change log shows who (the token subject), why, and that the change came through MCP.",
+    "A tool with requires_confirm refuses locally, without calling the Hub, unless confirm=true (isError result, error.code CONFIRMATION_REQUIRED). live_traffic: its description tells the model to show the diff, validation result or before/after first. mints_secret: the model agrees owner and scope with the user first.",
+    "Fields named by sensitive_output (JSON pointers into the output) are write-once secrets: hubmcp never logs them and returns them only in that result. hubmcp refuses any tool call whose arguments contain a string matching secret_patterns (isError result, error.code SECRET_IN_INPUT; hub_invoke: outcome=refused), without calling the Hub.",
     "Errors from the Hub are returned as tool results with isError=true and the canonical error object, not as protocol errors.",
     "A 202 is reported as outcome=queued, never as success."
   ],
+  "forbidden_operations": [
+    { "spec": "hub-admin.v1.yaml", "operationId": "deleteRegistrarEndpoint", "http_method": "DELETE", "reason": "HTTP DELETE. Deleting stays a manual console action." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "purgeDeadLetters", "http_method": "POST", "reason": "Purge destroys dead letters." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "replayDeadLetters", "http_method": "POST", "reason": "Replay re-sends traffic to vendors." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "unsealRequest", "http_method": "POST", "reason": "Unseal exposes sealed payloads (D6); audited, console only." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "transitionAccountLifecycle", "http_method": "POST", "reason": "Drain and retire take an account out of service." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "createAccount", "http_method": "POST", "reason": "The request body requires credentials (secret values). Accounts are created in the console or with hubctl until the CCR that makes credentials optional lands." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "addNextCredential", "http_method": "POST", "reason": "Accepts credential values (secrets)." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "promoteNextCredential", "http_method": "POST", "reason": "Credential rotation; console or hubctl only." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "deleteOldCredential", "http_method": "POST", "reason": "Destroys a credential." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "forceOpenBreaker", "http_method": "POST", "reason": "Breaker force stops traffic to an account endpoint." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "forceCloseBreaker", "http_method": "POST", "reason": "Breaker force overrides failure protection." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "clearBreakerForce", "http_method": "POST", "reason": "Breaker force; operator decision, console only." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "pauseIntegration", "http_method": "POST", "reason": "Pause is a kill switch for live traffic." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "resumeIntegration", "http_method": "POST", "reason": "Resume undoes an operator kill switch." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "revokeApiKey", "http_method": "POST", "reason": "Revoke irreversibly disables a key (a delete in effect)." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "rotateApiKey", "http_method": "POST", "reason": "Rotation retires the old key; console only." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "rotateRegistrarSecret", "http_method": "POST", "reason": "Rotation retires the old signing secret and mints a new one; console only." }
+  ],
+  "not_exposed_operations": [
+    { "spec": "hub-admin.v1.yaml", "operationId": "getMe", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "testAccountConnection", "http_method": "POST", "reason": "Makes a real call to the vendor with the account credentials; run it from the console." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "getCapability", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "listCapabilityVersions", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "createCapability", "http_method": "POST", "reason": "Canonical capability schemas are owned by the platform team and reviewed in PRs." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "createCapabilityVersion", "http_method": "POST", "reason": "Canonical capability schemas are owned by the platform team and reviewed in PRs." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "listTransformers", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "listTransformerVersions", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "getTransformerVersion", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "updateIntegration", "http_method": "PATCH", "reason": "Can switch off moves_money_or_quota (which drives Idempotency-Key and MCP confirmation) and change grants; console only." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "listIntegrationVersions", "http_method": "GET", "reason": "Planned as a read tool in HUB-312." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "listApiKeys", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "getApiKey", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "listRegistrarEndpoints", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "listSnapshots", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "getLatestSnapshot", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "getSnapshot", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "getSnapshotBlob", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "getRequest", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "listDeadLetters", "http_method": "GET", "reason": "Planned as a read tool in HUB-312." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "getDeadLetter", "http_method": "GET", "reason": "Planned as a read tool in HUB-312." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "getBreaker", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "listChangeLog", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "getChangeLogEntry", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." }
+  ],
+  "forbidden_input_properties": ["credentials", "credential", "secret", "secrets", "signing_secret", "password", "passcode", "token", "access_token", "refresh_token", "api_key", "client_secret", "private_key"],
+  "forbidden_mutation_input_properties": ["disabled", "paused", "state"],
+  "secret_patterns": [{ "name": "api_key", "pattern": "hk_(live|test)_[A-Za-z0-9]{28,}" }, { "name": "signing_secret", "pattern": "whsec_[A-Za-z0-9]{26,}" }],
   "tools": [
     {
       "name": "hub_list_integrations",
       "title": "List integrations",
       "audience": "tenant",
       "description": "List the integrations this API key's tenant can invoke. Each item gives the integration_id (use it in other hub_* tools), its capability (the shape of the request body, e.g. events.track@v1), the operations it supports, its delivery mode (sync returns a result immediately; wait/async may return 'queued'), whether it is interactive, whether it is paused, and whether it moves money or quota (then hub_invoke needs confirm=true and an idempotency_key). Use this first when the user mentions a third-party action and you don't know the integration id.",
-      "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "listIntegrations" } ],
+      "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "listIntegrations", "http_method": "GET" } ],
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
         "type": "object",
@@ -88,8 +142,8 @@
       "audience": "tenant",
       "description": "Get everything needed to call one integration correctly: its delivery policy (mode, wait window, TTL, what happens when the upstream is down) and, for each operation, the canonical request and response JSON Schemas. Always call this before hub_invoke or hub_dry_run so you build a body that matches request_schema exactly — unknown fields are rejected. Fields tagged x-pii hold personal data: only send values the user actually provided.",
       "maps_to": [
-        { "spec": "hub-public.v1.yaml", "operationId": "getIntegration" },
-        { "spec": "hub-public.v1.yaml", "operationId": "getCapability" }
+        { "spec": "hub-public.v1.yaml", "operationId": "getIntegration", "http_method": "GET" },
+        { "spec": "hub-public.v1.yaml", "operationId": "getCapability", "http_method": "GET" }
       ],
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
@@ -167,7 +221,7 @@
       "title": "Dry-run an integration (developer tool)",
       "audience": "tenant",
       "description": "Show the exact upstream HTTP request the Hub WOULD send for a canonical body, without sending anything (no side effects, no quota used). Use it to check a body before a real call, or when the user is developing an integration. IMPORTANT: unlike every other tenant tool, the result reveals the upstream request shape (URL, headers, body) with secrets replaced by ***; do not present it to end users as the integration's contract, and never build logic on it — it changes whenever the Hub cuts over. Requires an API key with the dry_run scope; otherwise you get FORBIDDEN.",
-      "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "dryRunIntegration" } ],
+      "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "dryRunIntegration", "http_method": "POST" } ],
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
         "type": "object",
@@ -222,9 +276,9 @@
       "audience": "tenant",
       "description": "Call an integration for real with a canonical body. This has real-world effects (events sent, messages delivered, money or quota possibly consumed). Steps: 1) hub_describe_integration to get the request_schema; 2) build the body; 3) call hub_invoke. Always pass an idempotency_key (a stable string per logical action, e.g. 'order-8821-created') so a retry cannot double-send. If the integration has moves_money_or_quota=true you MUST first show the user what will be sent and get explicit approval, then call with confirm=true. Results: outcome=completed gives the canonical result; outcome=queued means accepted but NOT done yet — tell the user and use hub_get_request with the request_id to follow up; outcome=error gives a canonical error (if retryable is true you may retry with the same idempotency_key after retry_after_ms). For multi-step operations, pass the session returned by step 1.",
       "maps_to": [
-        { "spec": "hub-public.v1.yaml", "operationId": "invokeIntegration" },
-        { "spec": "hub-public.v1.yaml", "operationId": "invokeIntegrationOperation" },
-        { "spec": "hub-public.v1.yaml", "operationId": "getIntegration" }
+        { "spec": "hub-public.v1.yaml", "operationId": "invokeIntegration", "http_method": "POST" },
+        { "spec": "hub-public.v1.yaml", "operationId": "invokeIntegrationOperation", "http_method": "POST" },
+        { "spec": "hub-public.v1.yaml", "operationId": "getIntegration", "http_method": "GET" }
       ],
       "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true },
       "inputSchema": {
@@ -287,7 +341,7 @@
       "title": "Get request status",
       "audience": "tenant",
       "description": "Check the status of an earlier hub_invoke by request_id — use it after an outcome=queued. status is one of accepted, in_flight, retry_scheduled, parked (waiting for the upstream to recover), succeeded (result holds the canonical response), failed or dead_lettered (error holds why), expired (it was not delivered before its TTL). Do not poll in a tight loop: wait at least a few seconds between calls and tell the user it is still pending.",
-      "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "getRequestStatus" } ],
+      "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "getRequestStatus", "http_method": "GET" } ],
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
         "type": "object",
@@ -329,7 +383,7 @@
       "title": "Search requests (admin, read-only)",
       "audience": "admin",
       "description": "Operator tool: search the Hub's request ledger across tenants (or within your tenant scope) by integration, status, error code, vendor, account and time range. Unlike tenant tools, results include vendor_id, account_id and integration version, because this is the control plane. Use it to investigate incidents ('which requests to int_evt_brandA timed out in the last hour?'). The time range must be ≤ 31 days; default to the last hour if the user gives none. Requires HUB_ADMIN_TOKEN.",
-      "maps_to": [ { "spec": "hub-admin.v1.yaml", "operationId": "searchRequests" } ],
+      "maps_to": [ { "spec": "hub-admin.v1.yaml", "operationId": "searchRequests", "http_method": "GET" } ],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
@@ -375,8 +429,8 @@
       "audience": "admin",
       "description": "Operator tool: get the full audit timeline of one request — received, validated, resolved (which integration version, vendor, account and transformers were used), transformed, each upstream attempt and response, and the final outcome — plus the attempt list. Payloads follow the integration's audit policy: masked values are hashes, sealed payloads are null (this tool cannot unseal). Use it to explain why a specific request failed. Requires HUB_ADMIN_TOKEN.",
       "maps_to": [
-        { "spec": "hub-admin.v1.yaml", "operationId": "getRequestTimeline" },
-        { "spec": "hub-admin.v1.yaml", "operationId": "listRequestAttempts" }
+        { "spec": "hub-admin.v1.yaml", "operationId": "getRequestTimeline", "http_method": "GET" },
+        { "spec": "hub-admin.v1.yaml", "operationId": "listRequestAttempts", "http_method": "GET" }
       ],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
@@ -412,7 +466,7 @@
       "title": "Circuit breaker states (admin, read-only)",
       "audience": "admin",
       "description": "Operator tool: list circuit breakers per (account, endpoint) with state (closed / open / half_open), whether an operator forced it, failure ratio, when it reopens, and how many requests are parked behind it. Use it to answer 'is vendor X down?' or 'why are requests queued?'. Filter by vendor_id, account_id or state. Requires HUB_ADMIN_TOKEN.",
-      "maps_to": [ { "spec": "hub-admin.v1.yaml", "operationId": "listBreakers" } ],
+      "maps_to": [ { "spec": "hub-admin.v1.yaml", "operationId": "listBreakers", "http_method": "GET" } ],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
@@ -440,6 +494,1497 @@
         {
           "input": { "state": "open" },
           "output": { "items": [ { "account_id": "ct-brandA-in", "endpoint_ref": "upload@1", "vendor_id": "clevertap", "state": "open", "forced": "none", "open_until": "2026-10-31T09:41:00Z", "parked_count": 1290 } ], "next_cursor": null }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_list_tenants",
+      "title": "List tenants (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: list tenants, the identities that teams' services use to call the Hub with API keys. Each row says whether the tenant is disabled, how many integrations it owns and how many active API keys it has. Filter with q. Use it to check whether a tenant already exists before hub_admin_create_tenant. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "listTenants", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "q": { "type": "string", "maxLength": 128, "description": "Case-insensitive substring of the id or display name." },
+          "cursor": { "type": "string", "maxLength": 512, "description": "next_cursor from a previous call." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin TenantList.",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "type": "object", "required": ["tenant_id", "display_name", "disabled"], "properties": { "tenant_id": { "type": "string" }, "display_name": { "type": "string" }, "disabled": { "type": "boolean" }, "integrations_owned": { "type": "integer" }, "active_api_keys": { "type": "integer" }, "updated_at": { "type": "string", "format": "date-time" } } } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "q": "orders" },
+          "output": { "items": [{ "tenant_id": "orders-service", "display_name": "Orders service", "disabled": false, "integrations_owned": 3, "active_api_keys": 2, "updated_at": "2026-10-30T12:00:00Z" }], "next_cursor": null }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_get_tenant",
+      "title": "Get a tenant (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: get one tenant (display name, contact, rate limit, disabled flag, counts) and its etag. Call it before hub_admin_update_tenant to show the user the current values and to get the etag for if_match. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "getTenant", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tenant_id"],
+        "properties": {
+          "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin Tenant. Plus etag (from the ETag header).",
+        "required": ["tenant_id", "display_name", "disabled", "rate_limit"],
+        "properties": {
+          "tenant_id": { "type": "string" },
+          "display_name": { "type": "string" },
+          "description": { "type": ["string", "null"] },
+          "contact": { "type": ["string", "null"] },
+          "rate_limit": { "type": "object" },
+          "disabled": { "type": "boolean" },
+          "integrations_owned": { "type": "integer" },
+          "active_api_keys": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "etag": { "type": ["string", "null"], "description": "ETag response header. Pass it as if_match to the matching update tool." }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "tenant_id": "orders-service" },
+          "output": { "tenant_id": "orders-service", "display_name": "Orders service", "description": "Order lifecycle events and notifications", "contact": "orders-team@example.com", "rate_limit": { "rps": 200, "burst": 400 }, "disabled": false, "integrations_owned": 3, "active_api_keys": 2, "created_at": "2026-06-01T10:00:00Z", "updated_at": "2026-10-30T12:00:00Z", "etag": "\"3\"" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_create_tenant",
+      "title": "Create a tenant (admin)",
+      "audience": "admin",
+      "description": "Admin write tool: create a tenant, the identity a team's services use to call the Hub. It starts with no API keys (mint one with hub_admin_create_api_key) and owns no integrations. tenant_id is permanent (3-64 characters: letters, digits, _ and -), so agree on it and the display name with the user first. CONFLICT if it already exists. Needs the admin role: you act as the signed-in user, and the Hub answers FORBIDDEN if their role is lower. reason is required and lands in the change log under the user's identity.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createTenant", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tenant_id", "display_name", "reason"],
+        "properties": {
+          "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "display_name": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "description": { "type": ["string", "null"] },
+          "contact": { "type": ["string", "null"], "description": "Team e-mail or channel." },
+          "rate_limit": { "type": "object", "additionalProperties": false, "description": "Tenant rate limit: rps (requests per second) and burst.", "properties": { "rps": { "type": "number", "minimum": 0 }, "burst": { "type": "integer", "minimum": 0 } } },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin TenantChange.",
+        "required": ["change_id", "tenant"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "tenant": { "type": "object", "description": "hub-admin Tenant.", "required": ["tenant_id", "display_name", "disabled", "rate_limit"], "properties": { "tenant_id": { "type": "string" }, "display_name": { "type": "string" }, "description": { "type": ["string", "null"] }, "contact": { "type": ["string", "null"] }, "rate_limit": { "type": "object" }, "disabled": { "type": "boolean" }, "integrations_owned": { "type": "integer" }, "active_api_keys": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "Accepts no secret values (no credentials, tokens or signing secrets).",
+        "Not idempotent: a repeat gets CONFLICT and changes nothing."
+      ],
+      "examples": [
+        {
+          "input": { "tenant_id": "orders-service", "display_name": "Orders service", "contact": "orders-team@example.com", "rate_limit": { "rps": 200, "burst": 400 }, "reason": "Pilot tenant for order events" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0NA", "tenant": { "tenant_id": "orders-service", "display_name": "Orders service", "description": "Order lifecycle events and notifications", "contact": "orders-team@example.com", "rate_limit": { "rps": 200, "burst": 400 }, "disabled": false, "integrations_owned": 0, "active_api_keys": 0, "created_at": "2026-10-31T09:00:00Z", "updated_at": "2026-10-31T09:00:00Z" } }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_update_tenant",
+      "title": "Update a tenant (admin)",
+      "audience": "admin",
+      "description": "Admin write tool: merge-patch a tenant's display_name, description, contact and rate_limit; only the fields you pass change. A rate_limit change applies to the tenant's live traffic within seconds (too low a value throttles every call it makes), so: 1) hub_admin_get_tenant; 2) show the user current and new values; 3) after explicit approval, call with confirm=true and if_match set to the etag. Disabling a tenant is not possible through MCP; it stays a manual console action. Needs the admin role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "updateTenant", "http_method": "PATCH" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "requires_confirm": "live_traffic",
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tenant_id", "reason"],
+        "properties": {
+          "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "display_name": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "description": { "type": ["string", "null"] },
+          "contact": { "type": ["string", "null"] },
+          "rate_limit": { "type": "object", "additionalProperties": false, "description": "Tenant rate limit: rps (requests per second) and burst.", "properties": { "rps": { "type": "number", "minimum": 0 }, "burst": { "type": "integer", "minimum": 0 } } },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." },
+          "if_match": { "type": "string", "minLength": 1, "maxLength": 128, "description": "The etag returned by the matching hub_admin_get_* tool. Strongly recommended: if the object changed since you read it, the Hub answers PRECONDITION_FAILED and nothing changes (read it again and re-confirm with the user)." },
+          "confirm": { "type": "boolean", "default": false, "description": "Must be true, set only after you showed the user exactly what changes (diff, validation result or before/after values) and they explicitly approved this call. Without it the tool refuses locally with CONFIRMATION_REQUIRED and calls nothing." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin TenantChange.",
+        "required": ["change_id", "tenant"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "tenant": { "type": "object", "description": "hub-admin Tenant.", "required": ["tenant_id", "display_name", "disabled", "rate_limit"], "properties": { "tenant_id": { "type": "string" }, "display_name": { "type": "string" }, "description": { "type": ["string", "null"] }, "contact": { "type": ["string", "null"] }, "rate_limit": { "type": "object" }, "disabled": { "type": "boolean" }, "integrations_owned": { "type": "integer" }, "active_api_keys": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "requires_confirm=live_traffic: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
+        "Never sends disabled (no kill switch through MCP).",
+        "Accepts no secret values (no credentials, tokens or signing secrets)."
+      ],
+      "examples": [
+        {
+          "input": { "tenant_id": "orders-service", "rate_limit": { "rps": 300, "burst": 600 }, "reason": "Black Friday traffic, OPS-881", "if_match": "\"3\"", "confirm": true },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0NB", "tenant": { "tenant_id": "orders-service", "display_name": "Orders service", "description": "Order lifecycle events and notifications", "contact": "orders-team@example.com", "rate_limit": { "rps": 300, "burst": 600 }, "disabled": false, "integrations_owned": 3, "active_api_keys": 2, "created_at": "2026-06-01T10:00:00Z", "updated_at": "2026-11-07T10:00:00Z" } }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_create_api_key",
+      "title": "Create an API key (admin, shows the key once)",
+      "audience": "admin",
+      "description": "Admin write tool: mint an API key for a tenant. Scopes: invoke, dry_run, requests_read, each optionally narrowed to one integration as <scope>:<integration_id>; grant only what the user needs. Agree on tenant, scopes and expiry with the user, then call with confirm=true. SENSITIVE OUTPUT: `secret` is the full key, shown exactly once (the Hub keeps only a hash). Give it to the user once, verbatim, and tell them to store it in their secret manager now. Never repeat it later, never put it in another tool call, file, code sample, commit or memory, and never summarise it; afterwards refer to the key by key_id or prefix. If it is lost, the user rotates the key in the console. Needs the admin role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createApiKey", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "requires_confirm": "mints_secret",
+      "sensitive_output": ["/secret"],
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tenant_id", "scopes", "reason"],
+        "properties": {
+          "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "scopes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^(invoke|dry_run|requests_read)(:[A-Za-z0-9][A-Za-z0-9_-]{2,63})?$" } },
+          "description": { "type": ["string", "null"], "description": "What the key is for, e.g. \"orders prod\"." },
+          "expires_at": { "type": ["string", "null"], "format": "date-time", "description": "Optional expiry (RFC 3339); null = no expiry." },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." },
+          "confirm": { "type": "boolean", "default": false, "description": "Must be true, set only after the user explicitly approved minting this secret (owner, scopes or URL, expiry). Without it the tool refuses locally with CONFIRMATION_REQUIRED and calls nothing." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin ApiKeySecretChange.",
+        "required": ["change_id", "api_key", "secret"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "api_key": { "type": "object", "required": ["key_id", "tenant_id", "prefix", "scopes", "state"], "properties": { "key_id": { "type": "string" }, "tenant_id": { "type": "string" }, "prefix": { "type": "string", "description": "First 12 characters; safe to repeat." }, "description": { "type": ["string", "null"] }, "scopes": { "type": "array", "items": { "type": "string" } }, "state": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" }, "expires_at": { "type": ["string", "null"], "format": "date-time" }, "last_used_at": { "type": ["string", "null"], "format": "date-time" }, "replaced_by": { "type": ["string", "null"] } } },
+          "secret": { "type": "string", "pattern": "^hk_(live|test)_[A-Za-z0-9]{28,}$", "description": "SENSITIVE, shown once. Hand to the user verbatim once; never repeat it." }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "requires_confirm=mints_secret: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
+        "sensitive_output /secret: never logged by hubmcp, returned only in this one result; any later tool call whose arguments contain a Hub secret is refused (SECRET_IN_INPUT).",
+        "Not idempotent: every call mints a new key."
+      ],
+      "examples": [
+        {
+          "input": { "tenant_id": "orders-service", "scopes": ["invoke"], "description": "orders prod", "expires_at": null, "reason": "Initial production key", "confirm": true },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0NC", "api_key": { "key_id": "key_01J9Z7F6G7H8J9K0M1N2P3Q4RS", "tenant_id": "orders-service", "prefix": "hk_live_7Qm2", "description": "orders prod", "scopes": ["invoke"], "state": "active", "created_at": "2026-10-31T09:00:00Z", "expires_at": null, "last_used_at": null, "replaced_by": null }, "secret": "hk_live_7Qm2EXAMPLEexampleEXAMPLE0000" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_list_vendors",
+      "title": "List vendors (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: list the third-party vendors registered in the Hub with their auth scheme, regions and endpoint/account counts. Filter with q. Use it before hub_admin_create_vendor to avoid duplicates. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "listVendors", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "q": { "type": "string", "maxLength": 128, "description": "Case-insensitive substring of the id or display name." },
+          "cursor": { "type": "string", "maxLength": 512, "description": "next_cursor from a previous call." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin VendorList.",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "type": "object", "required": ["vendor_id", "display_name", "auth_scheme", "regions", "revision"], "properties": { "vendor_id": { "type": "string" }, "display_name": { "type": "string" }, "auth_scheme": { "type": "string" }, "regions": { "type": "array", "items": { "type": "string" } }, "endpoint_count": { "type": "integer" }, "account_count": { "type": "integer" }, "revision": { "type": "integer" }, "updated_at": { "type": "string", "format": "date-time" } } } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": {},
+          "output": { "items": [{ "vendor_id": "clevertap", "display_name": "CleverTap", "auth_scheme": "static_headers", "regions": ["in", "us"], "endpoint_count": 1, "account_count": 2, "revision": 3, "updated_at": "2026-10-30T12:00:00Z" }], "next_cursor": null }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_get_vendor",
+      "title": "Get a vendor (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: get one vendor in full (regions, auth scheme, defaults, webhook verification, docs URL, its endpoints, revision) and its etag. Call it before hub_admin_update_vendor: that tool replaces every mutable field, so start from these values. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "getVendor", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["vendor_id"],
+        "properties": {
+          "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin Vendor. Plus etag (from the ETag header).",
+        "required": ["vendor_id", "display_name", "auth_scheme", "regions", "revision"],
+        "properties": {
+          "vendor_id": { "type": "string" },
+          "display_name": { "type": "string" },
+          "auth_scheme": { "type": "string" },
+          "regions": { "type": "object" },
+          "defaults": { "type": "object" },
+          "webhook_verification": { "type": ["object", "null"] },
+          "docs_url": { "type": ["string", "null"] },
+          "endpoints": { "type": "array", "items": { "type": "object" } },
+          "revision": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "etag": { "type": ["string", "null"], "description": "ETag response header. Pass it as if_match to the matching update tool." }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "vendor_id": "clevertap" },
+          "output": { "vendor_id": "clevertap", "display_name": "CleverTap", "auth_scheme": "static_headers", "regions": { "in": "https://in1.api.clevertap.com", "us": "https://us1.api.clevertap.com" }, "defaults": { "rate_limit": { "per_account_rps": 50 } }, "webhook_verification": { "scheme": "hmac_sha256", "header": "X-CleverTap-Signature", "max_skew_ms": 300000 }, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "endpoints": [{ "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "created_at": "2026-10-31T09:01:00Z" }], "revision": 3, "created_at": "2026-10-31T09:00:00Z", "updated_at": "2026-10-31T09:00:00Z", "etag": "\"3\"" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_create_vendor",
+      "title": "Create a vendor (admin)",
+      "audience": "admin",
+      "description": "Admin write tool: register a third-party vendor: base URL per region, auth scheme (only its shape, e.g. static_headers or bearer; credential values are set per account in the console or with hubctl, never here), optional defaults (per-account rate limit, breaker, health probe) and inbound webhook verification. The Hub only lets traffic out to the declared hosts. Check base URLs against the vendor's current API docs and pass docs_url. Add endpoints next with hub_admin_create_vendor_endpoint. Needs the admin role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createVendor", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["vendor_id", "display_name", "auth_scheme", "regions", "reason"],
+        "properties": {
+          "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "display_name": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "auth_scheme": { "type": "string", "enum": ["static_headers", "bearer", "basic", "query_param", "hmac_signing", "oauth2_client_credentials", "mtls"], "description": "Shape of the vendor auth only. Credential values are set per account in the console or with hubctl, never here." },
+          "regions": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "format": "uri" }, "description": "Base URL per region, e.g. {\"in\": \"https://in1.api.example.com\"}. Egress is restricted to these hosts." },
+          "defaults": { "type": "object", "description": "hub-admin VendorDefaults: rate_limit.per_account_rps, breaker (window_ms, min_calls, failure_ratio, consecutive_timeouts, open_ms, open_max_ms, half_open_probes), health_probe (endpoint, dry, every_ms)." },
+          "webhook_verification": { "type": ["object", "null"], "additionalProperties": false, "required": ["scheme"], "description": "How inbound webhooks from this vendor are verified. Any verification secret is set per account in the console, never here.", "properties": { "scheme": { "type": "string", "enum": ["none", "hmac_sha256", "basic", "ip_allowlist"] }, "header": { "type": "string" }, "max_skew_ms": { "type": "integer", "minimum": 0 }, "ip_allowlist": { "type": "array", "items": { "type": "string" } } } },
+          "docs_url": { "type": ["string", "null"], "format": "uri", "description": "The vendor's current API documentation for this." },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin VendorChange.",
+        "required": ["change_id", "vendor"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "vendor": { "type": "object", "description": "hub-admin Vendor.", "required": ["vendor_id", "display_name", "auth_scheme", "regions", "revision"], "properties": { "vendor_id": { "type": "string" }, "display_name": { "type": "string" }, "auth_scheme": { "type": "string" }, "regions": { "type": "object" }, "defaults": { "type": "object" }, "webhook_verification": { "type": ["object", "null"] }, "docs_url": { "type": ["string", "null"] }, "endpoints": { "type": "array", "items": { "type": "object" } }, "revision": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "Accepts no secret values (no credentials, tokens or signing secrets).",
+        "Not idempotent: a repeat gets CONFLICT and changes nothing."
+      ],
+      "examples": [
+        {
+          "input": { "vendor_id": "clevertap", "display_name": "CleverTap", "auth_scheme": "static_headers", "regions": { "in": "https://in1.api.clevertap.com", "us": "https://us1.api.clevertap.com" }, "defaults": { "rate_limit": { "per_account_rps": 50 } }, "webhook_verification": { "scheme": "hmac_sha256", "header": "X-CleverTap-Signature", "max_skew_ms": 300000 }, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "reason": "Onboard CleverTap for brand A engagement events" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0MN", "vendor": { "vendor_id": "clevertap", "display_name": "CleverTap", "auth_scheme": "static_headers", "regions": { "in": "https://in1.api.clevertap.com", "us": "https://us1.api.clevertap.com" }, "defaults": { "rate_limit": { "per_account_rps": 50 } }, "webhook_verification": { "scheme": "hmac_sha256", "header": "X-CleverTap-Signature", "max_skew_ms": 300000 }, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "endpoints": [], "revision": 1, "created_at": "2026-10-31T09:00:00Z", "updated_at": "2026-10-31T09:00:00Z" } }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_update_vendor",
+      "title": "Update a vendor (admin)",
+      "audience": "admin",
+      "description": "Admin write tool: replace a vendor's mutable fields (display_name, auth_scheme, regions, defaults, webhook_verification, docs_url). This is a full replacement, not a patch: start from hub_admin_get_vendor and send every field, changed or not, or omitted optional fields are cleared. It affects every account and integration on this vendor and reaches live traffic with the next config snapshot, so show the user the before/after, and only after explicit approval call with confirm=true and if_match set to the etag. Endpoints are not edited here (hub_admin_create_vendor_endpoint). Needs the admin role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "updateVendor", "http_method": "PUT" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "requires_confirm": "live_traffic",
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["vendor_id", "display_name", "auth_scheme", "regions", "reason"],
+        "properties": {
+          "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "display_name": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "auth_scheme": { "type": "string", "enum": ["static_headers", "bearer", "basic", "query_param", "hmac_signing", "oauth2_client_credentials", "mtls"], "description": "Shape of the vendor auth only. Credential values are set per account in the console or with hubctl, never here." },
+          "regions": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "format": "uri" }, "description": "Base URL per region, e.g. {\"in\": \"https://in1.api.example.com\"}. Egress is restricted to these hosts." },
+          "defaults": { "type": "object", "description": "hub-admin VendorDefaults: rate_limit.per_account_rps, breaker (window_ms, min_calls, failure_ratio, consecutive_timeouts, open_ms, open_max_ms, half_open_probes), health_probe (endpoint, dry, every_ms)." },
+          "webhook_verification": { "type": ["object", "null"], "additionalProperties": false, "required": ["scheme"], "description": "How inbound webhooks from this vendor are verified. Any verification secret is set per account in the console, never here.", "properties": { "scheme": { "type": "string", "enum": ["none", "hmac_sha256", "basic", "ip_allowlist"] }, "header": { "type": "string" }, "max_skew_ms": { "type": "integer", "minimum": 0 }, "ip_allowlist": { "type": "array", "items": { "type": "string" } } } },
+          "docs_url": { "type": ["string", "null"], "format": "uri", "description": "The vendor's current API documentation for this." },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." },
+          "if_match": { "type": "string", "minLength": 1, "maxLength": 128, "description": "The etag returned by the matching hub_admin_get_* tool. Strongly recommended: if the object changed since you read it, the Hub answers PRECONDITION_FAILED and nothing changes (read it again and re-confirm with the user)." },
+          "confirm": { "type": "boolean", "default": false, "description": "Must be true, set only after you showed the user exactly what changes (diff, validation result or before/after values) and they explicitly approved this call. Without it the tool refuses locally with CONFIRMATION_REQUIRED and calls nothing." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin VendorChange.",
+        "required": ["change_id", "vendor"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "vendor": { "type": "object", "description": "hub-admin Vendor.", "required": ["vendor_id", "display_name", "auth_scheme", "regions", "revision"], "properties": { "vendor_id": { "type": "string" }, "display_name": { "type": "string" }, "auth_scheme": { "type": "string" }, "regions": { "type": "object" }, "defaults": { "type": "object" }, "webhook_verification": { "type": ["object", "null"] }, "docs_url": { "type": ["string", "null"] }, "endpoints": { "type": "array", "items": { "type": "object" } }, "revision": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "requires_confirm=live_traffic: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
+        "Accepts no secret values (no credentials, tokens or signing secrets)."
+      ],
+      "examples": [
+        {
+          "input": { "vendor_id": "clevertap", "display_name": "CleverTap", "auth_scheme": "static_headers", "regions": { "in": "https://in1.api.clevertap.com", "us": "https://us1.api.clevertap.com" }, "defaults": { "rate_limit": { "per_account_rps": 80 } }, "webhook_verification": { "scheme": "hmac_sha256", "header": "X-CleverTap-Signature", "max_skew_ms": 300000 }, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "reason": "Vendor raised the per-account limit to 80 rps (VND-221)", "if_match": "\"3\"", "confirm": true },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0MP", "vendor": { "vendor_id": "clevertap", "display_name": "CleverTap", "auth_scheme": "static_headers", "regions": { "in": "https://in1.api.clevertap.com", "us": "https://us1.api.clevertap.com" }, "defaults": { "rate_limit": { "per_account_rps": 80 } }, "webhook_verification": { "scheme": "hmac_sha256", "header": "X-CleverTap-Signature", "max_skew_ms": 300000 }, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "endpoints": [{ "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "created_at": "2026-10-31T09:01:00Z" }], "revision": 4, "created_at": "2026-10-31T09:00:00Z", "updated_at": "2026-11-07T10:00:00Z" } }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_list_vendor_endpoints",
+      "title": "List vendor endpoints (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: list a vendor's endpoint versions (<name>@<version>, method, path, timeouts, idempotency, batch size). Transformers and integration specs reference them as <vendor_id>.<name>@<version>. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "listVendorEndpoints", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["vendor_id"],
+        "properties": {
+          "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "cursor": { "type": "string", "maxLength": 512, "description": "next_cursor from a previous call." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin VendorEndpointList.",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "type": "object", "description": "hub-admin VendorEndpoint.", "required": ["endpoint_ref", "name", "version", "method", "path"], "properties": { "endpoint_ref": { "type": "string" }, "name": { "type": "string" }, "version": { "type": "integer" }, "method": { "type": "string" }, "path": { "type": "string" }, "timeout_ms": { "type": "integer" }, "connect_timeout_ms": { "type": "integer" }, "idempotent": { "type": "boolean" }, "batch_max": { "type": ["integer", "null"] }, "stream": { "type": "boolean" }, "created_at": { "type": "string", "format": "date-time" } } } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "vendor_id": "clevertap" },
+          "output": { "items": [{ "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "created_at": "2026-10-31T09:01:00Z" }], "next_cursor": null }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_get_vendor_endpoint",
+      "title": "Get a vendor endpoint (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: get one vendor endpoint version by <name>@<version>. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "getVendorEndpoint", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["vendor_id", "endpoint_ref"],
+        "properties": {
+          "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "endpoint_ref": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$", "description": "<endpoint name>@<version>, e.g. upload@1." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin VendorEndpoint.",
+        "required": ["endpoint_ref", "name", "version", "method", "path"],
+        "properties": {
+          "endpoint_ref": { "type": "string" },
+          "name": { "type": "string" },
+          "version": { "type": "integer" },
+          "method": { "type": "string" },
+          "path": { "type": "string" },
+          "timeout_ms": { "type": "integer" },
+          "connect_timeout_ms": { "type": "integer" },
+          "idempotent": { "type": "boolean" },
+          "batch_max": { "type": ["integer", "null"] },
+          "stream": { "type": "boolean" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "vendor_id": "clevertap", "endpoint_ref": "upload@1" },
+          "output": { "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "created_at": "2026-10-31T09:01:00Z" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_create_vendor_endpoint",
+      "title": "Create a vendor endpoint version (admin)",
+      "audience": "admin",
+      "description": "Admin write tool: add an endpoint to a vendor, or change one. Endpoint versions are immutable: a new name creates <name>@1, an existing name creates <name>@<n+1>. Existing integrations keep the old version until a new integration version references the new one and is published, so this never changes live traffic by itself. method is the HTTP verb the Hub uses towards the vendor (it does not delete anything in the Hub). Check path and method against the vendor's current API docs. Needs the admin role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createVendorEndpoint", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["vendor_id", "name", "method", "path", "idempotent", "reason"],
+        "properties": {
+          "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+          "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+          "path": { "type": "string", "minLength": 1 },
+          "timeout_ms": { "type": "integer", "minimum": 1, "default": 3000 },
+          "connect_timeout_ms": { "type": "integer", "minimum": 1, "default": 500 },
+          "idempotent": { "type": "boolean", "description": "True only if the vendor documents that repeating the call is safe; drives retries." },
+          "batch_max": { "type": ["integer", "null"], "minimum": 1 },
+          "stream": { "type": "boolean", "default": false },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin VendorEndpointChange.",
+        "required": ["change_id", "endpoint"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "endpoint": { "type": "object", "description": "hub-admin VendorEndpoint.", "required": ["endpoint_ref", "name", "version", "method", "path"], "properties": { "endpoint_ref": { "type": "string" }, "name": { "type": "string" }, "version": { "type": "integer" }, "method": { "type": "string" }, "path": { "type": "string" }, "timeout_ms": { "type": "integer" }, "connect_timeout_ms": { "type": "integer" }, "idempotent": { "type": "boolean" }, "batch_max": { "type": ["integer", "null"] }, "stream": { "type": "boolean" }, "created_at": { "type": "string", "format": "date-time" } } }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "Accepts no secret values (no credentials, tokens or signing secrets).",
+        "Not idempotent: every call creates the next version."
+      ],
+      "examples": [
+        {
+          "input": { "vendor_id": "clevertap", "name": "upload", "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "reason": "Upload events endpoint" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0MQ", "endpoint": { "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "created_at": "2026-10-31T09:01:00Z" } }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_list_accounts",
+      "title": "List vendor accounts (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: list vendor accounts (one set of vendor credentials and quota) with state, credential versions and expiry, how many integrations use each, breaker states and dead letters. Filter by vendor_id, state or q. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "listAccounts", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "state": { "type": "string", "enum": ["active", "draining", "retired"] },
+          "q": { "type": "string", "maxLength": 128, "description": "Case-insensitive substring of the id or display name." },
+          "cursor": { "type": "string", "maxLength": 512, "description": "next_cursor from a previous call." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin AccountList.",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "type": "object", "required": ["account_id", "vendor_id", "region", "state"], "properties": { "account_id": { "type": "string" }, "vendor_id": { "type": "string" }, "region": { "type": "string" }, "state": { "type": "string" }, "active_cred_version": { "type": ["integer", "null"] }, "next_cred_version": { "type": ["integer", "null"] }, "credential_expires_at": { "type": ["string", "null"], "format": "date-time" }, "integrations_using": { "type": "integer" }, "breaker_states": { "type": "object" }, "dead_letter_count": { "type": "integer" }, "dead_letter_oldest_at": { "type": ["string", "null"], "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set.",
+        "Credential values are never returned (versions and expiry only)."
+      ],
+      "examples": [
+        {
+          "input": { "vendor_id": "clevertap" },
+          "output": { "items": [{ "account_id": "ct-brandA-in", "vendor_id": "clevertap", "region": "in", "state": "active", "active_cred_version": 3, "next_cred_version": null, "credential_expires_at": null, "integrations_using": 1, "breaker_states": { "open": 0, "half_open": 0, "closed": 1 }, "dead_letter_count": 1, "dead_letter_oldest_at": "2026-10-31T11:02:40Z", "updated_at": "2026-10-30T12:00:00Z" }], "next_cursor": null }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_get_account",
+      "title": "Get a vendor account (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: get one vendor account (non-secret config, quota, credential slots with fingerprints only, integrations using it, pinned requests, dead letters) and its etag. Call it before hub_admin_update_account. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "getAccount", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["account_id"],
+        "properties": {
+          "account_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin Account. Plus etag (from the ETag header).",
+        "required": ["account_id", "vendor_id", "region", "state", "config", "quota"],
+        "properties": {
+          "account_id": { "type": "string" },
+          "vendor_id": { "type": "string" },
+          "region": { "type": "string" },
+          "state": { "type": "string", "enum": ["active", "draining", "retired"] },
+          "config": { "type": "object" },
+          "quota": { "type": "object" },
+          "credentials": { "type": "array", "description": "Credential slots: version, fingerprint and expiry only, never values.", "items": { "type": "object" } },
+          "integrations_using": { "type": "array", "items": { "type": "object" } },
+          "pinned_requests": { "type": "integer" },
+          "open_sessions": { "type": "integer" },
+          "dead_letter_count": { "type": "integer" },
+          "dead_letter_oldest_at": { "type": ["string", "null"], "format": "date-time" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "etag": { "type": ["string", "null"], "description": "ETag response header. Pass it as if_match to the matching update tool." }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set.",
+        "Credential values are never returned (slot, version, fingerprint, expiry only)."
+      ],
+      "examples": [
+        {
+          "input": { "account_id": "ct-brandA-in" },
+          "output": { "account_id": "ct-brandA-in", "vendor_id": "clevertap", "region": "in", "state": "active", "config": { "project_id": "4RW-XXX-XXXX", "brand_code": "A" }, "quota": { "rps": 50, "daily": 5000000 }, "credentials": [{ "slot": "active", "cred_version": 3, "fingerprint": "sha256:9f2c1e", "created_at": "2026-09-01T10:00:00Z", "expires_at": null }], "integrations_using": [{ "integration_id": "int_evt_brandA", "version": 7, "role": "target" }], "pinned_requests": 0, "open_sessions": 0, "dead_letter_count": 1, "dead_letter_oldest_at": "2026-10-31T11:02:40Z", "created_at": "2026-06-01T10:00:00Z", "updated_at": "2026-10-30T12:00:00Z", "etag": "\"5\"" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_update_account",
+      "title": "Update account config and quota (admin)",
+      "audience": "admin",
+      "description": "Admin write tool: merge-patch a vendor account's non-secret config (account.config.* in transformers) and quota. Vendor and region are immutable; credentials and lifecycle (drain, retire) cannot be changed through MCP: credentials are set or rotated in the console or with hubctl, lifecycle is a manual console action. Never put a secret in config: it is shown to every viewer and is not encrypted. The change applies to live traffic immediately, so: 1) hub_admin_get_account; 2) show the user current and new values; 3) after explicit approval, call with confirm=true and if_match set to the etag. Needs the admin role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "updateAccount", "http_method": "PATCH" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "requires_confirm": "live_traffic",
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["account_id", "reason"],
+        "properties": {
+          "account_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "config": { "type": "object", "description": "JSON merge-patch of the non-secret config (null removes a key). Never secrets." },
+          "quota": { "type": "object", "additionalProperties": false, "description": "Vendor quota of this account: rps and daily (null = no daily cap).", "properties": { "rps": { "type": "number", "minimum": 0 }, "daily": { "type": ["integer", "null"], "minimum": 0 } } },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." },
+          "if_match": { "type": "string", "minLength": 1, "maxLength": 128, "description": "The etag returned by the matching hub_admin_get_* tool. Strongly recommended: if the object changed since you read it, the Hub answers PRECONDITION_FAILED and nothing changes (read it again and re-confirm with the user)." },
+          "confirm": { "type": "boolean", "default": false, "description": "Must be true, set only after you showed the user exactly what changes (diff, validation result or before/after values) and they explicitly approved this call. Without it the tool refuses locally with CONFIRMATION_REQUIRED and calls nothing." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin AccountChange.",
+        "required": ["change_id", "account"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "account": { "type": "object", "description": "hub-admin Account.", "required": ["account_id", "vendor_id", "region", "state", "config", "quota"], "properties": { "account_id": { "type": "string" }, "vendor_id": { "type": "string" }, "region": { "type": "string" }, "state": { "type": "string", "enum": ["active", "draining", "retired"] }, "config": { "type": "object" }, "quota": { "type": "object" }, "credentials": { "type": "array", "description": "Credential slots: version, fingerprint and expiry only, never values.", "items": { "type": "object" } }, "integrations_using": { "type": "array", "items": { "type": "object" } }, "pinned_requests": { "type": "integer" }, "open_sessions": { "type": "integer" }, "dead_letter_count": { "type": "integer" }, "dead_letter_oldest_at": { "type": ["string", "null"], "format": "date-time" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "requires_confirm=live_traffic: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
+        "Accepts no secret values (no credentials, tokens or signing secrets).",
+        "Never calls credential, test-connection or lifecycle operations."
+      ],
+      "examples": [
+        {
+          "input": { "account_id": "ct-brandA-in", "quota": { "rps": 80 }, "reason": "Vendor raised our quota to 80 rps (ticket VND-221)", "if_match": "\"5\"", "confirm": true },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0MS", "account": { "account_id": "ct-brandA-in", "vendor_id": "clevertap", "region": "in", "state": "active", "config": { "project_id": "4RW-XXX-XXXX", "brand_code": "A" }, "quota": { "rps": 80, "daily": 5000000 }, "credentials": [{ "slot": "active", "cred_version": 3, "fingerprint": "sha256:9f2c1e", "created_at": "2026-09-01T10:00:00Z", "expires_at": null }], "integrations_using": [{ "integration_id": "int_evt_brandA", "version": 7, "role": "target" }], "pinned_requests": 0, "open_sessions": 0, "dead_letter_count": 1, "dead_letter_oldest_at": "2026-10-31T11:02:40Z", "created_at": "2026-06-01T10:00:00Z", "updated_at": "2026-10-31T10:00:00Z" } }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_list_capabilities",
+      "title": "List capabilities (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: list the canonical capabilities (e.g. events.track@v1) with their operations and how many integrations use them. An integration and its transformers are bound to one capability key. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "listCapabilities", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "q": { "type": "string", "maxLength": 128, "description": "Case-insensitive substring of the id or display name." },
+          "cursor": { "type": "string", "maxLength": 512, "description": "next_cursor from a previous call." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin CapabilityList.",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "type": "object", "required": ["capability", "operations"], "properties": { "capability": { "type": "string" }, "name": { "type": "string" }, "major": { "type": "integer" }, "latest_minor": { "type": "integer" }, "interactive": { "type": "boolean" }, "operations": { "type": "array", "items": { "type": "string" } }, "integrations_using": { "type": "integer" }, "updated_at": { "type": "string", "format": "date-time" } } } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": {},
+          "output": { "items": [{ "capability": "events.track@v1", "name": "events.track", "major": 1, "latest_minor": 0, "interactive": false, "operations": ["default"], "integrations_using": 3, "updated_at": "2026-10-31T09:00:00Z" }], "next_cursor": null }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_get_transformer",
+      "title": "Get a transformer (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: get a transformer with its latest version (YAML, fixtures, goldens summary). Use latest_version as expected_latest_version in hub_admin_create_transformer_version. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "getTransformer", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["transformer_id"],
+        "properties": {
+          "transformer_id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin Transformer.",
+        "required": ["transformer_id", "kind", "capability", "vendor_endpoint", "latest_version", "latest"],
+        "properties": {
+          "transformer_id": { "type": "string" },
+          "kind": { "type": "string" },
+          "capability": { "type": "string" },
+          "vendor_endpoint": { "type": "string" },
+          "latest_version": { "type": "integer" },
+          "used_by_active_versions": { "type": "integer" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "latest": { "type": "object", "description": "hub-admin TransformerVersion." }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "transformer_id": "T1" },
+          "output": { "transformer_id": "T1", "kind": "request", "capability": "events.track@v1", "vendor_endpoint": "clevertap.upload@1", "latest_version": 7, "used_by_active_versions": 1, "updated_at": "2026-10-20T08:00:00Z", "latest": { "transformer_id": "T1", "version": 7, "ref": "T1@7", "kind": "request" } }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_create_transformer_version",
+      "title": "Create a transformer version (admin)",
+      "audience": "admin",
+      "description": "Admin write tool: store a new transformer version: n+1 of an existing transformer (pass expected_latest_version from hub_admin_get_transformer) or version 1 of a new transformer_id (omit it). The Hub compiles it, type-checks it against the capability schema and runs every golden fixture (at least one is required); if anything fails it answers PUBLISH_VALIDATION_FAILED and nothing is stored, so a transformer with failing goldens cannot exist. Iterate first with hub_admin_dry_run_transformer and hub_admin_run_transformer_goldens on a draft. Vendor payloads must follow the vendor's current API docs: cite them in docs_url. Not live: a version carries traffic only after an integration version references it and is published. Needs the editor role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createTransformerVersion", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor", "transport": ["stdio"] },
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["transformer_id", "kind", "capability", "vendor_endpoint", "yaml", "fixtures", "reason"],
+        "properties": {
+          "transformer_id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" },
+          "kind": { "type": "string", "enum": ["request", "response", "inbound"] },
+          "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" },
+          "vendor_endpoint": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$", "description": "<vendor_id>.<endpoint name>@<version>, e.g. clevertap.upload@1." },
+          "expected_latest_version": { "type": ["integer", "null"], "minimum": 1, "description": "latest_version you based this on; omit or null for a new transformer_id. CONFLICT if someone stored a newer one." },
+          "yaml": { "type": "string", "minLength": 1, "description": "Transformer DSL source (DESIGN §7)." },
+          "fixtures": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["name"], "description": "Golden fixture (hub-admin GoldenFixture): request transformers use input + expected_request, response transformers vendor_response + expected_response or expected_error.", "properties": { "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" }, "input": { "type": "object" }, "account_config": { "type": "object" }, "expected_request": { "type": "object" }, "vendor_response": { "type": "object" }, "expected_response": { "type": "object" }, "expected_error": { "type": "object" } } } },
+          "docs_url": { "type": ["string", "null"], "format": "uri", "description": "The vendor's current API documentation for this." },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin TransformerVersionChange (yaml and fixtures as sent).",
+        "required": ["change_id", "transformer_version"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "transformer_version": { "type": "object", "required": ["transformer_id", "version", "ref"], "properties": { "transformer_id": { "type": "string" }, "version": { "type": "integer" }, "ref": { "type": "string" }, "kind": { "type": "string" }, "capability": { "type": "string" }, "vendor_endpoint": { "type": "string" }, "goldens": { "type": "object" }, "author": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: editor); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "Accepts no secret values (no credentials, tokens or signing secrets).",
+        "Not idempotent: every call creates the next version (expected_latest_version guards against races)."
+      ],
+      "examples": [
+        {
+          "input": { "transformer_id": "T1", "kind": "request", "capability": "events.track@v1", "vendor_endpoint": "clevertap.upload@1", "expected_latest_version": 7, "yaml": "transformer: T1\nkind: request\ncapability: events.track@v1\nvendor_endpoint: clevertap.upload@1\nrequest:\n  method: POST\n  path: /1/upload\n", "fixtures": [{ "name": "order_placed", "input": { "user": { "id": "u_48213" }, "event": { "name": "order_placed", "timestamp": "2026-10-31T09:15:00Z" } }, "expected_request": { "method": "POST", "path": "/1/upload", "body": { "d": [{ "identity": "u_48213", "type": "event", "evtName": "order_placed", "ts": 1793438100 }] } } }], "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "reason": "Map context.campaign" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N0", "transformer_version": { "transformer_id": "T1", "version": 8, "ref": "T1@8", "kind": "request", "capability": "events.track@v1", "vendor_endpoint": "clevertap.upload@1", "goldens": { "passed": true, "total": 1, "failed": 0 }, "author": "priya@example.com", "created_at": "2026-10-31T10:00:00Z" } }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_run_transformer_goldens",
+      "title": "Run transformer goldens (admin, no side effects)",
+      "audience": "admin",
+      "description": "Operator tool: run golden fixtures against a stored transformer version (ref) or against an unsaved draft plus fixtures, and get a per-fixture pass/fail with diffs. Nothing is stored. Use it to iterate before hub_admin_create_transformer_version, which runs the same check. Give exactly one of ref, or draft with fixtures. Needs the editor role.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "runTransformerGoldens", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "oneOf": [{ "required": ["ref"] }, { "required": ["draft", "fixtures"] }],
+        "properties": {
+          "ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}@[1-9][0-9]*$", "description": "<transformer_id>@<version>, e.g. T1@7." },
+          "draft": { "type": "object", "additionalProperties": false, "required": ["kind", "capability", "vendor_endpoint", "yaml"], "description": "Unsaved transformer (hub-admin TransformerDraft).", "properties": { "kind": { "type": "string", "enum": ["request", "response", "inbound"] }, "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" }, "vendor_endpoint": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$", "description": "<vendor_id>.<endpoint name>@<version>, e.g. clevertap.upload@1." }, "yaml": { "type": "string", "minLength": 1 } } },
+          "fixtures": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["name"], "description": "Golden fixture (hub-admin GoldenFixture): request transformers use input + expected_request, response transformers vendor_response + expected_response or expected_error.", "properties": { "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" }, "input": { "type": "object" }, "account_config": { "type": "object" }, "expected_request": { "type": "object" }, "vendor_response": { "type": "object" }, "expected_response": { "type": "object" }, "expected_error": { "type": "object" } } } }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin GoldensRunResult.",
+        "required": ["passed", "total", "failed", "results"],
+        "properties": {
+          "passed": { "type": "boolean" },
+          "total": { "type": "integer" },
+          "failed": { "type": "integer" },
+          "results": { "type": "array", "items": { "type": "object", "required": ["fixture", "passed", "diff"], "properties": { "fixture": { "type": "string" }, "passed": { "type": "boolean" }, "diff": { "type": "array", "items": { "type": "object" } }, "error": { "type": ["string", "null"] } } } },
+          "duration_ms": { "type": "integer" }
+        }
+      },
+      "safety": [
+        "Non-mutating POST check: nothing is stored, no change-log entry, no upstream call; registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "ref": "T1@7" },
+          "output": { "passed": true, "total": 2, "failed": 0, "results": [{ "fixture": "order_placed", "passed": true, "diff": [] }, { "fixture": "no_timestamp", "passed": true, "diff": [] }], "duration_ms": 12 }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_dry_run_transformer",
+      "title": "Dry-run a transformer (admin, no side effects)",
+      "audience": "admin",
+      "description": "Operator tool: run a stored transformer version (ref) or an unsaved draft on one input. A request transformer turns a canonical input into the exact vendor request (secrets shown as ***); a response transformer turns a vendor_response into the canonical response or error. account_id injects that account's non-secret config. No upstream call, nothing stored. Give exactly one of ref or draft. Needs the editor role.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "dryRunTransformer", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "oneOf": [{ "required": ["ref"] }, { "required": ["draft"] }],
+        "properties": {
+          "ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}@[1-9][0-9]*$", "description": "<transformer_id>@<version>, e.g. T1@7." },
+          "draft": { "type": "object", "additionalProperties": false, "required": ["kind", "capability", "vendor_endpoint", "yaml"], "description": "Unsaved transformer (hub-admin TransformerDraft).", "properties": { "kind": { "type": "string", "enum": ["request", "response", "inbound"] }, "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" }, "vendor_endpoint": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$", "description": "<vendor_id>.<endpoint name>@<version>, e.g. clevertap.upload@1." }, "yaml": { "type": "string", "minLength": 1 } } },
+          "account_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$", "description": "Account whose non-secret config (and redacted credentials) is injected." },
+          "input": { "type": "object", "description": "Canonical request (request transformers)." },
+          "headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Caller headers (hdr.*)." },
+          "session": { "type": "object" },
+          "vendor_response": { "type": "object", "additionalProperties": false, "description": "Vendor response (response transformers).", "properties": { "status": { "type": "integer" }, "headers": { "type": "object", "additionalProperties": { "type": "string" } }, "body": {} } }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin TransformerDryRunResult.",
+        "required": ["ok", "kind", "compile_errors"],
+        "properties": {
+          "ok": { "type": "boolean" },
+          "kind": { "type": "string" },
+          "vendor_request": { "type": ["object", "null"], "properties": { "method": { "type": "string" }, "url": { "type": "string" }, "headers": { "type": "object", "additionalProperties": { "type": "string" } }, "body": {} } },
+          "canonical_response": { "type": ["object", "null"] },
+          "canonical_error": { "type": ["object", "null"] },
+          "compile_errors": { "type": "array", "items": { "type": "object" } },
+          "duration_us": { "type": "integer" }
+        }
+      },
+      "safety": [
+        "Non-mutating POST check: nothing is stored, no change-log entry, no upstream call; registered only when HUB_ADMIN_TOKEN is set.",
+        "Secrets are redacted by the Hub (***); hubmcp never un-redacts."
+      ],
+      "examples": [
+        {
+          "input": { "ref": "T1@7", "account_id": "ct-brandA-in", "input": { "user": { "id": "u_48213" }, "event": { "name": "order_placed", "timestamp": "2026-10-31T09:15:00Z" } } },
+          "output": { "ok": true, "kind": "request", "vendor_request": { "method": "POST", "url": "https://in1.api.clevertap.com/1/upload", "headers": { "Content-Type": "application/json", "X-CleverTap-Passcode": "***" }, "body": { "d": [{ "identity": "u_48213", "type": "event", "evtName": "order_placed", "ts": 1793438100 }] } }, "canonical_response": null, "canonical_error": null, "compile_errors": [], "duration_us": 142 }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_list_integrations",
+      "title": "List integrations (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: list integrations with owner tenant, capability, active and latest version, draft flag, paused flag and current targets (vendor, account, weight). Filters combine with AND. Unlike the tenant tool hub_list_integrations this is the control plane, so vendor and account ids appear. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "listIntegrations", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" },
+          "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "account_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "paused": { "type": "boolean", "description": "Filter only." },
+          "has_active_version": { "type": "boolean" },
+          "active_version_behind": { "type": "boolean" },
+          "q": { "type": "string", "maxLength": 128, "description": "Case-insensitive substring of the id or display name." },
+          "cursor": { "type": "string", "maxLength": 512, "description": "next_cursor from a previous call." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin IntegrationList.",
+        "required": ["items", "next_cursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "type": "object", "required": ["integration_id", "owner_tenant", "capability", "active_version", "latest_version", "has_draft", "paused"], "properties": { "integration_id": { "type": "string" }, "owner_tenant": { "type": "string" }, "capability": { "type": "string" }, "description": { "type": ["string", "null"] }, "active_version": { "type": ["integer", "null"] }, "latest_version": { "type": ["integer", "null"] }, "has_draft": { "type": "boolean" }, "paused": { "type": "boolean" }, "delivery_mode": { "type": ["string", "null"] }, "targets": { "type": "array", "items": { "type": "object" } }, "updated_at": { "type": "string", "format": "date-time" } } } },
+          "next_cursor": { "type": ["string", "null"] }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "tenant_id": "orders-service" },
+          "output": { "items": [{ "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "capability": "events.track@v1", "description": "Brand A product analytics events", "active_version": 7, "latest_version": 8, "has_draft": true, "paused": false, "delivery_mode": "wait", "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "weight": 100 }], "updated_at": "2026-10-30T12:00:00Z" }], "next_cursor": null }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_get_integration",
+      "title": "Get an integration (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: get one integration with its active version in full, latest_version and has_draft. Use active_version as expected_active_version for publish, weights and rollback. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "getIntegration", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin Integration.",
+        "required": ["integration_id", "owner_tenant", "capability", "grants", "moves_money_or_quota", "active_version", "latest_version", "has_draft", "paused"],
+        "properties": {
+          "integration_id": { "type": "string" },
+          "owner_tenant": { "type": "string" },
+          "capability": { "type": "string" },
+          "description": { "type": ["string", "null"] },
+          "grants": { "type": "array", "items": { "type": "string" } },
+          "moves_money_or_quota": { "type": "boolean" },
+          "active_version": { "type": ["integer", "null"] },
+          "latest_version": { "type": ["integer", "null"] },
+          "has_draft": { "type": "boolean" },
+          "paused": { "type": "boolean" },
+          "paused_reason": { "type": ["string", "null"] },
+          "active": { "type": ["object", "null"], "description": "Active IntegrationVersion in full (null in mutation responses or when none)." },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA" },
+          "output": { "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "capability": "events.track@v1", "description": "Brand A product analytics events", "grants": [], "moves_money_or_quota": false, "active_version": 7, "latest_version": 8, "has_draft": true, "paused": false, "paused_reason": null, "active": { "integration_id": "int_evt_brandA", "version": 7, "state": "published", "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 100 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } } }, "created_at": "2026-06-01T10:00:00Z", "updated_at": "2026-10-30T12:00:00Z" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_create_integration",
+      "title": "Create an integration (admin)",
+      "audience": "admin",
+      "description": "Admin write tool: create an integration: the stable id callers use, its owner tenant, its capability and grants (other tenants allowed to invoke). It carries no traffic until a first version is published (callers get INTEGRATION_PAUSED, reason no_active_version). Next: hub_admin_create_integration_draft with a full spec, hub_admin_validate_integration_version, then hub_admin_publish_integration_version. The integration_id is what callers see, so never put a vendor name, account name or version in it (int_sms_otp, not int_twilio_v2). Set moves_money_or_quota=true when calls spend money or vendor quota (SMS, payments, bureau pulls): callers must then send an Idempotency-Key and hub_invoke needs confirmation. Needs the editor role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createIntegration", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor", "transport": ["stdio"] },
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id", "owner_tenant", "capability", "reason"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$", "description": "Caller-facing id. No vendor, account or version in it." },
+          "owner_tenant": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" },
+          "description": { "type": ["string", "null"], "maxLength": 1024, "description": "Caller-facing description. No vendor, account or version in it." },
+          "grants": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" }, "description": "Other tenant ids allowed to invoke." },
+          "moves_money_or_quota": { "type": "boolean", "default": false },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin IntegrationChange.",
+        "required": ["change_id", "integration"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "integration": { "type": "object", "description": "hub-admin Integration.", "required": ["integration_id", "owner_tenant", "capability", "grants", "moves_money_or_quota", "active_version", "latest_version", "has_draft", "paused"], "properties": { "integration_id": { "type": "string" }, "owner_tenant": { "type": "string" }, "capability": { "type": "string" }, "description": { "type": ["string", "null"] }, "grants": { "type": "array", "items": { "type": "string" } }, "moves_money_or_quota": { "type": "boolean" }, "active_version": { "type": ["integer", "null"] }, "latest_version": { "type": ["integer", "null"] }, "has_draft": { "type": "boolean" }, "paused": { "type": "boolean" }, "paused_reason": { "type": ["string", "null"] }, "active": { "type": ["object", "null"], "description": "Active IntegrationVersion in full (null in mutation responses or when none)." }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: editor); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "Accepts no secret values (no credentials, tokens or signing secrets).",
+        "Not idempotent: a repeat gets CONFLICT and changes nothing.",
+        "No traffic until a version is published."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "capability": "events.track@v1", "description": "Brand A product analytics events", "grants": [], "moves_money_or_quota": false, "reason": "Analytics pilot for brand A" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N1", "integration": { "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "capability": "events.track@v1", "description": "Brand A product analytics events", "grants": [], "moves_money_or_quota": false, "active_version": null, "latest_version": null, "has_draft": false, "paused": false, "paused_reason": null, "active": null, "created_at": "2026-10-31T09:10:00Z", "updated_at": "2026-10-31T09:10:00Z" } }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_get_integration_version",
+      "title": "Get an integration version (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: get one integration version (draft or published) with its full spec. Read the draft before hub_admin_update_integration_draft, which replaces the whole spec. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "getIntegrationVersion", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id", "version"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin IntegrationVersion.",
+        "required": ["integration_id", "version", "state", "spec"],
+        "properties": {
+          "integration_id": { "type": "string" },
+          "version": { "type": "integer" },
+          "state": { "type": "string", "enum": ["draft", "published"] },
+          "spec": { "type": "object" },
+          "based_on": { "type": ["integer", "null"] },
+          "copied_from_version": { "type": ["integer", "null"] },
+          "author": { "type": "string" },
+          "reason": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "published_at": { "type": ["string", "null"], "format": "date-time" },
+          "published_by": { "type": ["string", "null"] },
+          "snapshot_version": { "type": ["integer", "null"] }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "version": 7 },
+          "output": { "integration_id": "int_evt_brandA", "version": 7, "state": "published", "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 100 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "based_on": 6, "author": "priya@example.com", "reason": "Add breaker override", "created_at": "2026-10-29T08:00:00Z", "published_at": "2026-10-29T08:05:00Z", "published_by": "priya@example.com", "snapshot_version": 412 }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_diff_integration_versions",
+      "title": "Diff two integration versions (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: structured diff (add/remove/replace on the spec) plus a unified YAML diff between two versions of an integration. Show the unified diff to the user before publishing a draft (from = active version, to = draft) or rolling back (from = active, to = target). Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "diffIntegrationVersions", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id", "from", "to"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "from": { "type": "integer", "minimum": 1 },
+          "to": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin VersionDiff.",
+        "required": ["integration_id", "from", "to", "changes", "unified"],
+        "properties": {
+          "integration_id": { "type": "string" },
+          "from": { "type": "integer" },
+          "to": { "type": "integer" },
+          "changes": { "type": "array", "items": { "type": "object", "required": ["op", "path"], "properties": { "op": { "type": "string", "enum": ["add", "remove", "replace"] }, "path": { "type": "string" }, "before": {}, "after": {} } } },
+          "unified": { "type": "string" }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "from": 7, "to": 8 },
+          "output": { "integration_id": "int_evt_brandA", "from": 7, "to": 8, "changes": [{ "op": "replace", "path": "/targets/0/weight", "before": 100, "after": 90 }], "unified": "--- v7\n+++ v8\n@@ targets @@\n-  weight: 100\n+  weight: 90\n" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_create_integration_draft",
+      "title": "Create an integration draft (admin)",
+      "audience": "admin",
+      "description": "Admin write tool: create draft version n+1 of an integration from a full spec, or, without spec, as a copy of based_on (default: the active version). Only one draft may exist (CONFLICT otherwise; edit it with hub_admin_update_integration_draft). A draft is not live: nothing changes for callers until it is published. Needs the editor role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createIntegrationDraft", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor", "transport": ["stdio"] },
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id", "reason"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "based_on": { "type": ["integer", "null"], "minimum": 1 },
+          "spec": { "type": "object", "description": "Full hub-admin IntegrationSpec: targets (vendor_id, account_id, transformer {request, response}, optional per-operation pairs, weight), failover, delivery, breaker, webhooks, audit. The Hub validates it and answers VALIDATION_FAILED with pointers." },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin IntegrationVersionChange.",
+        "required": ["change_id", "integration_version"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "integration_version": { "type": "object", "description": "hub-admin IntegrationVersion.", "required": ["integration_id", "version", "state", "spec"], "properties": { "integration_id": { "type": "string" }, "version": { "type": "integer" }, "state": { "type": "string", "enum": ["draft", "published"] }, "spec": { "type": "object" }, "based_on": { "type": ["integer", "null"] }, "copied_from_version": { "type": ["integer", "null"] }, "author": { "type": "string" }, "reason": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" }, "published_at": { "type": ["string", "null"], "format": "date-time" }, "published_by": { "type": ["string", "null"] }, "snapshot_version": { "type": ["integer", "null"] } } }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: editor); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "Accepts no secret values (no credentials, tokens or signing secrets).",
+        "Not live until published.",
+        "Not idempotent: a repeat gets CONFLICT (one draft at a time)."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "based_on": 7, "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "reason": "Canary 10% to the new workspace" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N2", "integration_version": { "integration_id": "int_evt_brandA", "version": 8, "state": "draft", "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "based_on": 7, "author": "priya@example.com", "reason": "Canary 10% to the new workspace", "created_at": "2026-10-31T09:20:00Z", "published_at": null, "published_by": null, "snapshot_version": null } }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_update_integration_draft",
+      "title": "Update an integration draft (admin)",
+      "audience": "admin",
+      "description": "Admin write tool: replace the whole spec of a draft version (read it first with hub_admin_get_integration_version and send the full edited spec). Published versions are immutable (CONFLICT). Not live until published. Needs the editor role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "updateIntegrationDraft", "http_method": "PUT" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor", "transport": ["stdio"] },
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id", "version", "spec", "reason"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "version": { "type": "integer", "minimum": 1 },
+          "spec": { "type": "object", "description": "Full hub-admin IntegrationSpec: targets (vendor_id, account_id, transformer {request, response}, optional per-operation pairs, weight), failover, delivery, breaker, webhooks, audit. The Hub validates it and answers VALIDATION_FAILED with pointers." },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin IntegrationVersionChange.",
+        "required": ["change_id", "integration_version"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "integration_version": { "type": "object", "description": "hub-admin IntegrationVersion.", "required": ["integration_id", "version", "state", "spec"], "properties": { "integration_id": { "type": "string" }, "version": { "type": "integer" }, "state": { "type": "string", "enum": ["draft", "published"] }, "spec": { "type": "object" }, "based_on": { "type": ["integer", "null"] }, "copied_from_version": { "type": ["integer", "null"] }, "author": { "type": "string" }, "reason": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" }, "published_at": { "type": ["string", "null"], "format": "date-time" }, "published_by": { "type": ["string", "null"] }, "snapshot_version": { "type": ["integer", "null"] } } }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: editor); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "Accepts no secret values (no credentials, tokens or signing secrets).",
+        "Drafts only; not live until published."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "version": 8, "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "reason": "Point the canary at T1@8" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N3", "integration_version": { "integration_id": "int_evt_brandA", "version": 8, "state": "draft", "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "based_on": 7, "author": "priya@example.com", "reason": "Point the canary at T1@8", "created_at": "2026-10-31T09:20:00Z", "published_at": null, "published_by": null, "snapshot_version": null } }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_validate_integration_version",
+      "title": "Validate an integration version (admin, no side effects)",
+      "audience": "admin",
+      "description": "Operator tool: run every publish check on a version (schemas compile, expressions type-check, goldens pass, response conforms, references exist, accounts not retired, weights sum to 100, ...) and get the report. Nothing changes. Always run it, fix every fail, and show the user the result before hub_admin_publish_integration_version. Needs the editor role.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "validateIntegrationVersion", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id", "version"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin ValidationReport.",
+        "required": ["valid", "checks"],
+        "properties": {
+          "valid": { "type": "boolean" },
+          "checks": { "type": "array", "items": { "type": "object", "required": ["check", "status"], "properties": { "check": { "type": "string" }, "status": { "type": "string", "enum": ["pass", "fail", "warn", "skipped"] }, "message": { "type": ["string", "null"] }, "pointer": { "type": ["string", "null"] } } } }
+        }
+      },
+      "safety": [
+        "Non-mutating POST check: nothing is stored, no change-log entry, no upstream call; registered only when HUB_ADMIN_TOKEN is set."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "version": 8 },
+          "output": { "valid": true, "checks": [{ "check": "schemas_compile", "status": "pass", "message": null, "pointer": null }, { "check": "goldens_pass", "status": "pass", "message": null, "pointer": null }, { "check": "weights_sum_100", "status": "pass", "message": null, "pointer": null }] }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_publish_integration_version",
+      "title": "Publish an integration version (admin, changes live traffic)",
+      "audience": "admin",
+      "description": "Admin write tool that CHANGES LIVE TRAFFIC: make a draft the active version; every node switches within about 10 s. Before calling: 1) hub_admin_validate_integration_version and fix every fail; 2) hub_admin_diff_integration_versions from the active version to this draft (for a first publish, show the full spec instead); 3) show the user the diff and the validation result; 4) only after explicit approval, call with confirm=true and expected_active_version = active_version from hub_admin_get_integration (null for a first publish). CONFLICT if someone published meanwhile; PUBLISH_VALIDATION_FAILED carries the report in error.meta.report. To undo, use hub_admin_rollback_integration. Needs the editor role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "publishIntegrationVersion", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor", "transport": ["stdio"] },
+      "requires_confirm": "live_traffic",
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id", "version", "expected_active_version", "reason"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "version": { "type": "integer", "minimum": 1 },
+          "expected_active_version": { "type": ["integer", "null"], "minimum": 1, "description": "Current active_version (null for a first publish)." },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." },
+          "confirm": { "type": "boolean", "default": false, "description": "Must be true, set only after you showed the user exactly what changes (diff, validation result or before/after values) and they explicitly approved this call. Without it the tool refuses locally with CONFIRMATION_REQUIRED and calls nothing." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin PublishResult.",
+        "required": ["change_id", "integration_id", "active_version"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "integration_id": { "type": "string" },
+          "previous_active_version": { "type": ["integer", "null"] },
+          "active_version": { "type": ["integer", "null"] },
+          "created_version": { "type": ["integer", "null"] },
+          "copied_from_version": { "type": ["integer", "null"] },
+          "snapshot_version": { "type": ["integer", "null"] },
+          "published_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: editor); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "requires_confirm=live_traffic: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
+        "expected_active_version makes a concurrent publish fail with CONFLICT instead of overwriting.",
+        "Reversible with hub_admin_rollback_integration (history stays linear)."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "version": 8, "expected_active_version": 7, "reason": "Canary 10% to the new workspace", "confirm": true },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N5", "integration_id": "int_evt_brandA", "previous_active_version": 7, "active_version": 8, "snapshot_version": 413, "published_at": "2026-10-31T09:30:00Z" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_set_integration_weights",
+      "title": "Set integration traffic weights (admin, changes live traffic)",
+      "audience": "admin",
+      "description": "Admin write tool that CHANGES LIVE TRAFFIC (with publish=true, the default): shift traffic between an integration's targets for a gradual cutover. It copies the active version, applies the weights (targets matched by vendor_id + account_id; the set must equal the active version's targets; weights sum to 100) and creates version n+1, published unless publish=false (then it stays a draft). Before calling, show the user the current weights (hub_admin_get_integration) next to the new ones, and only after explicit approval call with confirm=true and expected_active_version = active_version. To undo, set the old weights again or use hub_admin_rollback_integration. Needs the editor role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "updateIntegrationWeights", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor", "transport": ["stdio"] },
+      "requires_confirm": "live_traffic",
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id", "expected_active_version", "weights", "reason"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "expected_active_version": { "type": "integer", "minimum": 1 },
+          "weights": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["vendor_id", "account_id", "weight"], "properties": { "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" }, "account_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" }, "weight": { "type": "integer", "minimum": 0, "maximum": 100 } } } },
+          "publish": { "type": "boolean", "default": true },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." },
+          "confirm": { "type": "boolean", "default": false, "description": "Must be true, set only after you showed the user exactly what changes (diff, validation result or before/after values) and they explicitly approved this call. Without it the tool refuses locally with CONFIRMATION_REQUIRED and calls nothing." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin PublishResult.",
+        "required": ["change_id", "integration_id", "active_version"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "integration_id": { "type": "string" },
+          "previous_active_version": { "type": ["integer", "null"] },
+          "active_version": { "type": ["integer", "null"] },
+          "created_version": { "type": ["integer", "null"] },
+          "copied_from_version": { "type": ["integer", "null"] },
+          "snapshot_version": { "type": ["integer", "null"] },
+          "published_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: editor); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "requires_confirm=live_traffic: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
+        "confirm is required even with publish=false, for one simple rule.",
+        "expected_active_version makes a concurrent change fail with CONFLICT."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "expected_active_version": 8, "weights": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "weight": 50 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "weight": 50 }], "publish": true, "reason": "Canary healthy for 24 h, go 50/50", "confirm": true },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N9", "integration_id": "int_evt_brandA", "previous_active_version": 8, "active_version": 9, "copied_from_version": 8, "snapshot_version": 415, "published_at": "2026-11-01T09:00:00Z" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_rollback_integration",
+      "title": "Roll back an integration (admin, changes live traffic)",
+      "audience": "admin",
+      "description": "Admin write tool that CHANGES LIVE TRAFFIC: create and publish version n+1 with the content of an earlier version (history stays linear, nothing is deleted). It runs the full validation again (accounts may have been retired since). Before calling, show the user hub_admin_diff_integration_versions from the active version to to_version, and only after explicit approval call with confirm=true and expected_active_version = active_version. Needs the editor role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "rollbackIntegration", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor", "transport": ["stdio"] },
+      "requires_confirm": "live_traffic",
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["integration_id", "to_version", "expected_active_version", "reason"],
+        "properties": {
+          "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "to_version": { "type": "integer", "minimum": 1 },
+          "expected_active_version": { "type": "integer", "minimum": 1 },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." },
+          "confirm": { "type": "boolean", "default": false, "description": "Must be true, set only after you showed the user exactly what changes (diff, validation result or before/after values) and they explicitly approved this call. Without it the tool refuses locally with CONFIRMATION_REQUIRED and calls nothing." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin PublishResult.",
+        "required": ["change_id", "integration_id", "active_version"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "integration_id": { "type": "string" },
+          "previous_active_version": { "type": ["integer", "null"] },
+          "active_version": { "type": ["integer", "null"] },
+          "created_version": { "type": ["integer", "null"] },
+          "copied_from_version": { "type": ["integer", "null"] },
+          "snapshot_version": { "type": ["integer", "null"] },
+          "published_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: editor); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "requires_confirm=live_traffic: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
+        "Creates a new version; never deletes one."
+      ],
+      "examples": [
+        {
+          "input": { "integration_id": "int_evt_brandA", "to_version": 7, "expected_active_version": 8, "reason": "Canary account returning UPSTREAM_REJECTED", "confirm": true },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N6", "integration_id": "int_evt_brandA", "previous_active_version": 8, "active_version": 9, "copied_from_version": 7, "snapshot_version": 414, "published_at": "2026-10-31T09:45:00Z" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_get_registrar_endpoint",
+      "title": "Get a callback endpoint (admin, read-only)",
+      "audience": "admin",
+      "description": "Operator tool: get one registrar (callback) endpoint: URL, disabled flag, signing-secret version (never the secret), how many integration versions subscribe, and its etag. Call it before hub_admin_update_registrar_endpoint. Requires HUB_ADMIN_TOKEN.",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "getRegistrarEndpoint", "http_method": "GET" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
+      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["endpoint_id"],
+        "properties": {
+          "endpoint_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin RegistrarEndpoint. Plus etag (from the ETag header).",
+        "required": ["endpoint_id", "tenant_id", "url", "disabled", "secret_version"],
+        "properties": {
+          "endpoint_id": { "type": "string" },
+          "tenant_id": { "type": "string" },
+          "url": { "type": "string" },
+          "description": { "type": ["string", "null"] },
+          "disabled": { "type": "boolean" },
+          "secret_version": { "type": "integer" },
+          "secret_overlap_until": { "type": ["string", "null"], "format": "date-time" },
+          "subscribed_by": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "etag": { "type": ["string", "null"], "description": "ETag response header. Pass it as if_match to the matching update tool." }
+        }
+      },
+      "safety": [
+        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set.",
+        "Never returns the signing secret."
+      ],
+      "examples": [
+        {
+          "input": { "endpoint_id": "reg_orders_cb" },
+          "output": { "endpoint_id": "reg_orders_cb", "tenant_id": "orders-service", "url": "https://orders.internal/hub/callbacks", "description": "Orders callbacks", "disabled": false, "secret_version": 1, "secret_overlap_until": null, "subscribed_by": 1, "created_at": "2026-10-31T09:00:00Z", "updated_at": "2026-10-31T09:00:00Z", "etag": "\"2\"" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_create_registrar_endpoint",
+      "title": "Create a callback endpoint (admin, shows the signing secret once)",
+      "audience": "admin",
+      "description": "Admin write tool: register a tenant's HTTPS callback URL, where the Hub sends async results and delivery events, signed with a secret the Hub generates. The host must be allowlisted and resolve to a public address (VALIDATION_FAILED otherwise). Integrations subscribe to it in their spec (webhooks[].endpoint_id). Agree on tenant and URL with the user, then call with confirm=true. SENSITIVE OUTPUT: `signing_secret` is shown exactly once. Give it to the user once, verbatim, to store in their secret manager for verifying X-Hub-Signature. Never repeat it, never put it in another tool call, file, code sample or memory. If it is lost, the user rotates it in the console. Needs the admin role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createRegistrarEndpoint", "http_method": "POST" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "requires_confirm": "mints_secret",
+      "sensitive_output": ["/signing_secret"],
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["endpoint_id", "tenant_id", "url", "reason"],
+        "properties": {
+          "endpoint_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+          "description": { "type": ["string", "null"] },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." },
+          "confirm": { "type": "boolean", "default": false, "description": "Must be true, set only after the user explicitly approved minting this secret (owner, scopes or URL, expiry). Without it the tool refuses locally with CONFIRMATION_REQUIRED and calls nothing." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin RegistrarEndpointSecretChange.",
+        "required": ["change_id", "endpoint", "signing_secret"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "endpoint": { "type": "object", "description": "hub-admin RegistrarEndpoint.", "required": ["endpoint_id", "tenant_id", "url", "disabled", "secret_version"], "properties": { "endpoint_id": { "type": "string" }, "tenant_id": { "type": "string" }, "url": { "type": "string" }, "description": { "type": ["string", "null"] }, "disabled": { "type": "boolean" }, "secret_version": { "type": "integer" }, "secret_overlap_until": { "type": ["string", "null"], "format": "date-time" }, "subscribed_by": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
+          "signing_secret": { "type": "string", "pattern": "^whsec_[A-Za-z0-9]{26,}$", "description": "SENSITIVE, shown once. Hand to the user verbatim once; never repeat it." }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "requires_confirm=mints_secret: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
+        "sensitive_output /signing_secret: never logged by hubmcp, returned only in this one result; any later tool call whose arguments contain a Hub secret is refused (SECRET_IN_INPUT).",
+        "The Hub generates the secret; the tool never accepts one.",
+        "Not idempotent: a repeat gets CONFLICT and changes nothing."
+      ],
+      "examples": [
+        {
+          "input": { "endpoint_id": "reg_orders_cb", "tenant_id": "orders-service", "url": "https://orders.internal/hub/callbacks", "description": "Orders callbacks", "reason": "Callbacks for async integrations", "confirm": true },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0NF", "endpoint": { "endpoint_id": "reg_orders_cb", "tenant_id": "orders-service", "url": "https://orders.internal/hub/callbacks", "description": "Orders callbacks", "disabled": false, "secret_version": 1, "secret_overlap_until": null, "subscribed_by": 0, "created_at": "2026-10-31T09:00:00Z", "updated_at": "2026-10-31T09:00:00Z" }, "signing_secret": "whsec_EXAMPLEexampleEXAMPLEexample00" }
+        }
+      ]
+    },
+    {
+      "name": "hub_admin_update_registrar_endpoint",
+      "title": "Update a callback endpoint (admin)",
+      "audience": "admin",
+      "description": "Admin write tool: merge-patch a callback endpoint's url or description. A new URL receives the callbacks of every subscribed integration right away (same SSRF guard and allowlist as create), so: 1) hub_admin_get_registrar_endpoint; 2) show the user old and new URL and how many integrations subscribe; 3) after explicit approval, call with confirm=true and if_match set to the etag. Disabling an endpoint and rotating or deleting its secret are not possible through MCP; they stay manual console actions. Needs the admin role (FORBIDDEN otherwise).",
+      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "updateRegistrarEndpoint", "http_method": "PATCH" }],
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "requires_confirm": "live_traffic",
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["endpoint_id", "reason"],
+        "properties": {
+          "endpoint_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
+          "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+          "description": { "type": ["string", "null"] },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." },
+          "if_match": { "type": "string", "minLength": 1, "maxLength": 128, "description": "The etag returned by the matching hub_admin_get_* tool. Strongly recommended: if the object changed since you read it, the Hub answers PRECONDITION_FAILED and nothing changes (read it again and re-confirm with the user)." },
+          "confirm": { "type": "boolean", "default": false, "description": "Must be true, set only after you showed the user exactly what changes (diff, validation result or before/after values) and they explicitly approved this call. Without it the tool refuses locally with CONFIRMATION_REQUIRED and calls nothing." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "hub-admin RegistrarEndpointChange.",
+        "required": ["change_id", "endpoint"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
+          "endpoint": { "type": "object", "description": "hub-admin RegistrarEndpoint.", "required": ["endpoint_id", "tenant_id", "url", "disabled", "secret_version"], "properties": { "endpoint_id": { "type": "string" }, "tenant_id": { "type": "string" }, "url": { "type": "string" }, "description": { "type": ["string", "null"] }, "disabled": { "type": "boolean" }, "secret_version": { "type": "integer" }, "secret_overlap_until": { "type": ["string", "null"], "format": "date-time" }, "subscribed_by": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } }
+        }
+      },
+      "safety": [
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
+        "requires_confirm=live_traffic: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
+        "Never sends disabled; never rotates or deletes the secret.",
+        "Accepts no secret values (no credentials, tokens or signing secrets)."
+      ],
+      "examples": [
+        {
+          "input": { "endpoint_id": "reg_orders_cb", "url": "https://orders-v2.internal/hub/callbacks", "reason": "Orders callbacks moved to the v2 service", "if_match": "\"2\"", "confirm": true },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0NG", "endpoint": { "endpoint_id": "reg_orders_cb", "tenant_id": "orders-service", "url": "https://orders-v2.internal/hub/callbacks", "description": "Orders callbacks", "disabled": false, "secret_version": 1, "secret_overlap_until": null, "subscribed_by": 1, "created_at": "2026-10-31T09:00:00Z", "updated_at": "2026-11-07T10:00:00Z" } }
         }
       ]
     }

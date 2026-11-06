@@ -24,6 +24,9 @@ import (
 const (
 	testKey        = "hk_test_mcp_canary_7c1e93EXAMPLEnotreal"
 	testAdminToken = "eyJ.admin-token-canary-4b8d.notreal"
+	// testViewerToken is a signed-in user with the viewer role: the fake admin API answers 403 to
+	// every operation whose x-required-role is above viewer, like the real RBAC.
+	testViewerToken = "eyJ.viewer-token-canary-91ac.notreal"
 )
 
 // TestMain verifies no goroutine leaks. With HUBMCP_TEST_EXEC_MAIN=1 the test binary acts as the
@@ -68,23 +71,44 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// testApp builds the app against baseURL with the test credentials. withAdmin configures the
-// admin client (base baseURL + /admin/v1).
+// testApp builds a stdio app against baseURL with the test credentials. withAdmin configures the
+// admin client (base baseURL + /admin/v1) with the admin test token.
 func testApp(t testing.TB, baseURL string, withAdmin bool, logs io.Writer) *app {
 	t.Helper()
-	env := map[string]string{"HUB_BASE_URL": baseURL, "HUB_API_KEY": testKey}
+	o := appOpts{logs: logs}
 	if withAdmin {
-		env["HUB_ADMIN_TOKEN"] = testAdminToken
+		o.adminToken = testAdminToken
 	}
-	cfg, err := loadConfig(nil, func(k string) string { return env[k] }, io.Discard)
+	return newTestApp(t, baseURL, o)
+}
+
+// appOpts selects the transport ("" = stdio), the admin token ("" = none) and the log sink.
+type appOpts struct {
+	transport  string
+	adminToken string
+	logs       io.Writer
+}
+
+func newTestApp(t testing.TB, baseURL string, o appOpts) *app {
+	t.Helper()
+	env := map[string]string{"HUB_BASE_URL": baseURL, "HUB_API_KEY": testKey, "HUB_ADMIN_TOKEN": o.adminToken}
+	var args []string
+	if o.transport != "" {
+		args = []string{"-transport", o.transport}
+	}
+	cfg, err := loadConfig(args, func(k string) string { return env[k] }, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if logs == nil {
-		logs = io.Discard
+	if o.logs == nil {
+		o.logs = io.Discard
+	}
+	c, err := loadContract(toolContractJSON)
+	if err != nil {
+		t.Fatal(err)
 	}
 	secrets := newSecretSet(cfg.apiKey, cfg.adminToken)
-	a, err := newApp(cfg, newLogger(logs, 0, secrets), secrets, &http.Client{})
+	a, err := newApp(cfg, c, newLogger(o.logs, 0, secrets), secrets, &http.Client{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +219,7 @@ func callTool(t testing.TB, cs *mcp.ClientSession, name string, args any) toolOu
 		assertNoVendorIdentity(t, name, b)
 		assertNoVendorIdentity(t, name, []byte(text.Text))
 	}
-	if bytes.Contains(b, []byte(testKey)) || bytes.Contains(b, []byte(testAdminToken)) {
+	if bytes.Contains(b, []byte(testKey)) || bytes.Contains(b, []byte(testAdminToken)) || bytes.Contains(b, []byte(testViewerToken)) {
 		t.Fatalf("%s: credential in tool output: %s", name, b)
 	}
 	return toolOutcome{res: res, json: b}

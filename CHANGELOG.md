@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(hubmcp)` · Add the admin write tools of hubmcp-tools 1.1.0 (HUB-315) · HUB-315 · F-20
+  - With the user's own `HUB_ADMIN_TOKEN`, hubmcp offers all 42 contract tools on stdio: 16 write tools (tenants, API keys, vendors, endpoints, accounts, transformers, integrations, callback endpoints) and 21 admin read and check tools; Streamable HTTP never offers a write tool
+  - The admin client can only send the method and path of a mapped operation; no code path can send an HTTP DELETE, and a contract copy that maps a DELETE or forbidden operation refuses to load
+  - Live-traffic and secret-minting tools refuse locally with `CONFIRMATION_REQUIRED` without `confirm: true`; any argument that looks like a Hub API key or signing secret is refused with `SECRET_IN_INPUT`, `hub_invoke` included
+  - `reason` reaches the change log with " (via hubmcp)" appended, `if_match` is sent as `If-Match`, get tools return `etag`; a 403 from the Hub's RBAC is an `isError` result
+  - A minted API key or signing secret is returned once, never logged, and redacted from every later result and log line
 - 2026-11-07 · `docs(tickets)` · Track the hubmcp admin write tools (HUB-314, HUB-315) · HUB-314 · F-20
   - HUB-314 (contract, in review) carries the contract notice for hubmcp-tools 1.1.0
   - New HUB-315 (todo): implement the tools in hubmcp, with stdio-only registration, the no-DELETE/forbidden test, the confirm guard, secret-free inputs, per-tool contract tests and an e2e run against a live Hub
