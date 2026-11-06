@@ -17,8 +17,8 @@ const (
 )
 
 // handlers maps every contract tool to its implementation.
-func (a *app) handlers() map[string]toolFunc {
-	return map[string]toolFunc{
+func (a *app) handlers(c *toolContract) map[string]toolFunc {
+	h := map[string]toolFunc{
 		toolListIntegrations:   a.listIntegrations,
 		toolDescribe:           a.describeIntegration,
 		toolDryRun:             a.dryRun,
@@ -28,6 +28,10 @@ func (a *app) handlers() map[string]toolFunc {
 		toolAdminTimeline:      a.adminRequestTimeline,
 		toolAdminBreakerStates: a.adminBreakerStates,
 	}
+	for name, fn := range a.adminToolHandlers(c) {
+		h[name] = fn
+	}
+	return h
 }
 
 // invokeOutput is hub_invoke's structured content (contract outputSchema). Every field is always

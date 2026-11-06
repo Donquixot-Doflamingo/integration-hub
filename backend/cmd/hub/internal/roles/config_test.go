@@ -65,6 +65,17 @@ func TestLoadPrecedence(t *testing.T) {
 		{"traceparent goes to no vendor by default", Gateway, base, nil, func(t *testing.T, c Config) {
 			eq(t, len(c.TraceForwardVendors), 0)
 		}},
+		{"worker limits default to the delivery defaults", Worker, base, nil, func(t *testing.T, c Config) {
+			eq(t, c.WorkerConcurrency, 0)
+			eq(t, c.WorkerClaimBatch, 0)
+			eq(t, c.WorkerTargetCap, 0)
+		}},
+		{"worker limits from env and flag", Worker, with("HUB_WORKER_CONCURRENCY", "128", "HUB_WORKER_CLAIM_BATCH", "64", "HUB_WORKER_TARGET_CAP", "16"),
+			[]string{"-worker-target-cap", "8"}, func(t *testing.T, c Config) {
+				eq(t, c.WorkerConcurrency, 128)
+				eq(t, c.WorkerClaimBatch, 64)
+				eq(t, c.WorkerTargetCap, 8)
+			}},
 		{"trace forward vendors from env", Worker, with("HUB_TRACE_FORWARD_VENDORS", " mock, acme ,,"), nil, func(t *testing.T, c Config) {
 			eq(t, strings.Join(c.TraceForwardVendors, "|"), "mock|acme")
 		}},
@@ -96,6 +107,10 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 			[]string{"-shutdown-grace=5s", "-ready-drain=5s"}, []string{"must be shorter"}},
 		{"sample ratio out of range", Gateway, map[string]string{"HUB_PG_DSN": "x", "HUB_TRACE_SAMPLE_RATIO": "1.5"}, nil, []string{"trace-sample-ratio"}},
 		{"unknown worker pool", Worker, map[string]string{"HUB_PG_DSN": "x"}, []string{"-pool=gpu"}, []string{"pool"}},
+		{"worker limits not integers", Worker, map[string]string{"HUB_PG_DSN": "x", "HUB_WORKER_CONCURRENCY": "many", "HUB_WORKER_CLAIM_BATCH": "-1"}, nil,
+			[]string{"worker-concurrency", "worker-claim-batch"}},
+		{"target cap above concurrency", Worker, map[string]string{"HUB_PG_DSN": "x"}, []string{"-worker-concurrency=8", "-worker-target-cap=9"},
+			[]string{"must not exceed"}},
 		{"unknown flag", Gateway, map[string]string{"HUB_PG_DSN": "x"}, []string{"-nope"}, []string{"parse flags"}},
 		{"stray argument", Gateway, map[string]string{"HUB_PG_DSN": "x"}, []string{"extra"}, []string{"unexpected arguments"}},
 	}

@@ -1,0 +1,5 @@
+{
+  "status": 429,
+  "headers": {"Retry-After": "2"},
+  "body": {"type": "rate_limit_error", "code": "too_many_requests_per_operation", "message": "Too many requests for this operation, rate limit reached"}
+}

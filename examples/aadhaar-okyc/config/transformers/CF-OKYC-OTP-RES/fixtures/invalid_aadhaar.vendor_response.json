@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": {"ref_id": 208, "status": "INVALID", "message": "Invalid Aadhaar Card"}
+}

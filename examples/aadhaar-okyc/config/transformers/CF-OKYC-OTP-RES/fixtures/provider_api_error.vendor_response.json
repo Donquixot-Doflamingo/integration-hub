@@ -1,0 +1,4 @@
+{
+  "status": 500,
+  "body": {"type": "internal_error", "code": "api_error", "message": "something went wrong, please try after some time"}
+}

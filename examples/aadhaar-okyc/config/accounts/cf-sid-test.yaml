@@ -1,0 +1,14 @@
+# EXAMPLE ONLY (HUB-351, HUB-352). The test-mode account of the cashfree-sid vendor. No secrets
+# here: client_id and client_secret come from the credential source (examples/aadhaar-okyc/run.sh
+# stores them with `hubctl creds set`; the tests serve fake values).
+#
+# region picks the base URL: mock (mockvendor, the default) or sandbox (the provider's sandbox).
+# run.sh switches it with HUB_DEMO_TARGET=sandbox. Production keys never go in this account: a
+# production account is a separate account whose region is set by the control plane.
+account: cf-sid-test
+vendor: cashfree-sid
+region: mock
+state: active
+credentials_ref: localfile://cf-sid-test
+config: {}
+quota: { rps: 10, daily: 1000 }

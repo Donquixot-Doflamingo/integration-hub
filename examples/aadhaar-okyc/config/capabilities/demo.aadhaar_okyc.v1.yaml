@@ -1,0 +1,6 @@
+# EXAMPLE ONLY (HUB-351). Two operations, send_otp and verify_otp. The schemas live in the example
+# contracts overlay (examples/aadhaar-okyc/contracts/), never in the frozen contracts/. The
+# production capability is kyc.aadhaar_otp@v1 (HUB-334, contract-steward).
+capability: demo.aadhaar_okyc@v1
+schema_ref: schemas/capabilities/demo.aadhaar_okyc.v1.send_otp.request.json
+default_ttl: 10m

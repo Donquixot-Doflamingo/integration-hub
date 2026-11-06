@@ -1,0 +1,35 @@
+{
+  "description": "Aadhaar OKYC: the OTP is sent, then the provider answers 400 'OTP entered is invalid' (sandbox: OTP 000111).",
+  "routes": {
+    "okyc-otp": {
+      "match": {
+        "method": "POST",
+        "path": "/verification/offline-aadhaar/otp"
+      },
+      "behaviour": {
+        "status": 200,
+        "body": {
+          "status": "SUCCESS",
+          "message": "OTP sent successfully",
+          "ref_id": 21637861
+        }
+      }
+    },
+    "okyc-verify": {
+      "match": {
+        "method": "POST",
+        "path": "/verification/offline-aadhaar/verify"
+      },
+      "behaviour": {
+        "status": 400,
+        "body": {
+          "type": "validation_error",
+          "code": "verification_failed",
+          "message": "OTP entered is invalid",
+          "error": null,
+          "refId": 210
+        }
+      }
+    }
+  }
+}

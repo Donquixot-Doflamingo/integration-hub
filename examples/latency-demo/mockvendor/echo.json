@@ -1,0 +1,13 @@
+{
+  "description": "Postman Echo stand-in: POST /post answers like the public service, after a fixed 50 ms (LATENCY_TARGET=mock).",
+  "routes": {
+    "echo": {
+      "match": { "method": "POST", "path": "/post" },
+      "behaviour": {
+        "status": 200,
+        "body": { "args": {}, "data": { "message": "latency-demo", "seq": 0 }, "files": {}, "form": {}, "headers": {}, "json": { "message": "latency-demo", "seq": 0 }, "url": "http://127.0.0.1/post" },
+        "latency": { "mode": "fixed", "fixed_ms": 50 }
+      }
+    }
+  }
+}

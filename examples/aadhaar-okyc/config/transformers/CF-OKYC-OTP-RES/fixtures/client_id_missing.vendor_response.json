@@ -1,0 +1,4 @@
+{
+  "status": 400,
+  "body": {"type": "validation_error", "code": "x-client-id_missing", "message": "x-client-id is missing in the request."}
+}

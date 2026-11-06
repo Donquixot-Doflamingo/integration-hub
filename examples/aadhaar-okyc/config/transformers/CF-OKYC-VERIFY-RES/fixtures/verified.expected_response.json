@@ -1,0 +1,11 @@
+{
+  "response": {
+    "status": "verified",
+    "name": "Mallesh Fakkirappa Dollin",
+    "date_of_birth": "1995-02-02",
+    "year_of_birth": 1995,
+    "gender": "male",
+    "address": {"state": "Karnataka", "district": "Haveri", "pincode": "581115"},
+    "vendor_ref": "70471"
+  }
+}

@@ -17,7 +17,7 @@ The documents here are the **only** interface between the backend (Go), the admi
 | `tools/` | `make contracts-check` toolchain (pinned Redocly CLI + ajv, `check.mjs`, `version-check.mjs`), see "Validate locally" | |
 | `AGENTS.md` | Rules for editing this folder | |
 
-Operation counts (unchanged since 1.0.0): hub-public **15** (11 paths + 4 webhooks), hub-admin **79**, mockvendor **10**, MCP **8 tools**.
+Operation counts: hub-public **15** (11 paths + 4 webhooks), hub-admin **79**, mockvendor **10**, MCP **42 tools** (5 tenant, 21 admin read, 16 admin write; since hubmcp-tools 1.1.0).
 
 ## Freeze policy
 
@@ -137,6 +137,15 @@ The ignores live in `contracts/tools/.redocly.lint-ignore.yaml`, keyed by operat
 - **Rules** from `contracts/AGENTS.md`: OpenAPI 3.1.0 with the 2020-12 dialect, semver `info.version`, unique camelCase `operationId`s, declared tags, summary and description, required path parameters, an example on every request and response body, the canonical envelope on every 4xx/5xx, `x-required-role` on admin operations, a required `reason` and a `change_id` on admin mutations, and, from hub-admin 1.1.0, `X-Hub-Request-Id` on every hub-admin response.
 - **D12 vendor-leak check** (hub-public): no parameter, response header or body field (recursively, through `$ref`s into `schemas/`) is named after a vendor, account, version or transformer, and no example value contains a vendor or account id used in hub-admin examples. The same name check covers `schemas/capabilities/`, `schemas/events/` and the tenant MCP tools. Allow-listed operations: `dryRunIntegration` and `receiveVendorWebhook`. Allow-listed names: `vendor_ref`, `vendor_ms`, `spec_version` (callback envelope format) and the debug-only `X-Hub-Integration-Version`.
 - **MCP**: every `maps_to` operationId exists in its spec, tenant tools map only to hub-public and admin tools (`hub_admin_*`) only to hub-admin, and tool names are unique.
+- **MCP admin safety** (HUB-314, [`mcp/README.md`](mcp/README.md) "Admin write tools"):
+  - every `maps_to[].http_method` equals the spec's method;
+  - no tool maps to an HTTP DELETE or to an operation in `forbidden_operations`, and every hub-admin DELETE is in that list;
+  - every hub-admin operation is classified exactly once (mapped by a tool, `forbidden_operations` or `not_exposed_operations`), so a new operation fails until someone classifies it;
+  - admin tool inputs have no property from `forbidden_input_properties` (mutating tools also none from `forbidden_mutation_input_properties`), checked recursively;
+  - admin tools have `destructiveHint: false`, a `readOnlyHint` that matches whether they map to a mutation, and the spec's `x-required-role` in `requires`;
+  - mutating admin tools declare `requires.transport: ["stdio"]` and a required `reason` (3 to 1000 characters);
+  - `requires_confirm` comes with a `confirm` boolean input (default false), and publish, weights and rollback must have it;
+  - API-key and callback-endpoint creation declare `mints_secret` and `sensitive_output`.
 
 To prove a check fails, run it on a copy: `cp -R contracts /tmp/c && <break /tmp/c/...> && make contracts-check CONTRACTS_DIR=/tmp/c` (use a path without spaces). Never commit broken files.
 

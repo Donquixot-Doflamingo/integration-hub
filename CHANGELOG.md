@@ -30,6 +30,86 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Dev sign-in against a running Hub mints a real admin token through the admin's dev issuer; the token stays in the httpOnly session
   - The console server proxies `/admin/v1` to `HUB_ADMIN_UPSTREAM` with the session's token, passing only contract headers and refusing cross-origin mutations (ADR-0022)
   - Server-rendered pages no longer fail on real admin responses ("Failed to get response header")
+- 2026-11-07 · `docs(hubmcp)` · Resolve the leftover merge markers in the MCP setup guide and F-20 (HUB-315) · HUB-315 · F-20
+  - mcp-setup.md keeps the per-client guide and adds the role requirements, the dev token commands and the local refusal codes; F-20 keeps both history rows
+- 2026-11-07 · `test(hubmcp)` · Wait for the asynchronous audit trail in the hubmcp e2e test (HUB-315) · HUB-315 · F-20
+  - TestMCPEndToEnd polls the request timeline until the worker's attempt events land, instead of reading it once right after the request succeeds
+- 2026-11-07 · `docs(hubmcp)` · Document the hubmcp admin write tools and ADR-0020 (HUB-315) · HUB-315 · F-20
+  - ADR-0020 amends ADR-0006 and ADR-0018: admin tools act as the signed-in user, writes exist on stdio only, the Hub's RBAC decides, and no MCP path can delete
+  - SECURITY §2.5 has rows for the no-delete path, the confirm guard, secret inputs and minted secrets; TECH_SPEC §18, TESTING_STRATEGY §13, OBSERVABILITY §4.6 (`mutating`, `change_id`, minted-secret redaction), F-20 and the PRD scope lines (DV-4, FR-48, NFR-13) match
+  - The consumer skill's `mcp-setup.md` explains how to get and pass your own admin token, lists the admin tools and refusals, and has snippets (marked unverified) for the Codex CLI, Cursor and Claude Desktop
+  - HUB-315 in review
+- 2026-11-07 · `test(hubmcp)` · Onboard a team through hubmcp against a live Hub (HUB-315) · HUB-315 · F-20
+  - `TestMCPEndToEnd` now creates a tenant, an API key (secret returned once), a vendor and endpoint, a transformer version, an integration and its draft, validates, publishes with confirm, invokes it with the minted key, sets weights and rolls back, all through hubmcp with a `hubctl login -dev -role admin` token
+  - Each change is checked in the change log under the user's subject with the " (via hubmcp)" reason; nothing is deleted; a publish without confirm changes nothing; a viewer token gets FORBIDDEN on a write tool; the minted key never reaches hubmcp's logs
+- 2026-11-07 · `feat(hubmcp)` · Add the admin write tools of hubmcp-tools 1.1.0 (HUB-315) · HUB-315 · F-20
+  - With the user's own `HUB_ADMIN_TOKEN`, hubmcp offers all 42 contract tools on stdio: 16 write tools (tenants, API keys, vendors, endpoints, accounts, transformers, integrations, callback endpoints) and 21 admin read and check tools; Streamable HTTP never offers a write tool
+  - The admin client can only send the method and path of a mapped operation; no code path can send an HTTP DELETE, and a contract copy that maps a DELETE or forbidden operation refuses to load
+  - Live-traffic and secret-minting tools refuse locally with `CONFIRMATION_REQUIRED` without `confirm: true`; any argument that looks like a Hub API key or signing secret is refused with `SECRET_IN_INPUT`, `hub_invoke` included
+  - `reason` reaches the change log with " (via hubmcp)" appended, `if_match` is sent as `If-Match`, get tools return `etag`; a 403 from the Hub's RBAC is an `isError` result
+  - A minted API key or signing secret is returned once, never logged, and redacted from every later result and log line
+- 2026-11-07 · `docs(tickets)` · Track the hubmcp admin write tools (HUB-314, HUB-315) · HUB-314 · F-20
+  - HUB-314 (contract, in review) carries the contract notice for hubmcp-tools 1.1.0
+  - New HUB-315 (todo): implement the tools in hubmcp, with stdio-only registration, the no-DELETE/forbidden test, the confirm guard, secret-free inputs, per-tool contract tests and an e2e run against a live Hub
+- 2026-11-07 · `contract(mcp)` · Add admin write tools with no delete path (HUB-314) · HUB-314 · F-20
+  - `hubmcp-tools` 1.1.0: a team's Claude can onboard and change tenants, API keys, vendors, endpoints, account config and quota, transformers, integrations (drafts, validate, publish, weights, rollback) and callback endpoints, signed in as the user, with the Hub's RBAC deciding
+  - No MCP tool can delete, purge, replay, unseal, retire, pause, force a breaker, revoke or rotate keys, or accept a credential; deleting stays manual in the console
+  - Live-traffic changes and secret-minting tools need `confirm: true`; minted keys and signing secrets are marked sensitive and shown once
+  - `make contracts-check` now fails if any tool maps to a DELETE or forbidden operation, accepts a secret input, or leaves a hub-admin operation unclassified
+  - hubmcp must implement the new tools in HUB-315; until then its frozen-contract drift tests fail on this branch
+- 2026-11-07 · `test(edge)` · Take a last drain sample when the ramp test stops (HUB-412) · HUB-412 · F-12
+  - `TestChaos2RecoveryAndRampedDrain` no longer fails intermittently with "all 160 released -2562047h after the close": with continuous claiming the worker delivers the last released envelopes between two 100 ms samples, so the sampler now records the counter once more when the test stops it
+- 2026-11-07 · `test(edge)` · Prove vendor isolation with noisy-neighbour chaos tests (HUB-412) · HUB-412 · F-13
+  - `TestNoisyNeighbour`: while one vendor account is slow, hangs, refuses connections or answers 503 under steady caller traffic, another account's async p99 stays within 300 ms of its baseline, its sync p99 within 100 ms, and neither account loses a request
+  - On the old worker the slow and hanging scenarios fail (B's async p99 3.83 s and 2.33 s); with HUB-412 B stays at 51–129 ms
+  - New `docs/tech/ISOLATION.md`: what happens to other vendors when one vendor is down or slow, layer by layer, with the test that proves each claim
+  - HUB-412, HUB-407 and HUB-406 in review
+- 2026-11-07 · `feat(hub)` · Read worker concurrency, claim batch and target cap from config (HUB-407) · HUB-407 · F-09
+  - `HUB_WORKER_CONCURRENCY`, `HUB_WORKER_CLAIM_BATCH` and `HUB_WORKER_TARGET_CAP` (or `-worker-concurrency`, `-worker-claim-batch`, `-worker-target-cap`) size the worker; `0` keeps the defaults (256 / 64 llm, 32, concurrency / 4 up to 64)
+  - Non-integers, negative values or a target cap above the concurrency stop the process at start with a clear error
+- 2026-11-07 · `fix(delivery)` · Claim continuously and cap worker slots per vendor account (HUB-412) · HUB-412 · F-13
+  - One slow or hanging vendor no longer delays other vendors' async deliveries: the worker claims as soon as a slot frees instead of waiting for its whole batch, and one (account, endpoint) may hold at most a quarter of the worker's slots (64 of 256 by default)
+  - A claim takes no more of a vendor's backlog than its free slots, so a large backlog for a slow vendor never crowds others out; an envelope that still finds its vendor full is put back without counting an attempt, a breaker failure or a retry token
+  - Worker concurrency defaults to 256 (messaging) and 64 (LLM) per process, as TECH_SPEC promised, instead of 16
+  - New metrics `worker_inflight{pool}`, `worker_target_inflight{account, endpoint}`, `worker_target_cap_deferred_total{account, endpoint}`; ADR-0019
+- 2026-11-07 · `fix(delivery)` · Wait for the first registry snapshot before claiming (HUB-406) · HUB-406 · F-09
+  - A worker restarted with a backlog no longer panics on a nil snapshot: it claims nothing until the first snapshot loads and logs `worker.waiting_for_snapshot` once
+  - An envelope claimed without a snapshot is put back unattempted, so restarts no longer count crashes toward the poison detector (healthy envelopes could be dead-lettered as poison)
+  - The scheduler's drain releases no parked envelope before its first snapshot (it used to release at a 10/s guess instead of the account rate)
+- 2026-11-07 · `test(upstream)` · Give every node the full second in the breaker force test (HUB-416) · HUB-416 · F-12
+  - TestForceReachesEveryNodeWithinOneSecond no longer fails when node B's Redis message lands a few ms after node A's; it still fails if the hold is not in force on B within 1 s
+- 2026-11-07 · `docs(skills)` · Fix the transformer skill and file the gaps the operator skill found (HUB-316) · HUB-316 · F-21
+  - hub-transformers skill: the header field is `docs_url` and `hubctl transform test` takes transformer IDs (`T1`, `T2@3`), matching the code
+  - New tickets: console pages for vendors, accounts with write-only credentials, integration authoring and transformer authoring (HUB-290 to HUB-293); `delivery.polling` contract mismatch (HUB-414); unchecked `requests_read` scope (HUB-415)
+- 2026-11-07 · `docs(clients)` · Document hubmcp setup for every MCP client (HUB-318) · HUB-318 · F-21
+  - `mcp-setup.md` now has verified configs for Claude Code, Claude Desktop, Codex CLI and Cursor, each reading the key from your environment or keychain instead of a committed file
+  - The tenant key and the admin token are separate profiles: the admin one runs on stdio only, with your own token, as its own server entry, and needs `HUB_ADMIN_BASE_URL` ending in `/admin/v1`
+  - Hosted Streamable HTTP per client, the full hubmcp-tools 1.1.0 list, and troubleshooting
+
+- 2026-11-07 · `docs(clients)` · Make the consumer skill work in any AI agent (HUB-317) · HUB-317 · F-21
+  - One `integration-hub` skill folder now installs unchanged in Claude Code, claude.ai / Claude Desktop, OpenAI Codex and Cursor; the README gives verified paths, commands and doc links per tool, plus a Cursor rule option
+  - New `PASTE-INTO-ANY-ASSISTANT.md`: the rules in one file for chat assistants, custom instructions or a repo `AGENTS.md`
+  - The skill now covers two-step flows (OTP `send_otp` then `verify_otp` with `X-Hub-Session`) with a failure table and curl + Go examples, the real `hubclient` API (`Result` / `Queued`, `WithOperation`, `WithSession`, `GetRequest`) and the `hub_invoke` parameters
+
+- 2026-11-07 · `docs(skills)` · Add the hub-operator skill (HUB-316) · HUB-316 · F-21
+  - New repo skill `.claude/skills/hub-operator/` for the people who run the Hub: tenants and API keys (scopes), vendors, endpoints and accounts with credentials, callback endpoints and signatures, safe vendor/account config changes, switching an integration to another vendor or account (draft, validate, diff, publish, weights, shadow, rollback, re-resolve vs pinned), transformers (canonical → vendor → canonical, error mapping, goldens, dry-run) and multi-step flows (operations, `X-Hub-Session`, Aadhaar OTP)
+  - Every task shows the console path, the `hubctl` command and the `hubmcp` tool call side by side, with the admin API where the others do not reach yet, and a matrix of which way can do what
+  - States the hard lines: MCP has no delete tools, destructive actions are console-only for roles that have them, and secrets never pass through an AI
+  - Works in OpenAI Codex too (`.agents/skills/hub-operator` symlink) and in Cursor (reads `.claude/skills/`)
+
+- 2026-11-07 · `feat(examples)` · Add a live latency demo on a public echo API (HUB-353) · HUB-353 · F-18
+  - `examples/latency-demo/run.sh` calls Postman Echo N times directly and N times through a local Hub (`int_latency_echo`) in alternating rounds, then prints p50/p95/p99 for both, the difference and the Hub's own `hub_overhead_ms`
+  - `LATENCY_TARGET=mock` runs the same comparison offline against mockvendor at 50 ms
+  - The README explains why internet jitter dominates and points to the controlled numbers
+- 2026-11-07 · `feat(examples)` · Add a PAN verification sandbox example (HUB-352) · HUB-352 · F-22
+  - `int_pan_verify` on the same provider and account as the Aadhaar example: one sync call with an `Idempotency-Key`, a masked PAN, a yes/no name match, the Aadhaar link, and an invalid PAN as a 200 business answer; sealed audit for 90 days
+  - `examples/pan-verify/run.sh` runs it against mockvendor (valid, invalid, provider down) or the provider's sandbox (`HUB_DEMO_TARGET=sandbox`), including a replay that does not call the provider again
+  - 20 golden cases; `TestExamplePANVerify` proves the provider request, the minimal response, sealed audit, the replay and the edge refusals
+- 2026-11-07 · `feat(examples)` · Add an Aadhaar OTP e-KYC sandbox example (HUB-351) · HUB-351 · F-22
+  - `examples/aadhaar-okyc/`: Aadhaar OTP-based offline e-KYC behind one integration id (`int_aadhaar_okyc`, operations `send_otp` and `verify_otp`), mapped to Cashfree Secure ID's documented API; the provider's reference travels only in the vendor session, the audit is sealed for 90 days, the response is minimal
+  - `run.sh` runs the two steps against mockvendor (six scenarios) or, with `HUB_DEMO_TARGET=sandbox` and test keys, against the provider's sandbox; `client/main.go` does the same with the Go SDK
+  - 43 golden cases cover success and every documented provider error; `TestExampleAadhaarOKYCFlow` runs the flow through the gateway with sealed-audit and no-vendor-leak checks
+  - The README states what is possible without a UIDAI AUA/KUA licence, how to get sandbox keys, and what the app shows between the steps
 - 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
   - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
   - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series

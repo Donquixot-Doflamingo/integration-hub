@@ -1,0 +1,6 @@
+{
+  "method": "POST",
+  "path": "/pan",
+  "headers": {"Content-Type": "application/json", "X-Api-Version": "2024-08-01", "X-Client-Id": "fixture-client-id", "X-Client-Secret": "fixture-client-secret"},
+  "body": {"pan": "AZJPG7110R", "name": "Zoë D/O Ravi & Sons"}
+}

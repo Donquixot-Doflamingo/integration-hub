@@ -44,8 +44,11 @@ func toolNames(t *testing.T, cs *mcp.ClientSession) []string {
 // the fake Hub, which accepts testKey only.
 func httpTestServer(t *testing.T, hub *fakeHub, withAdmin bool) *httptest.Server {
 	t.Helper()
-	a := testApp(t, hub.srv.URL, withAdmin, nil)
-	a.hub = nil // over HTTP every client brings its own key
+	o := appOpts{transport: transportHTTP}
+	if withAdmin {
+		o.adminToken = testAdminToken // allowed on loopback (ADR-0018): read tools only
+	}
+	a := newTestApp(t, hub.srv.URL, o) // over HTTP every client brings its own key (a.hub is nil)
 	c, err := loadContract(toolContractJSON)
 	if err != nil {
 		t.Fatal(err)
@@ -70,9 +73,22 @@ func connectHTTP(t *testing.T, endpoint, token string) (*mcp.ClientSession, erro
 	return mcp.NewClient(&mcp.Implementation{Name: "http-test", Version: "1"}, nil).Connect(t.Context(), tr, nil)
 }
 
-// TestHTTPTransportServesSameToolsAsStdio: the Streamable HTTP endpoint advertises the same tool
-// set as the stdio server (HUB-301).
+// TestHTTPTransportServesSameToolsAsStdio: the Streamable HTTP endpoint advertises the stdio tool
+// set minus the admin write tools, which are stdio-only (HUB-301, HUB-315).
 func TestHTTPTransportServesSameToolsAsStdio(t *testing.T) {
+	c, err := loadContract(toolContractJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdioOnly := map[string]bool{}
+	for _, tool := range c.Tools {
+		if !tool.allowedOn(transportHTTP) {
+			stdioOnly[tool.Name] = true
+		}
+	}
+	if len(stdioOnly) != 16 {
+		t.Fatalf("%d stdio-only tools in the contract, want the 16 write tools", len(stdioOnly))
+	}
 	for _, withAdmin := range []bool{false, true} {
 		hub := newFakeHub(t)
 		hub.on("listIntegrations", hub.pub("listIntegrations", http.StatusOK, ""))
@@ -83,11 +99,16 @@ func TestHTTPTransportServesSameToolsAsStdio(t *testing.T) {
 		}
 		got := toolNames(t, cs)
 		_ = cs.Close()
-		want := toolNames(t, connect(t, testApp(t, "http://127.0.0.1:1", withAdmin, nil)))
-		if !slices.Equal(got, want) {
-			t.Errorf("admin=%v: http tools %v, stdio tools %v", withAdmin, got, want)
+		var want []string
+		for _, name := range toolNames(t, connect(t, testApp(t, "http://127.0.0.1:1", withAdmin, nil))) {
+			if !stdioOnly[name] {
+				want = append(want, name)
+			}
 		}
-		if n := len(got); (withAdmin && n != 8) || (!withAdmin && n != 5) {
+		if !slices.Equal(got, want) {
+			t.Errorf("admin=%v: http tools %v, stdio tools without write tools %v", withAdmin, got, want)
+		}
+		if n := len(got); (withAdmin && n != 26) || (!withAdmin && n != 5) {
 			t.Errorf("admin=%v: %d tools", withAdmin, n)
 		}
 	}

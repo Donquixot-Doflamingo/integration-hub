@@ -1,7 +1,8 @@
 // Command hubmcp is the MCP server that lets Hub users discover, dry-run and invoke integrations from an AI assistant (F-20, contracts/mcp/hubmcp-tools.json).
 //
-// It talks to the Hub only through the contracted HTTP API (pkg/hubclient for the caller API, a
-// GET-only client for the admin API), never internal/.
+// It talks to the Hub only through the contracted HTTP API (pkg/hubclient for the caller API, an
+// allowlisted client for the admin API that can never send a DELETE), never internal/. Admin
+// write tools act as the signed-in user (HUB_ADMIN_TOKEN) and exist on stdio only.
 package main
 
 import (
@@ -121,10 +122,14 @@ func loadConfig(args []string, getenv func(string) string, stderr io.Writer) (co
 	return c, errors.Join(errs...)
 }
 
-// newApp builds the tool dependencies from the configuration.
-func newApp(c config, log *slog.Logger, secrets *secretSet, hc *http.Client) (*app, error) {
+// newApp builds the tool dependencies from the configuration. Every Hub call goes through a
+// method-guarded copy of hc. The admin client's allowlist is the admin operations of the tools
+// this server registers (registeredTools), so over HTTP it cannot reach a write operation.
+func newApp(c config, contract *toolContract, log *slog.Logger, secrets *secretSet, hc *http.Client) (*app, error) {
 	ua := "hubmcp/" + version
-	a := &app{log: log, secrets: secrets, now: time.Now, sleep: sleepCtx, integrations: newIntegrationCache(time.Now)}
+	hc = guardedClient(hc)
+	a := &app{log: log, secrets: secrets, now: time.Now, sleep: sleepCtx, integrations: newIntegrationCache(time.Now),
+		transport: c.transport, secretRes: contract.secretRes, http: hc}
 	a.newHub = func(key string) (*hubclient.Client, error) {
 		return hubclient.New(c.baseURL, key, hubclient.WithHTTPClient(hc), hubclient.WithUserAgent(ua))
 	}
@@ -138,7 +143,8 @@ func newApp(c config, log *slog.Logger, secrets *secretSet, hc *http.Client) (*a
 		}
 	}
 	if c.adminToken != "" {
-		if a.admin, err = newAdminClient(c.adminBaseURL, c.adminToken, hc, ua); err != nil {
+		ops := adminOperations(registeredTools(contract, c.transport, true))
+		if a.admin, err = newAdminClient(c.adminBaseURL, c.adminToken, hc, ua, ops); err != nil {
 			return nil, err
 		}
 	}
@@ -161,7 +167,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdin i
 		log.ErrorContext(ctx, "load tool contract", slog.String("error", err.Error()))
 		return 1
 	}
-	a, err := newApp(cfg, log, secrets, &http.Client{})
+	a, err := newApp(cfg, contract, log, secrets, &http.Client{})
 	if err != nil {
 		log.ErrorContext(ctx, "configure hubmcp", slog.String("error", err.Error()))
 		return 2
@@ -172,7 +178,9 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdin i
 		return 1
 	}
 	log.InfoContext(ctx, "hubmcp started", slog.String("transport", cfg.transport), slog.String("hub_base_url", cfg.baseURL),
-		slog.Bool("admin_tools", a.admin != nil), slog.String("contract_version", contract.Version), slog.String("version", version))
+		slog.Bool("admin_tools", a.admin != nil), slog.Bool("admin_write_tools", a.admin != nil && cfg.transport == transportStdio),
+		slog.Int("tools", len(registeredTools(contract, cfg.transport, a.admin != nil))),
+		slog.String("contract_version", contract.Version), slog.String("version", version))
 	if a.admin == nil {
 		log.InfoContext(ctx, "admin tools disabled: HUB_ADMIN_TOKEN is not set")
 	}

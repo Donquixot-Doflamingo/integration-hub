@@ -1,0 +1,4 @@
+{
+  "status": 400,
+  "body": {"type": "validation_error", "code": "verification_failed", "message": "Aadhaar not linked to mobile number", "error": {"refId": 1}}
+}

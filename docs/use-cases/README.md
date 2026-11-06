@@ -2,7 +2,7 @@
 
 **Audience:** product owners, their seniors, and any team that wants to know "can the Hub do X for me, and how would my service call it?"
 **State described:** `main` on 2026-11-06. Milestones M0–M7 are done (gateway, transformers, audit, durable delivery, resilience, versioning, control plane). M8 (observability and load tests) is in progress. Release 2 (EP-12) is planned, not built.
-**Ticket:** HUB-342. Runnable example: [`examples/otp-account-flow/`](../../examples/otp-account-flow/README.md).
+**Ticket:** HUB-342. Runnable examples: [`examples/otp-account-flow/`](../../examples/otp-account-flow/README.md) (fictional vendor), [`examples/aadhaar-okyc/`](../../examples/aadhaar-okyc/README.md) (Aadhaar OTP e-KYC on a real provider's sandbox, HUB-351), [`examples/pan-verify/`](../../examples/pan-verify/README.md) (PAN verification, HUB-352), [`examples/latency-demo/`](../../examples/latency-demo/README.md) (live latency against a public API, HUB-353).
 
 Every use case below has a status line:
 
@@ -79,6 +79,8 @@ DESIGN §18.6 budgets the Hub's own overhead on a synchronous call (p99, 4 KB bo
 | **Total Hub overhead** | **≈ 3.4 ms (target ≤ 5 ms)** |
 
 Measured so far: `BenchmarkInvokeOverhead` (M3, 4 KB body, mock vendor answering in 0 ms) gave **p99 0.42–0.51 ms** ([M3 summary](../milestones/M3.md)). The full-load check (500 sync RPS + 2,000 async msg/s) is HUB-235 in M8.
+
+**Measure it yourself:** [`examples/latency-demo/run.sh`](../../examples/latency-demo/README.md) (HUB-353) calls a public echo API directly and through a local Hub and prints both sets of percentiles, the difference, and the Hub's own `hub_overhead_ms`. Over the internet the jitter is larger than the Hub's overhead, so read the deltas and the Hub's own line.
 
 The sync path never reads the database: configuration comes from an in-memory snapshot, and audit writes are buffered (`TestE2ENoDatabaseOnTheRequestPath` keeps answering at full speed with a stalled database). The one documented exception is step 2 of a vendor session (use case 6): one primary-key read, only when the request carries `X-Hub-Session`.
 
@@ -536,6 +538,10 @@ For Aadhaar OTP eKYC, step 1 carries the Aadhaar number in the canonical body. T
 2. **Logs never contain bodies** (redacting logger; codes and counts only).
 3. **Audit trail:** bureau, Aadhaar and PAN integrations use the `sealed` payload policy (decision D6): payloads are stored encrypted under a per-tenant key and are readable only through an audited "unseal" admin action (works today). The 90-day retention and KMS-managed keys are HUB-337. The capability schema tags the field `x-pii: government_id`. **Open question for compliance:** UIDAI rules restrict storing Aadhaar numbers outside an Aadhaar Data Vault. If even encrypted audit copies are not acceptable, the Aadhaar integration should use the `metadata_only` policy (hashes and sizes only, no bodies). Decide this before HUB-334 goes live.
 
+### Try it against a real provider: Aadhaar OTP e-KYC
+
+[`examples/aadhaar-okyc/`](../../examples/aadhaar-okyc/README.md) (HUB-351) runs the same two-step pattern with a real KYC provider's documented API: one integration, `int_aadhaar_okyc`, with operations `send_otp` (Aadhaar number + consent; UIDAI sends the OTP by SMS to the Aadhaar-linked mobile) and `verify_otp` (the OTP + `X-Hub-Session`; minimal e-KYC data back). The provider's reference id travels only in the vendor session, the audit trail is `sealed` (D6), and `run.sh` switches from mockvendor to the provider's sandbox with one environment variable (`HUB_DEMO_TARGET=sandbox`). UIDAI's own APIs need an AUA/KUA licence, so the example uses a licensed provider's OTP-based offline e-KYC; the README explains what is and is not possible. Proof: `TestExampleAadhaarOKYCFlow`, `TestExampleKYCConfigBuilds`.
+
 ### Status: Partly
 
 | Piece | Status | Proof or ticket |
@@ -582,6 +588,8 @@ sequenceDiagram
 ```
 
 **On failure.** Vendor down → 503 at once (`fail_fast`) or the next vendor (`failover`, safe because the call carries a key). A retry with the same key after success replays the stored answer: the bureau is not hit twice.
+
+**Try it: PAN verification.** [`examples/pan-verify/`](../../examples/pan-verify/README.md) (HUB-352) is this pattern on a real KYC provider's documented API, against mockvendor or the provider's sandbox: `int_pan_verify`, one sync call with an `Idempotency-Key`, an invalid PAN as a 200 business answer, the PAN masked in the response, `sealed` audit. Proof: `TestExamplePANVerify`.
 **Status: Partly**, see the table above.
 
 ### 7.2 Consent + async fetch (Account Aggregator)
