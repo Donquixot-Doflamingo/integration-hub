@@ -16,7 +16,7 @@ The question to answer: "If one vendor goes down or gets slow while callers keep
 
 The breaker parks a vendor that is down only after enough failures, and never parks one that is slow but answering. The connection bulkhead caps connections per account, but a worker attempt waiting for a connection still holds a worker slot.
 
-Measured with the noisy-neighbour chaos test (`TestNoisyNeighbour`, 16 slots, claims of 32, A at 20/s): account B's async p99 rose from 50–100 ms to 3.8–4.4 s while A was slow (1.3 s answers) and 2.2–2.4 s while A hung until its timeout. While A refused connections or answered 503 it was sometimes 0.8–1.1 s and sometimes unaffected (fast failures hold slots briefly and the breaker parks A within a second).
+Measured with the noisy-neighbour chaos test (`TestNoisyNeighbour`, 16 slots, claims of 32, A at 20/s) on `main`: account B's async p99 rose from about 60 ms to 3.8 s while A was slow (1.3 s answers) and to 2.3 s while A hung until its timeout. While A refused connections or answered 503, B was not measurably affected in the final run (fast failures hold slots briefly and the breaker parks A within a second).
 
 Constraints: at-least-once delivery with visibility timeouts and guarded transitions (§11, §10.9); re-resolution at send time (D10), so the outbox row does not know its target account until the worker resolves it; no DB reads on the sync path (§18.5, unaffected here).
 
@@ -36,7 +36,7 @@ Constraints: at-least-once delivery with visibility timeouts and guarded transit
 Rule for future work: a worker must never wait for one envelope before it can start another, and nothing a single (account, endpoint) does may occupy more than its cap of worker slots.
 
 ## Consequences
-- Positive: with the same 16 slots, B's async p99 while A misbehaves stays within about 60 ms of its baseline in all four scenarios in our runs (asserted bound: + 300 ms; numbers in `docs/tech/ISOLATION.md`). One worker's throughput is no longer bounded by its slowest envelope per batch, which is HUB-407's first acceptance criterion.
+- Positive: with the same 16 slots, B's async p99 while A misbehaves stays within about 80 ms of its baseline in all four scenarios in our runs (asserted bound: + 300 ms; numbers in `docs/tech/ISOLATION.md`). One worker's throughput is no longer bounded by its slowest envelope per batch, which is HUB-407's first acceptance criterion.
 - Positive: new metrics `worker_inflight{pool}`, `worker_target_inflight{account, endpoint}` and `worker_target_cap_deferred_total{account, endpoint}` show which target holds the slots. Target labels are breaker keys, bounded like `parked_count`.
 - Negative: the cap is per worker process, so a fleet of N workers allows N × cap attempts per target. That is the same scope as the per-process connection bulkhead.
 - Negative: an envelope put back over the cap moves behind envelopes that became due meanwhile (its `next_attempt_at` becomes the put-back time). Ordering was never promised without `ordering_key`.

@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(edge)` · Prove vendor isolation with noisy-neighbour chaos tests (HUB-412) · HUB-412 · F-13
+  - `TestNoisyNeighbour`: while one vendor account is slow, hangs, refuses connections or answers 503 under steady caller traffic, another account's async p99 stays within 300 ms of its baseline, its sync p99 within 100 ms, and neither account loses a request
+  - On the old worker the slow and hanging scenarios fail (B's async p99 3.83 s and 2.33 s); with HUB-412 B stays at 51–129 ms
+  - New `docs/tech/ISOLATION.md`: what happens to other vendors when one vendor is down or slow, layer by layer, with the test that proves each claim
+  - HUB-412, HUB-407 and HUB-406 in review
 - 2026-11-07 · `feat(hub)` · Read worker concurrency, claim batch and target cap from config (HUB-407) · HUB-407 · F-09
   - `HUB_WORKER_CONCURRENCY`, `HUB_WORKER_CLAIM_BATCH` and `HUB_WORKER_TARGET_CAP` (or `-worker-concurrency`, `-worker-claim-batch`, `-worker-target-cap`) size the worker; `0` keeps the defaults (256 / 64 llm, 32, concurrency / 4 up to 64)
   - Non-integers, negative values or a target cap above the concurrency stop the process at start with a clear error

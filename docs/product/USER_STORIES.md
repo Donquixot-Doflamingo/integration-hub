@@ -363,6 +363,8 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-1303 — Bulkheads
 **As an** on-call SRE, **I want** per-account concurrency limits (64) and a separate LLM worker pool, **so that** one slow vendor cannot exhaust the Hub. · **Must**
 - **Given** one account with a 30 s slow drip, **when** load runs on another account, **then** the other account's p99 is unchanged.
+- **Given** one account's vendor is slow (answers just under its timeout), hangs until its timeout, refuses connections or answers 503 while callers keep calling it, **when** another account carries async and sync traffic, **then** that account's async p99 (accept → succeeded) stays within 300 ms of its baseline, its sync p99 within 100 ms, and it loses no request (HUB-412, `docs/tech/ISOLATION.md`).
+- **Given** the misbehaving vendor recovers, **when** its backlog is delivered, **then** every request it was sent during the incident succeeds (retried, or parked and drained); none is lost.
 
 ### US-1304 — Retry budget
 **As a** platform engineer, **I want** retries capped at 20 % of the account's live traffic, **so that** retries cannot amplify an outage. · **Should**
