@@ -2524,9 +2524,12 @@ Walk every route with Playwright against the real stack (desktop and 390 px mobi
 Bugs found running the console against a real Hub, each fixed with a test. Backend bugs are reported, not fixed here.
 
 **Acceptance criteria**
-- [ ] A 409 that means "in use" or "already exists" shows the API message, not "someone else changed it, reload"
-- [ ] Keys seeded without a prefix are named by key id (labels, revoke confirmation text is never empty)
-- [ ] The publish button says "Publish draft" before a draft exists (was "Publish v?")
+- [x] A 409 that means "in use" or "already exists" shows the API message, not "someone else changed it, reload" (`ConfirmDialog.test.ts` conflictIsStale cases, `callback-endpoints.test.ts` delete 409)
+- [x] Keys seeded without a prefix are named by key id (labels, revoke confirmation text is never empty) (`keys.test.ts` keyName, `api-keys.test.ts` "keys without a prefix")
+- [x] The publish button says "Publish draft" before a draft exists (was "Publish v?") (`publish/page.test.ts`)
+- [x] Editing a callback endpoint's description works when its stored URL is a dev `http://` one the Hub accepted (Save was disabled with no reason) (`endpoints.test.ts`, `callback-endpoints.test.ts`)
+- [x] Request and DLQ entry pages no longer crash on a replayed request: attempts restart at 1 and timeline `seq` values repeat (`AttemptsTable.test.ts`, `requests/[request_id]/page.test.ts`, `timeline.test.ts`)
+- [x] Publish check `operations_have_transformers` (hub-admin 1.2.0) has a label; unknown checks read as words (`publish/draft.test.ts`)
 - [ ] Every other bug found is listed in the PR with its test
 
 ## EP-11 — MCP server + consumer skill + SDK

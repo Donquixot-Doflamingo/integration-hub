@@ -196,6 +196,7 @@
 	bind:open={createOpen}
 	title="Create a tenant"
 	verb="Create tenant"
+	conflictIsStale={false}
 	busyVerb="Creating..."
 	action="?/create"
 	tone="primary"

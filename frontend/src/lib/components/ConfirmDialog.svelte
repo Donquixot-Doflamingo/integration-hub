@@ -38,6 +38,7 @@
 		fields,
 		extra,
 		oneTimeSecret = false,
+		conflictIsStale = true,
 		onsuccess,
 		onfailure
 	}: {
@@ -69,6 +70,13 @@
 		 * result is never applied as the page's `form` (where it would outlive the reveal).
 		 */
 		oneTimeSecret?: boolean;
+		/**
+		 * True (default): a 409 `CONFLICT` means someone else changed the object first, so the
+		 * dialog offers a reload. False for actions whose 409 is about the object's state, not a race
+		 * (create with a taken id, delete while still in use; contract descriptions): the error panel
+		 * shows the API's message instead (HUB-289). 412 `PRECONDITION_FAILED` is always a race.
+		 */
+		conflictIsStale?: boolean;
 		onsuccess?: (data: ActionSuccessData) => void;
 		/** The action's failure data, e.g. to mark publish problems on the spec editor. */
 		onfailure?: (data: ActionFailureData) => void;
@@ -88,7 +96,11 @@
 	const typedOk = $derived(!confirmText || typed.trim() === confirmText);
 	const valid = $derived(!problem && typedOk && ready);
 	const reasonError = $derived(fieldErrors.reason ?? (touched && reason ? problem : null));
-	const conflict = $derived(error && isConcurrencyError(error) ? error : null);
+	const conflict = $derived(
+		error && isConcurrencyError(error) && (conflictIsStale || error.code !== 'CONFLICT')
+			? error
+			: null
+	);
 
 	// Open: reset, remember the trigger, focus Cancel. Close: give focus back to the trigger.
 	$effect(() => {

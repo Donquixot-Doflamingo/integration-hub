@@ -30,9 +30,13 @@ export interface TimedEvent {
 	sinceStart: number;
 }
 
-/** Events in `seq` order with their gaps (the contract promises seq order; sorted anyway). */
+/**
+ * Events in `seq` order with their gaps (the contract promises seq order; sorted anyway). A real
+ * Hub repeats `seq` values after a DLQ replay (the replay's events reuse 101, 102, ...), so equal
+ * seqs are ordered by time and the page keys rows by position, not by seq (HUB-289).
+ */
 export function timed(events: TimelineEvent[]): TimedEvent[] {
-	const sorted = [...events].sort((a, b) => a.seq - b.seq);
+	const sorted = [...events].sort((a, b) => a.seq - b.seq || Date.parse(a.at) - Date.parse(b.at));
 	const start = sorted.length ? Date.parse(sorted[0]!.at) : 0;
 	let prev: number | null = null;
 	return sorted.map((event) => {

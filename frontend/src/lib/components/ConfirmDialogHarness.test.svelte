@@ -4,8 +4,13 @@
 
 	let {
 		confirmText,
+		conflictIsStale,
 		onsuccess
-	}: { confirmText?: string; onsuccess?: (d: ActionSuccessData) => void } = $props();
+	}: {
+		confirmText?: string;
+		conflictIsStale?: boolean;
+		onsuccess?: (d: ActionSuccessData) => void;
+	} = $props();
 	let open = $state(false);
 </script>
 
@@ -18,6 +23,7 @@
 	action="?/go"
 	subject="int_evt_brandA"
 	{confirmText}
+	{conflictIsStale}
 	{onsuccess}
 >
 	<p>Creates v9 with the content of v7.</p>

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { contractMocks } from '$lib/api/mocks/contract.gen';
-import { mockError, mswPath } from '$lib/api/mocks/handlers';
+import { mockError, mockOperation, mswPath } from '$lib/api/mocks/handlers';
 import { presets } from '$lib/api/mocks/scenarios';
 import { server } from '$lib/api/mocks/server';
 import { accessFromRoles, type Access } from '$lib/auth/roles';
@@ -175,6 +175,31 @@ describe('row actions', () => {
 		return { user, dialog: await screen.findByRole('dialog') };
 	}
 
+	it('edit of the description works when the stored URL is a dev http one (HUB-289)', async () => {
+		let sent: unknown;
+		const dev = {
+			...contractMocks.listRegistrarEndpoints.example.items[0]!,
+			url: 'http://127.0.0.1:8097/hub/callbacks'
+		};
+		server.use(
+			mockOperation('listRegistrarEndpoints', { items: [dev], next_cursor: null }),
+			http.patch(mswPath('/registrar-endpoints/:endpoint_id'), async ({ request }) => {
+				sent = await request.json();
+				return HttpResponse.json(contractMocks.updateRegistrarEndpoint.example);
+			})
+		);
+		const { user, dialog } = await pick(/^Edit reg_orders_cb/);
+		await user.clear(within(dialog).getByLabelText(/^Description/));
+		await user.type(within(dialog).getByLabelText(/^Description/), 'QA receiver');
+		await user.type(within(dialog).getByLabelText(/Reason/), 'Name the dev receiver');
+		const save = within(dialog).getByRole('button', { name: 'Save changes' });
+		expect(save).toBeEnabled();
+		await user.click(save);
+		await waitFor(() =>
+			expect(sent).toEqual({ description: 'QA receiver', reason: 'Name the dev receiver' })
+		);
+	});
+
 	it('edit sends only the new URL; the SSRF error lands on the field there too', async () => {
 		let sent: unknown;
 		server.use(
@@ -265,9 +290,14 @@ describe('row actions', () => {
 		expect(confirm).toBeDisabled();
 		await user.type(within(dialog).getByLabelText(/to confirm/), EP);
 		await user.click(confirm);
-		expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-			`Someone else changed ${EP}`
+		// HUB-289: a 409 on delete means "still in use", not a race: the API's message, no reload.
+		const alert = await within(dialog).findByRole('alert');
+		expect(alert).toHaveTextContent('Could not delete');
+		expect(alert).toHaveTextContent(
+			contractMocks.deleteRegistrarEndpoint.errors['409']!.error.message
 		);
+		expect(alert).not.toHaveTextContent('Someone else changed');
+		expect(within(dialog).queryByRole('button', { name: 'Reload' })).toBeNull();
 		expect(url?.pathname).toMatch(/\/registrar-endpoints\/reg_orders_cb$/);
 		expect(url?.searchParams.get('reason')).toBe('Endpoint replaced by v2');
 	});

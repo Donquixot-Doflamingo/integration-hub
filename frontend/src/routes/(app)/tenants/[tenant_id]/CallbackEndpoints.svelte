@@ -95,7 +95,7 @@
 	let editValues = $state<EndpointValues>({ ...EMPTY });
 	let editTouched = $state(false);
 	let overlap = $state(DEFAULT_OVERLAP_MS);
-	const editProblems = $derived(endpointProblems(editValues, 'edit'));
+	const editProblems = $derived(endpointProblems(editValues, 'edit', editBefore));
 	const editChanged = $derived(updateEndpointBody(editValues, editBefore, 'x').ok);
 
 	function pick(e: RegistrarEndpoint, open: 'edit' | 'switch' | 'rotate' | 'delete') {
@@ -286,6 +286,7 @@
 	bind:open={createOpen}
 	title="Register a callback endpoint for {tenantId}"
 	verb="Register"
+	conflictIsStale={false}
 	busyVerb="Registering..."
 	action="?/createEndpoint"
 	tone="primary"
@@ -422,6 +423,7 @@
 		bind:open={deleteOpen}
 		title="Delete callback endpoint {e.endpoint_id}"
 		verb="Delete"
+		conflictIsStale={false}
 		busyVerb="Deleting..."
 		action="?/deleteEndpoint"
 		confirmText={e.endpoint_id}

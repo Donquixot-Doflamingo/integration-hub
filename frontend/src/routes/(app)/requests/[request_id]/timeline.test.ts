@@ -14,6 +14,17 @@ describe('timed', () => {
 		expect(t.map((x) => x.sinceStart)).toEqual([0, 1, 1, 213, 1999]);
 	});
 
+	it('keeps events with the same seq (a replayed request), ordered by time (HUB-289)', () => {
+		const [first, second] = events;
+		const replay = { ...first!, at: '2026-10-31T10:00:00.000Z' };
+		const t = timed([replay, second!, first!]);
+		expect(t.map((x) => [x.event.seq, x.event.at])).toEqual([
+			[first!.seq, first!.at],
+			[replay.seq, replay.at],
+			[second!.seq, second!.at]
+		]);
+	});
+
 	it('handles no events', () => expect(timed([])).toEqual([]));
 });
 

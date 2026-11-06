@@ -59,5 +59,18 @@ export const checkLabels: Record<string, string> = {
 	weights_sum_100: 'Weights total 100',
 	delivery_path_declared: 'Delivery path declared',
 	failover_requires_idempotency: 'Failover has idempotency',
-	supports_features: 'Vendors support the features used'
+	supports_features: 'Vendors support the features used',
+	operations_have_transformers: 'Every operation has a transformer'
 };
+
+/**
+ * Label of a publish check. The contract says clients must tolerate unknown check names, so a
+ * name without a label reads as a sentence ("new_check_name" -> "New check name") instead of a
+ * raw identifier (HUB-289: `operations_have_transformers`, added in hub-admin 1.2.0, showed raw).
+ */
+export function checkLabel(check: string): string {
+	const known = checkLabels[check];
+	if (known) return known;
+	const words = check.replace(/[_-]+/g, ' ').trim();
+	return words ? words[0]!.toUpperCase() + words.slice(1) : check;
+}

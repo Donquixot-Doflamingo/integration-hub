@@ -167,7 +167,7 @@
 				for every payload, whatever the policy.
 			</p>
 			<ol class="timeline">
-				{#each events as { event: e, sincePrevious, sinceStart } (e.seq)}
+				{#each events as { event: e, sincePrevious, sinceStart }, i (i)}
 					<li class:sealed={e.sealed}>
 						<div class="when">
 							<span class="seq" aria-label="Sequence {e.seq}">#{e.seq}</span>

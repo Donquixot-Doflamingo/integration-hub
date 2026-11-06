@@ -113,12 +113,21 @@ export function overlapFromForm(form: FormData): number | null {
 /** Key ids are `key_` + ULID (contract `KeyIdValue`). */
 export const KEY_ID = /^key_[0-9A-HJKMNP-TV-Z]{26}$/;
 
+/**
+ * How the console names a key to operators: its prefix, or its key id when the API has no prefix
+ * for it (keys seeded from the config tree carry only a hash, so the Hub answers `prefix: ""`).
+ * Used for labels and as the text to type before a revoke, which must never be empty (HUB-289).
+ */
+export function keyName(k: Pick<ApiKey, 'prefix' | 'key_id'>): string {
+	return k.prefix.trim() || k.key_id;
+}
+
 /** What the reveal says about the replaced key after a rotation. */
 export function overlapNote(old: ApiKey, overlapMs: number): string {
 	if (old.state === 'revoked' || overlapMs === 0) {
-		return `The old key ${old.prefix} no longer works. Switch callers to the new key now.`;
+		return `The old key ${keyName(old)} no longer works. Switch callers to the new key now.`;
 	}
-	return `The old key ${old.prefix} keeps working until ${formatUtc(old.expires_at)} (overlap ${formatDurationMs(overlapMs)}), then it is revoked automatically. Switch callers to the new key before then.`;
+	return `The old key ${keyName(old)} keeps working until ${formatUtc(old.expires_at)} (overlap ${formatDurationMs(overlapMs)}), then it is revoked automatically. Switch callers to the new key before then.`;
 }
 
 /** True for keys that still authenticate (and can be revoked). */

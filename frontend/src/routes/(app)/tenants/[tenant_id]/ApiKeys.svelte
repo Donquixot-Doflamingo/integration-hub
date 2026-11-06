@@ -29,6 +29,7 @@
 		scopeLabels,
 		STATES,
 		stateLabels,
+		keyName,
 		type KeyFormValues
 	} from './keys';
 
@@ -94,12 +95,12 @@
 		const r = d.result as ApiKeySecretChange;
 		reveal = {
 			title: `Copy the new API key for ${tenantId}`,
-			label: `New API key ${r.api_key.prefix} (scopes ${r.api_key.scopes.join(', ')})`,
+			label: `New API key ${keyName(r.api_key)} (scopes ${r.api_key.scopes.join(', ')})`,
 			secret: r.secret,
 			notes: []
 		};
 		onnotice({
-			message: `Created API key ${r.api_key.prefix} for ${tenantId} (${r.api_key.scopes.join(', ')}).`,
+			message: `Created API key ${keyName(r.api_key)} for ${tenantId} (${r.api_key.scopes.join(', ')}).`,
 			changeId: d.changeId,
 			requestId: d.requestId
 		});
@@ -124,12 +125,12 @@
 		const note = overlapNote(r.old_key, overlap);
 		reveal = {
 			title: `Copy the replacement API key for ${tenantId}`,
-			label: `New API key ${r.api_key.prefix} (replaces ${r.old_key.prefix})`,
+			label: `New API key ${keyName(r.api_key)} (replaces ${keyName(r.old_key)})`,
 			secret: r.secret,
 			notes: [note]
 		};
 		onnotice({
-			message: `Rotated ${r.old_key.prefix} to ${r.api_key.prefix}. ${note}`,
+			message: `Rotated ${keyName(r.old_key)} to ${keyName(r.api_key)}. ${note}`,
 			changeId: d.changeId,
 			requestId: d.requestId
 		});
@@ -137,7 +138,7 @@
 	function onRevoked(d: ActionSuccessData) {
 		const k = (d.result as ApiKeyChange).api_key;
 		onnotice({
-			message: `Revoked API key ${k.prefix}. Within about 10 s, calls with it get 401.`,
+			message: `Revoked API key ${keyName(k)}. Within about 10 s, calls with it get 401.`,
 			changeId: d.changeId,
 			requestId: d.requestId
 		});
@@ -193,19 +194,29 @@
 	>
 		{#snippet row(k)}
 			{@const b = badge(k.state)}
-			<th scope="row"><code class="id">{k.prefix}</code></th>
+			<th scope="row">
+				<code class="id" title={k.prefix.trim() ? undefined : 'No prefix recorded; key id shown'}
+					>{keyName(k)}</code
+				>
+			</th>
 			<td><StatusBadge tone={b.tone} icon={b.icon} label={stateLabels[k.state]} /></td>
 			{#if canRotate || canRevoke}
 				<td class="row-actions">
 					{#if k.state === 'active' && canRotate}
-						<button type="button" class="row-action" onclick={() => openRotate(k)}>
-							Rotate {k.prefix}
-						</button>
+						<button
+							type="button"
+							class="row-action"
+							aria-label="Rotate {keyName(k)}"
+							onclick={() => openRotate(k)}>Rotate</button
+						>
 					{/if}
 					{#if isLive(k) && canRevoke}
-						<button type="button" class="row-action stop" onclick={() => openRevoke(k)}>
-							Revoke {k.prefix}
-						</button>
+						<button
+							type="button"
+							class="row-action stop"
+							aria-label="Revoke {keyName(k)}"
+							onclick={() => openRevoke(k)}>Revoke</button
+						>
 					{:else if !isLive(k)}<span class="muted">-</span>{/if}
 				</td>
 			{/if}
@@ -328,18 +339,18 @@
 	{@const k = target}
 	<ConfirmDialog
 		bind:open={rotateOpen}
-		title="Rotate API key {k.prefix}"
+		title="Rotate API key {keyName(k)}"
 		verb="Rotate"
 		busyVerb="Rotating..."
 		action="?/rotateKey"
 		tone="primary"
-		subject="API key {k.prefix}"
+		subject="API key {keyName(k)}"
 		oneTimeSecret
 		onsuccess={onRotated}
 	>
 		<p>
 			Mints a replacement with the same tenant and scopes ({k.scopes.join(', ')}). The new key is
-			shown once. The old key {k.prefix} keeps working for the overlap you pick (state Expiring), then
+			shown once. The old key {keyName(k)} keeps working for the overlap you pick (state Expiring), then
 			it is revoked automatically.
 		</p>
 		{#snippet fields()}
@@ -351,8 +362,8 @@
 				</select>
 				<p class="hint">
 					{overlap === 0
-						? `${k.prefix} stops working as soon as the new key exists.`
-						: `${k.prefix} keeps working for ${formatDurationMs(overlap)} after the rotation.`}
+						? `${keyName(k)} stops working as soon as the new key exists.`
+						: `${keyName(k)} keeps working for ${formatDurationMs(overlap)} after the rotation.`}
 				</p>
 			</div>
 		{/snippet}
@@ -360,21 +371,21 @@
 
 	<ConfirmDialog
 		bind:open={revokeOpen}
-		title="Revoke API key {k.prefix}"
+		title="Revoke API key {keyName(k)}"
 		verb="Revoke"
 		busyVerb="Revoking..."
 		action="?/revokeKey"
-		confirmText={k.prefix}
-		subject="API key {k.prefix}"
+		confirmText={keyName(k)}
+		subject="API key {keyName(k)}"
 		onsuccess={onRevoked}
 	>
 		<p>
-			Within about 10 s, every call with {k.prefix} ({k.description ?? 'no description'}) gets 401.
-			Revoking cannot be undone: create or rotate a key to give the caller access again.
+			Within about 10 s, every call with {keyName(k)} ({k.description ?? 'no description'}) gets
+			401. Revoking cannot be undone: create or rotate a key to give the caller access again.
 		</p>
 		{#snippet fields()}
 			<input type="hidden" name="key_id" value={k.key_id} />
-			<input type="hidden" name="prefix" value={k.prefix} />
+			<input type="hidden" name="prefix" value={keyName(k)} />
 		{/snippet}
 	</ConfirmDialog>
 {/if}

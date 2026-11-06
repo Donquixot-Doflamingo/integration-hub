@@ -129,6 +129,37 @@ describe('ConfirmDialog', () => {
 		await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 	});
 
+	it.each([
+		['CONFLICT', 409, false],
+		['PRECONDITION_FAILED', 412, true]
+	])(
+		'conflictIsStale=false, %s: a state conflict shows the API message, not a reload prompt',
+		async (code, status, stale) => {
+			// HUB-289: deleting a callback endpoint that is still subscribed answered "Someone else
+			// changed reg_orders_cb ... Reload", which is wrong: nobody changed it, it is in use.
+			const message = '2 integration version(s) subscribe to registrar endpoint reg_orders_cb';
+			go.mockResolvedValueOnce(
+				fail(status, {
+					op: 'go',
+					error: toPlainError(new HubApiError({ ...conflict, status, code, message }))
+				})
+			);
+			const { user, dialog } = await openDialog({ conflictIsStale: false });
+			await user.type(within(dialog).getByLabelText(/Reason/), REASON);
+			await user.click(within(dialog).getByRole('button', { name: 'Roll back' }));
+			const alert = await within(dialog).findByRole('alert');
+			expect(alert).toHaveTextContent(code);
+			if (stale) {
+				expect(alert).toHaveTextContent('Someone else changed int_evt_brandA');
+			} else {
+				expect(alert).not.toHaveTextContent('Someone else changed');
+				expect(alert).toHaveTextContent('Could not roll back');
+				expect(alert).toHaveTextContent(message);
+				expect(within(dialog).queryByRole('button', { name: 'Reload' })).toBeNull();
+			}
+		}
+	);
+
 	it('never submits twice while a request is in flight', async () => {
 		let release!: () => void;
 		go.mockImplementationOnce(

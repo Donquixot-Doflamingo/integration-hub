@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(frontend)` · Fix console bugs found against a running Hub (HUB-289) · HUB-289 · F-19
+  - The request and DLQ entry pages of a replayed request no longer crash (repeated attempt numbers and timeline sequence numbers)
+  - Deleting a callback endpoint that is still subscribed, or creating a tenant or endpoint whose id is taken, shows the Hub's reason instead of "someone else changed it, reload"
+  - API keys seeded without a prefix are shown and confirmed by their key id instead of an empty name
+  - A callback endpoint with a dev `http://` URL can have its description edited (Save was disabled without a reason)
+  - The publish check "Every operation has a transformer" has a readable name; the publish button says "Publish draft" before a draft exists
 - 2026-11-07 · `docs(frontend)` · Renumber the console proxy ADR to 0022 (HUB-286) · HUB-286 · F-19
   - The same-origin admin proxy decision is `docs/tech/adr/0022-console-same-origin-admin-proxy.md` (0019 to 0021 are taken by other branches); every reference points to it
 - 2026-11-07 · `feat(frontend)` · Render destructive actions only for roles that may run them (HUB-288) · HUB-288 · F-19
