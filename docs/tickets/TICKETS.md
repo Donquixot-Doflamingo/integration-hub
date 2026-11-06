@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **211** · done: **157** · todo: **40** · other (in-progress/in-review/blocked): **14**
+Total tickets: **218** · done: **157** · todo: **46** · other (in-progress/in-review/blocked): **15**
 
 ## Epics
 
@@ -20,7 +20,7 @@ Total tickets: **211** · done: **157** · todo: **40** · other (in-progress/in
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 17 | 1 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 0 |
-| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
+| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 18 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -2699,6 +2699,92 @@ Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §9: `CredentialSource` 
 **Acceptance criteria**
 - [ ] Split into ~1-day tickets in this range before work starts
 - [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-342 — Use-case catalogue and a runnable OTP → account-verification example
+- **Epic:** EP-12 · **Type:** docs · **Area:** docs
+- **Status:** in-review · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
+- **Branch:** `docs/HUB-342-use-cases`
+
+The product owner asked how calls work and how UX-style flows ("first an OTP, then the user gives the account number") are handled inside the Hub. Write `docs/use-cases/README.md`: a catalogue for non-engineers of what the Hub does today vs what is planned, with the caller's exact requests and responses (shapes from `contracts/openapi/hub-public.v1.yaml`, no vendor names), a sequence diagram, failure behaviour and a status line citing the test that proves it. Back the two-step flow with a runnable example under `examples/otp-account-flow/` (registry overlay kept out of `backend/config` and `contracts/`, fictional vendor `demo-kyc` on mockvendor) and an integration test through the real gateway. Gaps found on the way become their own tickets (HUB-343 … HUB-348).
+
+**Acceptance criteria**
+- [x] `docs/use-cases/README.md` covers: how a call flows (pipeline, DESIGN §18.6 latency budget), events sync/async with multi-account and a minimal response, vendor/account swap with zero caller change, vendor down (fail_fast / wait / async parking and drain), async with signed callback, idempotent retry, two-step OTP → verify → bank account, the DESIGN §14 lending patterns with their EP-12 tickets
+- [x] Each use case has the caller's HTTP requests/responses, a mermaid sequence diagram, failure behaviour and a status line (Works today + test / Partly / Planned + ticket)
+- [x] `examples/otp-account-flow/` overlay: two example capability schemas, vendor `demo-kyc`, two accounts, tenant `loan-onboarding`, integrations `int_demo_otp` (v1, v2) and `int_demo_bank_verify`, four transformers with goldens; nothing added to `backend/config` or `contracts/`
+- [x] `TestExampleOTPConfigBuilds` (unit) builds the overlay and runs its goldens; `TestExampleOTPAccountFlow` (integration) runs step 1 (session opened, vendor txn id kept) → publish v2 → step 2 pinned to account A → step 3 bank verification, plus wrong OTP, vendor-expired OTP, expired session (`SESSION_NOT_FOUND`), double tap, vendor down, edge refusals, invalid account
+- [x] `examples/otp-account-flow/README.md` with how to run it and the exact requests
+- [x] Linked from the root `README.md` and `docs/features/README.md`; CHANGELOG entry
+
+### HUB-343 — Per-operation transformers on integration version targets
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-344 · **Feature:** F-22 · **Stories:** US-2205
+- **Branch:** `feat/HUB-343-per-operation-transformers`
+
+Found while building HUB-342. A target has one transformer pair (`transformer: {request, response}`), and the attempter uses it for every operation (`internal/delivery/attempter.go`). Because a request transformer names one `vendor_endpoint` and is compiled against one operation's schema, a multi-operation capability (DESIGN §3.1 `kyc.aadhaar_otp@v1` with `generate` and `verify`, each on its own vendor endpoint) cannot be expressed today. Let a target map each operation to its own pair, keeping the current single pair for single-operation capabilities. Needs the admin contract change in HUB-344 first (integration versions are created and shown through `/admin/v1`).
+
+**Acceptance criteria**
+- [ ] A target may set `operations: {<op>: {request, response}}`; the publish check refuses a version that leaves an operation of its capability without a pair, or pairs a transformer compiled for another operation
+- [ ] Sync, wait, async and dry-run select the pair of the invoked operation (envelope `operation`), including session steps and the failover chain
+- [ ] Integration test: `generate` and `verify` on two mockvendor endpoints in one session; goldens per transformer
+- [ ] `examples/otp-account-flow` moves to two operations (`send_otp`, `verify_otp`) and `docs/use-cases/README.md` drops the "one operation" note
+
+### HUB-344 — Contract: per-operation transformers in admin integration versions
+- **Epic:** EP-12 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
+- **Branch:** `contract/HUB-344-per-operation-transformers`
+
+Contract change request from HUB-342 for the `contract-steward`: the admin integration-version target needs an optional per-operation transformer map next to the existing `transformer` pair, so HUB-343 can be configured, published, diffed and shown by the console and `hubctl` (additive, admin minor bump). The caller API is unchanged: `invokeIntegrationOperation` already exists.
+
+**Acceptance criteria**
+- [ ] `hub-admin.v1.yaml` target schema gains optional `operations: {<operation name>: {request, response}}` (refs `^[A-Za-z][A-Za-z0-9_-]{0,63}@[1-9][0-9]*$`), with an example
+- [ ] `info.version` minor bump, `contracts/CHANGELOG.md` entry, validation clean
+- [ ] Backend and frontend notified
+
+### HUB-345 — Refuse multi-operation integrations whose single pair serves every operation
+- **Epic:** EP-12 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-03 · **Stories:** US-0301
+- **Branch:** `fix/HUB-345-multi-op-single-pair`
+
+Found while building HUB-342. A capability with operations `send` and `verify`, bound to an integration whose target pair is compiled for `send` (`operation: send`), builds a snapshot without any problem. Invoking `verify` then runs the `send` transformers on a `verify` body and validates the result against the `send` response schema. Until HUB-343 lands, the registry should refuse such a version with a path-qualified error instead of failing at request time.
+
+**Acceptance criteria**
+- [ ] `registry.Build` refuses an integration version whose target transformers are compiled for a different operation than one the capability declares, or whose capability has more than one operation, naming the file and `targets[i].transformer`
+- [ ] Table test in `internal/registry` (two-operation capability, one pair) fails before the fix and passes after
+- [ ] `go test -race ./internal/registry/...` green
+
+### HUB-346 — Transformer error rules map a canonical `reason`
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-04 · **Stories:** US-0405
+- **Branch:** `feat/HUB-346-error-rule-reason`
+
+Found while building HUB-342. An OTP screen must tell "wrong OTP, try again" from "OTP expired, resend" and "too many attempts". Today a transformer error rule can set `code`, `retryable`, `retry_after_ms` and `message` only, so callers can branch on nothing but free text (`upstream.code` is opaque by contract). Allow `reason:` on error rules. New reason values (e.g. `otp_mismatch`, `otp_expired`, `otp_attempts_exceeded`) must first be listed in the `reason` description of `contracts/schemas/events/canonical-error.json` (contract-steward, minor bump).
+
+**Acceptance criteria**
+- [ ] Contract change request filed and merged for the new reason values before the backend change
+- [ ] Error rules accept `reason` (expression or literal, ≤ 64 chars); golden error cases can pin it
+- [ ] Unit tests in `internal/transform`; contract test shows the reason in the 422 envelope
+
+### HUB-347 — Per-integration result cache for sync lookups
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-2205
+- **Branch:** `feat/HUB-347-lookup-result-cache`
+
+Coarse placeholder for Release 2, found while writing the HUB-342 use-case catalogue. DESIGN §14 lists an "optional per-integration result cache (e.g. PAN–Aadhaar link, 24 h)" for sync lookups; nothing implements it and no ticket tracked it. Split into ~1-day tickets (with stories, feature doc and any contract or config change) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope, cache key rules (tenant + integration + canonical body hash) and audit behaviour of a cache hit
+
+### HUB-348 — Upload + job pattern (bank statement analysis, bulk CKYC)
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237, HUB-098 · **Feature:** F-22 · **Stories:** US-2205
+- **Branch:** `feat/HUB-348-upload-job`
+
+Coarse placeholder for Release 2, found while writing the HUB-342 use-case catalogue. DESIGN §14 "Upload + job": large payloads in object storage with pointers in the ledger, and job poll/webhook adapters (bank statement analysis, bulk CKYC). F-22 and EP-12 had no item for it. Split into ~1-day tickets (with stories, feature doc and contract change requests) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 gains the item, with the contract changes it needs (upload size limits, job status) listed as CCRs
 
 ## Parallel tracks
 

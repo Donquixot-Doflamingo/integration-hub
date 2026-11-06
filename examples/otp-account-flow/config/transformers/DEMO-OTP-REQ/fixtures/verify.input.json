@@ -1,0 +1,8 @@
+{
+  "mobile": "+919812345678",
+  "otp": "482913",
+  "_context": {
+    "account": {"id": "demo-kyc-a", "config": {"client_id": "DEMO-CLIENT-A"}},
+    "session": {"vendor_txn_id": "dk_txn_7f3a"}
+  }
+}

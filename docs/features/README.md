@@ -4,6 +4,8 @@ One doc per feature, created from [`_TEMPLATE.md`](_TEMPLATE.md). Status lifecyc
 
 Several features share one epic and therefore one ticket range; the feature field on each ticket says which feature it belongs to.
 
+For a cross-feature, example-driven view (what a caller sends and gets back, and whether each scenario works today or is planned), see the [use-case catalogue](../use-cases/README.md).
+
 | ID | Name | Milestone / Epic | Status | Doc | Stories | Tickets |
 | --- | --- | --- | --- | --- | --- | --- |
 | F-01 | Repo foundation, dev environment & CI | Phase 1 + M0 · EP-00/EP-01 | in-progress | [F-01](F-01-repo-foundation.md) | US-0101–0104 | HUB-001–016, HUB-020–039 |

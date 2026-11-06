@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "body": {"status": "VERIFIED", "ref": "dk_ref_0002"},
+  "_context": {"req": {"mobile": "+919812345678", "otp": "482913"}}
+}
