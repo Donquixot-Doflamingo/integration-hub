@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": {"result": "VALID", "beneficiary_name": "RAHUL SINGH", "name_match_score": 12, "ref": "dk_ref_0005"}
+}

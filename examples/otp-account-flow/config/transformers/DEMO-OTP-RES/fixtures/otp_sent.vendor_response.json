@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "body": {"status": "OTP_SENT", "txn_id": "dk_txn_7f3a", "expires_in": 300, "ref": "dk_ref_0001"},
+  "_context": {"req": {"mobile": "+919812345678"}}
+}

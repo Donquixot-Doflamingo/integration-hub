@@ -1,0 +1,6 @@
+{
+  "method": "POST",
+  "path": "/v1/otp",
+  "headers": {"Content-Type": "application/json", "X-Client-Id": "DEMO-CLIENT-A"},
+  "body": {"action": "send", "mobile": "+919812345678"}
+}

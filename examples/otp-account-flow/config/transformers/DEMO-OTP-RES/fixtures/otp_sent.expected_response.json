@@ -1,0 +1,4 @@
+{
+  "response": {"status": "otp_sent", "expires_in_s": 300, "vendor_ref": "dk_ref_0001"},
+  "session": {"vendor_txn_id": "dk_txn_7f3a"}
+}

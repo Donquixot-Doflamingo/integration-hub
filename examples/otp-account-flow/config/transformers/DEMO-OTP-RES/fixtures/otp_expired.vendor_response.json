@@ -1,0 +1,4 @@
+{
+  "status": 422,
+  "body": {"error": "OTP_EXPIRED", "message": "otp expired"}
+}

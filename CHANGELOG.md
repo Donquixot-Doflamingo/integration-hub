@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `test(edge)` · Add a runnable OTP to bank-account example flow (HUB-342) · HUB-342 · F-22
+  - examples/otp-account-flow: an example registry overlay (two interactive capability schemas, fictional vendor demo-kyc on mockvendor, two accounts, tenant loan-onboarding, int_demo_otp v1/v2, int_demo_bank_verify, four transformers with goldens), kept out of backend/config and contracts/
+  - TestExampleOTPConfigBuilds builds the overlay and runs its goldens; TestExampleOTPAccountFlow runs send OTP -> verify in the session (pinned to account A across a publish) -> bank verification through the real gateway, plus wrong OTP, expired session, double tap, vendor down and edge refusals
+  - examples/otp-account-flow/README.md: how to run it and the exact requests and responses
 - 2026-11-06 · `docs(tickets)` · Add HUB-342 and gap tickets HUB-343 to HUB-348 (HUB-342) · HUB-342 · F-22
   - New ticket HUB-342 (use-case catalogue and runnable OTP example), in progress
   - Gaps found while scoping it: per-operation transformers (HUB-343) and their admin contract change (HUB-344), refusing multi-operation configs that would misroute today (HUB-345), a canonical reason on error rules (HUB-346), the lookup result cache (HUB-347) and the upload + job pattern (HUB-348)

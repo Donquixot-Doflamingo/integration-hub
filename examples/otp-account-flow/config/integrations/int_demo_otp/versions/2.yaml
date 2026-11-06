@@ -1,0 +1,14 @@
+# EXAMPLE ONLY (HUB-342). v2 differs from v1 only in the account: the example test publishes v2
+# between step 1 and step 2 to show that a session stays on the version + account that opened it.
+integration: int_demo_otp
+version: 2
+targets:
+  - vendor: demo-kyc
+    account: demo-kyc-b
+    transformer: { request: DEMO-OTP-REQ@1, response: DEMO-OTP-RES@1 }
+    weight: 100
+delivery:
+  mode: sync                    # interactive capability: sync only (DESIGN §5.4)
+  on_circuit_open: fail_fast    # never queue an OTP: a person is waiting
+audit: { payloads: masked, retention: 30d }
+publish: { author: example, reason: "move OTP traffic to the second demo-kyc account" }

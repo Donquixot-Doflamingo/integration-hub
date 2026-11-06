@@ -1,0 +1,9 @@
+# EXAMPLE ONLY (HUB-342). Fictional account of the fictional demo-kyc vendor. No secrets here:
+# the example test serves fake bearer tokens for it.
+account: demo-kyc-b
+vendor: demo-kyc
+region: in
+state: active
+credentials_ref: localfile://demo-kyc-b
+config: { client_id: "DEMO-CLIENT-B" }
+quota: { rps: 20, daily: 50000 }
