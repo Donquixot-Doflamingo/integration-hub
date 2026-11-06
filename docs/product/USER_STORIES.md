@@ -575,6 +575,11 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** the README, **when** I follow the steps for my tool, **then** the same `integration-hub` folder loads, with no tool-specific copy.
 - **Given** "verify the user's mobile with an OTP", **when** my assistant writes code, **then** it calls `send_otp`, keeps `X-Hub-Session`, calls `verify_otp` with it and a new `Idempotency-Key`, handles wrong OTP, expired session and retryable errors, and asks me before sending a real OTP.
 
+### US-2107 — hubmcp in my MCP client
+**As an** AI-assisted developer or platform engineer, **I want** a copy-paste `hubmcp` configuration for Claude Code, Claude Desktop, Codex CLI and Cursor, **so that** my assistant can use the Hub tools without secrets landing in committed files. · **Should**
+- **Given** my client, **when** I follow its section, **then** `hubmcp` connects with my tenant key read from my environment or keychain.
+- **Given** I am a platform engineer, **when** I add the admin profile, **then** it runs on stdio with my own token as a separate entry, and the page warns that deletes and secrets stay in the console.
+
 ## F-22 Release-2 capabilities
 
 ### US-2201 — Inbound vendor webhooks

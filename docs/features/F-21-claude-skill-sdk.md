@@ -47,6 +47,7 @@ Callers misuse async APIs (treating 202 as done), skip idempotency keys, and ver
 - [US-2104](../product/USER_STORIES.md) — Idempotency helper
 - [US-2105](../product/USER_STORIES.md) — Operator skill for any AI
 - [US-2106](../product/USER_STORIES.md) — Consumer skill in any assistant
+- [US-2107](../product/USER_STORIES.md) — hubmcp in my MCP client
 
 ## UX / API surface
 | Surface | Item | Contract ref |
@@ -106,3 +107,4 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-21`).
 | 2026-10-31 | SDK core shipped (HUB-094); status `in-progress`; behaviour rules 1a/1b; remaining SDK items listed in Status | backend-engineer |
 | 2026-11-07 | Operator skill `hub-operator` (HUB-316, US-2105) | docs agent |
 | 2026-11-07 | Consumer skill portable to Codex, Cursor and any assistant; two-step OTP flow; real hubclient API (HUB-317, US-2106) | docs agent |
+| 2026-11-07 | `references/mcp-setup.md` for Claude Code, Claude Desktop, Codex CLI and Cursor; tenant vs admin profile (HUB-318, US-2107) | docs agent |

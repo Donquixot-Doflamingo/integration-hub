@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(clients)` · Document hubmcp setup for every MCP client (HUB-318) · HUB-318 · F-21
+  - `mcp-setup.md` now has verified configs for Claude Code, Claude Desktop, Codex CLI and Cursor, each reading the key from your environment or keychain instead of a committed file
+  - The tenant key and the admin token are separate profiles: the admin one runs on stdio only, with your own token, as its own server entry, and needs `HUB_ADMIN_BASE_URL` ending in `/admin/v1`
+  - Hosted Streamable HTTP per client, the full hubmcp-tools 1.1.0 list, and troubleshooting
+
 - 2026-11-07 · `docs(clients)` · Make the consumer skill work in any AI agent (HUB-317) · HUB-317 · F-21
   - One `integration-hub` skill folder now installs unchanged in Claude Code, claude.ai / Claude Desktop, OpenAI Codex and Cursor; the README gives verified paths, commands and doc links per tool, plus a Cursor rule option
   - New `PASTE-INTO-ANY-ASSISTANT.md`: the rules in one file for chat assistants, custom instructions or a repo `AGENTS.md`

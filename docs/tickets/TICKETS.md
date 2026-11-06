@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **238** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **8**
+Total tickets: **239** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **9**
 
 ## Epics
 
@@ -19,7 +19,7 @@ Total tickets: **238** · done: **177** · todo: **53** · other (in-progress/in
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
-| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 16 | 8 |
+| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 17 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 4 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 12 | 0 |
 
@@ -2666,6 +2666,19 @@ Make `clients/claude-skill/` usable from whatever assistant a calling team has. 
 - [x] Caller flows covered: discover → dry-run → invoke with `Idempotency-Key` → 200 vs 202 → poll or callback; two-step OTP; error handling; never moving money or quota without confirmation
 - [x] Go snippets compile against `pkg/hubclient` (`go vet` on a scratch copy); cited MCP tools, operationIds, links and paths pass the check script
 - [ ] Rename to a neutral folder name: deferred (see above); a follow-up can rename with a symlink once the hubmcp branch has merged
+
+### HUB-318 — MCP setup for every client
+- **Epic:** EP-11 · **Type:** docs · **Area:** mcp
+- **Status:** in-review · **Depends on:** HUB-301, HUB-314 · **Feature:** F-20, F-21 · **Stories:** US-2107
+- **Branch:** `docs/HUB-316-operator-skills`
+
+`clients/claude-skill/integration-hub/references/mcp-setup.md` covers Claude Code (`claude mcp add`, `.mcp.json` with `${VAR}`), Claude Desktop (`claude_desktop_config.json` per OS with a keychain wrapper, since its `env` values are literal), Codex CLI (`~/.codex/config.toml` `[mcp_servers.*]` with `env_vars` forwarding, `codex mcp add`) and Cursor (`.cursor/mcp.json` with `${env:NAME}`, `envFile`), each verified against the client's docs (URLs in the file). Two profiles: the tenant key, and separately the user's own admin token (stdio only, a separate `hubmcp-admin` entry, never in a committed or hosted config, `HUB_ADMIN_BASE_URL` with `/admin/v1`). Also the hosted Streamable HTTP option per client and the full tool list of hubmcp-tools 1.1.0, consistent with `contracts/mcp/README.md`. The hubmcp backend branch may edit the same file; the lead merges.
+
+**Acceptance criteria**
+- [x] Config snippets for Claude Code, Claude Desktop, Codex CLI and Cursor, each with its doc URL, checked on 2026-11-07
+- [x] Tenant key and admin token documented separately; admin write tools stdio only; no deletes; no secrets in committed files
+- [x] Every tool of hubmcp-tools 1.1.0 named, and the env vars and flags (`-transport`, `-addr`, `-allow-remote`) match `backend/cmd/hubmcp`
+- [ ] Each snippet run on a clean machine per client: not possible in this container (no desktop clients); left for HUB-309
 
 ## EP-12 — Release 2 (DESIGN §19 Phase 2)
 

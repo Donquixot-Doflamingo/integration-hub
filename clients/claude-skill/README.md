@@ -36,7 +36,7 @@ Run these from a checkout of the Hub repo (`HUB_REPO` = its path). Copy, or syml
 | Tool | Personal (all your projects) | Per repository (shared via Git) | Docs |
 | --- | --- | --- | --- |
 | Claude Code | `~/.claude/skills/integration-hub/` | `.claude/skills/integration-hub/` | [code.claude.com/docs/en/skills](https://code.claude.com/docs/en/skills) |
-| OpenAI Codex (CLI, IDE, app) | `~/.agents/skills/integration-hub/` | `.agents/skills/integration-hub/` (scanned from the working directory up to the repo root) | [Codex: build skills](https://learn.chatgpt.com/docs/build-skills) |
+| OpenAI Codex (CLI, IDE, app) | `~/.agents/skills/integration-hub/` | `.agents/skills/integration-hub/` (scanned from the working directory up to the repo root) | [Codex: build skills](https://developers.openai.com/codex/skills) |
 | Cursor | `~/.cursor/skills/integration-hub/` (also reads `~/.agents/skills/`, `~/.claude/skills/`) | `.cursor/skills/integration-hub/` (also reads `.agents/skills/`, `.claude/skills/`) | [cursor.com/docs/context/skills](https://cursor.com/docs/context/skills) |
 | claude.ai / Claude Desktop | Upload a ZIP: Customize → Skills → **+** → Create skill → Upload a skill (code execution must be on) | Team/Enterprise owners can provision it for the org | [Use skills in Claude](https://support.claude.com/en/articles/12512180-use-skills-in-claude) |
 | Any other assistant | Paste `PASTE-INTO-ANY-ASSISTANT.md` into its custom instructions or the chat | Append it to the repo's `AGENTS.md` | — |
@@ -89,7 +89,7 @@ Upload `integration-hub.zip` under Customize → Skills. The folder name must ma
 `PASTE-INTO-ANY-ASSISTANT.md` is self-contained. Paste it as custom instructions, or append it to
 your service repo's `AGENTS.md` (read by Codex, Cursor and many other agents; Codex reads
 `~/.codex/AGENTS.md` and every `AGENTS.md` from the repo root down to the working directory, 32 KiB
-in total by default: [Codex: AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md)).
+in total by default: [Codex: AGENTS.md](https://developers.openai.com/codex/guides/agents-md)).
 
 ### Then, for every tool
 1. Set `HUB_BASE_URL` and `HUB_API_KEY` in your environment from your secret manager, never in code
