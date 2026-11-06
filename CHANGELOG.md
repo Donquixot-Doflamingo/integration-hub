@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `chore(deploy)` · Add DESIGN §16.3 alert rules and dashboards (HUB-232) · HUB-232 · F-18
+  - deploy/alerts/hub.rules.yaml: the ten §16.3 alerts (six page, four warn), each with summary, description and a docs/runbooks/<AlertName>.md link; promtool unit tests with a firing and a non-firing case per alert
+  - "Any" alerts (UPSTREAM_AUTH_FAILED, TRANSFORM_FAILED, audit drops) also fire on the first event of a new label set, which a plain increase() misses
+  - Auth, transform and DLQ alerts read hub_requests_total and dlq_count until attempt and DLQ counters exist (ADR-0012, HUB-245)
+  - deploy/dashboards: tenant, vendor/account and platform Grafana dashboards, data source chosen through a variable
 - 2026-11-06 · `fix(deploy)` · Read /metrics fully in the M0 smoke test instead of piping to grep -q (HUB-230) · HUB-230 · F-01
   - smoke-m0 no longer fails when grep stops reading before curl has written the whole /metrics body (curl exit 23 under pipefail)
 - 2026-11-06 · `docs(tickets)` · Track the transformer time-budget flake seen in the full itest run (HUB-238) · HUB-238 · F-04

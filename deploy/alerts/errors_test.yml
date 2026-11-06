@@ -1,0 +1,96 @@
+# promtool unit tests for the hub-errors group (HUB-232). Run: promtool test rules deploy/alerts/*_test.yml
+rule_files:
+  - hub.rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # UpstreamAuthFailed: the first failure creates the series with value 1. A plain increase()
+  # would never see it; the new-series branch does.
+  - name: first auth failure of a new label set pages
+    interval: 1m
+    input_series:
+      - series: 'hub_requests_total{tenant="t_lending",integration="int_pan",vendor="karza",account="acc_karza_1",version="3",mode="async",code="ok",instance="wk-1"}'
+        values: '0+10x20'
+      - series: 'hub_requests_total{tenant="t_lending",integration="int_pan",vendor="karza",account="acc_karza_1",version="3",mode="async",code="UPSTREAM_AUTH_FAILED",instance="wk-1"}'
+        values: '_x6 1x14'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: UpstreamAuthFailed
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: UpstreamAuthFailed
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              vendor: karza
+              account: acc_karza_1
+            exp_annotations:
+              summary: "Vendor rejected the Hub's credentials for account acc_karza_1"
+              description: "1 request(s) to vendor karza, account acc_karza_1 ended in UPSTREAM_AUTH_FAILED in the last 5 minutes."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/UpstreamAuthFailed.md"
+      # No further failures: resolved once the series is older than the 5-minute window.
+      - eval_time: 12m
+        alertname: UpstreamAuthFailed
+        exp_alerts: []
+
+  - name: another auth failure on an existing series pages; quiet series and other codes do not
+    interval: 1m
+    input_series:
+      - series: 'hub_requests_total{tenant="t_lending",integration="int_pan",vendor="karza",account="acc_karza_1",version="3",mode="sync",code="UPSTREAM_AUTH_FAILED",instance="gw-1"}'
+        values: '2x30 3x10'
+      - series: 'hub_requests_total{tenant="t_lending",integration="int_pan",vendor="karza",account="acc_karza_1",version="3",mode="sync",code="UPSTREAM_REJECTED",instance="gw-1"}'
+        values: '0+5x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: UpstreamAuthFailed
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: UpstreamAuthFailed
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              vendor: karza
+              account: acc_karza_1
+            exp_annotations:
+              summary: "Vendor rejected the Hub's credentials for account acc_karza_1"
+              description: "1.25 request(s) to vendor karza, account acc_karza_1 ended in UPSTREAM_AUTH_FAILED in the last 5 minutes."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/UpstreamAuthFailed.md"
+      - eval_time: 37m
+        alertname: UpstreamAuthFailed
+        exp_alerts: []
+
+  # TransformFailed: one integration bumps an existing series, another fails for the first time.
+  - name: transform failures page per integration, new and existing series
+    interval: 1m
+    input_series:
+      - series: 'hub_requests_total{tenant="t_lending",integration="int_bureau",vendor="cibil",account="acc_cibil_1",version="5",mode="sync",code="TRANSFORM_FAILED",instance="gw-1"}'
+        values: '4x30 6x10'
+      - series: 'hub_requests_total{tenant="t_growth",integration="int_events",vendor="clevertap",account="acc_ct_1",version="2",mode="async",code="TRANSFORM_FAILED",instance="wk-1"}'
+        values: '_x31 2x9'
+      - series: 'hub_requests_total{tenant="t_growth",integration="int_events",vendor="clevertap",account="acc_ct_1",version="2",mode="async",code="ok",instance="wk-1"}'
+        values: '0+100x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: TransformFailed
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: TransformFailed
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              integration: int_bureau
+            exp_annotations:
+              summary: "Transformer failures on integration int_bureau"
+              description: "2.5 request(s) of integration int_bureau ended in TRANSFORM_FAILED in the last 5 minutes."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/TransformFailed.md"
+          - exp_labels:
+              severity: page
+              integration: int_events
+            exp_annotations:
+              summary: "Transformer failures on integration int_events"
+              description: "2 request(s) of integration int_events ended in TRANSFORM_FAILED in the last 5 minutes."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/TransformFailed.md"
+      - eval_time: 38m
+        alertname: TransformFailed
+        exp_alerts: []
