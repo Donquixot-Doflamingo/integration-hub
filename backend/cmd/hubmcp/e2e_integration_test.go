@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -184,6 +185,34 @@ func TestMCPEndToEnd(t *testing.T) {
 		}
 	})
 
+	// HUB-315: a team onboards end to end through the write tools, signed in as an admin user.
+	var minted string
+	t.Run("admin write tools onboard a team as the signed-in user", func(t *testing.T) {
+		minted = onboardThroughMCP(t, st, cs, a, &outputs)
+	})
+
+	t.Run("a viewer token gets FORBIDDEN on a write tool", func(t *testing.T) {
+		venv := map[string]string{"HUB_BASE_URL": st.gatewayURL, "HUB_API_KEY": devKey,
+			"HUB_ADMIN_TOKEN": st.viewerToken, "HUB_ADMIN_BASE_URL": st.adminURL + "/admin/v1"}
+		vcfg, err := loadConfig(nil, func(k string) string { return venv[k] }, io.Discard)
+		if err != nil {
+			t.Fatal(err)
+		}
+		vsec := newSecretSet(vcfg.apiKey, vcfg.adminToken)
+		va, err := newApp(vcfg, tc, newLogger(&logs, 0, vsec), vsec, &http.Client{Timeout: 30 * time.Second})
+		if err != nil {
+			t.Fatal(err)
+		}
+		vcs := connect(t, va)
+		out := callTool(t, vcs, "hub_admin_create_tenant", map[string]any{"tenant_id": "viewer-made", "display_name": "Viewer made", "reason": "should be refused"})
+		if !out.res.IsError || out.field(t, "error", "code") != "FORBIDDEN" {
+			t.Fatalf("viewer create_tenant: %s", out.json)
+		}
+		if g := callTool(t, vcs, "hub_admin_get_tenant", map[string]any{"tenant_id": "viewer-made"}); !g.res.IsError || g.field(t, "error", "code") != "NOT_FOUND" {
+			t.Fatalf("the refused tenant exists: %s", g.json)
+		}
+	})
+
 	t.Run("no vendor identity outside hub_dry_run (grep)", func(t *testing.T) {
 		all := strings.Join(outputs, "\n")
 		for _, needle := range []string{"clevertap", "CleverTap", "ct-brandA-in", "ct-brandB-us", st.vendorURL, "integration_version", "X-Hub-Integration-Version", "vendor_id", "account_id"} {
@@ -195,9 +224,246 @@ func TestMCPEndToEnd(t *testing.T) {
 			t.Errorf("only %d outputs collected", len(outputs))
 		}
 	})
-	if strings.Contains(logs.String(), devKey) || strings.Contains(logs.String(), st.adminToken) {
+	if strings.Contains(logs.String(), devKey) || strings.Contains(logs.String(), st.adminToken) || strings.Contains(logs.String(), st.viewerToken) {
 		t.Error("credential in hubmcp logs")
 	}
+	if minted == "" || strings.Contains(logs.String(), minted) {
+		t.Errorf("minted API key missing (%t) or in hubmcp logs", minted == "")
+	}
+}
+
+// e2eIDs are the objects the onboarding run creates. The run starts from a fresh config archive
+// (startHubStack), so fixed ids do not collide across runs.
+const (
+	e2eTenant      = "mcp-team"
+	e2eVendor      = "mcpvendor"
+	e2eIntegration = "int_mcp_events"
+)
+
+// onboardThroughMCP is the HUB-315 e2e: create tenant → API key (secret returned once) → vendor +
+// endpoint → transformer version → integration → draft → validate → publish (refused without
+// confirm, then confirmed) → hub_invoke with the minted key → set weights → rollback. Each change
+// is in the change log under the admin user with the " (via hubmcp)" reason, and nothing is
+// deleted. It returns the minted key.
+func onboardThroughMCP(t *testing.T, st *hubStack, cs *mcp.ClientSession, a *app, outputs *[]string) string {
+	t.Helper()
+	start := time.Now().UTC().Add(-time.Second)
+	var changes []string
+	write := func(tool string, args map[string]any) toolOutcome {
+		t.Helper()
+		out := callTool(t, cs, tool, args)
+		if out.res.IsError {
+			t.Fatalf("%s: %s", tool, out.json)
+		}
+		id, _ := out.field(t, "change_id").(string)
+		if id == "" {
+			t.Fatalf("%s: no change_id: %s", tool, out.json)
+		}
+		changes = append(changes, id)
+		return out
+	}
+
+	write("hub_admin_create_tenant", map[string]any{"tenant_id": e2eTenant, "display_name": "MCP team", "contact": "mcp-team@example.com",
+		"rate_limit": map[string]any{"rps": 50, "burst": 100}, "reason": "Onboard the MCP team, OPS-315"})
+
+	keyArgs := map[string]any{"tenant_id": e2eTenant, "scopes": []any{"invoke"}, "description": "mcp e2e", "reason": "Key for the MCP team"}
+	if out := callTool(t, cs, "hub_admin_create_api_key", keyArgs); !out.res.IsError || out.field(t, "error", "code") != codeConfirmationRequired {
+		t.Fatalf("create_api_key without confirm: %s", out.json)
+	}
+	keyArgs["confirm"] = true
+	key := write("hub_admin_create_api_key", keyArgs)
+	secret, _ := key.field(t, "secret").(string)
+	if !strings.HasPrefix(secret, "hk_") || !strings.Contains(key.res.Content[0].(*mcp.TextContent).Text, secret) {
+		t.Fatalf("minted key not returned: %s", key.json)
+	}
+	keyID := key.field(t, "api_key", "key_id").(string)
+	// Returned once: a later read shows the key without its secret, which is now redacted by value.
+	tenant := callTool(t, cs, "hub_admin_get_tenant", map[string]any{"tenant_id": e2eTenant})
+	if tenant.res.IsError || strings.Contains(string(tenant.json), secret) || tenant.field(t, "etag") == nil {
+		t.Fatalf("get_tenant after minting: %s", tenant.json)
+	}
+	if out := callTool(t, cs, "hub_admin_get_tenant", map[string]any{"tenant_id": secret}); !out.res.IsError || out.field(t, "error", "code") != codeSecretInInput {
+		t.Fatalf("minted key passed back as input: %s", out.json)
+	}
+
+	write("hub_admin_create_vendor", map[string]any{"vendor_id": e2eVendor, "display_name": "MCP vendor", "auth_scheme": "static_headers",
+		"regions": map[string]any{"in": st.vendorURL}, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "reason": "New analytics vendor"})
+	ep := write("hub_admin_create_vendor_endpoint", map[string]any{"vendor_id": e2eVendor, "name": "upload", "method": "POST", "path": "/1/upload",
+		"idempotent": false, "reason": "Upload endpoint"})
+	if ep.field(t, "endpoint", "endpoint_ref") != "upload@1" {
+		t.Fatalf("endpoint: %s", ep.json)
+	}
+
+	tv := write("hub_admin_create_transformer_version", map[string]any{"transformer_id": "T1", "kind": "request", "capability": "events.track@v1",
+		"vendor_endpoint": "clevertap.upload@1", "expected_latest_version": 7, "yaml": configFile(t, "transformers/T1/7.yaml"),
+		"fixtures": []any{map[string]any{"name": "minimal", "input": configJSON(t, "transformers/T1/fixtures/minimal.input.json"),
+			"expected_request": configJSON(t, "transformers/T1/fixtures/minimal.expected_request.json")}},
+		"docs_url": "https://developer.clevertap.com/docs/upload-events-api", "reason": "T1 for the MCP team"})
+	if tv.field(t, "transformer_version", "ref") != "T1@8" || tv.field(t, "transformer_version", "yaml") != nil {
+		t.Fatalf("transformer version: %s", tv.json)
+	}
+
+	write("hub_admin_create_integration", map[string]any{"integration_id": e2eIntegration, "owner_tenant": e2eTenant, "capability": "events.track@v1",
+		"description": "MCP team engagement events", "reason": "MCP team events"})
+	spec := map[string]any{
+		"targets": []any{map[string]any{"vendor_id": "clevertap", "account_id": "ct-brandA-in",
+			"transformer": map[string]any{"request": "T1@8", "response": "R1@2"}, "weight": 100}},
+		"failover": []any{},
+		"delivery": map[string]any{"mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "fail_fast", "pending": "re_resolve", "polling": true},
+		"webhooks": []any{},
+		"audit":    map[string]any{"payloads": "masked", "retention_ms": 2592000000},
+	}
+	draft := write("hub_admin_create_integration_draft", map[string]any{"integration_id": e2eIntegration, "spec": spec, "reason": "First version"})
+	if draft.field(t, "integration_version", "version") != 1.0 || draft.field(t, "integration_version", "state") != "draft" {
+		t.Fatalf("draft: %s", draft.json)
+	}
+	if v := callTool(t, cs, "hub_admin_validate_integration_version", map[string]any{"integration_id": e2eIntegration, "version": 1}); v.res.IsError || v.field(t, "valid") != true {
+		t.Fatalf("validate: %s", v.json)
+	}
+
+	publish := map[string]any{"integration_id": e2eIntegration, "version": 1, "expected_active_version": nil, "reason": "Go live"}
+	if out := callTool(t, cs, "hub_admin_publish_integration_version", publish); !out.res.IsError || out.field(t, "error", "code") != codeConfirmationRequired {
+		t.Fatalf("publish without confirm: %s", out.json)
+	}
+	if g := callTool(t, cs, "hub_admin_get_integration", map[string]any{"integration_id": e2eIntegration}); g.field(t, "active_version") != nil || g.field(t, "has_draft") != true {
+		t.Fatalf("a refused publish changed the integration: %s", g.json)
+	}
+	publish["confirm"] = true
+	if p := write("hub_admin_publish_integration_version", publish); p.field(t, "active_version") != 1.0 {
+		t.Fatalf("publish: %s", p.json)
+	}
+
+	// The team's own service calls it with the minted key (a second hubmcp, as the team runs it).
+	tenv := map[string]string{"HUB_BASE_URL": st.gatewayURL, "HUB_API_KEY": secret}
+	tcfg, err := loadConfig(nil, func(k string) string { return tenv[k] }, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc, err := loadContract(toolContractJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tsec := newSecretSet(tcfg.apiKey)
+	ta, err := newApp(tcfg, tc, a.log, tsec, &http.Client{Timeout: 30 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tcs := connect(t, ta)
+	body := map[string]any{"user": map[string]any{"id": "u_315"}, "event": map[string]any{"name": "app_opened", "timestamp": "2026-11-07T09:15:00Z"}}
+	deadline := time.Now().Add(30 * time.Second)
+	for { // the gateway applies the new snapshot (tenant, key, integration) asynchronously
+		out := callTool(t, tcs, toolInvoke, map[string]any{"integration_id": e2eIntegration, "body": body, "idempotency_key": "e2e-mcp-" + st.runID()})
+		*outputs = append(*outputs, string(out.json))
+		if out.field(t, "outcome") == "completed" && out.field(t, "result", "status") == "ok" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("hub_invoke with the minted key: %s", out.json)
+		}
+		waitFor(t, 300*time.Millisecond)
+	}
+
+	weights := map[string]any{"integration_id": e2eIntegration, "expected_active_version": 1,
+		"weights": []any{map[string]any{"vendor_id": "clevertap", "account_id": "ct-brandA-in", "weight": 100}}, "reason": "Pin weights", "confirm": true}
+	if w := write("hub_admin_set_integration_weights", weights); w.field(t, "active_version") != 2.0 || w.field(t, "copied_from_version") != 1.0 {
+		t.Fatalf("weights: %s", w.json)
+	}
+	rb := write("hub_admin_rollback_integration", map[string]any{"integration_id": e2eIntegration, "to_version": 1, "expected_active_version": 2,
+		"reason": "Back to v1", "confirm": true})
+	if rb.field(t, "active_version") != 3.0 || rb.field(t, "copied_from_version") != 1.0 {
+		t.Fatalf("rollback: %s", rb.json)
+	}
+
+	// Change log: every write under the admin user, with the MCP reason suffix.
+	if len(changes) != 10 {
+		t.Fatalf("%d changes, want 10", len(changes))
+	}
+	for _, id := range changes {
+		var e struct {
+			Actor  string `json:"actor"`
+			Action string `json:"action"`
+			Reason string `json:"reason"`
+		}
+		adminGet(t, st, "/change-log/"+id, &e)
+		if e.Actor != e2eActor || !strings.HasSuffix(e.Reason, reasonSuffix) {
+			t.Errorf("change %s: actor %q reason %q", id, e.Actor, e.Reason)
+		}
+	}
+	// Nothing deleted: every change of this run is one of the writes above; the objects remain.
+	var log struct {
+		Items []struct {
+			Action string `json:"action"`
+		} `json:"items"`
+	}
+	adminGet(t, st, "/change-log?limit=200&actor="+e2eActor+"&from="+start.Format(time.RFC3339), &log)
+	if len(log.Items) != len(changes) {
+		t.Errorf("%d change-log entries for %s, want %d", len(log.Items), e2eActor, len(changes))
+	}
+	for _, it := range log.Items {
+		if strings.Contains(strings.ToLower(it.Action), "delete") || strings.Contains(strings.ToLower(it.Action), "revoke") {
+			t.Errorf("change-log action %s", it.Action)
+		}
+	}
+	for tool, args := range map[string]map[string]any{
+		"hub_admin_get_tenant":          {"tenant_id": e2eTenant},
+		"hub_admin_get_vendor":          {"vendor_id": e2eVendor},
+		"hub_admin_get_vendor_endpoint": {"vendor_id": e2eVendor, "endpoint_ref": "upload@1"},
+		"hub_admin_get_integration":     {"integration_id": e2eIntegration},
+	} {
+		if out := callTool(t, cs, tool, args); out.res.IsError {
+			t.Errorf("%s after the run: %s", tool, out.json)
+		}
+	}
+	var k struct {
+		State string `json:"state"`
+	}
+	adminGet(t, st, "/api-keys/"+keyID, &k)
+	if k.State != "active" {
+		t.Errorf("minted key state %q", k.State)
+	}
+	return secret
+}
+
+// adminGet reads the control plane directly with the admin user's token (test verification only).
+func adminGet(t *testing.T, st *hubStack, path string, out any) {
+	t.Helper()
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, st.adminURL+"/admin/v1"+path, nil)
+	req.Header.Set("Authorization", "Bearer "+st.adminToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s: HTTP %d %s", path, resp.StatusCode, b)
+	}
+	if err := json.Unmarshal(b, out); err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+}
+
+// configFile reads a file of the bootstrap config tree (backend/config).
+func configFile(t *testing.T, name string) string {
+	t.Helper()
+	dir, err := contract.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(dir), "backend", "config", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func configJSON(t *testing.T, name string) map[string]any {
+	t.Helper()
+	var v map[string]any
+	if err := json.Unmarshal([]byte(configFile(t, name)), &v); err != nil {
+		t.Fatal(err)
+	}
+	return v
 }
 
 func (s *hubStack) runID() string { return fmt.Sprintf("%d", time.Now().UnixNano()) }

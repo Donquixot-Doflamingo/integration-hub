@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(hubmcp)` · Onboard a team through hubmcp against a live Hub (HUB-315) · HUB-315 · F-20
+  - `TestMCPEndToEnd` now creates a tenant, an API key (secret returned once), a vendor and endpoint, a transformer version, an integration and its draft, validates, publishes with confirm, invokes it with the minted key, sets weights and rolls back, all through hubmcp with a `hubctl login -dev -role admin` token
+  - Each change is checked in the change log under the user's subject with the " (via hubmcp)" reason; nothing is deleted; a publish without confirm changes nothing; a viewer token gets FORBIDDEN on a write tool; the minted key never reaches hubmcp's logs
 - 2026-11-07 · `feat(hubmcp)` · Add the admin write tools of hubmcp-tools 1.1.0 (HUB-315) · HUB-315 · F-20
   - With the user's own `HUB_ADMIN_TOKEN`, hubmcp offers all 42 contract tools on stdio: 16 write tools (tenants, API keys, vendors, endpoints, accounts, transformers, integrations, callback endpoints) and 21 admin read and check tools; Streamable HTTP never offers a write tool
   - The admin client can only send the method and path of a mapped operation; no code path can send an HTTP DELETE, and a contract copy that maps a DELETE or forbidden operation refuses to load
