@@ -1,4 +1,4 @@
-# ADR-0012: Trace context across the outbox, callbacks and to vendors
+# ADR-0013: Trace context across the outbox, callbacks and to vendors
 
 | | |
 | --- | --- |

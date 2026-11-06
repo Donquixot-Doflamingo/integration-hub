@@ -499,7 +499,7 @@ Flags override env. Env names: `HUB_*`. Loaded once at start into an immutable s
 | `HUB_WORKER_POOL`, `HUB_WORKER_CLAIM_BATCH`, `HUB_WORKER_CONCURRENCY` | `messaging`, 32, 256 | worker |
 | `HUB_SHUTDOWN_GRACE` | `25s` | all |
 | `HUB_OTLP_ENDPOINT`, `HUB_TRACE_SAMPLE_RATIO` | empty (off), `0.05` | all |
-| `HUB_TRACE_FORWARD_VENDORS` | empty (no vendor receives `traceparent`; comma-separated vendor names, ADR-0012) | gateway, worker |
+| `HUB_TRACE_FORWARD_VENDORS` | empty (no vendor receives `traceparent`; comma-separated vendor names, ADR-0013) | gateway, worker |
 | `HUB_LOG_LEVEL`, `HUB_LOG_FORMAT` | `info`, `json` (`text` allowed in dev) | all |
 | `GOMEMLIMIT`, `GOGC` | see `OBSERVABILITY.md` §8.3 | all |
 | `HUB_OIDC_ISSUER`, `HUB_OIDC_AUDIENCE` | dev stub issuer | admin |
@@ -871,4 +871,4 @@ See DESIGN §3.1. Additional: **stage** — one timed step of the hot path (§11
 6. **Node → admin service authentication** for snapshot long-poll (§7).
 7. **`pool` column** on `outbox` (§6.3) — implied by DESIGN §17, not in §18.2.
 8. **Dev OIDC stub** source (§17.3).
-9. **Trace propagation to vendors** needs a vendor-definition flag (e.g. `propagate_trace: true`); DESIGN §16.4 says "vendors that accept it" without a field. *Interim (HUB-231, ADR-0012):* process config `HUB_TRACE_FORWARD_VENDORS`; the vendor field awaits a contract change.
+9. **Trace propagation to vendors** needs a vendor-definition flag (e.g. `propagate_trace: true`); DESIGN §16.4 says "vendors that accept it" without a field. *Interim (HUB-231, ADR-0013):* process config `HUB_TRACE_FORWARD_VENDORS`; the vendor field awaits a contract change.

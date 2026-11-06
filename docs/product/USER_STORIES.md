@@ -470,7 +470,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 **As a** service developer, **I want** a tenant dashboard of my requests, error codes and latencies, **so that** I can self-diagnose. · **Should**
 - **Given** the dashboards JSON, **when** imported, **then** tenant, vendor and platform dashboards render with the §16.2 metrics.
 
-### US-1805 — One trace per request, across the queue
+### US-1806 — One trace per request, across the queue
 **As an** on-call SRE, **I want** the spans of a request (edge, transform, upstream, worker attempt, callback) linked into one trace that continues my caller's `traceparent`, **so that** I can see where an async request spent its time without reading logs. · **Must**
 - **Given** an async request with a sampled caller `traceparent`, **when** the worker delivers it and the callback is sent, **then** the edge span continues the caller's trace, the worker attempt links to the accepting trace, the upstream span is the attempt's child, and the callback span links to the attempt; every span carries `hub.request_id`.
 - **Given** a vendor listed in `HUB_TRACE_FORWARD_VENDORS`, **when** the Hub calls it, **then** the request carries the Hub's `traceparent` and no `tracestate`; other vendors get neither.

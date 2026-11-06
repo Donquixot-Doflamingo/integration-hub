@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `docs(adr)` · Renumber the trace-context ADR to 0013 and its story to US-1806 (HUB-231) · HUB-231 · F-18
+  - ADR-0012 and US-1805 are taken by the subject-erasure work merging alongside; references updated
 - 2026-11-06 · `feat(telemetry)` · Trace async requests from caller to callback (HUB-231) · HUB-231 · F-18
   - The gateway's server span is named after the route and carries request id, tenant, integration, version, mode and canonical code; hub.transform.request/response spans appear under sampled requests
   - Async, wait and parked requests store the Hub's hub.queue.enqueue span in the envelope; each worker attempt is a hub.worker.attempt root linked to it, parent of its transform and upstream spans, and stays sampled when the accepting trace was

@@ -1672,10 +1672,10 @@ Export every §16.2 metric with labels tenant, integration, vendor, account, ver
 
 ### HUB-231 — Tracing: edge, transform, upstream, callback spans
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-027, HUB-088, HUB-120 · **Feature:** F-18 · **Stories:** US-1805
+- **Status:** in-review · **Depends on:** HUB-027, HUB-088, HUB-120 · **Feature:** F-18 · **Stories:** US-1806
 - **Branch:** `feat/HUB-231-tracing-spans`
 
-OTel spans for edge, transform, upstream and callback; accept caller `traceparent`; forward it to vendors that accept it (DESIGN §16.4). Decisions in ADR-0012 (vendor forwarding by `HUB_TRACE_FORWARD_VENDORS`, enqueue span in the envelope, `callback_deliveries.traceparent`, link-aware sampler).
+OTel spans for edge, transform, upstream and callback; accept caller `traceparent`; forward it to vendors that accept it (DESIGN §16.4). Decisions in ADR-0013 (vendor forwarding by `HUB_TRACE_FORWARD_VENDORS`, enqueue span in the envelope, `callback_deliveries.traceparent`, link-aware sampler).
 
 **Acceptance criteria**
 - [x] One trace links caller → gateway → worker → vendor → callback for an async request: `TestAsyncTraceLinksCallerToCallback` (edge, integration): edge span continues the caller's trace, the envelope carries the `hub.queue.enqueue` span, the worker attempt links to it, the upstream span is its child and the vendor receives that span's `traceparent`, the callback span links to the attempt
@@ -1765,10 +1765,10 @@ During the HUB-230 `make itest` run, `TestCutoverCompletedAndNewRequests/transfo
 
 ### HUB-240 — Tracing: remaining stage spans and upstream attempt attributes
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-231 · **Feature:** F-18 · **Stories:** US-1805
+- **Status:** todo · **Depends on:** HUB-231 · **Feature:** F-18 · **Stories:** US-1806
 - **Branch:** `feat/HUB-240-tracing-stage-spans`
 
-The spans OBSERVABILITY §5.1 lists as planned after HUB-231: `hub.validate`, `hub.resolve`, `hub.idempotency` (edge, only when sampled), `hub.webhook.inbound`, `hub.snapshot.apply`, `hub.admin.*`, and on the upstream span `hub.attempt`, `hub.breaker_state`, `hub.wait.limiter_ms`, `hub.wait.bulkhead_ms`. Each new key goes into `telemetry.AllowedSpanAttributes`. When the admin contract gains a vendor-definition trace flag (TECH_SPEC §22 q9), switch vendor forwarding to it and retire `HUB_TRACE_FORWARD_VENDORS` (ADR-0012).
+The spans OBSERVABILITY §5.1 lists as planned after HUB-231: `hub.validate`, `hub.resolve`, `hub.idempotency` (edge, only when sampled), `hub.webhook.inbound`, `hub.snapshot.apply`, `hub.admin.*`, and on the upstream span `hub.attempt`, `hub.breaker_state`, `hub.wait.limiter_ms`, `hub.wait.bulkhead_ms`. Each new key goes into `telemetry.AllowedSpanAttributes`. When the admin contract gains a vendor-definition trace flag (TECH_SPEC §22 q9), switch vendor forwarding to it and retire `HUB_TRACE_FORWARD_VENDORS` (ADR-0013).
 
 **Acceptance criteria**
 - [ ] Each listed span exists with its attributes, created only under a recording parent (0 allocations unsampled)

@@ -31,7 +31,7 @@ Without consistent metrics, labels and alerts, outages are found by callers and 
 - [US-1802](../product/USER_STORIES.md) — Overhead breakdown
 - [US-1803](../product/USER_STORIES.md) — Load and soak tests
 - [US-1804](../product/USER_STORIES.md) — Dashboards
-- [US-1805](../product/USER_STORIES.md) — One trace per request, across the queue
+- [US-1806](../product/USER_STORIES.md) — One trace per request, across the queue
 
 ## UX / API surface
 | Surface | Item | Contract ref |
@@ -59,7 +59,7 @@ Alerts (DESIGN §16.3):
 2. `tenant` and `integration` labels allowed; `request_id` never a label.
 3. Logs are structured `slog` JSON via the redacting handler; every log line carries `request_id` and trace ids when present.
 4. **Metrics (HUB-230, done):** every §16.2 metric is registered; `TestDesignMetricsAreRegistered` (roles) enumerates the names from one registry wired like the data plane. `hub_requests_total` is counted once per request: in the gateway for requests that end there (dry-runs excluded) and in delivery for each committed terminal transition of a queued request. The outbox gauges (`queue_depth`, `queue_oldest_age_s`, `dlq_count`) come from `delivery.QueueSampler` on the scheduler leader every 10 s. `credential_expiry_days` is computed at scrape time. Capped metrics fold excess label combinations into `__overflow__` (OBSERVABILITY §3.1). `hub_overhead_ms` is broken down by stage in `hub_stage_duration_ms` (since HUB-027).
-5. **Tracing (HUB-231, in review; ADR-0012):** the edge names the otelhttp server span after the route and tags it with request id, tenant, integration, version, mode and canonical code; `hub.transform.request` / `hub.transform.response` are created only under a recording span; async, wait and park requests open `hub.queue.enqueue`, whose `traceparent` the envelope stores; the worker's `hub.worker.attempt` is a new root linked to it, parent of the transform and upstream spans; terminal transitions store their span's `traceparent` on each callback row and `hub.callback.deliver` links to it. The link-aware sampler keeps linked roots sampled when the accepting trace was. Vendors listed in `HUB_TRACE_FORWARD_VENDORS` receive the upstream span's `traceparent`. `hub.requests.trace_id` is filled. Every span attribute key is in `telemetry.AllowedSpanAttributes`; the tests reject any other key and any value containing a credential, the API key or a body fragment. Remaining spans (`hub.validate`, `hub.resolve`, `hub.idempotency`, webhook inbound, snapshot apply, admin, upstream attempt/breaker attributes): HUB-240.
+5. **Tracing (HUB-231, in review; ADR-0013):** the edge names the otelhttp server span after the route and tags it with request id, tenant, integration, version, mode and canonical code; `hub.transform.request` / `hub.transform.response` are created only under a recording span; async, wait and park requests open `hub.queue.enqueue`, whose `traceparent` the envelope stores; the worker's `hub.worker.attempt` is a new root linked to it, parent of the transform and upstream spans; terminal transitions store their span's `traceparent` on each callback row and `hub.callback.deliver` links to it. The link-aware sampler keeps linked roots sampled when the accepting trace was. Vendors listed in `HUB_TRACE_FORWARD_VENDORS` receive the upstream span's `traceparent`. `hub.requests.trace_id` is filled. Every span attribute key is in `telemetry.AllowedSpanAttributes`; the tests reject any other key and any value containing a credential, the API key or a body fragment. Remaining spans (`hub.validate`, `hub.resolve`, `hub.idempotency`, webhook inbound, snapshot apply, admin, upstream attempt/breaker attributes): HUB-240.
 6. Load-test acceptance: overhead p99 ≤ 5 ms at target load; async accept p99 ≤ 10 ms; soak: zero lost accepted requests (ledger reconciliation of accepted vs terminal).
 
 ## Data model impact
@@ -104,4 +104,4 @@ HUB-230 – HUB-249.
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-11-06 | HUB-230 shipped: full §16.2 metric set, cardinality guard, status in-progress | backend-engineer |
-| 2026-11-06 | HUB-231: tracing across edge, transform, upstream, outbox, worker and callbacks; ADR-0012; US-1805 | backend-engineer |
+| 2026-11-06 | HUB-231: tracing across edge, transform, upstream, outbox, worker and callbacks; ADR-0013; US-1806 | backend-engineer |

@@ -71,7 +71,7 @@ type Config struct {
 	OTLPEndpoint     string // empty disables trace export
 	TraceSampleRatio float64
 	// TraceForwardVendors names the vendors (registry vendor names) that receive the Hub's W3C
-	// traceparent; every other vendor gets none (DESIGN §16.4, ADR-0012).
+	// traceparent; every other vendor gets none (DESIGN §16.4, ADR-0013).
 	TraceForwardVendors []string
 	ConfigDir           string // dev registry (backend/config); production nodes fetch snapshots instead (M7)
 	ContractsDir        string // repo-root contracts/, for capability schemas
