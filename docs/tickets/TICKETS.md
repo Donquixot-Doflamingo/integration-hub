@@ -1782,7 +1782,7 @@ Multi-hour soak with randomised mockvendor outages and worker restarts; reconcil
 
 ### HUB-237 — Runbooks and M8 summary
 - **Epic:** EP-09 · **Type:** docs · **Area:** docs
-- **Status:** in-progress · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-1807
+- **Status:** in-review · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-1807
 - **Branch:** `docs/HUB-237-runbooks-m8`
 
 Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`, credential rotation, snapshot lag; post the M8 wrap-up. The alert rules (HUB-232) link `docs/runbooks/<AlertName>.md` for all ten alerts in `deploy/alerts/hub.rules.yaml` (six page, four warn).
@@ -1791,8 +1791,8 @@ Part 1 done: `docs/runbooks/` has one runbook per alert (all ten, page and warn)
 
 **Acceptance criteria**
 - [x] Each paging alert links a runbook: `docs/runbooks/<AlertName>.md` exists for every `runbook_url` in `deploy/alerts/hub.rules.yaml` (the four warn alerts too)
-- [ ] Milestone summary posted; F-18 doc updated
-- [ ] Release notes for v1.0.0 prepared per `docs/process/RELEASE.md`
+- [x] Milestone summary posted; F-18 doc updated: `docs/milestones/M8.md`
+- [x] Release notes for v1.0.0 prepared per `docs/process/RELEASE.md`: `docs/releases/v1.0.0.md` (draft; tagging waits on the blockers it lists)
 
 ### HUB-238 — Transformer time budget flakes under -race in the full itest run
 - **Epic:** EP-09 · **Type:** test · **Area:** backend
