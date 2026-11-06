@@ -2,6 +2,8 @@ module github.com/Donquixot-Doflamingo/integration-hub/backend
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require (
 	github.com/expr-lang/expr v1.17.8
 	github.com/getkin/kin-openapi v0.152.0
@@ -52,7 +54,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
 	go.uber.org/atomic v1.12.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect

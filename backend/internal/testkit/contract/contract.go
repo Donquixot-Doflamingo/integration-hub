@@ -212,7 +212,7 @@ func (s *Spec) do(tb testing.TB, req *http.Request, invalid bool) (int, []byte) 
 		body, _ = io.ReadAll(req.Body)
 		req.Body = io.NopCloser(bytes.NewReader(body))
 	}
-	resp, err := http.DefaultClient.Do(req) //nolint:gosec // test helper: the URL is the test's own server
+	resp, err := http.DefaultClient.Do(req) // #nosec G107 G704 -- test helper: the URL is the test's own server
 	if err != nil {
 		tb.Fatalf("%s %s: %v", req.Method, req.URL, err)
 	}

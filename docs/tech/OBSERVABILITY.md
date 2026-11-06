@@ -176,8 +176,9 @@ Request-scoped fields are attached once via a `slog.Logger` stored in the contex
 - The set (`telemetry.SecretSet`) supports `Add`, `Remove` and `Replace` at runtime (credential warm-up and rotation). Readers are lock-free (an atomic pointer to a `strings.Replacer`, longest secret first). Values shorter than 6 bytes are ignored.
 - Keys named `authorization`, `proxy_authorization`, `cookie`, `set_cookie`, `api_key`, `password`, `secret`, `token` or `passcode` (any case) are always replaced with `***`, whatever their value.
 - Measured overhead (Apple M-series, Go 1.27, `BenchmarkRedactHandler`, 4 attrs, 50 registered secrets): ~1.0 µs and 21 allocs per line, vs ~0.57 µs and 4 allocs for the bare JSON handler. The cost is off the per-stage budget, since hot-path logging is debug-level and sampled (§4.2). Revisit with an Aho-Corasick matcher if the set grows into the thousands.
+- What is registered: decrypted vendor credentials and registrar signing secrets (credential cache, at warm-up and rotation) and the process's config secrets, the Postgres DSN password and `HUB_AUDIT_MASK_KEY` (`roles.Run`, HUB-234).
 - Tenant API keys never reach logs: edge logs only `key_id`.
-- Test: the M3 grep test asserts no registered secret appears in captured logs or stored audit events (TESTING_STRATEGY §3.4).
+- Test: the M3 grep test asserts no registered secret appears in captured logs or stored audit events (TESTING_STRATEGY §3.4). HUB-234 adds the role-log secret grep: all roles' logs from the `roles` integration run are captured and grepped for every secret the tests used (SECURITY.md §9). No new metrics, log lines or spans.
 
 ### 4.4 Bodies
 Logs **never** contain request or response bodies, canonical or vendor (backend/AGENTS.md). For debugging, use the audit timeline (subject to payload policy) or `dry-run`. The only exception is `mockvendor`, which may log bodies because it only sees synthetic data.

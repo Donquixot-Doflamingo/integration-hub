@@ -86,7 +86,7 @@ func pick(targets []registry.Target, routeKey string) (int, error) {
 	}
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(routeKey))
-	slot := int(h.Sum64() % 100) //nolint:gosec // modulo 100 fits in int
+	slot := int(h.Sum64() % 100) // #nosec G115 -- modulo 100 fits in int
 	sum := 0
 	for i, t := range targets {
 		sum += t.Weight
