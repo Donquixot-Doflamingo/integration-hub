@@ -31,6 +31,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Live-traffic changes and secret-minting tools need `confirm: true`; minted keys and signing secrets are marked sensitive and shown once
   - `make contracts-check` now fails if any tool maps to a DELETE or forbidden operation, accepts a secret input, or leaves a hub-admin operation unclassified
   - hubmcp must implement the new tools in HUB-315; until then its frozen-contract drift tests fail on this branch
+- 2026-11-07 · `test(upstream)` · Give every node the full second in the breaker force test (HUB-416) · HUB-416 · F-12
+  - TestForceReachesEveryNodeWithinOneSecond no longer fails when node B's Redis message lands a few ms after node A's; it still fails if the hold is not in force on B within 1 s
 - 2026-11-07 · `docs(skills)` · Fix the transformer skill and file the gaps the operator skill found (HUB-316) · HUB-316 · F-21
   - hub-transformers skill: the header field is `docs_url` and `hubctl transform test` takes transformer IDs (`T1`, `T2@3`), matching the code
   - New tickets: console pages for vendors, accounts with write-only credentials, integration authoring and transformer authoring (HUB-290 to HUB-293); `delivery.polling` contract mismatch (HUB-414); unchecked `requests_read` scope (HUB-415)

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **250** · done: **177** · todo: **59** · other (in-progress/in-review/blocked): **14**
+Total tickets: **251** · done: **177** · todo: **59** · other (in-progress/in-review/blocked): **15**
 
 ## Epics
 
@@ -21,7 +21,7 @@ Total tickets: **250** · done: **177** · todo: **59** · other (in-progress/in
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 40 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 19 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 4 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 14 | 0 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 15 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3192,6 +3192,17 @@ Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md` §3.3). At abou
 - [ ] Batched `COPY` (or multi-row insert) and a configurable number of writer goroutines; buffer size configurable (with HUB-403)
 - [ ] `hubload` async step at the gateway's accept limit shows no `buffer_full` drops on the same machine, or the report names the new limit
 - [ ] Benchmark of events/s per writer vs `main` (benchstat)
+
+### HUB-416 — Breaker force test checks node B before its subscription message can arrive
+- **Epic:** EP-13 · **Type:** test · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-209 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `test/HUB-416-breaker-force-race`
+
+`TestForceReachesEveryNodeWithinOneSecond` failed on #31, a docs-only PR. It waited until node A saw the forced-open hold, then checked node B once. B hears the hold on its own Redis subscription, which can land a few ms after A's, so the single check raced. The guarantee (HUB-209) is "in force on every node within 1 s of the write", so B now gets the same 1 s window.
+
+**Acceptance criteria**
+- [x] Node B is polled until it refuses, failing only 1 s after the force (the guarantee, unchanged)
+- [x] 20 consecutive runs pass under `-race`
 
 ### HUB-414 — Contract mismatch: admin server accepts delivery.polling
 - **Epic:** EP-13 · **Type:** fix · **Area:** contracts
