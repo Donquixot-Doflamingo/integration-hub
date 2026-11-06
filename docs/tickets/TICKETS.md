@@ -2474,18 +2474,18 @@ Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §9: `CredentialSource` 
 
 ### HUB-342 — Use-case catalogue and a runnable OTP → account-verification example
 - **Epic:** EP-12 · **Type:** docs · **Area:** docs
-- **Status:** in-progress · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
+- **Status:** in-review · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
 - **Branch:** `docs/HUB-342-use-cases`
 
 The product owner asked how calls work and how UX-style flows ("first an OTP, then the user gives the account number") are handled inside the Hub. Write `docs/use-cases/README.md`: a catalogue for non-engineers of what the Hub does today vs what is planned, with the caller's exact requests and responses (shapes from `contracts/openapi/hub-public.v1.yaml`, no vendor names), a sequence diagram, failure behaviour and a status line citing the test that proves it. Back the two-step flow with a runnable example under `examples/otp-account-flow/` (registry overlay kept out of `backend/config` and `contracts/`, fictional vendor `demo-kyc` on mockvendor) and an integration test through the real gateway. Gaps found on the way become their own tickets (HUB-343 … HUB-348).
 
 **Acceptance criteria**
-- [ ] `docs/use-cases/README.md` covers: how a call flows (pipeline, DESIGN §18.6 latency budget), events sync/async with multi-account and a minimal response, vendor/account swap with zero caller change, vendor down (fail_fast / wait / async parking and drain), async with signed callback, idempotent retry, two-step OTP → verify → bank account, the DESIGN §14 lending patterns with their EP-12 tickets
-- [ ] Each use case has the caller's HTTP requests/responses, a mermaid sequence diagram, failure behaviour and a status line (Works today + test / Partly / Planned + ticket)
-- [ ] `examples/otp-account-flow/` overlay: two example capability schemas, vendor `demo-kyc`, two accounts, tenant `loan-onboarding`, integrations `int_demo_otp` (v1, v2) and `int_demo_bank_verify`, four transformers with goldens; nothing added to `backend/config` or `contracts/`
-- [ ] `TestExampleOTPConfigBuilds` (unit) builds the overlay and runs its goldens; `TestExampleOTPAccountFlow` (integration) runs step 1 (session opened, vendor txn id kept) → publish v2 → step 2 pinned to account A → step 3 bank verification, plus wrong OTP, vendor-expired OTP, expired session (`SESSION_NOT_FOUND`), double tap, vendor down, edge refusals, invalid account
-- [ ] `examples/otp-account-flow/README.md` with how to run it and the exact requests
-- [ ] Linked from the root `README.md` and `docs/features/README.md`; CHANGELOG entry
+- [x] `docs/use-cases/README.md` covers: how a call flows (pipeline, DESIGN §18.6 latency budget), events sync/async with multi-account and a minimal response, vendor/account swap with zero caller change, vendor down (fail_fast / wait / async parking and drain), async with signed callback, idempotent retry, two-step OTP → verify → bank account, the DESIGN §14 lending patterns with their EP-12 tickets
+- [x] Each use case has the caller's HTTP requests/responses, a mermaid sequence diagram, failure behaviour and a status line (Works today + test / Partly / Planned + ticket)
+- [x] `examples/otp-account-flow/` overlay: two example capability schemas, vendor `demo-kyc`, two accounts, tenant `loan-onboarding`, integrations `int_demo_otp` (v1, v2) and `int_demo_bank_verify`, four transformers with goldens; nothing added to `backend/config` or `contracts/`
+- [x] `TestExampleOTPConfigBuilds` (unit) builds the overlay and runs its goldens; `TestExampleOTPAccountFlow` (integration) runs step 1 (session opened, vendor txn id kept) → publish v2 → step 2 pinned to account A → step 3 bank verification, plus wrong OTP, vendor-expired OTP, expired session (`SESSION_NOT_FOUND`), double tap, vendor down, edge refusals, invalid account
+- [x] `examples/otp-account-flow/README.md` with how to run it and the exact requests
+- [x] Linked from the root `README.md` and `docs/features/README.md`; CHANGELOG entry
 
 ### HUB-343 — Per-operation transformers on integration version targets
 - **Epic:** EP-12 · **Type:** feat · **Area:** backend

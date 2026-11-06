@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `docs(use-cases)` · Add the use-case catalogue for product owners (HUB-342) · HUB-342 · F-22
+  - docs/use-cases/README.md: how a call flows through the Hub (pipeline and the DESIGN §18.6 latency budget), then events, vendor/account swaps, vendor outages, signed callbacks, idempotent retries, two-step OTP -> verify -> bank account, and the DESIGN §14 lending patterns, each with the caller's exact requests, a sequence diagram, failure behaviour and a status line citing its test or ticket
+  - Two-step flows are marked Partly: vendor sessions work today; steps on different vendor endpoints need HUB-343
+  - Linked from the root README and the feature index; F-22 records the R2-5 status and the new items R2-11 (HUB-347) and R2-12 (HUB-348); HUB-342 in review
 - 2026-11-06 · `test(edge)` · Build the example snapshots once per test rig (HUB-342) · HUB-342 · F-22
   - TestExampleOTPAccountFlow builds the two example snapshots (and runs their goldens) once instead of nine times, so it is far less exposed to the transform time-budget flake under load (HUB-238)
 - 2026-11-06 · `test(edge)` · Add a runnable OTP to bank-account example flow (HUB-342) · HUB-342 · F-22
