@@ -59,6 +59,7 @@ func WriteError(w http.ResponseWriter, r *http.Request, ce *core.CanonicalError)
 	if ce.RequestID == "" {
 		ce.RequestID = RequestID(r.Context())
 	}
+	tagCode(r.Context(), string(ce.Code))
 	status := ce.Code.HTTPStatus()
 	if status == 0 {
 		status = http.StatusInternalServerError

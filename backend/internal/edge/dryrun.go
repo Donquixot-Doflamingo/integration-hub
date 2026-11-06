@@ -34,6 +34,7 @@ func (s *Server) dryRun(w http.ResponseWriter, r *http.Request) {
 		op = "default"
 	}
 	p, ce := s.prepare(r, ScopeDryRun, op)
+	tagIntegration(r.Context(), p)
 	if ce != nil {
 		s.fail(w, r, p, ce)
 		return

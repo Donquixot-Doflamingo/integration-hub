@@ -327,13 +327,19 @@ type result struct {
 
 // attempt sends one claimed delivery and records the outcome.
 func (d *Dispatcher) attempt(ctx context.Context, row delivery) {
-	ctx, span := d.tracer.Start(ctx, "hub.callback.deliver", trace.WithSpanKind(trace.SpanKindClient),
+	// A new root per attempt, linked to the terminal transition that enqueued the callback (the
+	// worker's attempt span), like the worker's own link to the accepting trace (DESIGN §11.3).
+	opts := []trace.SpanStartOption{trace.WithNewRoot(), trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
 			attribute.String("hub.endpoint_id", row.EndpointID),
 			attribute.Int("hub.callback.attempt", row.Attempts),
 			attribute.String("hub.callback.event", row.EventType),
 			attribute.String("hub.request_id", row.RequestID),
-		))
+		)}
+	if l, ok := telemetry.LinkTo(row.Traceparent); ok {
+		opts = append(opts, trace.WithLinks(l))
+	}
+	ctx, span := d.tracer.Start(ctx, "hub.callback.deliver", opts...)
 	defer span.End()
 
 	res := d.send(ctx, row)

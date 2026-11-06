@@ -420,7 +420,7 @@ Columns per DESIGN §18.2. This section adds keys, indexes, partitioning and ret
 | `outbox` | `request_id` | partial `(next_attempt_at) WHERE status IN ('accepted','retry_scheduled')` (claim); partial `(account_id, endpoint_id, next_attempt_at) WHERE status='parked'` (release, arrival order); partial `(claimed_until) WHERE status='in_flight'` (reclaim); `(expires_at) WHERE status IN ('retry_scheduled','parked')` (TTL); `(ordering_key, created_at) WHERE ordering_key IS NOT NULL` | **Not partitioned.** Row deleted on terminal ack in the same TX as the `requests` status change, so it stays small. `fillfactor=70`, aggressive autovacuum (`autovacuum_vacuum_scale_factor=0.01`). DESIGN §18.2 lists `(status, next_attempt_at)` and `(status, account_id, endpoint_id)`; partial indexes are the same keys narrowed by status. |
 | `dead_letters` | `request_id` | `(reason, created_at)`, `(account_id, created_at)` (replay filters, DESIGN §10.6) | 14-day retention |
 | `vendor_sessions` | `session_id` | `(expires_at)` (scheduler sweep); `(account_id, expires_at)` (retire guard `CountOpen`; a partial index on `expires_at > now()` is not allowed, `now()` is not immutable) | Columns: DESIGN §18.2 + `tenant_id`, `created_at` (migration `00006_sessions.sql`). 10-min default TTL; expired rows are invisible to `Get` and deleted by `sessions.Expire`. `data` (JSON object, ≤ 16 KB) and `vendor_txn_id` carry CHECKs refusing a 12-digit (4-4-4) number: the Aadhaar number is never stored (DESIGN §14). Read by the gateway only for requests carrying `X-Hub-Session` (one PK read, ADR-0011) |
-| `callback_deliveries` | `delivery_id` | partial `(next_attempt_at) WHERE status IN ('pending','retry_scheduled')`; `(request_id)`; partial `(claimed_until) WHERE status='in_flight'` (reclaim, HUB-120); partial `(created_at) WHERE status='dead_lettered'` (DLQ count/replay, HUB-120); unique `(event_id, endpoint_id)` | own DLQ via `status='dead_lettered'`; `payload` holds the exact signed bytes (migration `00005_callbacks.sql`) |
+| `callback_deliveries` | `delivery_id` | partial `(next_attempt_at) WHERE status IN ('pending','retry_scheduled')`; `(request_id)`; partial `(claimed_until) WHERE status='in_flight'` (reclaim, HUB-120); partial `(created_at) WHERE status='dead_lettered'` (DLQ count/replay, HUB-120); unique `(event_id, endpoint_id)` | own DLQ via `status='dead_lettered'`; `payload` holds the exact signed bytes (migration `00005_callbacks.sql`); nullable `traceparent` of the terminal transition's span, linked by `hub.callback.deliver` (`00010_callback_trace.sql`, HUB-231) |
 
 **Claim query** (DESIGN §11.2, §18.4):
 ```sql
@@ -502,6 +502,7 @@ Flags override env. Env names: `HUB_*`. Loaded once at start into an immutable s
 | `HUB_WORKER_POOL`, `HUB_WORKER_CLAIM_BATCH`, `HUB_WORKER_CONCURRENCY` | `messaging`, 32, 256 | worker |
 | `HUB_SHUTDOWN_GRACE` | `25s` | all |
 | `HUB_OTLP_ENDPOINT`, `HUB_TRACE_SAMPLE_RATIO` | empty (off), `0.05` | all |
+| `HUB_TRACE_FORWARD_VENDORS` | empty (no vendor receives `traceparent`; comma-separated vendor names, ADR-0013) | gateway, worker |
 | `HUB_LOG_LEVEL`, `HUB_LOG_FORMAT` | `info`, `json` (`text` allowed in dev) | all |
 | `GOMEMLIMIT`, `GOGC` | see `OBSERVABILITY.md` §8.3 | all |
 | `HUB_OIDC_ISSUER`, `HUB_OIDC_AUDIENCE` | dev stub issuer | admin |
@@ -874,4 +875,4 @@ See DESIGN §3.1. Additional: **stage** — one timed step of the hot path (§11
 6. **Node → admin service authentication** for snapshot long-poll (§7).
 7. **`pool` column** on `outbox` (§6.3) — implied by DESIGN §17, not in §18.2.
 8. **Dev OIDC stub** source (§17.3).
-9. **Trace propagation to vendors** needs a vendor-definition flag (e.g. `propagate_trace: true`); DESIGN §16.4 says "vendors that accept it" without a field.
+9. **Trace propagation to vendors** needs a vendor-definition flag (e.g. `propagate_trace: true`); DESIGN §16.4 says "vendors that accept it" without a field. *Interim (HUB-231, ADR-0013):* process config `HUB_TRACE_FORWARD_VENDORS`; the vendor field awaits a contract change.

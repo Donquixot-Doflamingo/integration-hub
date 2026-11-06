@@ -22,7 +22,8 @@ type delivery struct {
 	EndpointID         string
 	Subscription       int
 	Payload            []byte
-	Attempts           int // including the attempt this claim is for
+	Attempts           int    // including the attempt this claim is for
+	Traceparent        string // the terminal transition's span ("" without one)
 }
 
 // outcome is the recorded result of one attempt.
@@ -69,7 +70,7 @@ SET status = 'in_flight', claimed_by = $1, claimed_until = now() + $3 * interval
     attempts = d.attempts + 1, updated_at = now()
 WHERE d.delivery_id IN (SELECT delivery_id FROM due UNION SELECT delivery_id FROM abandoned)
 RETURNING d.delivery_id, d.event_id, d.event_type, d.request_id, d.tenant_id, d.integration_id,
-    d.integration_version, d.endpoint_id, d.subscription, d.payload, d.attempts`
+    d.integration_version, d.endpoint_id, d.subscription, d.payload, d.attempts, coalesce(d.traceparent, '')`
 
 func (s pgStore) claim(ctx context.Context, worker string, n int, visibility time.Duration) ([]delivery, error) {
 	rows, err := s.pool.Query(ctx, claimDue, worker, n, visibility.Milliseconds())
@@ -79,7 +80,7 @@ func (s pgStore) claim(ctx context.Context, worker string, n int, visibility tim
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (delivery, error) {
 		var d delivery
 		err := r.Scan(&d.ID, &d.EventID, &d.EventType, &d.RequestID, &d.TenantID, &d.IntegrationID,
-			&d.IntegrationVersion, &d.EndpointID, &d.Subscription, &d.Payload, &d.Attempts)
+			&d.IntegrationVersion, &d.EndpointID, &d.Subscription, &d.Payload, &d.Attempts, &d.Traceparent)
 		return d, err
 	})
 	if err != nil {
