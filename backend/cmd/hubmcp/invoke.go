@@ -94,6 +94,10 @@ func (a *app) invoke(ctx context.Context, c *toolCall) toolResult {
 }
 
 func (a *app) invokeChecked(ctx context.Context, c *toolCall, in *invokeInput) toolResult {
+	if in.IdempotencyKey != "" && !printableASCII(in.IdempotencyKey) {
+		// The Idempotency-Key header allows printable ASCII without spaces (hub-public).
+		return invalidArguments(toolInvoke, errors.New("idempotency_key must be printable ASCII without spaces"))
+	}
 	// Pre-check (contract hub_invoke safety): read the integration, cached ≤ 60 s.
 	d, err := a.integrations.get(ctx, c, in.IntegrationID)
 	if err != nil {
@@ -183,6 +187,15 @@ func invokeSummary(in *invokeInput) string {
 		key = "(none)"
 	}
 	return "integration_id=" + in.IntegrationID + " operation=" + op + " idempotency_key=" + key + " body=" + string(in.Body)
+}
+
+func printableASCII(s string) bool {
+	for i := range len(s) {
+		if s[i] < 0x21 || s[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 // autoRetry reports whether err may be retried once and after how long.

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -216,10 +217,12 @@ const (
 func (a *app) hubErrorObject(err error) (*errorObject, int) {
 	var he *hubclient.Error
 	if !errors.As(err, &he) {
-		return &errorObject{
-			Code:    string(hubclient.CodeInternalError),
-			Message: "hubmcp could not reach the Hub (" + err.Error() + "). Check HUB_BASE_URL and that the gateway is running.",
-		}, 0
+		msg := "hubmcp could not use the Hub's answer: " + err.Error()
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			msg = "hubmcp could not reach the Hub (" + err.Error() + "). Check HUB_BASE_URL and that the gateway is running."
+		}
+		return &errorObject{Code: string(hubclient.CodeInternalError), Message: msg}, 0
 	}
 	e := &errorObject{Code: string(he.Code), Message: he.Message, Retryable: he.Retryable, RequestID: optString(he.RequestID)}
 	if he.RetryAfter > 0 {

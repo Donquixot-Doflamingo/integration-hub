@@ -215,6 +215,16 @@ func TestInvoke(t *testing.T) {
 			want: want{outcome: "error", code: "VALIDATION_FAILED"},
 		},
 		{
+			name: "idempotency key with a space is refused locally",
+			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "idempotency_key": "order 8821"},
+			want: want{outcome: "error", code: "VALIDATION_FAILED"},
+			check: func(t *testing.T, h *fakeHub, out toolOutcome) {
+				if msg, _ := out.field(t, "error", "message").(string); !strings.Contains(msg, "printable ASCII") || len(h.callsTo("")) != 0 {
+					t.Errorf("got %s with %d Hub calls", out.json, len(h.callsTo("")))
+				}
+			},
+		},
+		{
 			name: "vendor-selecting argument is refused locally",
 			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "vendor": "clevertap"},
 			want: want{outcome: "error", code: "VALIDATION_FAILED"},

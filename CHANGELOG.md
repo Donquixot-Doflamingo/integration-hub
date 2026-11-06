@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(hubmcp)` · Refuse idempotency keys the Idempotency-Key header cannot carry (HUB-303) · HUB-303 · F-20
+  - hub_invoke answers VALIDATION_FAILED for an idempotency_key with spaces or non-ASCII characters instead of a misleading "could not reach the Hub"
+  - The HUB_BASE_URL hint now appears only for real connection failures
 - 2026-11-07 · `test(hubmcp)` · Run hubmcp end to end against a running Hub and mockvendor (HUB-307) · HUB-307 · F-20
   - The integration suite builds and runs admin, gateway, worker and mockvendor and drives every hubmcp flow: discovery, dry-run, sync invoke, async invoke until succeeded, money/quota refusal and confirmed invoke, admin tools
   - A grep over every tenant tool output proves no vendor, account or version appears outside hub_dry_run
