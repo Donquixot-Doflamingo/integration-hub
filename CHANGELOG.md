@@ -17,6 +17,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Span attributes are allowlisted (telemetry.AllowedSpanAttributes); tests fail on any other key or on a credential, API key or body fragment in a value
 - 2026-11-06 · `test(edge)` · Raise the tenant quota in the overhead benchmark so it runs again (HUB-231) · HUB-231 · F-18
   - BenchmarkInvokeOverhead no longer stops with 429 UPSTREAM_RATE_LIMITED after the dev tenant's 100 rps quota; the token bucket stays on the measured path
+- 2026-11-06 · `docs(tickets)` · Close HUB-230 and track HUB-238/HUB-239 for review (HUB-239) · HUB-239 · F-18
+  - HUB-230 done (PR #16 merged); HUB-238 in review; new ticket HUB-239 for the registry watch flake
+- 2026-11-06 · `test(registry)` · Write config edits atomically in the watch test (HUB-239) · HUB-239 · F-03
+  - TestWatchSwapsValidEditsAndKeepsLastGoodOnInvalid no longer reads a half-written file and fails with EOF
+- 2026-11-06 · `fix(transform)` · Re-run a golden case once when it only overran the time budget (HUB-238) · HUB-238 · F-04
+  - Publish-time goldens no longer fail on a single wall-clock overrun (GC pause, loaded CI under -race); a transformer that overruns twice is still refused
 - 2026-11-06 · `fix(deploy)` · Read /metrics fully in the M0 smoke test instead of piping to grep -q (HUB-230) · HUB-230 · F-01
   - smoke-m0 no longer fails when grep stops reading before curl has written the whole /metrics body (curl exit 23 under pipefail)
 - 2026-11-06 · `docs(tickets)` · Track the transformer time-budget flake seen in the full itest run (HUB-238) · HUB-238 · F-04

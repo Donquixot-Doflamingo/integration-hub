@@ -71,6 +71,13 @@ func (gc goldenContext) input(req map[string]any) (Input, error) {
 	return in, nil
 }
 
+// goldenTimeBudgetRetries is how many times RunGoldens re-runs a case that failed only on the
+// time budget (HUB-238). goldenTimeBudgetHook, when set (tests), is called on every overrun.
+var (
+	goldenTimeBudgetRetries = 1
+	goldenTimeBudgetHook    func()
+)
+
 // RunGoldens runs every fixture case of p from fixtures (the transformer's fixtures/ directory).
 // A transformer with no cases fails: every transformer ships with goldens (AGENTS §3.4).
 func RunGoldens(p *Program, fixtures fs.FS) []GoldenResult {
@@ -95,11 +102,27 @@ func RunGoldens(p *Program, fixtures fs.FS) []GoldenResult {
 	out := make([]GoldenResult, 0, len(cases))
 	for _, c := range cases {
 		r := GoldenResult{Transformer: p.ref, Case: c}
+		run := func() ([]string, error) {
+			if p.kind == "request" {
+				return p.goldenRequest(fixtures, c)
+			}
+			return p.goldenResponse(fixtures, c)
+		}
 		var err error
-		if p.kind == "request" {
-			r.Diffs, err = p.goldenRequest(fixtures, c)
-		} else {
-			r.Diffs, err = p.goldenResponse(fixtures, c)
+		// The time budget is wall-clock, so a GC pause or a loaded machine (CI under -race) can
+		// overrun it once. Re-run a case that failed on time alone, as the request path does
+		// (ErrTimeBudget); a transformer that is really too slow overruns again and still fails.
+		for attempt := 0; ; attempt++ {
+			r.Diffs, err = run()
+			if !errors.Is(err, ErrTimeBudget) {
+				break
+			}
+			if goldenTimeBudgetHook != nil {
+				goldenTimeBudgetHook()
+			}
+			if attempt == goldenTimeBudgetRetries {
+				break
+			}
 		}
 		if err != nil {
 			r.Err = err.Error()

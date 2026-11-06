@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 func fixtures(files map[string]string) fstest.MapFS {
@@ -83,5 +84,45 @@ func TestDiffNumbersCompareByValue(t *testing.T) {
 	}
 	if d := Diff([]any{1.0, 2.0}, []any{1.0}); len(d) != 1 || d[0] != "/: expected 2 items, got 1" {
 		t.Fatalf("diffs %v", d)
+	}
+}
+
+// TestGoldensRetryTimeBudgetOnce (HUB-238): a case that overruns the wall-clock budget once
+// (GC pause, loaded CI machine) passes on its re-run; a transformer that is really too slow
+// overruns twice and still fails, so publishing a slow transformer stays impossible.
+func TestGoldensRetryTimeBudgetOnce(t *testing.T) {
+	files := map[string]string{"ok.input.json": t1InputJSON, "ok.expected_request.json": t1ExpectedJSON}
+	tests := []struct {
+		name     string
+		recover  bool // the overrun is transient: the budget is restored after the first one
+		overruns int
+		wantPass bool
+	}{
+		{name: "transient overrun passes on the re-run", recover: true, overruns: 1, wantPass: true},
+		{name: "persistent overrun still fails", recover: false, overruns: 2, wantPass: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := compileDev(t, "T1/7.yaml")
+			p.limits.TimeBudget = time.Nanosecond
+			overruns := 0
+			goldenTimeBudgetHook = func() {
+				overruns++
+				if tt.recover {
+					p.limits.TimeBudget = time.Second
+				}
+			}
+			t.Cleanup(func() { goldenTimeBudgetHook = nil })
+			res := RunGoldens(p, fixtures(files))
+			if len(res) != 1 || res[0].Passed() != tt.wantPass {
+				t.Fatalf("result %+v, want passed=%v", res, tt.wantPass)
+			}
+			if overruns != tt.overruns {
+				t.Fatalf("overruns = %d, want %d (one re-run, never more)", overruns, tt.overruns)
+			}
+			if !tt.wantPass && !strings.Contains(res[0].Err, "time budget exceeded") {
+				t.Fatalf("err %q", res[0].Err)
+			}
+		})
 	}
 }
