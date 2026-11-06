@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(edge)` · Check the ramped drain by step boundaries, not 1 s windows (HUB-156) · HUB-156 · F-12
+  - TestChaos2RecoveryAndRampedDrain no longer fails when a slow CI runner delays a scheduler pass: it asserts the drain is never ahead of the ramp, loses no quota (owed releases are out within one catch-up horizon) and empties the 160-envelope backlog by 5.8 s
+- 2026-11-07 · `fix(delivery)` · Cap the drain catch-up at one second of the rate, not two ticks (HUB-156) · HUB-156 · F-12
+  - The ramped drain makes up scheduler passes slower than two ticks instead of losing their quota; it never releases above the ramped account rate
 - 2026-11-07 · `docs(security)` · Document the HUB-234 security gates and tests · HUB-234 · F-18
   - SECURITY.md: gosec/govulncheck gates and the reviewed #nosec triage table (§8.1), explicit TLS floor and egress tests (§5), redaction set contents (§3), role-log secret grep (§9)
   - HUB-234 in review with all acceptance criteria met; new todo tickets HUB-248 (nosniff header) and HUB-249 (server read timeout and header limit)
