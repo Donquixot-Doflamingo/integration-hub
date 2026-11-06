@@ -123,8 +123,19 @@ func TestForceReachesEveryNodeWithinOneSecond(t *testing.T) {
 		t.Fatalf("force %+v %v", next, err)
 	}
 	waitState(t, ba, Open, time.Second)
-	if ok, _, _ := b.Get(key, policy()).Allow(time.Now()); ok {
-		t.Fatal("node B (never used the breaker) passed a forced-open breaker")
+	// B hears the hold on its own Redis subscription, which can land a few ms after A's: the
+	// guarantee is "in force on every node within 1 s of the write", so B gets the same window
+	// (HUB-416). It was checked once, right after A, which raced with B's message.
+	nodeB := b.Get(key, policy())
+	for {
+		ok, _, _ := nodeB.Allow(time.Now())
+		if !ok {
+			break
+		}
+		if time.Since(start) > time.Second {
+			t.Fatal("node B (never used the breaker) still passed a forced-open breaker 1 s after the force")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	t.Logf("force-open in force on both nodes after %s", time.Since(start).Round(time.Millisecond))
 	if s, ok, _ := ReadShared(t.Context(), admin, key); !ok || s.Forced != ForceOpen {

@@ -1,0 +1,4 @@
+{
+  "status": 400,
+  "body": {"type": "validation_error", "code": "otp_empty", "message": "Please enter the otp in the request"}
+}

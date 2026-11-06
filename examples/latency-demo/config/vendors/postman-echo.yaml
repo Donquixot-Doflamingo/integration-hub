@@ -1,0 +1,25 @@
+# EXAMPLE ONLY (HUB-353). Postman Echo, a free, open, no-auth HTTP echo service, used to measure
+# what the Hub adds on top of a real internet round trip (examples/latency-demo/run.sh).
+# Docs: https://learning.postman.com/docs/reference/developer-resources/echo-api (checked
+# 2026-11-07); POST /post answered 200 {"args", "data", "files", "form", "headers", "json", "url"}
+# when checked from the build machine the same day. It is a shared public service: keep N and
+# concurrency small.
+#
+# Regions: public (the internet) and mock (mockvendor on this machine, for an offline run of the
+# same script). run.sh picks one by the account's region.
+#
+# The service needs no credentials, but every Hub auth scheme needs one value: static_headers
+# sends creds.client_tag as X-Hub-Demo-Client (a non-secret tag, stored like any credential).
+vendor: postman-echo
+auth: static_headers
+docs_url: https://learning.postman.com/docs/reference/developer-resources/echo-api
+regions:
+  public: https://postman-echo.com
+  mock:   http://127.0.0.1:8099
+endpoints:
+  echo@1: { method: POST, path: /post, timeout_ms: 5000, connect_timeout_ms: 2000, idempotent: true }
+defaults:
+  # High enough not to delay the demo (the account limiter would add waiting time to "via Hub");
+  # politeness to the public service comes from run.sh's small N and C.
+  rate_limit: { per_account_rps: 100 }
+  breaker: { window_s: 30, min_calls: 20, failure_ratio: 0.5, consecutive_timeouts: 5, open_s: 30, open_max_s: 300, half_open_probes: 2 }

@@ -12,9 +12,11 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/pkg/hubclient"
 )
 
-// Admin read-only tools (HUB-305). They are registered only with HUB_ADMIN_TOKEN, use the
-// GET-only adminClient, and never call unseal, replay, purge, pause or force operations
-// (contract rule 4). Control-plane rows legitimately name vendor, account and version.
+// Admin read tools with hand-written handlers (HUB-305): search, timeline and breaker states.
+// The other admin tools are contract-driven (admintools.go). All are registered only with
+// HUB_ADMIN_TOKEN and reach the control plane through the allowlisted adminClient; none can call
+// unseal, replay, purge, pause or force (contract rule 4). Control-plane rows legitimately name
+// vendor, account and version.
 
 // defaultSearchWindow is the time range hub_admin_search_requests uses when none is given
 // (the contract's description: "default to the last hour").
@@ -88,7 +90,7 @@ func (a *app) adminSearchRequests(ctx context.Context, c *toolCall) toolResult {
 	set("to", in.To)
 
 	var page adminPage
-	if err := a.admin.get(ctx, "/requests", q, &page); err != nil {
+	if err := a.admin.get(ctx, "searchRequests", nil, q, &page); err != nil {
 		return adminFailure(toolAdminSearch, err)
 	}
 	for _, row := range page.Items {
@@ -114,13 +116,13 @@ func (a *app) adminRequestTimeline(ctx context.Context, c *toolCall) toolResult 
 	if err := json.Unmarshal(c.args, &in); err != nil {
 		return invalidArguments(toolAdminTimeline, err)
 	}
-	id := url.PathEscape(in.RequestID)
+	id := map[string]string{"request_id": in.RequestID}
 	var tl struct {
 		RequestID     string                       `json:"request_id"`
 		PayloadPolicy string                       `json:"payload_policy"`
 		Events        []map[string]json.RawMessage `json:"events"`
 	}
-	if err := a.admin.get(ctx, "/requests/"+id+"/timeline", nil, &tl); err != nil {
+	if err := a.admin.get(ctx, "getRequestTimeline", id, nil, &tl); err != nil {
 		res := adminFailure(toolAdminTimeline, err)
 		res.requestID = in.RequestID
 		return res
@@ -128,7 +130,7 @@ func (a *app) adminRequestTimeline(ctx context.Context, c *toolCall) toolResult 
 	var at struct {
 		Items []map[string]json.RawMessage `json:"items"`
 	}
-	if err := a.admin.get(ctx, "/requests/"+id+"/attempts", nil, &at); err != nil {
+	if err := a.admin.get(ctx, "listRequestAttempts", id, nil, &at); err != nil {
 		res := adminFailure(toolAdminTimeline, err)
 		res.requestID = in.RequestID
 		return res
@@ -170,7 +172,7 @@ func (a *app) adminBreakerStates(ctx context.Context, c *toolCall) toolResult {
 		q.Set("limit", strconv.Itoa(in.Limit))
 	}
 	var page adminPage
-	if err := a.admin.get(ctx, "/breakers", q, &page); err != nil {
+	if err := a.admin.get(ctx, "listBreakers", nil, q, &page); err != nil {
 		return adminFailure(toolAdminBreakerStates, err)
 	}
 	return toolResult{structured: page.output()}
@@ -191,6 +193,9 @@ func adminFailure(tool string, err error) toolResult {
 		return res
 	}
 	msg := "The admin API answered HTTP " + strconv.Itoa(statusOf(ae)) + " without an error envelope."
+	if errors.Is(err, errOperationNotAllowed) {
+		return failure(tool, &errorObject{Code: string(hubclient.CodeForbidden), Message: "hubmcp refused: " + err.Error() + ". Nothing was sent."}, 0)
+	}
 	if ae == nil || ae.Err != nil {
 		msg = "hubmcp could not read the admin API (" + err.Error() + "). Check HUB_ADMIN_BASE_URL (default HUB_BASE_URL + /admin/v1)."
 	}

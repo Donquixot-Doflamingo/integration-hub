@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "body": {"status": "SUCCESS", "message": "OTP sent successfully", "ref_id": 21637861},
+  "_context": {"req": {"aadhaar_number": "655675523712", "consent": true, "purpose": "KYC for a personal loan application"}}
+}

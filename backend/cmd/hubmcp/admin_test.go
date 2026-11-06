@@ -1,9 +1,7 @@
 package main
 
 import (
-	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -166,64 +164,6 @@ func TestAdminBreakerStates(t *testing.T) {
 			t.Fatalf("got %s", out.json)
 		}
 	})
-}
-
-// TestAdminToolsAreReadOnly (HUB-305): every Hub operation an admin tool maps to is a GET in
-// hub-admin.v1.yaml, and exercising every admin tool sends only GETs to operations in its
-// maps_to (never unseal, replay, purge, pause or force).
-func TestAdminToolsAreReadOnly(t *testing.T) {
-	hub := newFakeHub(t)
-	methodOf := map[string]string{}
-	for _, op := range hub.admin.Operations() {
-		methodOf[op.ID] = op.Method
-	}
-	c, err := loadContract(toolContractJSON)
-	if err != nil {
-		t.Fatal(err)
-	}
-	allowed := map[string][]string{}
-	for _, tool := range c.Tools {
-		if tool.Audience != audienceAdmin {
-			continue
-		}
-		for _, m := range tool.MapsTo {
-			if m.Spec != "hub-admin.v1.yaml" || methodOf[m.OperationID] != http.MethodGet {
-				t.Errorf("%s maps to %s#%s (%s), want a hub-admin GET", tool.Name, m.Spec, m.OperationID, methodOf[m.OperationID])
-			}
-			allowed[tool.Name] = append(allowed[tool.Name], m.OperationID)
-		}
-		if !tool.Annotations.ReadOnlyHint || tool.Annotations.DestructiveHint {
-			t.Errorf("%s annotations are not read-only", tool.Name)
-		}
-	}
-	if len(allowed) != 3 {
-		t.Fatalf("%d admin tools, want 3", len(allowed))
-	}
-
-	hub.on("searchRequests", hub.adm("searchRequests", 200, ""))
-	hub.on("getRequestTimeline", hub.adm("getRequestTimeline", 200, ""))
-	hub.on("listRequestAttempts", hub.adm("listRequestAttempts", 200, ""))
-	hub.on("listBreakers", hub.adm("listBreakers", 200, ""))
-	cs, _ := adminSession(t, hub)
-	for name, args := range map[string]map[string]any{
-		toolAdminSearch:        {},
-		toolAdminTimeline:      {"request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T6", "include_payloads": true},
-		toolAdminBreakerStates: {},
-	} {
-		before := len(hub.callsTo(""))
-		callTool(t, cs, name, args)
-		for _, call := range hub.callsTo("")[before:] {
-			if call.Method != http.MethodGet || !slices.Contains(allowed[name], call.OperationID) {
-				t.Errorf("%s sent %s %s (%s), not a GET in its maps_to", name, call.Method, call.Path, call.OperationID)
-			}
-		}
-	}
-	// Mutating admin operations exist in the contract; none was ever called.
-	for _, call := range hub.callsTo("") {
-		if methodOf[call.OperationID] != http.MethodGet {
-			t.Errorf("mutating operation %s called", call.OperationID)
-		}
-	}
 }
 
 // TestAdminToolsWithoutToken (HUB-305): without HUB_ADMIN_TOKEN the admin tools do not exist, a

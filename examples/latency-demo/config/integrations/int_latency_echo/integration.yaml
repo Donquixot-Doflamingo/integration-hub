@@ -1,0 +1,9 @@
+# EXAMPLE ONLY (HUB-353). A sync call to a public echo API, to compare "direct" with "through the
+# Hub" latency. Echoing moves no money or quota: no Idempotency-Key needed.
+integration: int_latency_echo
+owner_tenant: latency-demo
+capability: demo.echo@v1
+grants: []
+active_version: 1
+description: Latency demo against a public echo API (example)
+moves_money_or_quota: false

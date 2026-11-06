@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"os/exec"
-	"slices"
 	"strings"
 	"testing"
 
@@ -62,46 +61,74 @@ func toolMatrix() map[string][2]toolCase {
 	}
 }
 
-// TestEveryToolSuccessAndError runs a success and an error scenario for every contract tool,
-// validates outputs against the contract (callTool) and checks each tool only calls the Hub
-// operations its maps_to names (HUB-306).
+// TestEveryToolSuccessAndError runs, for every contract tool (all 42), a success and a Hub-error
+// scenario against the contract-validated fake Hub, plus for every admin tool a FORBIDDEN answer
+// to a viewer token surfaced as an isError result. Outputs are validated against the contract
+// (callTool), and every request a tool sends is one of its maps_to operations with exactly the
+// declared http_method (HUB-306, HUB-315).
 func TestEveryToolSuccessAndError(t *testing.T) {
 	c, err := loadContract(toolContractJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
 	matrix := toolMatrix()
-	for _, tool := range c.Tools {
+	covered := 0
+	for i := range c.Tools {
+		tool := &c.Tools[i]
 		cases, ok := matrix[tool.Name]
+		if !ok && tool.Audience == audienceAdmin {
+			cases, ok = adminToolCases(t, tool), true
+		}
 		if !ok {
 			t.Errorf("contract tool %s has no success/error scenario", tool.Name)
 			continue
 		}
-		var mapped []string
+		covered++
+		declared := map[string]string{} // operationId -> http_method
 		for _, m := range tool.MapsTo {
-			mapped = append(mapped, m.OperationID)
+			declared[m.OperationID] = m.HTTPMethod
 		}
-		for i, tc := range cases {
-			wantErr := i == 1
-			t.Run(tool.Name+map[bool]string{false: "/success", true: "/error"}[wantErr], func(t *testing.T) {
+		type scenario struct {
+			name    string
+			tc      toolCase
+			token   string
+			wantErr bool
+			code    string
+		}
+		scenarios := []scenario{{name: "success", tc: cases[0]}, {name: "error", tc: cases[1], wantErr: true}}
+		if tool.Audience == audienceAdmin {
+			scenarios[0].token, scenarios[1].token = testAdminToken, testAdminToken
+			scenarios = append(scenarios, scenario{name: "forbidden", tc: viewerCase(tool, cases[0]), token: testViewerToken, wantErr: true, code: "FORBIDDEN"})
+		}
+		for _, sc := range scenarios {
+			t.Run(tool.Name+"/"+sc.name, func(t *testing.T) {
 				hub := newFakeHub(t)
-				tc.setup(hub)
-				cs := connect(t, testApp(t, hub.srv.URL, tool.Audience == audienceAdmin, nil))
-				out := callTool(t, cs, tool.Name, tc.args)
-				if out.res.IsError != wantErr {
-					t.Fatalf("isError=%v, want %v: %s", out.res.IsError, wantErr, out.json)
+				sc.tc.setup(hub)
+				cs := connect(t, newTestApp(t, hub.srv.URL, appOpts{adminToken: sc.token}))
+				out := callTool(t, cs, tool.Name, sc.tc.args)
+				if out.res.IsError != sc.wantErr {
+					t.Fatalf("isError=%v, want %v: %s", out.res.IsError, sc.wantErr, out.json)
+				}
+				if sc.code != "" && out.field(t, "error", "code") != sc.code {
+					t.Fatalf("error code %v, want %s: %s", out.field(t, "error", "code"), sc.code, out.json)
 				}
 				calls := hub.callsTo("")
 				if len(calls) == 0 {
 					t.Fatal("no Hub call")
 				}
 				for _, call := range calls {
-					if !slices.Contains(mapped, call.OperationID) {
-						t.Errorf("%s called %s, not in its maps_to %v", tool.Name, call.OperationID, mapped)
+					method, ok := declared[call.OperationID]
+					if !ok {
+						t.Errorf("%s called %s, not in its maps_to %v", tool.Name, call.OperationID, declared)
+					} else if call.Method != method {
+						t.Errorf("%s sent %s %s for %s, the contract declares %s", tool.Name, call.Method, call.Path, call.OperationID, method)
 					}
 				}
 			})
 		}
+	}
+	if covered != 42 {
+		t.Errorf("%d tools covered, want 42", covered)
 	}
 }
 

@@ -298,7 +298,7 @@ func (r *latencyRig) pairs(n int, integration string, key bool, out *samples, mu
 	return nil
 }
 
-func quantile(s []time.Duration, q float64) time.Duration {
+func budgetQuantile(s []time.Duration, q float64) time.Duration {
 	c := slices.Clone(s)
 	slices.Sort(c)
 	i := int(q*float64(len(c))+0.5) - 1
@@ -314,7 +314,7 @@ func check(t *testing.T, vendorMS int, name string, s samples, assert bool, adde
 	t.Helper()
 	v := time.Duration(vendorMS) * time.Millisecond
 	q := func(x []time.Duration) [3]time.Duration {
-		return [3]time.Duration{quantile(x, 0.50), quantile(x, 0.95), quantile(x, 0.99)}
+		return [3]time.Duration{budgetQuantile(x, 0.50), budgetQuantile(x, 0.95), budgetQuantile(x, 0.99)}
 	}
 	h, d := q(s.hub), q(s.direct)
 	added := [3]time.Duration{h[0] - d[0], h[1] - d[1], h[2] - d[2]}
@@ -462,10 +462,10 @@ func TestLatencyBudget(t *testing.T) {
 			r.vendor(t, v)
 			for attempt := 1; ; attempt++ {
 				m := r.measure(t)
-				stall := quantile(m.late, 1)
+				stall := budgetQuantile(m.late, 1)
 				t.Logf("DIAG vendor=%dms attempt=%d hub own time (audit ledger, sync) p50/p95/p99/max=%s/%s/%s/%s ms; 1 ms sleep woke late by p50/p99/max=%s/%s/%s ms; GC cycles %d, pause total %s ms; load average %s",
-					v, attempt, ms(quantile(m.own, 0.5)), ms(quantile(m.own, 0.95)), ms(quantile(m.own, 0.99)), ms(quantile(m.own, 1)),
-					ms(quantile(m.late, 0.5)), ms(quantile(m.late, 0.99)), ms(stall), m.gcCycles, ms(m.gcPause), loadAvg())
+					v, attempt, ms(budgetQuantile(m.own, 0.5)), ms(budgetQuantile(m.own, 0.95)), ms(budgetQuantile(m.own, 0.99)), ms(budgetQuantile(m.own, 1)),
+					ms(budgetQuantile(m.late, 0.5)), ms(budgetQuantile(m.late, 0.99)), ms(stall), m.gcCycles, ms(m.gcPause), loadAvg())
 				if stall > maxStall {
 					for _, x := range []struct {
 						name string

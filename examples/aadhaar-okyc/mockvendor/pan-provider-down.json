@@ -1,0 +1,19 @@
+{
+  "description": "PAN: the provider's source is down (502).",
+  "routes": {
+    "pan": {
+      "match": {
+        "method": "POST",
+        "path": "/verification/pan"
+      },
+      "behaviour": {
+        "status": 502,
+        "body": {
+          "type": "internal_error",
+          "code": "verification_failed",
+          "message": "Authorised source is temporarily unavailable, please try again shortly"
+        }
+      }
+    }
+  }
+}

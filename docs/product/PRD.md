@@ -52,7 +52,7 @@ From DESIGN §1, plus scope boundaries agreed for this repo:
 - No broker-backed queue in v1 (Postgres outbox only, D9); NATS/RabbitMQ is Release 3.
 - No multi-region active/active; one region (warm standby is Release 3, pending Q8).
 - The admin console does not edit transformers in v1 (viewer + dry-run + goldens only); a transformer editor is Release 2.
-- The MCP server does not expose admin *mutations*; admin tools are read-only.
+- The MCP server never deletes anything (no delete, purge, replay, unseal, retire, credential, breaker-force, pause or key revoke/rotate operation) and never accepts credentials. Admin writes exist only as the signed-in user, over stdio (ADR-0020).
 
 ## 5. Personas (summary)
 
@@ -108,7 +108,7 @@ These are agreed additions. None breaks a DESIGN §2 decision; each will be reco
 | DV-1 | **Monorepo layout**: Go backend under `backend/` (module `github.com/Donquixot-Doflamingo/integration-hub/backend`), SvelteKit console in `frontend/`, contracts in `contracts/`, consumer skill in `clients/claude-skill/`. DESIGN §18.1 paths are relative to `backend/`. | Frontend and backend built in parallel against frozen contracts | §18.1 layout unchanged inside `backend/` |
 | DV-2 | **Admin console pulled forward** from Release 2 (DESIGN §19 Phase 2 "admin UI") into v1, built in parallel with M1–M8 against frozen admin contracts. Screens: integrations list/detail (version history, diff, publish/rollback/weights/pause); vendor & account health board (breaker states); request explorer with timeline; DLQ console with replay by filter; transformer viewer with dry-run and goldens; tenants / API keys / registrar endpoints; change log. Transformer *editing* stays Release 2. | Operators need it from the first production pilot | RBAC from §16.1; UI changes go through the same publish pipeline |
 | DV-3 | **Caller discovery endpoints** (additive to DESIGN §4.1): `GET /v1/integrations` (integrations the calling tenant may invoke: id, capability, operations, delivery mode, paused flag, description), `GET /v1/integrations/{id}`, `GET /v1/capabilities/{capability}` (canonical request/response JSON Schemas per operation). They never return vendor, account or version. | MCP server and Claude skill need to discover what to call | §0 caller invariant, D12 |
-| DV-4 | **`hubmcp`** MCP server (Go; stdio + streamable HTTP), configured with `HUB_BASE_URL` + `HUB_API_KEY`. Tenant tools `hub_list_integrations`, `hub_describe_integration`, `hub_dry_run`, `hub_invoke`, `hub_get_request`; optional read-only admin tools with `HUB_ADMIN_TOKEN`: `hub_admin_search_requests`, `hub_admin_request_timeline`, `hub_admin_breaker_states` (contract: `contracts/mcp/hubmcp-tools.json`). `hub_invoke` requires `confirm: true` and an idempotency key for integrations flagged `moves_money_or_quota`. | AI-assisted development | Uses only contract endpoints |
+| DV-4 | **`hubmcp`** MCP server (Go; stdio + streamable HTTP), configured with `HUB_BASE_URL` + `HUB_API_KEY`. Tenant tools `hub_list_integrations`, `hub_describe_integration`, `hub_dry_run`, `hub_invoke`, `hub_get_request`; optional admin tools with `HUB_ADMIN_TOKEN` (the signed-in user's own token): read tools such as `hub_admin_search_requests`, `hub_admin_request_timeline`, `hub_admin_breaker_states`, and, on stdio only, write tools to create and change tenants, keys, vendors, transformers, integrations and callback endpoints, never delete (contract: `contracts/mcp/hubmcp-tools.json` 1.1.0, ADR-0020). `hub_invoke` requires `confirm: true` and an idempotency key for integrations flagged `moves_money_or_quota`. | AI-assisted development | Uses only contract endpoints |
 | DV-5 | **Consumer Claude skill** (`clients/claude-skill/integration-hub/SKILL.md`), copied to `~/.claude/skills/integration-hub/`. | Teach correct Hub usage (idempotency, 202 handling, signature verification) | §4.5 SDK rule |
 | DV-6 | **Caller dry-run is a documented, scope-gated exception to the no-vendor-leak rule** (see OI-1): it returns the exact upstream request (method, URL, headers, body) with credentials and secret values replaced by `***`. It requires API-key scope `dry_run`, which is not granted by default and is meant for integration developers during onboarding and debugging; callers must never build logic on its output (it changes at every Hub-side cutover). Decided by the lead and frozen in `contracts/openapi/hub-public.v1.yaml` 1.0.0. | DESIGN §4.1 dry-run "returns the vendor request"; integration developers need the exact request to debug mappings | §0 and D12 hold for every other caller operation; the exception is explicit (`x-audience: integration-developers`), audited (`dry_run: true`) and opt-in per key |
 
@@ -198,7 +198,7 @@ Priority: **M** = Must (v1), **S** = Should (v1), **C** = Could, **R2** = Releas
 ### 8.9 Developer tooling (F-20, F-21)
 | ID | Requirement | Pri | Ref |
 | --- | --- | --- | --- |
-| FR-48 | `hubmcp` tenant tools and optional read-only admin tools per DV-4 | M | DV-4 |
+| FR-48 | `hubmcp` tenant tools and optional admin tools (read; write as the signed-in user over stdio, no delete) per DV-4 | M | DV-4 |
 | FR-49 | `hub_invoke` requires `confirm: true` and an idempotency key for integrations with `moves_money_or_quota: true`, and refuses without calling the Hub otherwise | M | DV-4 |
 | FR-50 | `hubclient` returns 202 as a distinct `Queued` type, never as success | M | §4.5 |
 | FR-51 | Consumer skill documents discovery, canonical bodies, Idempotency-Key, 202 vs 200, callback signature verification, MCP wiring | M | DV-5 |
@@ -225,7 +225,7 @@ Priority: **M** = Must (v1), **S** = Should (v1), **C** = Could, **R2** = Releas
 | NFR-10 | Consistency | Config propagates to all nodes ≤ 10 s; breaker state agreed across nodes ≈ 1 s | §8.2, §10.4 |
 | NFR-11 | Security | Tenant keys hashed, shown once, rotatable with overlap; secrets envelope-encrypted; egress only to declared vendor hosts; TLS 1.2+ | §16.5 |
 | NFR-12 | Security | Callback SSRF guard (no private/link-local, no redirects, 5 s timeout); HMAC signature with 5-min replay window | §12.1 |
-| NFR-13 | Security | Admin API behind OIDC + RBAC; MCP admin tools read-only | §16.1, DV-4 |
+| NFR-13 | Security | Admin API behind OIDC + RBAC; MCP admin tools use the user's own token and RBAC, writes stdio only, no delete path | §16.1, DV-4 |
 | NFR-14 | PII | `x-pii` tags drive masking; `masked` default 30 days; bureau/Aadhaar/PAN `sealed` 90 days (R2); LLM `metadata_only`; Aadhaar number never stored | §13.2, §14 |
 | NFR-15 | PII | Deletion job purges by subject identifier; regional accounts enforce data residency | §16.5 |
 | NFR-16 | Auditability | sha256 + size for every payload kept even when bodies are masked/sealed/omitted | §13.3 |
@@ -277,7 +277,7 @@ Pilot: CleverTap `events.track@v1` for `orders-service` (integrations `int_evt_b
 | Frontend/backend drift | Medium | Frozen contracts, generated client, contract tests |
 | Redis outage (breaker, limits, idempotency) | Medium | Local breaker cache; degrade policy to be defined in TECH_SPEC (see gaps) |
 | Real vendor payload shapes differ from illustrative ones | Medium | Verify against vendor docs, cite URL in transformer file (§0) |
-| AI tooling triggers real side effects | Medium | MCP dry-run first, `confirm: true` gate, tenant-scoped key, read-only admin tools |
+| AI tooling triggers real side effects | Medium | MCP dry-run first, `confirm: true` gate (invoke and live-traffic admin writes), tenant-scoped key, admin writes as the signed-in user with RBAC and change log, no delete path |
 
 ## 13. Dependencies
 

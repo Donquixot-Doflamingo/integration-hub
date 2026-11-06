@@ -1,0 +1,5 @@
+{
+  "status": 429,
+  "headers": {"Retry-After": "20"},
+  "body": {"type": "rate_limit_error", "code": "too_many_requests_per_ip", "message": "Too many requests from the IP, rate limit reached"}
+}

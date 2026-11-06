@@ -363,6 +363,8 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-1303 — Bulkheads
 **As an** on-call SRE, **I want** per-account concurrency limits (64) and a separate LLM worker pool, **so that** one slow vendor cannot exhaust the Hub. · **Must**
 - **Given** one account with a 30 s slow drip, **when** load runs on another account, **then** the other account's p99 is unchanged.
+- **Given** one account's vendor is slow (answers just under its timeout), hangs until its timeout, refuses connections or answers 503 while callers keep calling it, **when** another account carries async and sync traffic, **then** that account's async p99 (accept → succeeded) stays within 300 ms of its baseline, its sync p99 within 100 ms, and it loses no request (HUB-412, `docs/tech/ISOLATION.md`).
+- **Given** the misbehaving vendor recovers, **when** its backlog is delivered, **then** every request it was sent during the incident succeeds (retried, or parked and drained); none is lost.
 
 ### US-1304 — Retry budget
 **As a** platform engineer, **I want** retries capped at 20 % of the account's live traffic, **so that** retries cannot amplify an outage. · **Should**
@@ -460,6 +462,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-1802 — Overhead breakdown
 **As a** platform engineer, **I want** each middleware stage to publish its own duration, **so that** I can find latency regressions. · **Must**
 - **Given** a sync request, **when** metrics are scraped, **then** `hub_overhead_ms` has a stage label for every §18.4 stage.
+- **Given** the live latency demo (`examples/latency-demo/run.sh`, HUB-353), **when** I run it against a public API, **then** I see p50/p95/p99 directly and through a local Hub, their difference, and the Hub's own `hub_overhead_ms` for the same requests.
 
 ### US-1803 — Load and soak tests
 **As a** platform engineer, **I want** k6/vegeta load tests at 500 sync RPS + 2,000 async msg/s and a soak with random outages, **so that** we prove the budgets. · **Must**
@@ -569,6 +572,22 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 **As a** service developer, **I want** an SDK helper that derives stable idempotency keys from my business ids, **so that** retries are safe by default. · **Should**
 - **Given** the same business id, **when** keys are derived, **then** they are equal; different ids produce different keys.
 
+### US-2105 — Operator skill for any AI
+**As a** platform engineer or integration admin (with Claude, Codex, Cursor or another assistant), **I want** a repo skill that shows, for every control-plane task, the console path, the `hubctl` command and the `hubmcp` tool call, **so that** nobody has to guess how to onboard a tenant, vendor or account, register callbacks, switch vendors, write transformers or set up a two-step flow. · **Must**
+- **Given** the repo is open in Claude Code, Codex or Cursor, **when** I ask "how do I move int_evt_brandA to a new account?", **then** the assistant loads `hub-operator` and walks draft → validate → diff → publish (or weights) with the three ways, showing the diff before any live change.
+- **Given** a request to delete, pause, rotate a secret or create an account with credentials through MCP, **when** the assistant answers, **then** it says MCP cannot do it and gives the console (or hubctl / admin API) path instead.
+- **Given** "Aadhaar is get-OTP then verify: two calls?", **when** answered, **then** the assistant explains one integration, two operations, `X-Hub-Session`, and what the operator configures (one transformer pair per operation, `session:` section, sync).
+
+### US-2106 — Consumer skill in any assistant
+**As an** AI-assisted developer on a calling team, **I want** to install the Hub skill in the assistant I already use (Claude Code, claude.ai, Codex, Cursor) or paste one file into any other, **so that** my assistant calls the Hub correctly without a vendor SDK. · **Must**
+- **Given** the README, **when** I follow the steps for my tool, **then** the same `integration-hub` folder loads, with no tool-specific copy.
+- **Given** "verify the user's mobile with an OTP", **when** my assistant writes code, **then** it calls `send_otp`, keeps `X-Hub-Session`, calls `verify_otp` with it and a new `Idempotency-Key`, handles wrong OTP, expired session and retryable errors, and asks me before sending a real OTP.
+
+### US-2107 — hubmcp in my MCP client
+**As an** AI-assisted developer or platform engineer, **I want** a copy-paste `hubmcp` configuration for Claude Code, Claude Desktop, Codex CLI and Cursor, **so that** my assistant can use the Hub tools without secrets landing in committed files. · **Should**
+- **Given** my client, **when** I follow its section, **then** `hubmcp` connects with my tenant key read from my environment or keychain.
+- **Given** I am a platform engineer, **when** I add the admin profile, **then** it runs on stdio with my own token as a separate entry, and the page warns that deletes and secrets stay in the console.
+
 ## F-22 Release-2 capabilities
 
 ### US-2201 — Inbound vendor webhooks
@@ -591,6 +610,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-2205 — Vendor sessions and hand-offs
 **As a** service developer, **I want** two-step flows (Aadhaar OTP) via `X-Hub-Session` and redirect hand-offs (DigiLocker, eSign, eNACH), **so that** multi-step KYC works through one contract. · **Must**
 - **Given** step 1 `generate`, **when** it returns, **then** I receive `X-Hub-Session`; step 2 `verify` with it is routed to the same account + version within 10 min; after expiry → `SESSION_NOT_FOUND`.
+- **Given** the Aadhaar OTP e-KYC example (`int_aadhaar_okyc`, HUB-351), **when** I call `send_otp` with an Aadhaar number and consent and then `verify_otp` with the OTP and `X-Hub-Session`, **then** I get minimal e-KYC data, the provider's reference never reaches me, the Hub keeps no Aadhaar number in the session and the audit is sealed; switching from mockvendor to the provider's sandbox changes no request or response.
 
 ### US-2206 — Account Aggregator long-running requests
 **As a** service developer, **I want** AA consent → notification → FI fetch handled as one long-running request with a callback, **so that** I receive FI data without orchestrating the AA flow. · **Should**
@@ -600,6 +620,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 **As a** compliance officer, **I want** bureau/Aadhaar/PAN payloads sealed with a per-tenant key and readable only via an audited unseal, **so that** sensitive data is protected but provable. · **Must**
 - **Given** a sealed request, **when** a viewer opens it, **then** only sha256, size and metadata are shown.
 - **Given** a user with unseal permission and a reason, **when** they unseal, **then** the payload is shown and a `change_log` / audit event records who, when, why.
+- **Given** the PAN and Aadhaar examples (`int_pan_verify`, `int_aadhaar_okyc`, HUB-351, HUB-352), **when** a call completes, **then** its audit record has policy `sealed`, no payload holds the PAN, Aadhaar number, OTP or name in clear, and the sealed copies open only with the tenant key.
 
 ### US-2208 — KMS / Vault credential sources
 **As a** platform engineer, **I want** KMS and Vault `CredentialSource` implementations, **so that** production secrets use managed envelope encryption. · **Must**

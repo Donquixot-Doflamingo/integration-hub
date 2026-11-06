@@ -1,0 +1,4 @@
+{
+  "status": 409,
+  "body": {"type": "validation_error", "code": "verification_pending", "message": "Otp generated for this aadhaar, please try after some time"}
+}

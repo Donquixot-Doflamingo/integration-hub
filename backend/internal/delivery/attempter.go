@@ -14,6 +14,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/resolve"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
@@ -62,6 +63,11 @@ type Job struct {
 	Live bool
 	// LimiterWait caps the wait for an account token (default: 250 ms live, 5 s otherwise).
 	LimiterWait time.Duration
+	// Acquire, when set, takes a worker slot of the attempt's (account, endpoint) once the
+	// breakers admitted it and before anything is built, waited for or sent (HUB-412). false
+	// ends the run with OverCap; the caller releases what it acquired. A call the breaker
+	// refuses never asks: it parks at once and holds no slot.
+	Acquire func(queue.Target) bool
 }
 
 // Result is what a job produced. Exactly one of Body and Err is set.
@@ -82,8 +88,11 @@ type Result struct {
 	// retry_after_ms): the caller applies on_circuit_open, or parks. Account and Endpoint name
 	// the breaker for parking.
 	CircuitOpen bool
-	Account     string
-	Endpoint    string
+	// OverCap reports that Job.Acquire refused: nothing was built or sent, no breaker outcome
+	// was recorded. The worker puts the envelope back.
+	OverCap  bool
+	Account  string
+	Endpoint string
 }
 
 // AuditRequest is the audit and dry-run view of an upstream request.
@@ -175,6 +184,11 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	j.Timings.Observe(telemetry.StageAdmission, start)
 	if ce != nil {
 		r.Err, r.CircuitOpen = ce, true
+		return r
+	}
+	if j.Acquire != nil && !j.Acquire(queue.Target{Account: target.AccountID, Endpoint: tf.VendorEndpoint}) {
+		adm.record(a.now(), upstream.OutcomeIgnore) // gives back a half-open probe slot
+		r.OverCap = true
 		return r
 	}
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/resolve"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/sessions"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
 )
 
 // Snapshots is the read side of the registry store.
@@ -32,6 +34,13 @@ const PoisonCrashes = 2
 
 // Worker is the §18.4 worker loop for one pool: claim, TTL check, re-resolve, attempt,
 // classify → ack / retry / dead-letter, all through guarded transitions.
+//
+// Isolation (HUB-412, docs/tech/ISOLATION.md): Run claims continuously, as many envelopes as it
+// has free slots, so one slow attempt never holds up the next claim; and no (account, endpoint)
+// may hold more than TargetCap of the Concurrency slots, so a slow or hanging vendor can only
+// fill its own share. A claim takes no more of a target's backlog than the target's free slots;
+// an envelope that still finds its target full when it starts is put back unattempted (no attempt
+// counted, the breaker sees nothing) and is claimed again once the target has a free slot.
 type Worker struct {
 	Name        string // unique per process: claims are owned by it
 	Pool        string // queue.PoolMessaging or queue.PoolLLM
@@ -51,9 +60,44 @@ type Worker struct {
 	// accepting trace stored in the envelope). nil: no spans.
 	TracerProvider trace.TracerProvider
 	Now            func() time.Time
-	Batch          int           // envelopes per claim (default 32)
-	Concurrency    int           // attempts in flight (default 16)
-	Idle           time.Duration // wait when nothing was due (default 200 ms)
+	// Batch is the most envelopes one claim takes (HUB_WORKER_CLAIM_BATCH, default 32). Run
+	// claims min(Batch, free slots).
+	Batch int
+	// Concurrency is the attempts in flight (HUB_WORKER_CONCURRENCY; default 256 for the
+	// messaging pool, 64 for llm, TECH_SPEC §12.1).
+	Concurrency int
+	// TargetCap is the most attempts in flight for one (account, endpoint)
+	// (HUB_WORKER_TARGET_CAP; default a quarter of Concurrency, at most the per-account
+	// connection bulkhead of 64, DESIGN §10.8).
+	TargetCap int
+	Idle      time.Duration // wait when nothing was due (default 200 ms)
+
+	mu       sync.Mutex
+	inflight map[queue.Target]int
+	waited   bool // the no-snapshot wait was logged
+	metrics  workerMetrics
+}
+
+// workerMetrics are the isolation gauges and counter (nil fields: not registered).
+type workerMetrics struct {
+	inflight       *prometheus.GaugeVec   // worker_inflight{pool}
+	targetInflight *prometheus.GaugeVec   // worker_target_inflight{account, endpoint}
+	capDeferred    *prometheus.CounterVec // worker_target_cap_deferred_total{account, endpoint}
+}
+
+// RegisterMetrics adds worker_inflight, worker_target_inflight and
+// worker_target_cap_deferred_total to reg. Target labels are breaker keys: bounded by the
+// registry's accounts × endpoints, like parked_count.
+func (w *Worker) RegisterMetrics(reg prometheus.Registerer) {
+	w.metrics = workerMetrics{
+		inflight: prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "worker_inflight",
+			Help: "Attempts in flight in this worker process, by pool."}, []string{"pool"}),
+		targetInflight: prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "worker_target_inflight",
+			Help: "Attempts in flight in this worker process per (account, endpoint); capped at the worker's target cap."}, []string{"account", "endpoint"}),
+		capDeferred: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "worker_target_cap_deferred_total",
+			Help: "Claimed envelopes put back unattempted because their (account, endpoint) had the worker's target cap in flight."}, []string{"account", "endpoint"}),
+	}
+	reg.MustRegister(w.metrics.inflight, w.metrics.targetInflight, w.metrics.capDeferred)
 }
 
 func (w *Worker) now() time.Time {
@@ -63,52 +107,144 @@ func (w *Worker) now() time.Time {
 	return time.Now()
 }
 
+// DefaultBatch, DefaultConcurrency and DefaultLLMConcurrency are the TECH_SPEC §8.1 / §12.1
+// defaults.
+const (
+	DefaultBatch          = 32
+	DefaultConcurrency    = 256
+	DefaultLLMConcurrency = 64
+)
+
 func (w *Worker) batch() int {
 	if w.Batch <= 0 {
-		return 32
+		return DefaultBatch
 	}
 	return w.Batch
 }
 
-// Run claims and delivers until ctx ends; in-flight attempts finish first.
-func (w *Worker) Run(ctx context.Context) {
-	idle := w.Idle
-	if idle <= 0 {
-		idle = 200 * time.Millisecond
+func (w *Worker) concurrency() int {
+	switch {
+	case w.Concurrency > 0:
+		return w.Concurrency
+	case w.Pool == queue.PoolLLM:
+		return DefaultLLMConcurrency
 	}
+	return DefaultConcurrency
+}
+
+// targetCap is TargetCap, or a quarter of the slots (so up to three misbehaving targets still
+// leave a quarter to everyone else) but never more than the per-account connection bulkhead:
+// attempts beyond it would only queue for a connection while holding a slot.
+func (w *Worker) targetCap() int {
+	if w.TargetCap > 0 {
+		return min(w.TargetCap, w.concurrency())
+	}
+	return min(upstream.DefaultBulkhead, max(1, w.concurrency()/4))
+}
+
+func (w *Worker) idle() time.Duration {
+	if w.Idle <= 0 {
+		return 200 * time.Millisecond
+	}
+	return w.Idle
+}
+
+// sleep waits d or until ctx ends.
+func sleep(ctx context.Context, d time.Duration) {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
+}
+
+// ready reports whether a registry snapshot is loaded. Before the first one a worker must not
+// claim: it could not resolve anything, and a claim it cannot finish would expire and count as a
+// crash (HUB-406).
+func (w *Worker) ready(ctx context.Context) bool {
+	if w.Snapshots.Snapshot() != nil {
+		return true
+	}
+	w.mu.Lock()
+	first := !w.waited
+	w.waited = true
+	w.mu.Unlock()
+	if first {
+		w.Log.InfoContext(ctx, "worker.waiting_for_snapshot", slog.String("pool", w.Pool))
+	}
+	return false
+}
+
+// Run claims and delivers until ctx ends; in-flight attempts finish first. It claims as soon
+// as a slot is free, up to min(Batch, free slots) at a time (DESIGN §18.4, go-system-design
+// "claim n = free slots"), so nothing waits for a whole batch. Envelopes are claimed only
+// when they can start at once: there is no in-memory queue to drain at shutdown.
+func (w *Worker) Run(ctx context.Context) {
+	for !w.ready(ctx) {
+		if sleep(ctx, w.idle()); ctx.Err() != nil {
+			return
+		}
+	}
+	slots := make(chan struct{}, w.concurrency())
+	var wg sync.WaitGroup
+	defer wg.Wait() // graceful: every claimed envelope is finished
 	for ctx.Err() == nil {
-		n, err := w.ProcessOnce(ctx)
+		select {
+		case slots <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		n := 1
+	more:
+		for n < w.batch() {
+			select {
+			case slots <- struct{}{}:
+				n++
+			default:
+				break more
+			}
+		}
+		claimed, err := w.claim(ctx, n)
+		for range n - len(claimed) {
+			<-slots
+		}
+		for _, c := range claimed {
+			wg.Go(func() {
+				defer func() { <-slots }()
+				w.handle(context.WithoutCancel(ctx), c) // a claim outlives the caller's cancellation
+			})
+		}
 		if err != nil && ctx.Err() == nil {
 			w.Log.ErrorContext(ctx, "claim failed", slog.String("pool", w.Pool), slog.String("error", err.Error()))
 		}
-		if n == 0 || err != nil {
-			t := time.NewTimer(idle)
-			select {
-			case <-ctx.Done():
-				t.Stop()
-			case <-t.C:
-			}
+		if err != nil || len(claimed) == 0 { // nothing claimable is due now
+			sleep(ctx, w.idle())
 		}
 	}
 }
 
-// ProcessOnce claims one batch and handles it; it returns how many envelopes it handled.
+// claim takes up to n due envelopes, no more of a target's backlog than its free slots.
+func (w *Worker) claim(ctx context.Context, n int) ([]queue.Claimed, error) {
+	return w.Queue.ClaimWithin(ctx, w.DB, w.Name, w.Pool, n, w.targetCap(), w.rooms())
+}
+
+// ProcessOnce claims one batch and handles all of it before returning (tests and tools; Run
+// claims continuously). It returns how many envelopes it handled; none before a snapshot exists.
 func (w *Worker) ProcessOnce(ctx context.Context) (int, error) {
-	claimed, err := w.Queue.Claim(ctx, w.DB, w.Name, w.Pool, w.batch())
+	if !w.ready(ctx) {
+		return 0, nil
+	}
+	claimed, err := w.claim(ctx, w.batch())
 	if err != nil {
 		return 0, err
 	}
-	concurrency := w.Concurrency
-	if concurrency <= 0 {
-		concurrency = 16
-	}
-	sem := make(chan struct{}, concurrency)
+	sem := make(chan struct{}, w.concurrency())
 	var wg sync.WaitGroup
 	for _, c := range claimed {
 		sem <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-sem }()
-			// A claim outlives the caller's cancellation: finish (or lose) it cleanly.
 			w.handle(context.WithoutCancel(ctx), c)
 		})
 	}
@@ -116,15 +252,65 @@ func (w *Worker) ProcessOnce(ctx context.Context) (int, error) {
 	return len(claimed), nil
 }
 
+// acquire takes one of target's slots; false when the target already has its cap in flight.
+func (w *Worker) acquire(t queue.Target) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.inflight == nil {
+		w.inflight = map[queue.Target]int{}
+	}
+	n := w.inflight[t]
+	if n >= w.targetCap() {
+		return false
+	}
+	w.inflight[t] = n + 1
+	if w.metrics.targetInflight != nil {
+		w.metrics.targetInflight.WithLabelValues(t.Account, t.Endpoint).Set(float64(n + 1))
+		w.metrics.inflight.WithLabelValues(w.Pool).Inc()
+	}
+	return true
+}
+
+func (w *Worker) release(t queue.Target) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n := w.inflight[t] - 1
+	if n <= 0 {
+		delete(w.inflight, t)
+		n = 0
+	} else {
+		w.inflight[t] = n
+	}
+	if w.metrics.targetInflight != nil {
+		w.metrics.targetInflight.WithLabelValues(t.Account, t.Endpoint).Set(float64(n))
+		w.metrics.inflight.WithLabelValues(w.Pool).Dec()
+	}
+}
+
+// rooms lists the free slots of every target with attempts in flight (0: at its cap).
+func (w *Worker) rooms() []queue.TargetRoom {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	limit := w.targetCap()
+	out := make([]queue.TargetRoom, 0, len(w.inflight))
+	for t, n := range w.inflight {
+		out = append(out, queue.TargetRoom{Target: t, Slots: max(limit-n, 0)})
+	}
+	return out
+}
+
+// InFlight returns the attempts in flight for (account, endpoint) (tests, debugging).
+func (w *Worker) InFlight(account, endpoint string) int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.inflight[queue.Target{Account: account, Endpoint: endpoint}]
+}
+
 func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 	env := c.Envelope
 	ctx, span := w.startAttempt(ctx, c)
 	defer span.End()
 	log := w.Log.With(slog.String("request_id", env.RequestID), slog.String("integration", env.IntegrationID))
-	snap := w.Snapshots.Snapshot()
-	timings := telemetry.NewTimings(w.now())
-	trail := w.trail(snap, env, c.Attempt)
-	emit := func() { w.Audit.Emit(audit.Batch{Events: trail.Events()}) }
 	report := func(err error, what string) {
 		endAttempt(span, err, what)
 		if IsLost(err) {
@@ -133,6 +319,14 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 			log.ErrorContext(ctx, "transition failed", slog.String("outcome", what), slog.String("error", err.Error()))
 		}
 	}
+	snap := w.Snapshots.Snapshot()
+	if snap == nil { // claimed before any snapshot (HUB-406): put back, not an attempt, not a crash
+		report(w.Transitions.Hold(ctx, env, w.Name, w.now().Add(time.Second), "no registry snapshot yet"), "no snapshot")
+		return
+	}
+	timings := telemetry.NewTimings(w.now())
+	trail := w.trail(snap, env, c.Attempt)
+	emit := func() { w.Audit.Emit(audit.Batch{Events: trail.Events()}) }
 
 	if c.Crashes >= PoisonCrashes {
 		trail.Add(audit.RequestDeadLettered, c.Attempt, nil, map[string]any{"reason": "poison", "crashes": c.Crashes})
@@ -216,18 +410,43 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 	}
 
 	account := res.Target.Account
-	if c.Attempt == 1 {
-		w.Budget.Live(account)
-	}
 	hdr := map[string]any{}
 	if env.IdempotencyKey != nil {
 		hdr["idempotency_key"] = *env.IdempotencyKey
 	}
 	queueWait := w.now().Sub(env.CreatedAt)
+	// Per-target isolation (HUB-412): the attempt takes one of its (account, endpoint)'s slots
+	// once the breakers admitted it; over the cap nothing counts (no attempt, no breaker outcome,
+	// no retry budget) and the envelope goes back so other targets can use the slot.
+	var held *queue.Target
+	defer func() {
+		if held != nil {
+			w.release(*held)
+		}
+	}()
 	out := w.Attempter.Run(ctx, Job{
 		RequestID: env.RequestID, Snap: snap, Res: res, Body: body, Hdr: hdr, Session: sessionData, Trail: trail, Timings: &timings,
 		FirstAttempt: c.Attempt, Live: c.Attempt == 1 && c.Status == core.StateAccepted, // drained and retried: not live
+		Acquire: func(t queue.Target) bool {
+			if !w.acquire(t) {
+				return false
+			}
+			held = &t
+			return true
+		},
 	})
+	if out.OverCap {
+		if w.metrics.capDeferred != nil {
+			w.metrics.capDeferred.WithLabelValues(out.Account, out.Endpoint).Inc()
+		}
+		log.DebugContext(ctx, "worker.target_at_cap", slog.String("account", out.Account), slog.String("endpoint", out.Endpoint))
+		// Due at once: the claim's room filter holds it back until the target has a free slot.
+		report(w.Transitions.HoldForTarget(ctx, env, w.Name, w.now(), queue.Target{Account: out.Account, Endpoint: out.Endpoint}), "target at cap")
+		return
+	}
+	if c.Attempt == 1 {
+		w.Budget.Live(account)
+	}
 	final := audit.Final{
 		Attempts: c.Attempt, IntegrationVersion: res.VersionNumber,
 		HubOverheadMS: telemetry.Millis(timings.Overhead(w.now())), VendorMS: telemetry.Millis(timings.Stage(telemetry.StageUpstream)),

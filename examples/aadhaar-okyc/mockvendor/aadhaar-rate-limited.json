@@ -1,0 +1,22 @@
+{
+  "description": "Aadhaar OKYC: the provider rate-limits OTP requests (429, Retry-After 30).",
+  "routes": {
+    "okyc-otp": {
+      "match": {
+        "method": "POST",
+        "path": "/verification/offline-aadhaar/otp"
+      },
+      "behaviour": {
+        "status": 429,
+        "headers": {
+          "Retry-After": "30"
+        },
+        "body": {
+          "type": "rate_limit_error",
+          "code": "too_many_requests_per_operation",
+          "message": "Too many requests for this operation, rate limit reached"
+        }
+      }
+    }
+  }
+}

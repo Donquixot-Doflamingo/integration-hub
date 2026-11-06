@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 )
 
 // secret is a configuration value that must never be printed (HUB_API_KEY, HUB_ADMIN_TOKEN,
@@ -19,14 +20,25 @@ func (secret) LogValue() slog.Value { return slog.StringValue("***") }
 // minSecretLen is the shortest value redacted by value; shorter ones would mangle ordinary text.
 const minSecretLen = 6
 
-// secretSet redacts configured secrets by value, in logs and in tool output (contract rule 6).
+// secretSet redacts secrets by value, in logs and in tool output (contract rule 6): the
+// configured credentials, and every write-once secret a tool minted (sensitive_output), which is
+// added after the one result that returns it.
 type secretSet struct {
+	mu    sync.RWMutex
 	plain [][]byte // raw values
 	json  [][]byte // values as they appear inside a JSON string
 }
 
 func newSecretSet(values ...secret) *secretSet {
 	s := &secretSet{}
+	s.add(values...)
+	return s
+}
+
+// add registers more values to redact. Values shorter than minSecretLen are ignored.
+func (s *secretSet) add(values ...secret) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, v := range values {
 		if len(v) < minSecretLen {
 			continue
@@ -35,11 +47,12 @@ func newSecretSet(values ...secret) *secretSet {
 		enc, _ := json.Marshal(string(v))
 		s.json = append(s.json, enc[1:len(enc)-1])
 	}
-	return s
 }
 
 // redact replaces every secret in str with ***.
 func (s *secretSet) redact(str string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	for _, p := range s.plain {
 		str = strings.ReplaceAll(str, string(p), "***")
 	}
@@ -48,6 +61,8 @@ func (s *secretSet) redact(str string) string {
 
 // redactJSON replaces every secret inside a JSON document with ***.
 func (s *secretSet) redactJSON(b []byte) []byte {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	for _, p := range s.json {
 		b = bytes.ReplaceAll(b, p, []byte("***"))
 	}

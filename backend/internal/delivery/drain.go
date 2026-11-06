@@ -184,6 +184,9 @@ func (r *Resilience) drain(ctx context.Context, db queue.DB, tick time.Duration)
 	for _, g := range groups {
 		r.parked.WithLabelValues(g.Account, g.Endpoint).Set(float64(g.Count))
 		r.oldest.WithLabelValues(g.Account, g.Endpoint).Set(r.now().Sub(g.Oldest).Seconds())
+		if snap == nil { // no account quota known before the first snapshot (HUB-406): hold the drain
+			continue
+		}
 		key := upstream.BreakerKey{Account: g.Account, Endpoint: g.Endpoint}
 		state, ok := r.Breakers.SharedState(ctx, key)
 		if ok && state.State != upstream.Closed {

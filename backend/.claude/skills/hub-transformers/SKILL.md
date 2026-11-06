@@ -9,7 +9,7 @@ A transformer is an immutable, versioned YAML mapping (DESIGN §3.1, §7). Reque
 
 ## Before you write one
 1. **Do you need a new transformer at all?** (§3.3) If only *values* differ between accounts (project id, brand code, region, custom field names) → reuse the transformer and read them from `account.config.*`. Fork (new transformer id) only when the payload **shape** changes. Changing an existing one = a new **version** (`T1@8`), never an edit of `T1@7`.
-2. **Read the vendor's current API docs.** Shapes in DESIGN are illustrative. Confirm endpoint path, method, auth headers, field names and types, required fields, limits (batch max, payload size), error format, rate-limit headers, idempotency support. Put the doc URL(s) and the date you checked in the file header (`docs:` field + comment). No URL → not mergeable.
+2. **Read the vendor's current API docs.** Shapes in DESIGN are illustrative. Confirm endpoint path, method, auth headers, field names and types, required fields, limits (batch max, payload size), error format, rate-limit headers, idempotency support. Put the doc URL and the date you checked in the file header (`docs_url:` field + comment). No URL → not mergeable.
 3. **Check the capability schema** in `contracts/schemas/capabilities/` (canonical request/response). The response transformer's output must conform to the capability response schema (publish validation, §6.4). If the canonical schema lacks something the vendor needs, the answer is `account.config`, a default, or a capability change request to the contract-steward — never a vendor-specific field in the canonical schema.
 
 ## File skeleton
@@ -20,7 +20,7 @@ version: 7
 kind: request                       # request | response | inbound | stream
 capability: events.track@v1
 vendor_endpoint: clevertap.upload@1
-docs: ["https://<vendor docs url>"]
+docs_url: https://<vendor docs url>
 request:
   method: POST
   path: /1/upload
@@ -114,7 +114,7 @@ config/transformers/<id>/fixtures/<case>.expected_response.json # response: cano
 ```bash
 cd backend
 hubctl transform test                         # all goldens (same runner as CI and publish)
-hubctl transform test config/transformers/T1  # one transformer (see --help for flags)
+hubctl transform test T1 T2@3                 # only these transformers (ID, or ID@version)
 go test ./internal/transform -run TestGoldens
 go test -run='^$' -bench=BenchmarkTransform4KB -benchmem ./internal/transform   # ≤ 0.5 ms p99
 ```

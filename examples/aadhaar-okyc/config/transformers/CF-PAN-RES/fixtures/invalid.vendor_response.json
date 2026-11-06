@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "body": {"pan": "ABCPV1234D", "reference_id": 17974435, "name_provided": null, "valid": false, "message": "Invalid PAN",
+    "name_match_score": 0, "name_match_result": "-", "pan_status_code": "N", "pan_status_desc": "Not found in ITD database or Invalid PAN"}
+}
