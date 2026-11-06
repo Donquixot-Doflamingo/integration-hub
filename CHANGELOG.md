@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `ci(backend)` · Gate merges on pinned gosec and govulncheck · HUB-234 · F-18
+  - New blocking CI jobs gosec (any untriaged medium/high finding in non-test code fails) and govulncheck (any reachable known vulnerability fails); local: make gosec, make vuln, make security
+  - Tool versions pinned in backend/Makefile: gosec v2.30.0, govulncheck v1.9.0
+  - Every gosec false positive carries a scoped // #nosec <rule> -- <reason> annotation that both gosec and golangci-lint honour (triage table in SECURITY.md §8.1)
 - 2026-11-07 · `build(backend)` · Pin Go toolchain 1.26.10 and x/net v0.62.0 · HUB-234 · F-18
   - Builds and CI use Go 1.26.10: govulncheck found 36 standard-library vulnerabilities reachable from Hub code in go1.26.0 (crypto/x509, net/url, html/template, net/http among them)
   - golang.org/x/net v0.62.0 fixes GO-2026-6866 and GO-2026-6860 (required module, not called)

@@ -77,7 +77,7 @@ func ReadKeyFile(path string) ([]byte, error) {
 	if fi.Mode().Perm()&0o077 != 0 {
 		return nil, fmt.Errorf("creds: dev key file %s has mode %v; it must not be readable by group or others (chmod 600)", path, fi.Mode().Perm())
 	}
-	b, err := os.ReadFile(path) //nolint:gosec // path is operator configuration (HUB_DEV_KEY_FILE)
+	b, err := os.ReadFile(path) // #nosec G304 -- path is operator configuration (HUB_DEV_KEY_FILE)
 	if err != nil {
 		return nil, fmt.Errorf("creds: dev key file: %w", err)
 	}

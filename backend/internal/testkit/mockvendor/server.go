@@ -364,8 +364,8 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func newRNG(b Behaviour) *rand.Rand {
 	if b.ErrorRatio != nil && b.ErrorRatio.Seed != nil {
-		seed := uint64(*b.ErrorRatio.Seed)                          //nolint:gosec // seed bits, sign irrelevant
-		return rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15)) //nolint:gosec // deterministic test double, not crypto
+		seed := uint64(*b.ErrorRatio.Seed)                          // #nosec G115 -- seed bits, sign irrelevant
+		return rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15)) // #nosec G404 -- deterministic test double, not crypto
 	}
-	return rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())) //nolint:gosec // test double, not crypto
+	return rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())) // #nosec G404 -- test double, not crypto
 }
