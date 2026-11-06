@@ -118,7 +118,7 @@ integration-hub/
 │   │   ├── hub/                  # main + role wiring (cmd/hub/internal/roles)
 │   │   ├── hubctl/
 │   │   ├── mockvendor/
-│   │   └── hubmcp/               # main + cmd/hubmcp/internal/{tools,client}
+│   │   └── hubmcp/               # one main package: tools, GET-only admin client, embedded tool contract (ADR-0018)
 │   ├── internal/
 │   │   ├── edge/  registry/  transform/  resolve/  creds/  upstream/
 │   │   ├── queue/  delivery/  sessions/  idempotency/  audit/  callbacks/  webhooks/

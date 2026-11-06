@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(hubmcp)` · Run hubmcp end to end against a running Hub and mockvendor (HUB-307) · HUB-307 · F-20
+  - The integration suite builds and runs admin, gateway, worker and mockvendor and drives every hubmcp flow: discovery, dry-run, sync invoke, async invoke until succeeded, money/quota refusal and confirmed invoke, admin tools
+  - A grep over every tenant tool output proves no vendor, account or version appears outside hub_dry_run
+  - US-2003 and US-2006 now match the contract (no generated idempotency key; HTTP clients send their tenant key)
 - 2026-11-07 · `test(hubmcp)` · Cover every MCP tool's success and error path and spawn the binary (HUB-306) · HUB-306 · F-20
   - A contract-driven test runs a success and an error scenario for every tool and checks each tool only calls the Hub operations in its `maps_to`
   - A protocol smoke test spawns hubmcp over stdio (initialize, tools/list, tools/call)

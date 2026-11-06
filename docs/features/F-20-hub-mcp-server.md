@@ -4,7 +4,7 @@
 `backend/cmd/hubmcp`: a Go MCP server (stdio + streamable HTTP) that lets Claude and other MCP clients discover, dry-run and invoke Hub integrations as a tenant, plus optional read-only admin tools for on-call (PRD DV-4).
 
 ## Status
-`in-progress` — 2026-11-07 (HUB-300 onward on `feat/HUB-300-hubmcp`).
+`in-progress` — 2026-11-07: HUB-300–307 built and in review on `feat/HUB-300-hubmcp` (shipped when merged); follow-ups HUB-311–313.
 
 ## Owner
 `backend-engineer` (uses `backend/.claude/skills/mcp-builder`); `contract-steward` for the tool contract.
@@ -129,3 +129,4 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-20`).
 | 2026-11-07 | Money/quota confirm guard (HUB-304) | backend-engineer |
 | 2026-11-07 | Admin read-only tools (HUB-305) | backend-engineer |
 | 2026-11-07 | Test suite (HUB-306); follow-ups HUB-311 (metrics/traces), HUB-312 (admin DLQ/versions CCR), HUB-313 (Inspector) | backend-engineer |
+| 2026-11-07 | E2E against a running Hub (HUB-307); US-2003/US-2006 aligned with ADR-0018 | backend-engineer |

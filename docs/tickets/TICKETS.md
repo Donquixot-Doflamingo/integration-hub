@@ -2320,14 +2320,16 @@ The protocol smoke run is `TestSpawnedBinaryOverStdio` (the binary spawned over 
 
 ### HUB-307 — MCP e2e against a running Hub
 - **Epic:** EP-11 · **Type:** test · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-306, HUB-097, HUB-123 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `test/HUB-307-mcp-e2e`
+- **Status:** in-review · **Depends on:** HUB-306, HUB-097, HUB-123 · **Feature:** F-20 · **Stories:** US-2001–US-2005
+- **Branch:** `test/HUB-307-mcp-e2e` (delivered on `feat/HUB-300-hubmcp`)
 
 Run hubmcp against a compose Hub + mockvendor and exercise discovery, sync invoke, async invoke + status, dry-run.
 
+`TestMCPEndToEnd` (`backend/cmd/hubmcp/e2e_integration_test.go`, tag `integration`) builds `hub`, `hubctl` and `mockvendor`, runs admin + gateway + worker + mockvendor as processes on `HUB_PG_DSN`/`HUB_REDIS_ADDR` (the compose services; no Docker needed), with a copy of `backend/config` pointed at mockvendor and dev credentials from `hubctl creds`.
+
 **Acceptance criteria**
-- [ ] All flows pass end to end
-- [ ] No vendor identity in any tool output except `hub_dry_run`, the documented exception (grep)
+- [x] All flows pass end to end (discovery, dry-run, sync invoke + status, async invoke → queued → succeeded via `hub_get_request`, money/quota refusal then confirmed invoke, the three admin tools)
+- [x] No vendor identity in any tool output except `hub_dry_run`, the documented exception (grep) (subtest `no_vendor_identity_outside_hub_dry_run_(grep)` over every tenant tool output, with the gateway sending debug version headers; the dry-run subtest proves the exception shows the mockvendor URL with secrets `***`)
 
 ### HUB-308 — hubclient polish: retries, polling, callback verifier
 - **Epic:** EP-11 · **Type:** feat · **Area:** backend
