@@ -6,6 +6,19 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(control)` · Regenerate sqlc models for the callback traceparent column (HUB-231) · HUB-231 · F-18
+  - internal/control/db models match migration 00010, so the sqlc CI check passes
+- 2026-11-06 · `docs(adr)` · Renumber the trace-context ADR to 0013 and its story to US-1806 (HUB-231) · HUB-231 · F-18
+  - ADR-0012 and US-1805 are taken by the subject-erasure work merging alongside; references updated
+- 2026-11-06 · `feat(telemetry)` · Trace async requests from caller to callback (HUB-231) · HUB-231 · F-18
+  - The gateway's server span is named after the route and carries request id, tenant, integration, version, mode and canonical code; hub.transform.request/response spans appear under sampled requests
+  - Async, wait and parked requests store the Hub's hub.queue.enqueue span in the envelope; each worker attempt is a hub.worker.attempt root linked to it, parent of its transform and upstream spans, and stays sampled when the accepting trace was
+  - Callback deliveries link to the attempt that settled the request (new nullable hub.callback_deliveries.traceparent, migration 00010)
+  - HUB_TRACE_FORWARD_VENDORS lists the vendors that receive the Hub's traceparent (default none; tracestate is never sent)
+  - hub.requests.trace_id is filled, so the request explorer links to the trace
+  - Span attributes are allowlisted (telemetry.AllowedSpanAttributes); tests fail on any other key or on a credential, API key or body fragment in a value
+- 2026-11-06 · `test(edge)` · Raise the tenant quota in the overhead benchmark so it runs again (HUB-231) · HUB-231 · F-18
+  - BenchmarkInvokeOverhead no longer stops with 429 UPSTREAM_RATE_LIMITED after the dev tenant's 100 rps quota; the token bucket stays on the measured path
 - 2026-11-07 · `docs(tickets)` · File the operability follow-ups the runbooks found (HUB-237) · HUB-237 · F-18
   - New epic EP-13 (HUB-400–HUB-429): hubctl on-call commands, a SnapshotBehind false positive after restarts, the admin API credential minimum length, unwired ops settings (pprof, log level, worker concurrency), and OBSERVABILITY §9 drift
 - 2026-11-07 · `docs(runbooks)` · Add runbooks for every alert (HUB-237) · HUB-237 · F-18

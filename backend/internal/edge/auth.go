@@ -54,6 +54,7 @@ func bearer(r *http.Request) (string, bool) {
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return s.metrics.TimedMiddleware(telemetry.StageAuth, func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tagRoute(r)
 			snap := s.deps.Snapshots.Snapshot()
 			if snap == nil {
 				WriteError(w, r, &core.CanonicalError{Code: core.CodeNotReady, Message: "Node is not ready", Retryable: true, RetryAfterMS: core.Ptr[int64](1000)})
@@ -79,6 +80,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			f, _ := telemetry.RequestFieldsFrom(ctx)
 			f.Tenant = entry.Tenant.Tenant
 			ctx = telemetry.WithRequestFields(ctx, f)
+			tagTenant(ctx, f.Tenant)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	})(next)
