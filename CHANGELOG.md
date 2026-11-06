@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(edge)` · Move the OTP example to send_otp and verify_otp (HUB-343) · HUB-343 · F-14
+  - examples/otp-account-flow: `demo.mobile_otp@v1` has two operations, `send_otp` and `verify_otp`, on two demo-kyc endpoints (`/v1/otp/send`, `/v1/otp/verify`), each with its own transformer pair and goldens; callers use `invoke/send_otp` and `invoke/verify_otp` (the single-operation stand-in is gone)
+  - TestExampleOTPAccountFlow proves step 1 and step 2 hit different vendor endpoints in one session, pinned to v1 / account A across a publish; TestExampleOTPRefusesOnePairForBothOperations shows the build refusing the config without its verify_otp pair
+  - Use case 6 of the use-case catalogue: per-operation routing and the publish-time refusal are Works today, with their tests; HUB-343 in review; new todo tickets HUB-349 (publisher archives an unrebuildable snapshot when a draining account is targeted again) and HUB-350 (`hubctl dry-run --operation`)
+
 - 2026-11-07 · `fix(registry)` · Refuse one transformer pair serving every operation (HUB-345) · HUB-345 · F-03
   - A multi-operation capability whose only transformer pair is compiled for one operation is refused when the snapshot is built (config files, `hubctl apply`, admin publish), naming the version file and `targets[i].transformer`, instead of running that operation's transformers for the others at request time
   - Delivered by the HUB-343 check `operations_have_transformers`; registry rule documented in F-03

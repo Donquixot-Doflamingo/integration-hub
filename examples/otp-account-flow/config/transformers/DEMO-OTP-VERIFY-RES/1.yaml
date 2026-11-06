@@ -1,17 +1,14 @@
-# EXAMPLE ONLY (HUB-342). Fictional vendor "demo-kyc" (see DEMO-OTP-REQ@1 for the invented shape).
-# On a successful step 1 the session: section keeps ONLY the vendor txn id; the Hub stores it for
-# 10 minutes, pinned to this version and account (DESIGN §14). Later steps never open a session.
-# Wrong or expired OTPs map to UPSTREAM_REJECTED with a fixed, vendor-neutral message.
-transformer: DEMO-OTP-RES
+# EXAMPLE ONLY (HUB-342, HUB-343). Fictional vendor "demo-kyc" (see DEMO-OTP-VERIFY-REQ@1).
+# Wrong or expired OTPs map to UPSTREAM_REJECTED with a fixed, vendor-neutral message. No session:
+# section: a later step never opens a session.
+transformer: DEMO-OTP-VERIFY-RES
 version: 1
 kind: response
 capability: demo.mobile_otp@v1
+operation: verify_otp
 response:
-  status:       'res.body.status == "OTP_SENT" ? "otp_sent" : "verified"'
-  expires_in_s: res.body.expires_in
-  vendor_ref:   res.body.ref
-session:
-  vendor_txn_id: res.body.txn_id
+  status:     '"verified"'
+  vendor_ref: res.body.ref
 errors:
   - when: res.status == 401 || res.status == 403
     code: UPSTREAM_AUTH_FAILED

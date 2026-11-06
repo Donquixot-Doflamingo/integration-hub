@@ -1,0 +1,20 @@
+# EXAMPLE ONLY (HUB-342, HUB-343). Fictional vendor "demo-kyc" (no vendor documentation). Invented shape:
+#   POST /v1/otp/verify  {"mobile", "txn_id", "otp"}  -> 200 {"status": "VERIFIED", "ref"}
+#                                                       422 {"error": "OTP_MISMATCH" | "OTP_EXPIRED", "message"}
+# The vendor txn id comes from the session send_otp opened (session.vendor_txn_id, DESIGN §14).
+transformer: DEMO-OTP-VERIFY-REQ
+version: 1
+kind: request
+capability: demo.mobile_otp@v1
+operation: verify_otp
+vendor_endpoint: demo-kyc.otp_verify@1
+request:
+  method: POST
+  path: /v1/otp/verify
+  headers:
+    Content-Type: '"application/json"'
+    X-Client-Id:  account.config.client_id
+  body:
+    mobile: req.mobile
+    txn_id: session.vendor_txn_id
+    otp:    req.otp

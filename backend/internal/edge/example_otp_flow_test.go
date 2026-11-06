@@ -1,8 +1,10 @@
 package edge
 
 import (
+	"errors"
 	"io/fs"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -99,8 +101,35 @@ func TestExampleOTPConfigBuilds(t *testing.T) {
 				t.Errorf("capability %s missing or not interactive", c)
 			}
 		}
-		if acct := snap.Integrations["int_demo_otp"].Active().Targets[0].Account; acct != "demo-kyc-"+map[int]string{1: "a", 2: "b"}[active] {
+		target := snap.Integrations["int_demo_otp"].Active().Targets[0]
+		if acct := target.Account; acct != "demo-kyc-"+map[int]string{1: "a", 2: "b"}[active] {
 			t.Errorf("v%d targets %s", active, acct)
 		}
+		// HUB-343: each operation has its own pair, so its own vendor endpoint.
+		for op, endpoint := range map[string]string{"send_otp": "demo-kyc.otp_send@1", "verify_otp": "demo-kyc.otp_verify@1"} {
+			if tf := snap.Transformers[target.Pair(op).Request]; tf == nil || tf.VendorEndpoint != endpoint || tf.Operation != op {
+				t.Errorf("v%d %s: request transformer %+v, want endpoint %s", active, op, tf, endpoint)
+			}
+		}
+	}
+}
+
+// TestExampleOTPRefusesOnePairForBothOperations is HUB-345 on the example: without its
+// operations entry, verify_otp would run send_otp's transformers, and the build refuses that.
+func TestExampleOTPRefusesOnePairForBothOperations(t *testing.T) {
+	src := exampleSources(t, 1)
+	cfg := src.Config.(fstest.MapFS)
+	const file = "integrations/int_demo_otp/versions/1.yaml"
+	const ops = "    operations:\n      verify_otp: { request: DEMO-OTP-VERIFY-REQ@1, response: DEMO-OTP-VERIFY-RES@1 }\n"
+	if !strings.Contains(string(cfg[file].Data), ops) {
+		t.Fatalf("%s has no verify_otp pair", file)
+	}
+	cfg[file] = &fstest.MapFile{Data: []byte(strings.Replace(string(cfg[file].Data), ops, "", 1))}
+	_, err := registry.Build(src, time.Now())
+	var ps registry.ConfigErrors
+	if !errors.As(err, &ps) || !slices.ContainsFunc(ps, func(p registry.Problem) bool {
+		return p.File == file && p.Path == "targets[0].transformer" && strings.Contains(p.Message, "operation verify_otp uses the default pair")
+	}) {
+		t.Fatalf("want a targets[0].transformer problem for verify_otp, got %v", err)
 	}
 }
