@@ -1,0 +1,5 @@
+# Callback receiver of the soak (hubload soak -receiver-addr 127.0.0.1:28797).
+endpoint_id: reg_load_cb
+tenant: load-tenant
+url: http://127.0.0.1:28797/hub/callbacks
+secret_ref: localfile://reg_load_cb

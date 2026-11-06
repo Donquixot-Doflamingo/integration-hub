@@ -383,7 +383,9 @@ Not shipped yet (HUB-244); several need metrics that are not exported (`hub_acce
 
 ## 12. Load and soak tests (`deploy/load/`)
 
-Tool: **k6** (scenarios, thresholds, custom metrics); **vegeta** for ad-hoc constant-rate checks. Target is laptop-scale (DESIGN §19 M8) with mockvendor at configurable latency.
+Tool: **`hubload`** (`backend/cmd/hubload`, ADR-0016), driven by `deploy/load/run.sh` (`make load`, `make soak`). It is an open-loop generator (arrivals at a constant rate, latency measured from the intended send time, so a stalled Hub shows up as latency rather than as fewer requests). Each step also scrapes `/metrics` of every role before and after (`hub_overhead_ms`, `hub_stage_duration_ms`, `vendor_latency_ms`, `hub_requests_total` deltas; native histogram buckets when present), samples the outbox every second (same queries as `queue_depth` / `queue_oldest_age_s`), reads the audit ledger's `hub.requests.hub_overhead_ms` for the measured window, and reports CPU per process. k6 and vegeta are not used (ADR-0016). The target is laptop scale (DESIGN §19 M8) with mockvendor at a configured latency. Default sizes fit a 2-CPU machine; `deploy/load/README.md` gives the full-length settings. Results: `docs/tech/LOAD_TEST_REPORT.md`.
+
+Until HUB-405 is fixed, the exported `hub_overhead_ms` histogram is wrong: it is computed with a timestamp taken before the vendor call, so it is mostly negative. Use the audit ledger value (`hub.requests.hub_overhead_ms`) or the stage breakdown instead. The S1 SLO and the `HubOverheadHigh` alert read the broken metric until then.
 
 | Scenario | Shape | Pass criteria |
 | --- | --- | --- |
@@ -394,7 +396,9 @@ Tool: **k6** (scenarios, thresholds, custom metrics); **vegeta** for ad-hoc cons
 | L5 outage chaos | L2 load; mockvendor hard-down for 3 min at random every 15 min | breaker opens; parked grows; drain starts ≤ 60 s after recovery; ramp 20 % → 100 %; S4 = 0 |
 | L6 soak | L3 at 50 % load for 24 h (staging) with random L5 outages | S4 = 0; flat goroutines and heap after warm-up; no audit drops; p99 stable |
 
-Accepted request ids are recorded by the k6 script and reconciled against `requests` at the end (zero-loss proof independent of Hub metrics).
+Accepted request ids (202 bodies) are recorded by `hubload soak` and reconciled against `hub.requests` at the end (zero-loss proof independent of Hub metrics). Its callback receiver counts terminal events per request id, so duplicates (two outcomes for one request) and redeliveries (the same event twice) are told apart. Worker restarts (`SOAK_RESTARTS`) stay off until HUB-406: a worker restarted while a backlog exists panics on a nil snapshot.
+
+Also new for the load runs: `net/http/pprof` is mounted on the ops port of every role (§8.1, HUB-403). The harness takes a 20 s CPU profile of the gateway during the sync run and of the worker and gateway during the async run.
 
 ---
 

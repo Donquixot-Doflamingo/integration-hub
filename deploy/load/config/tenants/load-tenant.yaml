@@ -1,0 +1,9 @@
+# Load-test tenant (deploy/load). The key is a test value for local load runs only:
+# hk_test_load_tenant_local_only (sha256 below). Never use it outside a load database.
+tenant: load-tenant
+api_keys:
+  - key_id: key_01JLOAD0TENANT00000000000A
+    hash: sha256:d85653dcd0516c007ba27b9af738227013bd8498be845b5d46f79bd95d463b32
+    scopes: [invoke, requests_read]
+    state: active
+rate_limit: { rps: 100000, burst: 100000 }

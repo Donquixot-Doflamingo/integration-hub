@@ -1,0 +1,13 @@
+integration: int_load_async
+version: 1
+targets:
+  - vendor: clevertap
+    account: ct-load
+    transformer: { request: T1@7, response: R1@2 }
+    weight: 100
+delivery:
+  mode: async
+  ttl: 6h
+  polling: true
+audit: { payloads: masked, retention: 30d }
+publish: { author: platform-team, reason: "load test (HUB-235)" }

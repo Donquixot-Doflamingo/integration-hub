@@ -31,7 +31,7 @@ flowchart TB
 | E2E | `backend/test/e2e/`, `frontend/tests/e2e/`, `backend/cmd/hubmcp/e2e/` | every PR (smoke), nightly (full) | `e2e` | < 15 min |
 | Benchmarks | `*_test.go` `Benchmark*` | every PR (hot-path packages) | none | < 6 min |
 | Fuzz | `Fuzz*` | nightly 10 min/target; seeds run in unit tests | none | — |
-| Load / soak | `deploy/load/` | weekly + before release (staging) | — | 1–24 h |
+| Load / soak | `deploy/load/` + `backend/cmd/hubload` (`make load`) | weekly + before release (staging); laptop scale on demand | — | ~25 min laptop, 1–24 h staging |
 
 ## 2. Unit tests (Go)
 - **Table-driven** (`tests := []struct{name string; ...}` + `t.Run`), `t.Parallel()` where safe.
@@ -148,7 +148,7 @@ Benchmarks are in the package they measure; budgets from DESIGN §18.6 / §7.6. 
 p99 is computed by a helper that records per-iteration durations into an HDR histogram (Go benchmarks report means only).
 
 ## 10. Load and soak
-Defined in `OBSERVABILITY.md` §12 (L1–L6): 500 sync RPS + 2,000 async msg/s (M8), zero lost async requests in a soak with random outages. Also a **metrics cardinality check**: run the dev config expanded to 500 integrations synthetic, scrape `/metrics`, fail if series exceed the budget in OBSERVABILITY §3.1.
+Defined in `OBSERVABILITY.md` §12 (L1–L6): 500 sync RPS + 2,000 async msg/s (M8), zero lost async requests in a soak with random outages. Run with `make load` / `make soak` (`deploy/load/run.sh`, generator `backend/cmd/hubload`, ADR-0016) against a dedicated load database. Laptop-scale defaults; full-length settings in `deploy/load/README.md`; latest report `docs/tech/LOAD_TEST_REPORT.md`. `hubload` itself has unit tests (open-loop behaviour under a stalled server, drop accounting, native and classic histogram deltas, callback duplicate/redelivery counting, chaos restore), and `TestLoadOverlayConfigBuilds` (registry) keeps the load registry overlay valid. Also a **metrics cardinality check**: run the dev config expanded to 500 integrations synthetic, scrape `/metrics`, fail if series exceed the budget in OBSERVABILITY §3.1.
 
 ## 11. Other checks
 - `promtool check rules` + `promtool test rules` for `deploy/alerts/` (one test per alert with a firing and a non-firing case; `TestAlertRulesCoverDesign` enforces it and that every DESIGN §16.3 alert has a rule).

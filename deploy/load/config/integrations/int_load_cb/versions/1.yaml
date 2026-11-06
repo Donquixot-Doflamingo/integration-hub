@@ -1,0 +1,19 @@
+integration: int_load_cb
+version: 1
+targets:
+  - vendor: clevertap
+    account: ct-load
+    transformer: { request: T1@7, response: R1@2 }
+    weight: 100
+delivery:
+  mode: async_callback
+  ttl: 6h
+webhooks:
+  - event: request.completed
+    endpoint: reg_load_cb
+  - event: request.failed
+    endpoint: reg_load_cb
+  - event: request.expired
+    endpoint: reg_load_cb
+audit: { payloads: masked, retention: 30d }
+publish: { author: platform-team, reason: "soak test (HUB-236)" }

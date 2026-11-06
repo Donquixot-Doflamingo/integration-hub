@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `perf(load)` · Add hubload and the deploy/load harness (HUB-235) · HUB-235 · F-18
+  - `make load` starts mockvendor, gateway, worker and scheduler on a dedicated load database and runs the comparison (direct to mockvendor vs through the Hub), the sync and async ramps with CPU profiles, and the soak, then writes a Markdown report
+  - New `hubload` tool (`rate`, `soak`, `report`, `settle`): open-loop arrivals (latency from the intended send time), per-step metric deltas, audit-ledger overhead, outbox sampling and CPU per process
+  - The soak injects random vendor outages (refused, reset, 503, timeouts) and reconciles every accepted request against `hub.requests` and the callbacks received: lost, non-terminal, duplicate outcomes, redeliveries
+  - Measurements wait for a quiet machine (1-minute load average below 1.0) and record the load average next to every number; the run refuses databases whose name does not contain `load`
 - 2026-11-07 · `feat(roles)` · Serve pprof on the ops port only (HUB-403) · HUB-403 · F-18
   - Every role serves `/debug/pprof/*` on its ops port (TECH_SPEC §2, OBSERVABILITY §8.1), so a running gateway or worker can be CPU- and heap-profiled
   - The public gateway and admin listeners still answer 404 on `/debug/pprof/`
