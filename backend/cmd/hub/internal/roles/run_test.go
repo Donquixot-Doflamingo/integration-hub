@@ -130,8 +130,12 @@ func startRoleWith(t *testing.T, cfg Config, opts Options) map[string]string {
 			close(started)
 		}
 	}
+	if opts.Secrets == nil { // the logger and the role share one redaction set, as in main
+		opts.Secrets = telemetry.NewSecretSet()
+	}
+	log := newRoleLogger(cfg.Role, opts.Secrets) // captured for the secret grep (logscan_test.go)
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, cfg, slog.New(slog.DiscardHandler), opts) }()
+	go func() { done <- Run(ctx, cfg, log, opts) }()
 	select {
 	case <-started:
 	case err := <-done:
@@ -194,6 +198,8 @@ func TestGatewayContinuesCallerTrace(t *testing.T) {
 // process's redaction set before anything logs, whichever entry point built the logger.
 func TestRunRegistersConfigSecrets(t *testing.T) {
 	const pw, mask = "pg-password-canary-0001", "audit-mask-key-canary-0123456789abcdef"
+	forbid("postgres password", pw)
+	forbid("audit mask key", mask)
 	cfg := testConfig(t, Worker)
 	cfg.PGDSN = Secret("postgres://hub:" + pw + "@127.0.0.1:1/hub")
 	cfg.AuditMaskKey = Secret(mask)

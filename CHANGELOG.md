@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(roles)` · Grep every role's itest logs for secrets · HUB-234 · F-18
+  - Every role the roles tests start now logs through the production logger into one capture; the package fails if any secret a test declared appears in it (labels printed, never values)
+  - TestRoleLogsCarryNoSecrets runs gateway, worker, scheduler and admin on the encrypted credential source through sync calls, a vendor echoing credentials, async delivery with a signed callback, connection tests, a rotation and an unknown API key
 - 2026-11-07 · `fix(roles)` · Redact the DSN password and mask key by value · HUB-234 · F-18
   - HUB_AUDIT_MASK_KEY is now redacted by value from every log line, like credentials (it was only hidden when logged as a config value)
   - The Postgres DSN password is registered by roles.Run itself, so every entry point (hub binary, tests, future wiring) redacts it
