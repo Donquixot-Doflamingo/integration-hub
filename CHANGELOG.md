@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(control)` · Regenerate sqlc models for the callback traceparent column (HUB-231) · HUB-231 · F-18
+  - internal/control/db models match migration 00010, so the sqlc CI check passes
 - 2026-11-06 · `docs(adr)` · Renumber the trace-context ADR to 0013 and its story to US-1806 (HUB-231) · HUB-231 · F-18
   - ADR-0012 and US-1805 are taken by the subject-erasure work merging alongside; references updated
 - 2026-11-06 · `feat(telemetry)` · Trace async requests from caller to callback (HUB-231) · HUB-231 · F-18
