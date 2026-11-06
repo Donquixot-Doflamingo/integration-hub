@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(security)` · Document the HUB-234 security gates and tests · HUB-234 · F-18
+  - SECURITY.md: gosec/govulncheck gates and the reviewed #nosec triage table (§8.1), explicit TLS floor and egress tests (§5), redaction set contents (§3), role-log secret grep (§9)
+  - HUB-234 in review with all acceptance criteria met; new todo tickets HUB-248 (nosniff header) and HUB-249 (server read timeout and header limit)
 - 2026-11-07 · `test(roles)` · Grep every role's itest logs for secrets · HUB-234 · F-18
   - Every role the roles tests start now logs through the production logger into one capture; the package fails if any secret a test declared appears in it (labels printed, never values)
   - TestRoleLogsCarryNoSecrets runs gateway, worker, scheduler and admin on the encrypted credential source through sync calls, a vendor echoing credentials, async delivery with a signed callback, connection tests, a rotation and an unknown API key

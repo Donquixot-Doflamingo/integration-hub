@@ -61,6 +61,7 @@ flowchart TB
 - Every transformer must have at least: a happy path, an optional field absent (`??` defaults), each `errors:` rule, and a max-size payload.
 - Comparison is semantic JSON equality with a stable diff output; volatile values (`now()`, `uuid()`) are pinned by a fake clock and seeded uuid in the expr env.
 - **Secret grep (M3)**: goldens use fixture credentials registered with the redactor; the test asserts the expected request contains them **only** in header/query/auth targets and that the `request.transformed` audit form contains `***`.
+- **Role-log secret grep (HUB-234)**: every role started by the `cmd/hub/internal/roles` tests logs through the production logger into one capture; `TestMain` fails the package if any secret a test declared with `forbid` appears in it, and `TestRoleLogsCarryNoSecrets` drives gateway + worker + scheduler + admin through every secret-handling path on the encrypted credential source (SECURITY.md §9).
 - `-update` flag regenerates expected files; CI rejects runs with `-update`.
 
 ## 4. Contract tests
@@ -190,6 +191,7 @@ flowchart LR
 | Hygiene, commit message format, CHANGELOG entry per commit | yes |
 | Contract lint + `info.version` bumped when `contracts/` changed | yes |
 | golangci-lint, arch test, `govulncheck` (no known vulns in called code) | yes |
+| `gosec` (no untriaged medium/high finding in non-test code, SECURITY.md §8.1) | yes |
 | `make test` (-race, goldens, contract coverage) | yes |
 | `make itest`, chaos (path-filtered) | yes |
 | Benchmark regression | yes for hot-path packages; advisory elsewhere |

@@ -4,7 +4,7 @@
 Completes the metrics catalogue (DESIGN §16.2), alert rules as code (§16.3), OTel tracing (§16.4), tenant/vendor/platform dashboards, and the M8 load and soak tests that prove the latency and durability targets (§1, §18.6, §19 M8).
 
 ## Status
-`in-progress` — 2026-11-06 (HUB-230 metrics done; tracing, alerts, PII deletion, security, load and soak tests to come).
+`in-progress` — 2026-11-07 (HUB-230 metrics done; HUB-234 security checks in review; tracing, alerts, PII deletion, load and soak tests to come).
 
 ## Owner
 `backend-engineer`.
@@ -58,7 +58,8 @@ Alerts (DESIGN §16.3):
 2. `tenant` and `integration` labels allowed; `request_id` never a label.
 3. Logs are structured `slog` JSON via the redacting handler; every log line carries `request_id` and trace ids when present.
 4. **Metrics (HUB-230, done):** every §16.2 metric is registered; `TestDesignMetricsAreRegistered` (roles) enumerates the names from one registry wired like the data plane. `hub_requests_total` is counted once per request: in the gateway for requests that end there (dry-runs excluded) and in delivery for each committed terminal transition of a queued request. The outbox gauges (`queue_depth`, `queue_oldest_age_s`, `dlq_count`) come from `delivery.QueueSampler` on the scheduler leader every 10 s. `credential_expiry_days` is computed at scrape time. Capped metrics fold excess label combinations into `__overflow__` (OBSERVABILITY §3.1). `hub_overhead_ms` is broken down by stage in `hub_stage_duration_ms` (since HUB-027).
-5. Load-test acceptance: overhead p99 ≤ 5 ms at target load; async accept p99 ≤ 10 ms; soak: zero lost accepted requests (ledger reconciliation of accepted vs terminal).
+5. **Security checks (HUB-234, in review):** CI jobs `gosec` (`make gosec`, gosec v2.30.0, fails on medium/high findings not triaged with `#nosec`) and `govulncheck` (`make vuln`, v1.9.0, fails on reachable known vulnerabilities, stdlib included; toolchain pinned to go1.26.10). Both egress clients enforce an explicit TLS 1.2 floor (`TestTLS`, `TestGuardRefusesTLSBelow12`). Body limits are proven through the gateway handler (`TestBodyLimitsAtTheEdge`). Every role's logs from the `roles` integration run are grepped for every secret the tests used (`TestRoleLogsCarryNoSecrets` + package `TestMain`). The redaction set also holds the DSN password and audit mask key. Details and the triage table: `docs/tech/SECURITY.md` §5, §8.1, §9.
+6. Load-test acceptance: overhead p99 ≤ 5 ms at target load; async accept p99 ≤ 10 ms; soak: zero lost accepted requests (ledger reconciliation of accepted vs terminal).
 
 ## Data model impact
 None.
@@ -82,6 +83,7 @@ No PII or secrets in labels, span attributes or logs; span attributes allowliste
 - **Unit**: alert rules tested with `promtool test rules`.
 - **Load**: k6/vegeta scenarios in CI-optional job; results recorded in the M8 summary.
 - **Soak**: random mockvendor outages over ≥ 1 h; reconciliation script.
+- **Security (HUB-234)**: `make security` (gosec + govulncheck); `TestTLS`, `TestTLSFloorIsExplicit`, `TestGuardRefusesTLSBelow12`, `TestBodyLimitsAtTheEdge`, `TestRoleLogsCarryNoSecrets`, `TestRunRegistersConfigSecrets`; egress `TestUndeclaredHostRefusedBeforeDial`, `TestDialerChecksEgress`.
 
 ## Rollout & migration
 Dashboards imported into the target Grafana once hosting is decided (PRD Q8).
@@ -98,3 +100,4 @@ HUB-230 – HUB-249.
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-11-06 | HUB-230 shipped: full §16.2 metric set, cardinality guard, status in-progress | backend-engineer |
+| 2026-11-07 | HUB-234: security gates (gosec, govulncheck), TLS floor, body-limit and role-log secret-grep tests | backend-engineer |
