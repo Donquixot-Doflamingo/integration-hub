@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 )
 
 func testConfig(tb testing.TB, role Role) Config {
@@ -185,5 +187,21 @@ func TestGatewayContinuesCallerTrace(t *testing.T) {
 	}
 	if got := spans[0].SpanContext().TraceID().String(); got != traceID {
 		t.Fatalf("trace id = %s, want %s", got, traceID)
+	}
+}
+
+// TestRunRegistersConfigSecrets: Run adds the DSN password and the audit mask key to the
+// process's redaction set before anything logs, whichever entry point built the logger.
+func TestRunRegistersConfigSecrets(t *testing.T) {
+	const pw, mask = "pg-password-canary-0001", "audit-mask-key-canary-0123456789abcdef"
+	cfg := testConfig(t, Worker)
+	cfg.PGDSN = Secret("postgres://hub:" + pw + "@127.0.0.1:1/hub")
+	cfg.AuditMaskKey = Secret(mask)
+	secrets := telemetry.NewSecretSet()
+	startRoleWith(t, cfg, Options{Secrets: secrets})
+	for _, v := range []string{pw, mask} {
+		if got := secrets.Redact("x " + v + " y"); got != "x "+telemetry.Redacted+" y" {
+			t.Errorf("not registered for redaction: %q", got)
+		}
 	}
 }
