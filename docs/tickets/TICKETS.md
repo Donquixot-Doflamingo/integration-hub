@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **203** · done: **157** · todo: **42** · other (in-progress/in-review/blocked): **4**
+Total tickets: **207** · done: **157** · todo: **45** · other (in-progress/in-review/blocked): **5**
 
 ## Epics
 
@@ -17,7 +17,7 @@ Total tickets: **203** · done: **157** · todo: **42** · other (in-progress/in
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
-| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 13 | 1 |
+| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 17 | 1 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
@@ -1683,14 +1683,16 @@ OTel spans for edge, transform, upstream and callback; accept caller `traceparen
 
 ### HUB-232 — Alert rules and dashboards as code
 - **Epic:** EP-09 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-230 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-review · **Depends on:** HUB-230 · **Feature:** F-18 · **Stories:** US-1801, US-1804
 - **Branch:** `chore/HUB-232-alerts-dashboards`
 
 Prometheus alert rules for every §16.3 alert with `promtool` unit tests, and dashboards JSON for tenant, vendor and platform views in `deploy/`.
 
+Shipped: `deploy/alerts/hub.rules.yaml` + `*_test.yml`, `deploy/dashboards/{tenant,vendor,platform}.json`, `make monitoring` and CI job `monitoring` (promtool 3.4.2 check + test; Go tests that parse every rule and panel query and fail on names the registry does not export). Rules use only exported metrics: ADR-0014 (auth/transform/DLQ sources until HUB-241), ADR-0015 (query check).
+
 **Acceptance criteria**
-- [ ] Each §16.3 alert has a rule and a passing promtool test
-- [ ] Dashboards load in Grafana (CI JSON lint + import check)
+- [x] Each §16.3 alert has a rule and a passing promtool test
+- [ ] Dashboards load in Grafana (CI JSON lint + import check) — JSON lint, structure and exported-metrics check run in CI (`TestDashboardsAreValidAndUseExportedMetrics`); the Grafana import check is not done (no Grafana in CI or the dev container): HUB-243
 
 ### HUB-233 — PII deletion job by subject identifier
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
@@ -1747,7 +1749,7 @@ Multi-hour soak with randomised mockvendor outages and worker restarts; reconcil
 - **Status:** todo · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-18xx
 - **Branch:** `docs/HUB-237-runbooks-m8`
 
-Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`, credential rotation, snapshot lag; post the M8 wrap-up.
+Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`, credential rotation, snapshot lag; post the M8 wrap-up. The alert rules (HUB-232) link `docs/runbooks/<AlertName>.md` for all ten alerts in `deploy/alerts/hub.rules.yaml` (six page, four warn).
 
 **Acceptance criteria**
 - [ ] Each paging alert links a runbook
@@ -1883,6 +1885,50 @@ HUB-233 shipped the erasure as the `hub erase-subject` maintenance command becau
 **Acceptance criteria**
 - [ ] Steward reviewed and merged the contract change (or rejected with reasons)
 - [ ] Backend handler + contract test; RBAC table row added (SECURITY §7)
+### HUB-241 — Attempt-level and DLQ counters for the auth, transform and DLQ alerts
+- **Epic:** EP-09 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-232 · **Feature:** F-18 · **Stories:** US-1801
+- **Branch:** `feat/HUB-241-attempt-dlq-counters`
+
+OBSERVABILITY §3.3 plans `vendor_attempts_total{vendor,account,endpoint,code}` (delivery, one per attempt) and `dlq_entries_total{account,reason}` (queue, one per dead-letter write); neither is exported, so HUB-232 reads `hub_requests_total` and the `dlq_count` gauge (ADR-0014). Add both counters, then switch `UpstreamAuthFailed`, `TransformFailed` and `DLQSurge` to them and supersede ADR-0014.
+
+**Acceptance criteria**
+- [ ] Both counters registered and pinned in the metrics catalogue test; incremented exactly once per attempt / dead-letter write (tests)
+- [ ] The three rules and their promtool tests use the counters; the catalogue check passes
+- [ ] OBSERVABILITY §3.3 and §11.1 updated; ADR-0014 superseded
+
+### HUB-242 — Clear the parked gauges when the scheduler loses leadership
+- **Epic:** EP-09 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-13 · **Stories:** US-1801
+- **Branch:** `fix/HUB-242-parked-gauges-leadership`
+
+`delivery.Resilience` sets `parked_count` and `parked_oldest_age_s` on each leader tick but nothing resets them when leadership is lost (`Scheduler.lead` clears only the `QueueSampler`), so a former leader keeps exporting its last values. HUB-232 works around it in `ParkedOldestAgeHigh` and the dashboards with `and on (instance) (scheduler_leader == 1)`.
+
+**Acceptance criteria**
+- [ ] A scheduler that stops leading exports no `parked_*` series (test)
+- [ ] The leader filter can be dropped from the rule and dashboards (promtool test for the former-leader case still passes)
+
+### HUB-243 — Grafana import check for the dashboards in CI
+- **Epic:** EP-09 · **Type:** chore · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-232 · **Feature:** F-18 · **Stories:** US-1804
+- **Branch:** `chore/HUB-243-grafana-import-check`
+
+HUB-232 lints the dashboards and checks their queries against the exported metrics, but does not import them into Grafana (not available where HUB-232 was built). Start a pinned Grafana image as a CI service, provision a Prometheus data source, import each `deploy/dashboards/*.json` through the HTTP API and fail on any error.
+
+**Acceptance criteria**
+- [ ] CI job imports all three dashboards into a pinned Grafana and fails on a non-200 or a dashboard with panel errors
+- [ ] HUB-232's second acceptance criterion can be ticked
+
+### HUB-244 — Additional alert rules (OBSERVABILITY §11.2)
+- **Epic:** EP-09 · **Type:** chore · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-232 · **Feature:** F-18 · **Stories:** US-1801
+- **Branch:** `chore/HUB-244-extra-alerts`
+
+Rules beyond DESIGN §16.3 planned in OBSERVABILITY §11.2 (`SchedulerLeaderMissing`, `SnapshotApplyFailing`, `CredsCacheMiss`, `HeapNearLimit`, `GoroutinesGrowing`, `AuditBufferFilling`, `CallbackFailuresHigh`, availability burn rates). Rules whose metric is not exported (`ZeroLossViolation` → `hub_accepted_unaccounted`, `AcceptP99High` → `hub_accept_ms`) wait for those metrics.
+
+**Acceptance criteria**
+- [ ] Each rule whose metrics exist has a promtool test with a firing and a non-firing case and passes the catalogue check
+- [ ] OBSERVABILITY §11.2 marks which rules shipped and which wait for a metric
 
 ## EP-10 — Admin console (SvelteKit)
 
