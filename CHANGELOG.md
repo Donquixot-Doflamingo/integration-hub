@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
+  - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
+  - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series
 - 2026-11-07 · `docs(tech)` · Add the M8 load and soak test report (HUB-235, HUB-236) · HUB-235 · F-18
   - `docs/tech/LOAD_TEST_REPORT.md` leads with direct vs through-the-Hub latency (vendor at 0/50/200 ms, mockvendor stand-in): the Hub adds about 1.1–1.4 ms typical and 2.5–3.5 ms at p99
   - Sync: 500 RPS with 0 errors, ledger overhead p99 3.8 ms (6.5 ms with the limiter's Redis call); knee at about 600 RPS on 2 shared CPUs
