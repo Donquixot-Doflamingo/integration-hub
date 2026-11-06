@@ -14,7 +14,7 @@ import (
 // hubctl creds manages the local dev credential file (HUB-084, DESIGN §9). Values are written
 // encrypted and are never printed: list shows key names only.
 
-//nolint:gosec // G101 false positive: usage text, no credential
+// #nosec G101 -- usage text, no credential
 const credsUsage = `usage: hubctl creds <command> [flags]
 
 commands:

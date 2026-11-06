@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,8 +30,9 @@ type Options struct {
 	Metrics *telemetry.Metrics
 	// ExtraChecks are added to the readiness checks (later milestones: snapshot loaded).
 	ExtraChecks []Check
-	// Secrets is the process's redaction set (the logger's); decrypted credentials are added to
-	// it. nil means a fresh set.
+	// Secrets is the process's redaction set (the logger's). Run adds the secrets of cfg (the
+	// Postgres password, the audit mask key) and the data plane adds decrypted credentials. nil
+	// means a fresh set.
 	Secrets *telemetry.SecretSet
 }
 
@@ -51,6 +53,11 @@ type listener struct {
 // routing, then the public listener and finally the ops listener are closed within
 // ShutdownGrace.
 func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error {
+	secrets := opts.Secrets
+	if secrets == nil {
+		secrets = telemetry.NewSecretSet()
+	}
+	registerConfigSecrets(secrets, cfg) // before anything can log
 	var ready atomic.Bool
 	metrics := opts.Metrics
 	if metrics == nil {
@@ -78,10 +85,6 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	}
 	var dp *dataPlane
 	if cfg.Role == Gateway || cfg.Role == Worker || cfg.Role == Scheduler {
-		secrets := opts.Secrets
-		if secrets == nil {
-			secrets = telemetry.NewSecretSet()
-		}
 		if dp, err = newDataPlane(ctx, cfg, metrics, log, secrets, tp, st, reg); err != nil {
 			_ = tp.Shutdown(ctx)
 			return err
@@ -183,4 +186,16 @@ func publicHandler(role Role, dp *dataPlane) http.Handler {
 		return dp.edge.Handler()
 	}
 	return http.NotFoundHandler()
+}
+
+// registerConfigSecrets adds the secret values of cfg to the redaction set (SECURITY.md §3): the
+// Postgres password of the DSN and the audit mask key. Both are Secret-typed, so they already
+// log as "***" when logged as config; this catches them inside error strings and payloads too.
+func registerConfigSecrets(secrets *telemetry.SecretSet, cfg Config) {
+	if u, err := url.Parse(string(cfg.PGDSN)); err == nil && u.User != nil {
+		if pw, ok := u.User.Password(); ok {
+			secrets.Add(pw)
+		}
+	}
+	secrets.Add(string(cfg.AuditMaskKey))
 }

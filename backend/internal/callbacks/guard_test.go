@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -255,6 +256,40 @@ func TestGuardDialsTheVettedAddress(t *testing.T) {
 	}
 	if got := fn.addrs(); len(got) != 1 || got[0] != "8.8.8.8:443" {
 		t.Fatalf("dialed %v, want the vetted IP literal 8.8.8.8:443", got)
+	}
+}
+
+// TestGuardRefusesTLSBelow12 (HUB-234, DESIGN §16.5): a callback receiver that only speaks
+// TLS 1.0/1.1 is refused at the handshake, even when the TLS config handed to the guard would
+// allow it; the same receiver is reachable by a client that permits TLS 1.0 (control).
+func TestGuardRefusesTLSBelow12(t *testing.T) {
+	var hits atomic.Int64
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
+	// MinVersion must be explicit: a Go server's default floor is TLS 1.2 (Go 1.22+).
+	ts.TLS = &tls.Config{MinVersion: tls.VersionTLS10, MaxVersion: tls.VersionTLS11}
+	ts.Config.ErrorLog = slog.NewLogLogger(slog.DiscardHandler, slog.LevelError) // expected handshake failures
+	ts.StartTLS()
+	t.Cleanup(ts.Close)
+	permissive := ts.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
+	permissive.MinVersion = tls.VersionTLS10
+
+	conn, err := (&tls.Dialer{Config: permissive}).DialContext(t.Context(), "tcp", ts.Listener.Addr().String())
+	if err != nil {
+		t.Fatalf("control: a TLS 1.0+ client cannot reach the receiver: %v", err)
+	}
+	if v := conn.(*tls.Conn).ConnectionState().Version; v != tls.VersionTLS11 {
+		t.Fatalf("control negotiated %x, want TLS 1.1", v)
+	}
+	_ = conn.Close()
+
+	fn := &fakeNet{target: ts.Listener.Addr().String()}
+	res := staticResolver(map[string][]netip.Addr{"example.com": addrs("8.8.8.8")})
+	g := newTestGuard(t, GuardOptions{Resolver: res, dial: fn.dial, tlsConfig: permissive})
+	if _, err := post(t, g, "https://example.com/cb"); err == nil || !strings.Contains(err.Error(), "protocol version") {
+		t.Fatalf("Do = %v, want a protocol version handshake failure", err)
+	}
+	if hits.Load() != 0 {
+		t.Fatal("the receiver got a request over TLS < 1.2")
 	}
 }
 
