@@ -30,6 +30,20 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 - 2026-11-07 · `build(backend)` · Pin Go toolchain 1.26.10 and x/net v0.62.0 · HUB-234 · F-18
   - Builds and CI use Go 1.26.10: govulncheck found 36 standard-library vulnerabilities reachable from Hub code in go1.26.0 (crypto/x509, net/url, html/template, net/http among them)
   - golang.org/x/net v0.62.0 fixes GO-2026-6866 and GO-2026-6860 (required module, not called)
+- 2026-11-06 · `docs(use-cases)` · Add the use-case catalogue for product owners (HUB-342) · HUB-342 · F-22
+  - docs/use-cases/README.md: how a call flows through the Hub (pipeline and the DESIGN §18.6 latency budget), then events, vendor/account swaps, vendor outages, signed callbacks, idempotent retries, two-step OTP -> verify -> bank account, and the DESIGN §14 lending patterns, each with the caller's exact requests, a sequence diagram, failure behaviour and a status line citing its test or ticket
+  - Two-step flows are marked Partly: vendor sessions work today; steps on different vendor endpoints need HUB-343
+  - Linked from the root README and the feature index; F-22 records the R2-5 status and the new items R2-11 (HUB-347) and R2-12 (HUB-348); HUB-342 in review
+- 2026-11-06 · `test(edge)` · Build the example snapshots once per test rig (HUB-342) · HUB-342 · F-22
+  - TestExampleOTPAccountFlow builds the two example snapshots (and runs their goldens) once instead of nine times, so it is far less exposed to the transform time-budget flake under load (HUB-238)
+- 2026-11-06 · `test(edge)` · Add a runnable OTP to bank-account example flow (HUB-342) · HUB-342 · F-22
+  - examples/otp-account-flow: an example registry overlay (two interactive capability schemas, fictional vendor demo-kyc on mockvendor, two accounts, tenant loan-onboarding, int_demo_otp v1/v2, int_demo_bank_verify, four transformers with goldens), kept out of backend/config and contracts/
+  - TestExampleOTPConfigBuilds builds the overlay and runs its goldens; TestExampleOTPAccountFlow runs send OTP -> verify in the session (pinned to account A across a publish) -> bank verification through the real gateway, plus wrong OTP, expired session, double tap, vendor down and edge refusals
+  - examples/otp-account-flow/README.md: how to run it and the exact requests and responses
+- 2026-11-06 · `docs(tickets)` · Add HUB-342 and gap tickets HUB-343 to HUB-348 (HUB-342) · HUB-342 · F-22
+  - New ticket HUB-342 (use-case catalogue and runnable OTP example), in progress
+  - Gaps found while scoping it: per-operation transformers (HUB-343) and their admin contract change (HUB-344), refusing multi-operation configs that would misroute today (HUB-345), a canonical reason on error rules (HUB-346), the lookup result cache (HUB-347) and the upload + job pattern (HUB-348)
+  - Ticket counters recomputed (they were one ticket behind for EP-09)
 - 2026-11-07 · `fix(delivery)` · Base the drain quota on elapsed time so late ticks don't slow the ramp (HUB-155) · HUB-155 · F-12
   - The ramped drain keeps its DESIGN §10.5 rate on a busy scheduler: a late or dropped tick is made up (at most 2 ticks' worth, so no burst)
   - Fixes the intermittent TestChaos2RecoveryAndRampedDrain failure on CI

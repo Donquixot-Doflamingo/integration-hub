@@ -1,0 +1,6 @@
+{
+  "method": "POST",
+  "path": "/v1/bank-accounts/verify",
+  "headers": {"Content-Type": "application/json", "X-Client-Id": "DEMO-CLIENT-A"},
+  "body": {"account_number": "50100123456789", "ifsc": "DEMO0001234", "reference": "bank-verify-app-78"}
+}
