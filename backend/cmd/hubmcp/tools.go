@@ -20,8 +20,8 @@ const (
 // handlers maps every contract tool to its implementation.
 func (a *app) handlers() map[string]toolFunc {
 	return map[string]toolFunc{
-		toolListIntegrations:   a.notImplemented(toolListIntegrations),
-		toolDescribe:           a.notImplemented(toolDescribe),
+		toolListIntegrations:   a.listIntegrations,
+		toolDescribe:           a.describeIntegration,
 		toolDryRun:             a.notImplemented(toolDryRun),
 		toolInvoke:             a.notImplemented(toolInvoke),
 		toolGetRequest:         a.notImplemented(toolGetRequest),

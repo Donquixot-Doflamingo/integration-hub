@@ -108,6 +108,7 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-20`).
 - **Contract copy:** `go:embed` cannot reach `contracts/`, so `backend/cmd/hubmcp/hubmcp-tools.json` is a byte-for-byte copy (`go generate ./cmd/hubmcp` refreshes it). `TestEmbeddedContractIsTheFrozenOne` fails on any drift and `TestToolListEqualsFrozenContract` compares the advertised tools with `contracts/mcp/hubmcp-tools.json` itself.
 - **Isolation:** caller tools use `pkg/hubclient`; admin tools use a GET-only client. `internal/archtest` forbids `cmd/hubmcp` from importing `internal/`.
 - **Config:** `HUB_BASE_URL`, `HUB_API_KEY` (env only, no flag; stdio), optional `HUB_ADMIN_TOKEN` / `HUB_ADMIN_BASE_URL`; flags `-transport`, `-addr`, `-allow-remote`, `-log-level`.
+- **Outputs:** built field by field from `pkg/hubclient` types, never by passing Hub JSON through, so a field outside the contract's output schema (vendor, account, version, debug headers) cannot reach a tenant tool. Hub errors become `isError` results carrying the canonical error object (`code`, `message`, `retryable`, `retry_after_ms`, `reason`, `circuit`, `upstream`, `details`, `request_id`); `UNAUTHORIZED` adds a hint to check `HUB_API_KEY`, an unreachable Hub a hint to check `HUB_BASE_URL`.
 - **HTTP transport:** SDK `StreamableHTTPHandler` behind `http.CrossOriginProtection` and the SDK's `auth.RequireBearerToken`; the verifier asks the Hub whether the key is valid (fail closed) and puts that key's `hubclient` in the request's token info, so tools run with the client's own key. Secrets print as `***` (`%v`, `%#v`, slog) and are redacted by value from logs and tool results.
 
 ## Changelog of this doc
@@ -116,3 +117,4 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-20`).
 | 2026-10-31 | Created | docs agent |
 | 2026-11-07 | In progress: scaffold, implementation notes, observability (HUB-300) | backend-engineer |
 | 2026-11-07 | Streamable HTTP transport and per-client key auth (HUB-301, ADR-0018) | backend-engineer |
+| 2026-11-07 | Discovery tools (HUB-302) | backend-engineer |

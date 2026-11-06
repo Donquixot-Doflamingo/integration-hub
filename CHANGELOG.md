@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(hubmcp)` · Add the hub_list_integrations and hub_describe_integration tools (HUB-302) · HUB-302 · F-20
+  - An assistant can list the integrations its tenant may invoke and get each operation's canonical request and response schemas
+  - Outputs carry only caller-API fields; vendor, account and version never appear, even if a Hub response carried them
+  - Hub errors come back as tool results with the canonical error object
 - 2026-11-07 · `feat(hubmcp)` · Serve hubmcp over Streamable HTTP with per-client key auth (HUB-301) · HUB-301 · F-20
   - `hubmcp -transport http` serves the same tools at `/mcp` (default `127.0.0.1:8090`; `-allow-remote` needed for other addresses)
   - Each HTTP client authenticates with its own tenant API key as bearer token; hubmcp checks it with the Hub and uses it for that client's calls; requests without a valid key get 401

@@ -2261,14 +2261,14 @@ Add streamable HTTP transport with bearer auth for shared deployments.
 
 ### HUB-302 — Discovery tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-302-mcp-discovery-tools`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2001
+- **Branch:** `feat/HUB-302-mcp-discovery-tools` (delivered on `feat/HUB-300-hubmcp`)
 
 Tools to list integrations, describe one, and fetch a capability's schemas, backed by the discovery endpoints (HUB-090 contract).
 
 **Acceptance criteria**
-- [ ] Tool outputs never contain vendor, account or version
-- [ ] Tested against a contract-validated fake Hub
+- [x] Tool outputs never contain vendor, account or version (`TestDiscoveryNeverLeaksVendorIdentity` plants vendor/account/version fields and debug headers in every Hub response; outputs are built field by field)
+- [x] Tested against a contract-validated fake Hub (`TestListIntegrations`, `TestDescribeIntegration`: every exchange validated against hub-public.v1.yaml, every output against the tool's outputSchema)
 
 ### HUB-303 — Invoke, request status and dry-run tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -200,6 +201,38 @@ type errorDetail struct {
 	Message string `json:"message"`
 }
 
+// hubErrorObject converts a hubclient error into the canonical error object. A transport failure
+// (the Hub is unreachable) becomes a local INTERNAL_ERROR naming the base URL, not the API key.
+func (a *app) hubErrorObject(err error) (*errorObject, int) {
+	var he *hubclient.Error
+	if !errors.As(err, &he) {
+		return &errorObject{
+			Code:    string(hubclient.CodeInternalError),
+			Message: "hubmcp could not reach the Hub (" + err.Error() + "). Check HUB_BASE_URL and that the gateway is running.",
+		}, 0
+	}
+	e := &errorObject{Code: string(he.Code), Message: he.Message, Retryable: he.Retryable, RequestID: optString(he.RequestID)}
+	if he.RetryAfter > 0 {
+		ms := he.RetryAfter.Milliseconds()
+		e.RetryAfterMS = &ms
+	}
+	e.Circuit, e.Reason = optString(he.Circuit), optString(he.Reason)
+	if he.Upstream != nil {
+		e.Upstream = &upstreamError{Code: optString(he.Upstream.Code)}
+		if he.Upstream.Status != 0 {
+			s := he.Upstream.Status
+			e.Upstream.Status = &s
+		}
+	}
+	for _, d := range he.Details {
+		e.Details = append(e.Details, errorDetail{Pointer: d.Pointer, Keyword: d.Keyword, Message: d.Message})
+	}
+	if he.Code == hubclient.CodeUnauthorized {
+		e.Message += " (check HUB_API_KEY)"
+	}
+	return e, he.Status
+}
+
 // errorEnvelope is the structured content of a failed tool other than hub_invoke.
 type errorEnvelope struct {
 	Error any `json:"error"`
@@ -226,6 +259,13 @@ func invalidArguments(tool string, err error) toolResult {
 		Code:    string(hubclient.CodeValidationFailed),
 		Message: "Arguments do not match the " + tool + " input schema: " + err.Error(),
 	}, 0)
+}
+
+func optString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func optInt(n int) *int {
