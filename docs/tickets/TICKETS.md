@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **207** · done: **157** · todo: **46** · other (in-progress/in-review/blocked): **4**
+Total tickets: **207** · done: **157** · todo: **44** · other (in-progress/in-review/blocked): **6**
 
 ## Epics
 
@@ -2532,15 +2532,15 @@ Contract change request from HUB-342 for the `contract-steward`: the admin integ
 
 ### HUB-345 — Refuse multi-operation integrations whose single pair serves every operation
 - **Epic:** EP-12 · **Type:** fix · **Area:** backend
-- **Status:** todo · **Depends on:** — · **Feature:** F-03 · **Stories:** US-0301
-- **Branch:** `fix/HUB-345-multi-op-single-pair`
+- **Status:** in-review · **Depends on:** — · **Feature:** F-03 · **Stories:** US-0301
+- **Branch:** `fix/HUB-345-multi-op-single-pair` (delivered on `feat/HUB-343-per-operation-transformers`: the HUB-343 check `operations_have_transformers` subsumes it)
 
 Found while building HUB-342. A capability with operations `send` and `verify`, bound to an integration whose target pair is compiled for `send` (`operation: send`), builds a snapshot without any problem. Invoking `verify` then runs the `send` transformers on a `verify` body and validates the result against the `send` response schema. Until HUB-343 lands, the registry should refuse such a version with a path-qualified error instead of failing at request time.
 
 **Acceptance criteria**
-- [ ] `registry.Build` refuses an integration version whose target transformers are compiled for a different operation than one the capability declares, or whose capability has more than one operation, naming the file and `targets[i].transformer`
-- [ ] Table test in `internal/registry` (two-operation capability, one pair) fails before the fix and passes after
-- [ ] `go test -race ./internal/registry/...` green
+- [x] `registry.Build` refuses an integration version whose target transformers are compiled for a different operation than one the capability declares, naming the file and `targets[i].transformer` (registry `checkOperations`, check `operations_have_transformers`). With HUB-343 a multi-operation capability is no longer refused as such: it is refused when its default pair would serve an operation it is not compiled for, which is exactly the one-pair case this ticket is about
+- [x] Table test in `internal/registry` (two-operation capability, one pair) fails before the fix and passes after: `TestOperationsHaveTransformers/two-operation_capability,_one_pair_(HUB-345)` (verified by disabling the check); the example config proves it too (`TestExampleOTPRefusesOnePairForBothOperations`)
+- [x] `go test -race ./internal/registry/...` green
 
 ### HUB-346 — Transformer error rules map a canonical `reason`
 - **Epic:** EP-12 · **Type:** feat · **Area:** backend

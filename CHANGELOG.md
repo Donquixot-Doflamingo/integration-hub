@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(registry)` · Refuse one transformer pair serving every operation (HUB-345) · HUB-345 · F-03
+  - A multi-operation capability whose only transformer pair is compiled for one operation is refused when the snapshot is built (config files, `hubctl apply`, admin publish), naming the version file and `targets[i].transformer`, instead of running that operation's transformers for the others at request time
+  - Delivered by the HUB-343 check `operations_have_transformers`; registry rule documented in F-03
+
 - 2026-11-07 · `feat(registry)` · Select a transformer pair per operation (HUB-343) · HUB-343 · F-14
   - An integration version target (also failover and shadow) may give operations of a multi-operation capability their own transformer pair (`operations: {<op>: {request, response}}`), so one integration can send each operation to a different vendor endpoint; other operations keep the default `transformer` pair
   - Sync, wait, async (the worker re-resolves from the envelope's operation), dry-run, session steps, failover and shadow all run the invoked operation's pair; the audit `integration.resolved` / `request.transformed` meta names that pair and endpoint

@@ -95,6 +95,12 @@ func TestOperationsHaveTransformers(t *testing.T) {
 		version func(t *testing.T) string
 		want    []Problem
 	}{
+		{"two-operation capability, one pair (HUB-345)", func(t *testing.T) string {
+			return opVersion(t, 1, opsBlock, "")
+		}, []Problem{
+			{opV, "targets[0].transformer", strings.Replace(defaulted, "%s", "TS-SEND-REQ@1", 1)},
+			{opV, "targets[0].transformer", strings.Replace(defaulted, "%s", "TS-SEND-RES@1", 1)},
+		}},
 		{"operation key the capability does not declare", func(t *testing.T) string {
 			return opVersion(t, 1, "      verify:", "      verfy:")
 		}, []Problem{
