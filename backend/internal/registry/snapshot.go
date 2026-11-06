@@ -17,7 +17,11 @@ import (
 // path reads only snapshots: never the database or the files. Requests keep the snapshot they
 // started with for their whole attempt, so a swap never changes anything mid-flight (§6.3).
 type Snapshot struct {
-	// Version increases by one on every Store.Swap; 0 means not yet published.
+	// Version is the snapshot archive version this content was published as
+	// (hub.config_snapshots.version, the number getLatestSnapshot returns), so every node
+	// serving the same publish reports the same number, restarts included (HUB-401). 0 means
+	// the content is not (yet) known to be archived: built from the config directory, or
+	// booted from the local cache, until the node has checked the archive.
 	Version uint64
 	// Checksum is "sha256:<hex>" over every config file and every capability schema used.
 	// Equal content gives an equal checksum, on every node.
@@ -139,24 +143,48 @@ func checksum(config fs.FS, c *Config) (string, error) {
 }
 
 // Store holds the current snapshot behind an atomic pointer. Readers call Snapshot (lock-free)
-// and keep the pointer for the whole request; writers call Swap.
+// and keep the pointer for the whole request; writers call Swap or Label.
 type Store struct {
-	cur  atomic.Pointer[Snapshot]
-	mu   sync.Mutex // serialises Swap so versions are strictly increasing
-	next uint64
+	cur atomic.Pointer[Snapshot]
+	mu  sync.Mutex // serialises writers
 }
 
 // Snapshot returns the current snapshot, or nil before the first Swap.
 func (s *Store) Snapshot() *Snapshot { return s.cur.Load() }
 
-// Swap publishes snap with the next version number and returns the published snapshot. snap
-// itself is not modified (its maps are shared, read-only, with the published copy).
+// Swap publishes a copy of snap, archive version included, and returns it. snap itself is
+// not modified (its maps are shared, read-only, with the published copy). The version is never
+// counted locally: a per-process counter made a restarted node look behind its peers forever
+// (HUB-401).
 func (s *Store) Swap(snap *Snapshot) *Snapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.next++
 	pub := *snap
-	pub.Version = s.next
 	s.cur.Store(&pub)
 	return &pub
+}
+
+// SwapVersion publishes snap as archive version v (Swap with Version set).
+func (s *Store) SwapVersion(snap *Snapshot, v uint64) *Snapshot {
+	cp := *snap
+	cp.Version = v
+	return s.Swap(&cp)
+}
+
+// Label records that the content being served was archived as version v: when the current
+// snapshot has this checksum and another version, a relabelled copy replaces it (requests in
+// flight keep the one they loaded). It returns the published snapshot and whether it changed.
+// A node that built the archived content from its config directory, or that booted from its
+// local cache, so reports the same version as its peers.
+func (s *Store) Label(checksum string, v uint64) (*Snapshot, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur := s.cur.Load()
+	if cur == nil || cur.Checksum != checksum || cur.Version == v {
+		return cur, false
+	}
+	pub := *cur
+	pub.Version = v
+	s.cur.Store(&pub)
+	return &pub, true
 }

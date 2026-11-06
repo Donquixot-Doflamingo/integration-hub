@@ -89,6 +89,8 @@ Alerts: the ten rules in OBSERVABILITY §11.1. Dashboards: OBSERVABILITY §10. N
 
 This feature *is* the observability layer; see table above and DESIGN §16.2 list: `hub_requests_total{mode,code}`, `hub_overhead_ms`, `vendor_latency_ms`, `breaker_state`, `breaker_transitions_total`, `queue_depth`, `queue_oldest_age_s`, `parked_count`, `parked_oldest_age_s`, `dlq_count`, `ratelimit_rejections_total{layer}`, `retry_budget_exhausted_total`, `snapshot_version`, `credential_expiry_days`, `llm_tokens_total`, `llm_cost_usd_total`, `audit_events_dropped_total`.
 
+`snapshot_version` (gauge and audit field) is the snapshot's archive version, not a per-process count, so a node restarted after a publish reports what its peers report and `SnapshotBehind` no longer fires falsely; 0 = not yet confirmed against the archive (HUB-401; promtool case "a node restarted after a publish is not behind" in `deploy/alerts/platform_test.yml`).
+
 ## Security & PII
 No PII or secrets in labels, span attributes or logs; span attributes allowlisted (`telemetry.AllowedSpanAttributes`, enforced by `SpanAttributeViolations` in `TestSyncSpans` and `TestAsyncTraceLinksCallerToCallback`). Span statuses carry an error class only, never error text. Our trace ids reach a vendor only when it is listed in `HUB_TRACE_FORWARD_VENDORS`.
 No PII or secrets in labels, span attributes or logs; span attributes allowlisted. Subject erasure: SECURITY §4.1 (input from stdin only, redacted from logs, fail closed without the seal key, `change_log` keeps a domain-separated `subject_ref`, never a stored form).
@@ -128,6 +130,7 @@ HUB-230 – HUB-249.
 | 2026-11-06 | HUB-230 shipped: full §16.2 metric set, cardinality guard, status in-progress | backend-engineer |
 | 2026-11-06 | HUB-231: tracing across edge, transform, upstream, outbox, worker and callbacks; ADR-0013; US-1806 | backend-engineer |
 | 2026-11-07 | HUB-234: security gates (gosec, govulncheck), TLS floor, body-limit and role-log secret-grep tests | backend-engineer |
+| 2026-11-07 | HUB-401: `snapshot_version` is the archive version | backend-engineer |
 | 2026-11-06 | HUB-233: subject erasure job (`hub erase-subject`, ADR-0012), US-1805 | backend-engineer |
 | 2026-11-06 | HUB-232: alert rules with promtool tests, tenant/vendor/platform dashboards, exported-metrics check; ADR-0014, ADR-0015 | backend-engineer |
 | 2026-11-07 | HUB-237: runbooks for the ten alerts and the credential rotation procedure (`docs/runbooks/`), US-1807; breaker alert condition corrected to "not closed" | docs-keeper |

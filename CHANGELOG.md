@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(registry)` · Report the archive version as snapshot_version (HUB-401) · HUB-401 · F-18
+  - `snapshot_version` (the gauge, the `integration.resolved` audit meta and `hub.requests.snapshot_version`) is the archive version `getLatestSnapshot` returns, so a node restarted after a publish reports the same number as its peers and `SnapshotBehind` no longer fires falsely
+  - A node that built its config directory or booted from its cache reports 0 until it has confirmed the archive holds the same content (then the archive's version)
+  - New promtool case for a restart after a publish; the SnapshotBehind runbook loses its false-positive section
 - 2026-11-07 · `perf(upstream)` · Lease account limiter tokens off the sync request path (HUB-408) · HUB-408 · F-13
   - A sync or worker call takes its account token from a local lease: no Redis round trip per request in steady state; leases are refilled in the background and sized to the node's recent traffic (1 token to 10 % of the account rate)
   - The account quota still holds across nodes (two gateways measured at exactly the 40 rps quota); a node may be one token ahead of the shared bucket at most

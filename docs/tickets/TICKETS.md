@@ -2888,15 +2888,15 @@ The alert runbooks (HUB-237) fall back to curl for actions that have admin opera
 
 ### HUB-401 — SnapshotBehind fires falsely after a restart: snapshot_version is per process
 - **Epic:** EP-13 · **Type:** fix · **Area:** backend
-- **Status:** in-progress · **Depends on:** — · **Feature:** F-18 · **Stories:** US-1807
+- **Status:** in-review · **Depends on:** — · **Feature:** F-18 · **Stories:** US-1807
 - **Branch:** `fix/HUB-401-snapshot-version`
 
 `registry.Store.Swap` counts versions per process from 1, so a node restarted after any publish reports a lower `snapshot_version` than its peers forever, and `SnapshotBehind` fires falsely. Audit rows store the same local number, so it cannot be compared across nodes. Use the published archive version (or checksum) for the gauge and the audit field.
 
 **Acceptance criteria**
-- [ ] The gauge and audit `snapshot_version` carry the archive version; a restarted node matches its peers
-- [ ] Alert test (promtool) for a restart after a publish: no `SnapshotBehind`
-- [ ] Runbook SnapshotBehind.md: false-positive section removed
+- [x] The gauge and audit `snapshot_version` carry the archive version; a restarted node matches its peers (`registry.Store` no longer counts: `Swap` keeps the archive version, `Label` relabels content the archive holds; `TestStoreCarriesTheArchiveVersion`; roles itest `TestRestartedNodeReportsTheArchiveVersion`, which fails on the old code with "reports snapshot_version 2, want 3"; 0 = not yet confirmed against the archive)
+- [x] Alert test (promtool) for a restart after a publish: no `SnapshotBehind` (`deploy/alerts/platform_test.yml` "a node restarted after a publish is not behind"; fails with the old counter values)
+- [x] Runbook SnapshotBehind.md: false-positive section removed (and what `0` means)
 
 ### HUB-402 — Enforce the credential minimum length on the admin API
 - **Epic:** EP-13 · **Type:** fix · **Area:** backend
