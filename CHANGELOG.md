@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(skills)` · Add the hub-operator skill (HUB-316) · HUB-316 · F-21
+  - New repo skill `.claude/skills/hub-operator/` for the people who run the Hub: tenants and API keys (scopes), vendors, endpoints and accounts with credentials, callback endpoints and signatures, safe vendor/account config changes, switching an integration to another vendor or account (draft, validate, diff, publish, weights, shadow, rollback, re-resolve vs pinned), transformers (canonical → vendor → canonical, error mapping, goldens, dry-run) and multi-step flows (operations, `X-Hub-Session`, Aadhaar OTP)
+  - Every task shows the console path, the `hubctl` command and the `hubmcp` tool call side by side, with the admin API where the others do not reach yet, and a matrix of which way can do what
+  - States the hard lines: MCP has no delete tools, destructive actions are console-only for roles that have them, and secrets never pass through an AI
+  - Works in OpenAI Codex too (`.agents/skills/hub-operator` symlink) and in Cursor (reads `.claude/skills/`)
+
 - 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
   - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
   - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series

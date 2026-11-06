@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **236** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **6**
+Total tickets: **237** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **7**
 
 ## Epics
 
@@ -19,7 +19,7 @@ Total tickets: **236** · done: **177** · todo: **53** · other (in-progress/in
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
-| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 8 |
+| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 15 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 4 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 12 | 0 |
 
@@ -2639,6 +2639,20 @@ Run `@modelcontextprotocol/inspector` (CLI mode) against `bin/hubmcp` in CI or a
 
 **Acceptance criteria**
 - [ ] Scripted Inspector run lists the contract tools and calls one tool successfully
+
+### HUB-316 — Operator skills in the repo
+- **Epic:** EP-11 · **Type:** docs · **Area:** docs
+- **Status:** in-review · **Depends on:** HUB-305, HUB-314 · **Feature:** F-21 · **Stories:** US-2105
+- **Branch:** `docs/HUB-316-operator-skills`
+
+So nobody has to guess how to run the Hub, whatever AI they use: one repo-wide skill, `.claude/skills/hub-operator/` (SKILL.md + seven `references/`), also linked from `.agents/skills/hub-operator` for OpenAI Codex (Cursor reads `.claude/skills/` itself). Topics: tenants and API keys (scopes); vendors, endpoints and accounts with credentials; callback endpoints and signature verification; changing vendor/account config safely; switching an integration to another vendor or account (draft, validate, diff, publish, weights, shadow, rollback, re-resolve vs pinned); transformers (canonical → vendor → canonical walk-through, error mapping, goldens, dry-run); multi-step flows (operations, `X-Hub-Session`). Each task shows the console path, the `hubctl` command and the `hubmcp` tool call, with the admin API as the fallback, and says plainly where a way does not exist yet. One skill rather than several: one trigger surface ("operate the Hub"), shared access and safety rules in SKILL.md, topics loaded on demand.
+
+**Acceptance criteria**
+- [x] Skill follows the skill-creator structure: frontmatter `name` / `description` with trigger phrases (1,115 characters, under Claude Code's 1,536 cap), SKILL.md under 500 lines, progressive disclosure through `references/` with a table of contents on long files
+- [x] Every topic above covered, each with console, `hubctl` and MCP (or an explicit "not available, use X")
+- [x] States that MCP has no delete tools and that deletes and other destructive actions are console-only for roles that have them; secrets never go through MCP
+- [x] Every cited `hubctl` command and flag, MCP tool name (hubmcp-tools 1.1.0), admin `operationId` and relative link checked by a script against the code and contracts (0 errors)
+- [x] Codex discovery: `.agents/skills/hub-operator` symlink (Codex follows symlinked skill folders)
 
 ## EP-12 — Release 2 (DESIGN §19 Phase 2)
 

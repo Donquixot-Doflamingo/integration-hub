@@ -113,7 +113,7 @@ Defined in `.claude/agents/`:
 Communication between agents goes through written artifacts: contract change requests, tickets and feature docs. If the backend finds it needs a different response shape, it opens a change request to the steward and waits. It does not ship a shape the frontend has not seen.
 
 ## 12. Skills
-- Repo-wide (`.claude/skills/`): PRD writing, user stories, feature docs, tickets, commits and changelog, ADRs, skill-creator.
+- Repo-wide (`.claude/skills/`): PRD writing, user stories, feature docs, tickets, commits and changelog, ADRs, skill-creator, and `hub-operator` (operating the Hub: tenants, keys, vendors, accounts, callbacks, cutover, transformers, multi-step flows; also linked from `.agents/skills/` for Codex).
 - Backend (`backend/.claude/skills/`): Go idioms, Go architecture, Go system design, Go testing, memory and performance profiling, structured logging, debugging, observability, Postgres/outbox patterns, MCP builder.
 - Frontend (`frontend/.claude/skills/`): Svelte 5 and SvelteKit, frontend design, typed API client from OpenAPI, frontend testing, accessibility.
 - Third-party skills are vendored with their `LICENSE.txt` and listed in `THIRD_PARTY_SKILLS.md`. Do not add a skill from an unknown source without the user's approval.
