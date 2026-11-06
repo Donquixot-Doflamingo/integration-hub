@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(upstream)` · Give every node the full second in the breaker force test (HUB-416) · HUB-416 · F-12
+  - TestForceReachesEveryNodeWithinOneSecond no longer fails when node B's Redis message lands a few ms after node A's; it still fails if the hold is not in force on B within 1 s
 - 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
   - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
   - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series
