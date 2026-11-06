@@ -1,0 +1,11 @@
+# EXAMPLE ONLY (HUB-342). The calling service of the example: a loan onboarding backend.
+# Its key is a test value for local use only: hk_test_example_loan_onboarding_local_only
+# (stored here only as its sha256, like every key).
+tenant: loan-onboarding
+display_name: Loan onboarding (example)
+api_keys:
+  - key_id: key_01JEXAMP1E0LOAN0NB0ARD000A
+    hash: sha256:24c30dabb780cae1982f5c171786de44196319be636852e151417649f4d53f25
+    scopes: [invoke, dry_run, requests_read]
+    state: active
+rate_limit: { rps: 50, burst: 100 }

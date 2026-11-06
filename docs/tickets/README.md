@@ -59,8 +59,8 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-09 | M8 Observability & hardening | F-18 | HUB-230–HUB-249 | 17 | 1 |
 | EP-10 | Admin console (SvelteKit) | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
-| EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 11 | 0 |
-| **Total** | | | | **208** | **157** |
+| EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 18 | 0 |
+| **Total** | | | | **215** | **157** |
 
 ## Sizing
 
@@ -86,8 +86,10 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | --- | --- | --- | --- |
 | F-01 | Repo foundation, dev environment & CI | EP-00, EP-01 | 27 |
 | F-02 | Mock vendor (programmable fake vendor) | EP-01 | 3 |
-| F-03 | Config registry & snapshots | EP-02 | 11 |
-| F-04 | Transformation engine & golden fixtures | EP-03 | 13 |
+| F-03 | Config registry & snapshots | EP-02 | 12 |
+| F-04 | Transformation engine & golden fixtures | EP-03 | 14 |
+| F-03 | Config registry & snapshots | EP-02 | 12 |
+| F-04 | Transformation engine & golden fixtures | EP-03 | 14 |
 | F-05 | Tenant auth, grants & edge validation | EP-04 | 3 |
 | F-06 | Sync invoke path & canonical error envelope | EP-04 | 8 |
 | F-07 | Credentials & vendor auth schemes | EP-04 | 2 |
@@ -105,7 +107,7 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | F-19 | Admin console (SvelteKit frontend) | EP-10 | 36 |
 | F-20 | Hub MCP server (`hubmcp`) | EP-11 | 8 |
 | F-21 | Consumer Claude skill & Go SDK (`hubclient`) | EP-04, EP-11 | 4 |
-| F-22 | Release-2 capabilities | EP-12 | 11 |
+| F-22 | Release-2 capabilities | EP-12 | 16 |
 
 ## Parallel work and critical path
 

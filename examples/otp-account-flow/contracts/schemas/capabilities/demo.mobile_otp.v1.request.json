@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hub:capability:demo.mobile_otp@v1:default:request",
+  "title": "demo.mobile_otp@v1 request (EXAMPLE ONLY, not a frozen contract)",
+  "description": "Example capability for examples/otp-account-flow (HUB-342). Not part of contracts/: a production OTP capability goes through the contract-steward. Step 1 (no X-Hub-Session): send an OTP to `mobile`. Step 2 (X-Hub-Session from step 1): verify `otp`. Both steps share one operation because an integration version has one transformer pair for every operation today (HUB-343); the intended shape is two operations, `send_otp` and `verify_otp`.",
+  "x-capability": "demo.mobile_otp@v1",
+  "x-capability-minor": 0,
+  "interactive": true,
+  "operations": {
+    "default": {
+      "description": "Send an OTP (step 1) or verify it inside the session step 1 opened (step 2).",
+      "idempotent": false,
+      "request_schema": "demo.mobile_otp.v1.request.json",
+      "response_schema": "demo.mobile_otp.v1.response.json"
+    }
+  },
+  "type": "object",
+  "required": ["mobile"],
+  "additionalProperties": false,
+  "properties": {
+    "mobile": {
+      "description": "Indian mobile number in E.164 form.",
+      "type": "string",
+      "pattern": "^\\+91[6-9][0-9]{9}$",
+      "x-pii": "phone"
+    },
+    "otp": {
+      "description": "The OTP the user typed. Step 2 only; ignored on step 1.",
+      "type": "string",
+      "pattern": "^[0-9]{4,8}$",
+      "x-pii": "free_text"
+    }
+  },
+  "examples": [
+    { "mobile": "+919812345678" },
+    { "mobile": "+919812345678", "otp": "482913" }
+  ]
+}

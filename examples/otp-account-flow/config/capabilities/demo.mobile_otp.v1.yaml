@@ -1,0 +1,5 @@
+# EXAMPLE ONLY (HUB-342). The schema lives in the example contracts overlay
+# (examples/otp-account-flow/contracts/), never in the frozen contracts/.
+capability: demo.mobile_otp@v1
+schema_ref: schemas/capabilities/demo.mobile_otp.v1.request.json
+default_ttl: 10m

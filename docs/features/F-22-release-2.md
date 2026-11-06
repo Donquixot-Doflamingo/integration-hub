@@ -30,6 +30,8 @@ v1 covers engagement-style traffic (CleverTap pilot). Lending capabilities (bure
 | R2-8 | Sealed audit + unseal | Field-level encryption with per-tenant key; default for bureau/Aadhaar/PAN, 90 days; audited unseal admin action | §13.2, D6 | US-2207 |
 | R2-9 | KMS / Vault | `CredentialSource` implementations; envelope encryption with managed master keys; audited decrypts | §9 | US-2208 |
 | R2-10 | Other DESIGN Phase-2 items | Tenant self-service; UI changes landing as Git commits; transformer editor in the console; 99.95 % availability target | §16.1, §19, §1 | — |
+| R2-11 | Lookup result cache | Optional per-integration result cache for sync lookups (e.g. PAN–Aadhaar link, 24 h); HUB-347 | §14 | US-2205 |
+| R2-12 | Upload + job | Large payloads in object storage, job poll/webhook adapters (bank statement analysis, bulk CKYC); HUB-348 | §14 | US-2205 |
 
 **Non-goals**
 - Release 3 items: broker-backed queue (NATS/RabbitMQ), per-key ordering at scale, warm-standby region, Java/Node SDKs, cost dashboards, transformer template library (DESIGN §19 Phase 3).
@@ -45,6 +47,8 @@ v1 covers engagement-style traffic (CleverTap pilot). Lending capabilities (bure
 | Sessions | `X-Hub-Session` header on `invokeIntegrationOperation` | `contracts/openapi/hub-public.v1.yaml#/components/parameters/HubSession` |
 | Admin | `POST /admin/v1/requests/{request_id}/unseal` | `contracts/openapi/hub-admin.v1.yaml#unsealRequest` |
 | Events | `message.delivered@v1`, `aa.fi_ready@v1` | Not in `contracts/schemas/events/` yet (missing — needs CCR, Release 2) |
+
+**Status of R2-5 (2026-11-06, HUB-342).** The vendor session store itself shipped in M6 (HUB-175, HUB-183): `X-Hub-Session`, pinning to version + account, 10-min expiry, Aadhaar-like data refused. What R2-5 still needs: per-operation transformers so `generate` and `verify` can call different vendor endpoints (HUB-343, admin contract HUB-344; until then the registry should refuse such configs, HUB-345), a canonical `reason` for OTP rejections (HUB-346), and the production `kyc.aadhaar_otp@v1` capability with a licensed KUA/ASA (HUB-334). The caller's view, with a runnable example, is use case 6 of the [use-case catalogue](../use-cases/README.md#6-two-step-flows-otp-then-verify-then-bank-account).
 
 ## Behaviour & rules
 Defined per item in DESIGN; key invariants carried into each item's doc:
@@ -85,3 +89,4 @@ HUB-330 – HUB-399.
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-06 | R2-5 status after HUB-342; R2-11 (HUB-347) and R2-12 (HUB-348) added; link to the use-case catalogue | backend-engineer |
