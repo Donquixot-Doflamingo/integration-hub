@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(load)` · Triage hubload for gosec with #nosec annotations (HUB-235) · HUB-235 · F-18
+  - The gosec CI gate passes on `cmd/hubload`: seven flagged lines (G304, G404, G204) carry reviewed `#nosec` annotations and are listed in SECURITY.md §8.1
 - 2026-11-07 · `docs(tech)` · Add the M8 load and soak test report (HUB-235, HUB-236) · HUB-235 · F-18
   - `docs/tech/LOAD_TEST_REPORT.md` leads with direct vs through-the-Hub latency (vendor at 0/50/200 ms, mockvendor stand-in): the Hub adds about 1.1–1.4 ms typical and 2.5–3.5 ms at p99
   - Sync: 500 RPS with 0 errors, ledger overhead p99 3.8 ms (6.5 ms with the limiter's Redis call); knee at about 600 RPS on 2 shared CPUs

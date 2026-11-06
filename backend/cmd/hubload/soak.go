@@ -178,9 +178,9 @@ func (c soakConfig) validate() error {
 
 func runSoak(ctx context.Context, c soakConfig, log io.Writer) (*SoakResult, error) {
 	if c.seed == 0 {
-		c.seed = rand.Uint64() //nolint:gosec // chaos schedule, not security
+		c.seed = rand.Uint64() // #nosec G404 -- chaos schedule seed, not security
 	}
-	rng := rand.New(rand.NewPCG(c.seed, c.seed^0x9e3779b97f4a7c15)) //nolint:gosec // reproducible chaos schedule
+	rng := rand.New(rand.NewPCG(c.seed, c.seed^0x9e3779b97f4a7c15)) // #nosec G404 -- reproducible chaos schedule, not security
 	ctl := &http.Client{Timeout: 10 * time.Second}
 	pool, err := pgxpool.New(ctx, c.pgDSN)
 	if err != nil {
@@ -363,7 +363,7 @@ func (c soakConfig) restartLoop(ctx context.Context, start time.Time, at []time.
 			kind = "kill"
 		}
 		ev := ChaosEvent{AtS: round3(time.Since(start).Seconds()), Kind: "worker_" + kind}
-		cmd := exec.CommandContext(context.WithoutCancel(ctx), c.restartHook, kind) //nolint:gosec // operator-supplied hook of a test tool
+		cmd := exec.CommandContext(context.WithoutCancel(ctx), c.restartHook, kind) // #nosec G204 -- operator-supplied restart hook of a load-test tool
 		if out, err := cmd.CombinedOutput(); err != nil {
 			ev.Error = strings.TrimSpace(err.Error() + " " + string(out))
 		}
