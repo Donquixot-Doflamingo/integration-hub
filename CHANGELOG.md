@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `feat(telemetry)` · Export the full DESIGN §16.2 metric set with a cardinality guard (HUB-230) · HUB-230 · F-18
+  - hub_requests_total counts every finished request once by tenant, integration, served vendor and account, version, mode and final code (gateway for requests that end there, delivery for queued ones)
+  - queue_depth, queue_oldest_age_s (due, unclaimed work only) and dlq_count are sampled by the scheduler leader every 10 s
+  - credential_expiry_days reports each credential slot with an expiry and counts down between reloads
+  - llm_tokens_total and llm_cost_usd_total are registered for llm.chat (HUB-333)
+  - Capped metrics fold new label combinations into __overflow__ past their series cap, counted in metric_series_overflow_total
 - 2026-11-02 · `docs(milestones)` · Accept M7 and write the control-plane summary (HUB-214) · HUB-214 · F-16
   - M7 accepted: 79/79 admin operations, RBAC matrix, one change-log row per mutation, idempotent hubctl apply with exact plans
   - docs/milestones/M7.md with Deviations and contract change requests; F-16 and F-17 shipped; M7 tickets done

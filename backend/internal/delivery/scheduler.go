@@ -38,6 +38,10 @@ type Scheduler struct {
 	SessionSweepEvery time.Duration
 	// Resilience (probes, drain) runs every Tick while leading; nil skips it.
 	Resilience *Resilience
+	// Sampler publishes the outbox gauges every SampleEvery (default 10 s) while leading; nil
+	// skips it.
+	Sampler     *QueueSampler
+	SampleEvery time.Duration
 
 	leader prometheus.Gauge
 }
@@ -101,6 +105,12 @@ func (s *Scheduler) lead(ctx context.Context) error {
 	defer prune.Stop()
 	sweep := time.NewTicker(orDefault(s.SessionSweepEvery, 30*time.Second))
 	defer sweep.Stop()
+	sample := time.NewTicker(orDefault(s.SampleEvery, 10*time.Second))
+	defer sample.Stop()
+	if s.Sampler != nil {
+		defer s.Sampler.Clear()
+		s.Sampler.Sample(ctx, s.DB)
+	}
 	s.prune(ctx)
 	for {
 		select {
@@ -118,6 +128,10 @@ func (s *Scheduler) lead(ctx context.Context) error {
 			s.prune(ctx)
 		case <-sweep.C:
 			s.sweepSessions(ctx)
+		case <-sample.C:
+			if s.Sampler != nil {
+				s.Sampler.Sample(ctx, s.DB)
+			}
 		}
 	}
 }

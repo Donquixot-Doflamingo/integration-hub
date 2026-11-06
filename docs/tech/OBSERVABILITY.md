@@ -63,27 +63,29 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `code` | 14 | DESIGN §4.4 + `ok` |
 | `stage` | 12 | §11 of TECH_SPEC |
 
+**Cardinality guard (HUB-230):** `hub_requests_total`, `llm_tokens_total`, `llm_cost_usd_total` and `dlq_count` have a hard series cap. Past it, new label combinations are recorded with every bounded label set to `__overflow__` (enum labels `mode`, `code`, `kind` keep their values), and `metric_series_overflow_total{metric}` counts them. A combination admitted once stays admitted.
+
 **Budget: ≤ 50,000 active series per process type; ≤ 250,000 total.** Histograms with the full `{tenant, integration, vendor, account, version}` label set are capped to one metric (`vendor_latency_ms`); everything else that is a histogram drops `tenant`/`version`. CI runs a cardinality check against the dev config + synthetic expansion (TESTING_STRATEGY §10).
 
 ### 3.2 DESIGN §16.2 metrics
 | Metric | Type | Unit | Labels | Est. series | Emitting package |
 | --- | --- | --- | --- | --- | --- |
-| `hub_requests_total` | counter | requests | `tenant, integration, vendor, account, version, mode, code` | ~500 × 1.5 versions × 1 mode × 6 codes seen ≈ 4,500 | `edge` (sync/wait final), `delivery` (async final) |
+| `hub_requests_total` | counter | requests | `tenant, integration, vendor, account, version, mode, code` (`code` = `ok` or a §4.4 code; `vendor`/`account` = the target that served the last attempt, empty when refused before resolve) | ~500 × 1.5 versions × 1 mode × 6 codes seen ≈ 4,500 (capped at 10,000, then `__overflow__`) | `edge` (every request that ends in the gateway, dry-runs excluded), `delivery` (each committed terminal transition of a queued request: wait tail, async; once, since a lost race does not commit) |
 | `hub_overhead_ms` | histogram | ms | `integration, mode` | 500 × 2 × buckets ≈ 17,000 (classic) | `edge` |
 | `vendor_latency_ms` | histogram | ms | `vendor, account, endpoint, outcome` (HUB-086: `upstream` only knows transport facts, so `outcome` is the status class `1xx`–`5xx` or the transport kind `timeout`, `connect`, `reset`, `canceled`, `protocol`; canonical codes live on `vendor_attempts_total`) | 200 × 2 × 4 × 17 ≈ 27,000 (classic; native ≈ 1,600) | `upstream` |
 | `breaker_state` | gauge (0 closed, 1 half_open, 2 open) | enum | `vendor, account, endpoint` | ≤ 1,000 | `upstream` (every node reports its local view) |
 | `breaker_transitions_total` | counter | transitions | `vendor, account, endpoint, from, to` | ≤ 4,000 | `upstream` |
-| `queue_depth` | gauge | envelopes | `pool, status` (`accepted`, `retry_scheduled`, `in_flight`) | ≤ 6 | `delivery` (scheduler samples every 10 s) |
-| `queue_oldest_age_s` | gauge | s | `pool` | 2 | `delivery` (scheduler) |
+| `queue_depth` | gauge | envelopes | `pool, status` (`accepted`, `retry_scheduled`, `in_flight`; every pair reported, 0 when empty) | ≤ 6 | `delivery` (`QueueSampler`, scheduler leader, every 10 s; cleared when leadership is lost) |
+| `queue_oldest_age_s` | gauge | s | `pool` | 2 | `delivery` (`QueueSampler`): age of the oldest **due, unclaimed** envelope (`now − min(next_attempt_at)` over accepted/retry_scheduled with `next_attempt_at ≤ now`); envelopes waiting out a backoff do not count, so the alert fires only when workers fall behind (HUB-230) |
 | `parked_count` | gauge | envelopes | `vendor, account, endpoint` | ≤ 1,000 | `delivery` (scheduler) |
 | `parked_oldest_age_s` | gauge | s | `vendor, account, endpoint` | ≤ 1,000 | `delivery` (scheduler) |
-| `dlq_count` | gauge | entries | `tenant, integration, account, reason` | ≤ 5,000 | `queue` (scheduler samples) |
+| `dlq_count` | gauge | entries | `tenant, integration, account, reason` (unreplayed only) | ≤ 5,000 (capped; the rest fold into one `__overflow__` series) | `delivery` (`QueueSampler`, every 10 s) |
 | `ratelimit_rejections_total` | counter | rejections | `layer` (`tenant`, `account`, `budget`), `tenant, integration` | ≤ 1,500 | `edge` (tenant), `upstream` (account), `edge` (LLM budget) |
 | `retry_budget_exhausted_total` | counter | events | `account` | 200 | `delivery` |
 | `snapshot_version` | gauge | version | — (per pod via scrape labels) | 1 per pod | `registry` |
-| `credential_expiry_days` | gauge | days | `account, slot` | 400 | `creds` |
-| `llm_tokens_total` | counter | tokens | `tenant, integration, account, model, kind` (`input`/`output`) | ≤ 2,000 | `delivery` / `edge` via response mapping |
-| `llm_cost_usd_total` | counter | USD | `tenant, integration, account, model` | ≤ 1,000 | same |
+| `credential_expiry_days` | gauge | days | `account, slot` (`active`, `next`; only slots with an expiry; negative once expired) | 400 | `creds` (computed at scrape time from the cache generation, so it counts down between reloads) |
+| `llm_tokens_total` | counter | tokens | `tenant, integration, account, model, kind` (`input`/`output`) | ≤ 2,000 (capped at 4,000) | `telemetry.RecordLLMUsage`; registered now, emitted once `llm.chat` lands (HUB-333) |
+| `llm_cost_usd_total` | counter | USD | `tenant, integration, account, model` | ≤ 1,000 (capped at 2,000) | same |
 | `audit_events_dropped_total` | counter | rows | `reason` (`buffer_full`, `write_error`, `encode_error`) | 3 | `audit` |
 
 ### 3.3 Additional Hub metrics (not in §16.2; needed for SLIs, alerts and the runbook)
@@ -110,6 +112,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `callback_ssrf_blocked_total` | counter | attempts | `class` (`private`, `loopback`, `link_local`, `cgnat`, `multicast`, `unspecified`, `documentation`, `translation`, `reserved`) | `callbacks` | SSRF guard refusals at delivery (HUB-119/120); any increase is a misconfigured or hostile endpoint |
 | `callback_queue_oldest_age_s` | gauge | s | — | `callbacks` (each dispatcher, every 15 s) | age of the oldest due callback not yet sent |
 | `callback_dlq_count` | gauge | deliveries | — | `callbacks` (each dispatcher, every 15 s) | callback DLQ size (`status='dead_lettered'`) |
+| `metric_series_overflow_total` | counter | observations | `metric` | `telemetry` | observations folded into `__overflow__` because a capped metric reached its series cap (HUB-230); any increase means the cap or the label set needs review |
 | `callback_enqueued_total` | counter | deliveries | `event` | `callbacks` | deliveries written by `Enqueue` inside the state-change transaction (HUB-120) |
 | `callback_enqueue_skipped_total` | counter | subscriptions | `reason` (`unknown_version`, `unknown_endpoint`, `tenant_mismatch`) | `callbacks` | subscriptions that could not be honoured; any increase is a config problem |
 | `webhook_inbound_total` | counter | webhooks | `vendor, account, outcome` (`accepted`, `bad_signature`, `replay`, `uncorrelated`) | `webhooks` | |

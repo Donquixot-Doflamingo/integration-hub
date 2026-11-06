@@ -65,7 +65,7 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 	if err != nil {
 		return nil, err
 	}
-	dp.transitions = &delivery.Transitions{DB: st.pg, Queue: q, OnTerminal: delivery.CallbackHook(enq)}
+	dp.transitions = &delivery.Transitions{DB: st.pg, Queue: q, OnTerminal: delivery.CallbackHook(enq), Metrics: m}
 	dp.breakers = upstream.NewBreakers(st.rdb, m, log)
 	if cfg.Role == Scheduler {
 		// Probes need no credentials (DESIGN §10.4 synthetic probe; an auth error proves the vendor answers).
@@ -76,7 +76,9 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 		dp.client = probeClient
 		res := &delivery.Resilience{Breakers: dp.breakers, Upstream: probeClient, Snapshots: &reg.store, Queue: q, Log: log}
 		res.RegisterMetrics(m.Registry)
-		dp.scheduler = &delivery.Scheduler{DB: st.pg, Queue: q, Transitions: dp.transitions, Log: log, Resilience: res}
+		sampler := &delivery.QueueSampler{Queue: q, Log: log}
+		sampler.RegisterMetrics(m.Registry)
+		dp.scheduler = &delivery.Scheduler{DB: st.pg, Queue: q, Transitions: dp.transitions, Log: log, Resilience: res, Sampler: sampler}
 		dp.scheduler.RegisterMetrics(m.Registry)
 		return dp, nil
 	}

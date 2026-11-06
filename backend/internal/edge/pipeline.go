@@ -204,5 +204,24 @@ func (s *Server) record(r *http.Request, p *prepared, status string, httpStatus 
 	}
 	start := time.Now()
 	s.deps.Audit.Emit(p.trail.Batch(rec, p.attemptRows...))
+	if !p.dryRun {
+		s.metrics.CountRequest(requestLabels(p, rec.Mode, code))
+	}
 	p.timings.Observe(telemetry.StageAudit, start)
+}
+
+// requestLabels names the target that served the request: the account of the last attempt
+// (a failover target when one answered), else the resolved target (refused before any attempt).
+func requestLabels(p *prepared, mode, code string) telemetry.RequestLabels {
+	vendor, account := p.res.Target.Vendor, p.res.Target.Account
+	if n := len(p.attemptRows); n > 0 && p.attemptRows[n-1].AccountID != "" {
+		account = p.attemptRows[n-1].AccountID
+		if a := p.caller.Snap.Accounts[account]; a != nil {
+			vendor = a.Vendor
+		}
+	}
+	return telemetry.RequestLabels{
+		Tenant: p.caller.Tenant.Tenant, Integration: p.integration.Integration, Vendor: vendor, Account: account,
+		Version: p.res.VersionNumber, Mode: mode, Code: code,
+	}
 }

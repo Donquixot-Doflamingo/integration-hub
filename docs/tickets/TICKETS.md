@@ -1660,15 +1660,15 @@ Prove the M7 Accept line and post the wrap-up.
 
 ### HUB-230 — Metrics: full §16.2 set
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-027, HUB-154, HUB-123 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-review · **Depends on:** HUB-027, HUB-154, HUB-123 · **Feature:** F-18 · **Stories:** US-18xx
 - **Branch:** `feat/HUB-230-metrics-full`
 
 Export every §16.2 metric with labels tenant, integration, vendor, account, version, with a cardinality guard; incl. `credential_expiry_days`, `queue_oldest_age_s`, `llm_*` placeholders.
 
 **Acceptance criteria**
-- [ ] Every metric in §16.2 present on `/metrics` (test enumerates names)
-- [ ] Label cardinality capped with an overflow bucket
-- [ ] `hub_overhead_ms` broken down by stage
+- [x] Every metric in §16.2 present on `/metrics` (test enumerates names): `TestDesignMetricsAreRegistered`
+- [x] Label cardinality capped with an overflow bucket: `TestRequestsOverflow`, `TestQueueSampler` (`__overflow__`, `metric_series_overflow_total`)
+- [x] `hub_overhead_ms` broken down by stage: `hub_stage_duration_ms{stage}` (HUB-027), unchanged
 
 ### HUB-231 — Tracing: edge, transform, upstream, callback spans
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend

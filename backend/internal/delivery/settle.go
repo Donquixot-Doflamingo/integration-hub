@@ -34,7 +34,7 @@ func (s Settler) Settle(ctx context.Context, env core.Envelope, worker string, n
 	}
 	if out.Err == nil {
 		final.HTTPStatus = 200
-		return core.StateSucceeded, s.Transitions.Succeed(ctx, env, worker, Outcome{Final: final, Result: out.Body})
+		return core.StateSucceeded, s.Transitions.Succeed(ctx, env, worker, Outcome{Final: final, Result: out.Body, Account: out.Account, Endpoint: out.Endpoint})
 	}
 	if Retryable(out.Err) {
 		var retryAfter time.Duration
@@ -52,7 +52,7 @@ func (s Settler) Settle(ctx context.Context, env core.Envelope, worker string, n
 	return core.StateDeadLettered, s.Transitions.DeadLetter(ctx, env, worker, Outcome{Final: final, Err: out.Err, DL: queue.DeadLetter{
 		Reason: string(out.Err.Code), LastError: out.Err.Message, AccountID: account,
 		LastVendorRequest: out.LastRequest, LastVendorResponse: out.LastResponse,
-	}})
+	}, Account: out.Account, Endpoint: out.Endpoint})
 }
 
 // TerminalAudit adds the event that closes an attempt's audit block for the state it settled in
