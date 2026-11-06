@@ -19,6 +19,25 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Span attributes are allowlisted (telemetry.AllowedSpanAttributes); tests fail on any other key or on a credential, API key or body fragment in a value
 - 2026-11-06 · `test(edge)` · Raise the tenant quota in the overhead benchmark so it runs again (HUB-231) · HUB-231 · F-18
   - BenchmarkInvokeOverhead no longer stops with 429 UPSTREAM_RATE_LIMITED after the dev tenant's 100 rps quota; the token bucket stays on the measured path
+- 2026-11-06 · `docs(adr)` · Renumber the alerting ADRs to 0014/0015 and follow-up tickets to HUB-241–244 (HUB-232) · HUB-232 · F-18
+  - ADR-0012/0013 and HUB-245–247 are taken by the erasure and tracing work merging alongside; references updated
+- 2026-11-06 · `docs(tickets)` · Set HUB-232 in review and file its follow-ups (HUB-232) · HUB-232 · F-18
+  - HUB-232 in review: §16.3 rules with promtool tests done; Grafana import check left open (HUB-243)
+  - New todo tickets: HUB-241 attempt and DLQ counters, HUB-242 parked gauges kept by a former scheduler leader, HUB-243 Grafana import check, HUB-244 OBSERVABILITY §11.2 alert rules
+  - HUB-237 lists the ten runbook files the alert rules link
+- 2026-11-06 · `ci(backend)` · Check alert rules and dashboards in CI (HUB-232) · HUB-232 · F-18
+  - New backend CI job monitoring: installs promtool 3.4.2 from the release tarball (SHA-256 verified) and runs make monitoring
+  - deploy/README.md documents the rule file, dashboard import and the checks
+- 2026-11-06 · `test(roles)` · Check deploy queries against exported metrics (HUB-232) · HUB-232 · F-18
+  - Every alert rule and dashboard query is parsed with the PromQL parser; an unknown metric, label matcher, by() or on() label fails the backend tests with the alert or panel name
+  - Dashboards are linted: stable uid, unique panel ids, data source only through ${datasource}, every variable defined
+  - Every DESIGN §16.3 alert must have one rule with its runbook link and a firing and a non-firing promtool case
+  - make monitoring runs promtool check/test and these tests (ADR-0015; github.com/prometheus/prometheus is a test-only dependency)
+- 2026-11-06 · `chore(deploy)` · Add DESIGN §16.3 alert rules and dashboards (HUB-232) · HUB-232 · F-18
+  - deploy/alerts/hub.rules.yaml: the ten §16.3 alerts (six page, four warn), each with summary, description and a docs/runbooks/<AlertName>.md link; promtool unit tests with a firing and a non-firing case per alert
+  - "Any" alerts (UPSTREAM_AUTH_FAILED, TRANSFORM_FAILED, audit drops) also fire on the first event of a new label set, which a plain increase() misses
+  - Auth, transform and DLQ alerts read hub_requests_total and dlq_count until attempt and DLQ counters exist (ADR-0014, HUB-241)
+  - deploy/dashboards: tenant, vendor/account and platform Grafana dashboards, data source chosen through a variable
 - 2026-11-06 · `docs(tickets)` · Close HUB-230 and track HUB-238/HUB-239 for review (HUB-239) · HUB-239 · F-18
   - HUB-230 done (PR #16 merged); HUB-238 in review; new ticket HUB-239 for the registry watch flake
 - 2026-11-06 · `test(registry)` · Write config edits atomically in the watch test (HUB-239) · HUB-239 · F-03

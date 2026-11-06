@@ -682,6 +682,7 @@ Versions are pinned in `go.mod` / `package-lock.json` at M0 (DESIGN §18.7: "con
 | Lint | `golangci-lint` (incl. depguard, errcheck, gosec, revive, bodyclose, noctx) | M0 |
 | Frontend | SvelteKit 2, Svelte 5 runes, TypeScript strict, `openapi-typescript` + `openapi-fetch`, Vitest + Testing Library, Playwright, MSW | ADR-0005 |
 | Load | k6 (scripted scenarios, thresholds) — vegeta for quick constant-rate checks | M8 |
+| Alert rules and dashboards | `promtool` 3.4.2 (CI: pinned release tarball + SHA-256) for `check rules` / `test rules`; `prometheus/prometheus` v0.304.2 `promql/parser`, **test-only**, to check every rule and panel query against the exported metric catalogue | ADR-0015, HUB-232 |
 
 ---
 
