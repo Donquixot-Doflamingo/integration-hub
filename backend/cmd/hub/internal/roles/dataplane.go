@@ -44,8 +44,9 @@ type dataPlane struct {
 	dispatcher  *callbacks.Dispatcher // worker: signed callbacks
 	scheduler   *delivery.Scheduler   // scheduler
 	breakers    *upstream.Breakers    // circuit breakers (gateway, worker, scheduler)
-	rdb         *redis.Client         // hub:creds pings (credential rotation)
-	shadow      *delivery.Shadower    // gateway: shadow copies (DESIGN §6.4)
+	limiter     *upstream.AccountLimiter
+	rdb         *redis.Client      // hub:creds pings (credential rotation)
+	shadow      *delivery.Shadower // gateway: shadow copies (DESIGN §6.4)
 	wg          sync.WaitGroup
 	stop        context.CancelFunc
 }
@@ -119,6 +120,7 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 	masker := audit.NewMasker(key)
 	sealer := auditSealer(ctx, cfg, log)
 	limiter := upstream.NewAccountLimiter(st.rdb, m, log)
+	dp.limiter = limiter
 	attempter := &delivery.Attempter{Creds: cache, Upstream: client, Breakers: dp.breakers, Limiter: limiter, Log: log}
 	budget := delivery.NewBudget(m.Registry)
 	settler := delivery.Settler{Transitions: dp.transitions, Budget: budget}
@@ -228,6 +230,7 @@ func (dp *dataPlane) shutdown() {
 		dp.stop()
 	}
 	dp.wg.Wait()
+	dp.limiter.Close() // token leases in flight (each bounded by 50 ms)
 	if dp.client != nil {
 		dp.client.Close()
 	}

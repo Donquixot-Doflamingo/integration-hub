@@ -353,15 +353,21 @@ func (r *m5) sampleReleases(stop <-chan struct{}) (*[]sample, <-chan struct{}) {
 		defer close(done)
 		t := time.NewTicker(100 * time.Millisecond)
 		defer t.Stop()
+		take := func() {
+			v := testutil.ToFloat64(r.res.ReleasedCounter().WithLabelValues(acctB, "clevertap.upload@1"))
+			mu.Lock()
+			*out = append(*out, sample{time.Now(), v})
+			mu.Unlock()
+		}
 		for {
 			select {
 			case <-stop:
+				// A last sample: the final releases can be delivered within one tick (the
+				// limiter no longer adds a Redis round trip per attempt, HUB-408).
+				take()
 				return
 			case <-t.C:
-				v := testutil.ToFloat64(r.res.ReleasedCounter().WithLabelValues(acctB, "clevertap.upload@1"))
-				mu.Lock()
-				*out = append(*out, sample{time.Now(), v})
-				mu.Unlock()
+				take()
 			}
 		}
 	}()

@@ -596,7 +596,7 @@ DESIGN §18.6 is the budget (≈ 3.4 ms, target ≤ 5 ms p99 Hub overhead, 4 KB,
 | Idempotency (Redis) | 1.0 ms | `stage="idempotency"`, itest against real Redis |
 | Transform | 0.5 ms | `stage="transform_request"`, `BenchmarkTransform4KB` (DESIGN §7.6) |
 | Credential injection | 0.02 ms | `stage="inject"`, `BenchmarkInject` |
-| Breaker, account limiter, bulkhead | 0.1 ms | `stage="admission"` (excludes deliberate waits, reported separately as `hub_wait_ms{kind}`) |
+| Breaker, account limiter, bulkhead | 0.1 ms | `stage="admission"`: local breaker check plus the account limiter's local token lease (no Redis call in steady state, ADR-0019); a lease reply a call had to wait for counts here. Only the time spent waiting for the account's tokens is excluded, as `hub_wait_ms{kind}` |
 | Response map + serialise | 0.4 ms | `stage="transform_response"`, `BenchmarkMapResponse4KB` |
 | Audit + metrics | 0.1 ms | `stage="audit"`, `BenchmarkAuditEmit` (non-blocking send) |
 | **Total** | **≤ 5 ms** | `hub_overhead_ms` = server time − vendor time − deliberate waits |

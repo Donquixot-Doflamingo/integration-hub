@@ -2971,15 +2971,15 @@ Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md`). One worker fi
 
 ### HUB-408 — Account limiter: a Redis round trip on every sync vendor call
 - **Epic:** EP-13 · **Type:** perf · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-147 · **Feature:** F-13 · **Stories:** US-13xx
+- **Status:** in-review · **Depends on:** HUB-147 · **Feature:** F-13 · **Stories:** US-13xx
 - **Branch:** `perf/HUB-408-limiter-lease`
 
 Found by the HUB-235 sync ramp. `upstream.(*AccountLimiter).Wait` runs a Redis script for every vendor call, including sync ones. At 500 RPS on 2 CPUs its own time (stage `admission` = `wait`) has a p99 of 3.8 ms, the largest stage on the path. DESIGN §18.5 rule 6 allows only the idempotency check as a non-vendor network call on the sync path; the go-system-design skill says to cache a local token lease. The whole call is also added to `StageWait`, which `hub_overhead_ms` excludes as a deliberate wait, even when the token was granted at once. So the overhead the Hub reports leaves out its biggest stage: at 500 RPS the ledger p99 is 3.4 ms without it and 6.2 ms with it. A Redis stall also puts the sync path at risk: the limiter's 50 ms timeout fired 15 times within one second during a quiet 100 RPS run, giving that step a 20 ms p99 "Hub adds" tail (report §3.1).
 
 **Acceptance criteria**
-- [ ] A node leases tokens in blocks (for example 10 % of the account rate) and serves sync calls from the lease without a Redis call in steady state; the fleet-wide rate still holds (itest with two limiters)
-- [ ] Only time actually spent waiting for tokens counts as `StageWait`; the Redis call, when there is one, counts as `admission` overhead
-- [ ] `hubload` sync step at 500 RPS shows the admission stage p99 under 0.1 ms (DESIGN §18.6 budget)
+- [x] A node leases tokens in blocks (for example 10 % of the account rate) and serves sync calls from the lease without a Redis call in steady state; the fleet-wide rate still holds (itest with two limiters). ADR-0019: blocks sized to the node's use over 200 ms, capped at 10 % of the rate, refilled in the background. Proofs: `TestLimiterSteadyStateMakesNoRedisCallOnTheRequest` (no request waits on a 20 ms Redis; 25 leases for 2,000 calls), `TestSyncPathMakesNoRedisCallPerRequest` (edge itest, 100 ms Redis: no warm sync call waits; 14 Redis commands for 400 calls), `TestAccountLimitAcrossTwoGateways` (two gateways: 40.0/s at a 40 rps quota), `TestLimiterFleetRate`, `TestAccountRateAcrossWorkers`
+- [x] Only time actually spent waiting for tokens counts as `StageWait`; the Redis call, when there is one, counts as `admission` overhead (`Attempter.Run` adds the call minus the wait to `admission`; `TestLimiterLeaseReplyIsNotAWait`, `TestLimiterWaitsOnlyAtTheLimit`)
+- [ ] `hubload` sync step at 500 RPS shows the admission stage p99 under 0.1 ms (DESIGN §18.6 budget). Not run on this branch: load generators are not run on the shared container without an explicit go-ahead; re-check with the HUB-235 harness
 
 ### HUB-409 — Audit masking re-parses JSON on the request goroutine
 - **Epic:** EP-13 · **Type:** perf · **Area:** backend

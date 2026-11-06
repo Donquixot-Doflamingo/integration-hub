@@ -71,10 +71,13 @@ func (a *Attempter) admitBreakers(j Job, t upstream.Target, endpointRef string) 
 }
 
 // waitLimiter takes a token of the account's shared bucket (DESIGN §10.8), waiting up to the
-// job's limit; the wait is excluded from hub_overhead_ms.
-func (a *Attempter) waitLimiter(ctx context.Context, j Job, t upstream.Target) *core.CanonicalError {
+// job's limit. Only the time spent waiting for the account's tokens is a deliberate wait
+// (StageWait, excluded from hub_overhead_ms); it is returned so the caller counts the rest of
+// the call (a lease reply it had to wait for, when there was one) as admission overhead
+// (HUB-408).
+func (a *Attempter) waitLimiter(ctx context.Context, j Job, t upstream.Target) (time.Duration, *core.CanonicalError) {
 	if a.Limiter == nil {
-		return nil
+		return 0, nil
 	}
 	maxWait := j.LimiterWait
 	if maxWait <= 0 {
@@ -91,12 +94,12 @@ func (a *Attempter) waitLimiter(ctx context.Context, j Job, t upstream.Target) *
 		rps = t.Vendor.Defaults.RateLimit.PerAccountRPS
 	}
 	ok, waited := a.Limiter.Wait(ctx, t.AccountID, rps, j.Live, maxWait)
-	j.Timings.Add(telemetry.StageWait, waited) // a deliberate wait: excluded from overhead
+	j.Timings.Add(telemetry.StageWait, waited)
 	if !ok {
-		return &core.CanonicalError{Code: core.CodeUpstreamRateLimited, Message: "The upstream account's rate limit is reached",
+		return waited, &core.CanonicalError{Code: core.CodeUpstreamRateLimited, Message: "The upstream account's rate limit is reached",
 			Retryable: true, RetryAfterMS: core.Ptr[int64](1000), Reason: core.Ptr("account_quota"), Upstream: &core.Upstream{}}
 	}
-	return nil
+	return waited, nil
 }
 
 func circuitOpen(retry time.Duration) *core.CanonicalError {

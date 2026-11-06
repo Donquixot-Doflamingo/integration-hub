@@ -204,8 +204,8 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	}
 	// The account limiter last: its wait is the time right before the send.
 	start = time.Now()
-	ce = a.waitLimiter(ctx, j, target)
-	j.Timings.Observe(telemetry.StageAdmission, start)
+	waited, ce := a.waitLimiter(ctx, j, target)
+	j.Timings.Add(telemetry.StageAdmission, time.Since(start)-waited)
 	if ce != nil {
 		adm.record(a.now(), upstream.OutcomeIgnore)
 		r.Err = ce

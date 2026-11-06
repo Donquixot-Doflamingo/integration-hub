@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `perf(upstream)` · Lease account limiter tokens off the sync request path (HUB-408) · HUB-408 · F-13
+  - A sync or worker call takes its account token from a local lease: no Redis round trip per request in steady state; leases are refilled in the background and sized to the node's recent traffic (1 token to 10 % of the account rate)
+  - The account quota still holds across nodes (two gateways measured at exactly the 40 rps quota); a node may be one token ahead of the shared bucket at most
+  - A Redis outage or stall no longer delays callers: a failed lease lets that account's traffic through for 1 s, then retries
+  - `hub_wait_ms{kind="account_limiter"}` now holds only real waits for tokens; a lease reply a call waited for counts in the `admission` stage (and in `hub_overhead_ms`)
+  - New metric `account_limiter_leases_total{result}` and `redis_op_duration_seconds{op="limiter_lease"}`; ADR-0019
 - 2026-11-07 · `docs(tickets)` · File the sync latency budget as HUB-413 (HUB-413) · HUB-413 · F-18
   - New ticket HUB-413 (EP-13): a CI gate that keeps a 100 ms vendor at ≤ 110 ms p99 through the Hub, tests that audit, async accepts and callbacks never delay a sync call, and `docs/tech/LATENCY.md`
   - New user story US-1808 (a sync call costs the vendor's time, not double); HUB-408 and HUB-401 in progress

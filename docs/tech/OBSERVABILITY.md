@@ -94,7 +94,8 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `hub_build_info` | gauge (always 1) | — | `role, version` | `telemetry` | build and role identification on every scrape (HUB-027) |
 | `hub_stage_duration_ms` | histogram | ms | `stage` | `edge`, `delivery` | per-stage breakdown required by DESIGN §18.4/§18.5; low-cardinality on purpose |
 | `hub_accept_ms` | histogram | ms | `mode` | `edge` | S2 |
-| `hub_wait_ms` | histogram | ms | `kind` (`account_limiter`, `bulkhead`) | `upstream` | waits excluded from overhead |
+| `hub_wait_ms` | histogram | ms | `kind` (`account_limiter`, `bulkhead`) | `upstream` | waits excluded from overhead. `account_limiter` is only time spent waiting for the account's tokens (bucket empty); a lease reply a call waited for is `admission` overhead (HUB-408) |
+| `account_limiter_leases_total` | counter | leases | `result` (`granted`, `empty` = nothing above the class's reserve, `error` = Redis failed: fail open 1 s) | `upstream` | token leases taken from Redis by a background goroutine, never on the request (HUB-408, ADR-0019). In steady state a busy node leases about 10 times per second per account; `error` rising means Redis trouble and an unenforced account quota |
 | `vendor_attempts_total` | counter | attempts | `vendor, account, endpoint, code` | `delivery` | **planned (HUB-241), not exported yet.** Attempt-level codes for auth/transform alerts; until then they read `hub_requests_total` (ADR-0014) |
 | `dlq_entries_total` | counter | entries | `account, reason` | `queue` | **planned (HUB-241), not exported yet.** Rate alert "> 50 / 10 min / account"; until then `DLQSurge` reads the net growth of `dlq_count` (ADR-0014) |
 | `hub_accepted_unaccounted` | gauge | requests | — | `delivery` (scheduler reconciler, every 5 min) | S4 |
@@ -123,7 +124,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `creds_cache_miss_total` | counter | misses | `account` | `creds` | must stay 0 on the hot path |
 | `creds_decrypts_total` | counter | loader calls | — | `creds` | decrypting loads happen only at warm-up and background refresh (HUB-084); a rise with traffic is a bug. Each load also logs `credentials decrypted` (account@version list, never values; HUB-177) |
 | `shadow_total` | counter | copies | `integration, mode, outcome` (`ok`, `vendor_error`, `failed`, `dropped`) | `delivery` | shadow cutover health (HUB-173); `dropped` means the 64-copy bound was hit. Replaces the proposed `shadow_mismatch_total` |
-| `redis_op_duration_seconds` | histogram | s | `op` (`idempotency_begin`, `idempotency_complete`, `idempotency_release`; upstream ops later) | `telemetry` registers it once per process; `idempotency` (HUB-118) observes, `upstream` later | one observation per Redis round trip; buckets 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 100, 500 ms so the 1 ms idempotency budget (DESIGN §18.6) is a boundary |
+| `redis_op_duration_seconds` | histogram | s | `op` (`idempotency_begin`, `idempotency_complete`, `idempotency_release`, `limiter_lease`) | `telemetry` registers it once per process; `idempotency` (HUB-118) and the account limiter's background leases (`upstream`, HUB-408) observe | one observation per Redis round trip; buckets 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 100, 500 ms so the 1 ms idempotency budget (DESIGN §18.6) is a boundary |
 | `pg_pool_acquire_duration_seconds`, `pg_pool_in_use` | histogram, gauge | s, conns | `pool` | cmd wiring (pgxpool stats) | |
 | `http_server_inflight` | gauge | requests | `server` (`public`,`admin`) | `edge`, `control` | |
 | `scheduler_leader` | gauge (0/1) | — | — | `delivery` | exactly one leader |
@@ -296,7 +297,7 @@ Each alert's `runbook_url` points at `docs/runbooks/<AlertName>.md`; the index i
 
 ### 9.1 High Hub overhead (`HubOverheadP99High`)
 1. Platform dashboard → "Overhead by stage": which `hub_stage_duration_ms{stage}` moved?
-2. `validate` up → a new or larger capability schema / payload size shift (check `http_request_size_bytes`). `idempotency` up → Redis latency (`redis_op_duration_seconds`). `audit` up → audit channel near full (`audit_buffer_fill_ratio`). `admission` up → bulkhead/limiter contention (should be in `hub_wait_ms`, not overhead — if not, a bug).
+2. `validate` up → a new or larger capability schema / payload size shift (check `http_request_size_bytes`). `idempotency` up → Redis latency (`redis_op_duration_seconds`). `audit` up → audit channel near full (`audit_buffer_fill_ratio`). `admission` up → breaker or limiter cost; the limiter serves from a local lease, so a rise means calls are waiting for lease replies (Redis slow: `redis_op_duration_seconds{op="limiter_lease"}`), never for tokens (those are in `hub_wait_ms`).
 3. Check GC: `go_gc_duration_seconds`, GC CPU; check `go_sched_latencies_seconds` (CPU throttling → raise limits or replicas).
 4. Grab a 30 s CPU profile from one hot pod: `go tool pprof http://localhost:9090/debug/pprof/profile?seconds=30`.
 5. Compare with the last release's benchmarks (`benchstat`).
