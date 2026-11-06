@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `feat(control)` · Erase a data subject's stored payloads by identifier (HUB-233) · HUB-233 · F-18
+  - New `hub erase-subject -tenant -actor -reason [-since] [-until] [-dry-run]` reads the identifier from stdin and purges every stored body of the tenant's requests that hold it in any stored form: raw, JSON-escaped, masked HMAC, or inside sealed payloads
+  - Event payloads become `omitted` with `meta.pii_erased`; kept results, dead-letter canonical bodies and last vendor exchanges, delivered callback payloads and matching vendor sessions are removed. Hashes, sizes, timelines and metadata stay
+  - Requests still queued or with callbacks to deliver are deferred (exit 3) for a re-run; erased dead letters can no longer be replayed
+  - Every run appends one `change_log` row (`eraseSubjectPayloads`) with a subject reference, never the identifier; a missing seal key with sealed rows present fails without changing anything
+
 - 2026-11-06 · `docs(tickets)` · Track subject index, replay records and erasure CCR (HUB-233) · HUB-233 · F-18
   - HUB-233 in progress; new todo tickets HUB-245 (hashed subject index), HUB-246 (idempotency replay records of erased requests) and HUB-247 (CCR: admin operation eraseSubjectPayloads)
   - Ticket totals corrected to the actual count (202)

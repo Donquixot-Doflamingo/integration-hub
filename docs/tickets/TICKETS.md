@@ -1694,15 +1694,17 @@ Prometheus alert rules for every §16.3 alert with `promtool` unit tests, and da
 
 ### HUB-233 — PII deletion job by subject identifier
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-093, HUB-208 · **Feature:** F-18 · **Stories:** US-1805
+- **Status:** in-review · **Depends on:** HUB-093, HUB-208 · **Feature:** F-18 · **Stories:** US-1805
 - **Branch:** `feat/HUB-233-pii-deletion`
 
 Job that purges stored payloads by subject identifier using `x-pii` tags while keeping hashes and metadata (DESIGN §16.5).
 
+Shipped as the `hub erase-subject` maintenance command, because the admin contract has no erasure operation (CCR: HUB-247). See ADR-0012 and SECURITY §4.1. Follow-ups: HUB-245 (subject index) and HUB-246 (Redis idempotency replay records).
+
 **Acceptance criteria**
-- [ ] After deletion, no stored body contains the subject identifier (grep test)
-- [ ] Hashes, sizes and timelines remain
-- [ ] Deletion recorded in change_log
+- [x] After deletion, no stored body contains the subject identifier (grep test): `TestEraseSubjectPurgesEveryStoredBody` greps every bytea/json/jsonb/text column of every `hub` table and opens the sealed payloads
+- [x] Hashes, sizes and timelines remain: same test, before/after comparison of events (sha256, bytes, type, time, meta), requests, attempts, dead-letter and callback metadata
+- [x] Deletion recorded in change_log: same test, one `eraseSubjectPayloads` row per run with actor, reason, counts and `subject_ref`; the dry run writes none
 
 ### HUB-234 — Security hardening checks
 - **Epic:** EP-09 · **Type:** chore · **Area:** backend
