@@ -1,9 +1,13 @@
 ---
 name: integration-hub
-description: Call third-party capabilities (engagement events, SMS/WhatsApp, credit bureau, KYC/PAN/Aadhaar, Account Aggregator, payments/mandates, LLMs) through the company Integration Hub instead of integrating vendors directly. Covers HUB_BASE_URL/HUB_API_KEY setup, discovering integrations and capability schemas, building canonical bodies, dry-run first, invoke with Idempotency-Key, 200 vs 202 Queued handling and polling, error codes and retry rules, verifying X-Hub-Signature callbacks (Go/Python/Node), the Go hubclient SDK, the hubmcp MCP tools, and requesting a new integration. Use whenever the user wants to send an event or message, pull a bureau report, verify PAN/Aadhaar, call an LLM or any external vendor from an internal service, mentions the Hub, an integration id like int_..., hubclient, hubmcp, or a vendor SDK/API (CleverTap, MoEngage, OpenAI, etc.) for a company service.
+description: Call third-party capabilities (engagement events, SMS/WhatsApp, credit bureau, KYC/PAN/Aadhaar, Account Aggregator, payments/mandates, LLMs) through the company Integration Hub instead of integrating vendors directly. Covers HUB_BASE_URL/HUB_API_KEY setup, discovering integrations and capability schemas, building canonical bodies, dry-run first, invoke with Idempotency-Key, 200 vs 202 Queued handling and polling, two-step flows such as OTP send then verify with X-Hub-Session, error codes and retry rules, verifying X-Hub-Signature callbacks (Go/Python/Node), the Go hubclient SDK, the hubmcp MCP tools, and requesting a new integration. Use whenever the user wants to send an event or message, pull a bureau report, verify PAN/Aadhaar or an OTP, call an LLM or any external vendor from an internal service, mentions the Hub, an integration id like int_..., X-Hub-Session, hubclient, hubmcp, or a vendor SDK/API (CleverTap, MoEngage, OpenAI, etc.) for a company service.
 ---
 
 # Using the Integration Hub
+
+> This skill is plain Markdown and works in any agent that reads `SKILL.md` folders (Claude Code,
+> claude.ai, OpenAI Codex, Cursor) or as pasted instructions. Where it says "MCP tools", use them only
+> if your client has the `hubmcp` server configured; otherwise use the HTTP calls shown.
 
 The Hub is **one vendor-agnostic API** for every third party. You send a **stable integration ID** +
 a **canonical request body**; you get a **canonical response**. The Hub picks vendor, account
@@ -34,7 +38,11 @@ All calls: `Authorization: Bearer $HUB_API_KEY`. Keys are per tenant (service), 
 creation, rotatable. Use a non-production environment for experiments.
 
 Prefer the MCP server if it is configured (tools `hub_list_integrations`, `hub_describe_integration`,
-`hub_dry_run`, `hub_invoke`, `hub_get_request`): see `references/mcp-setup.md`.
+`hub_dry_run`, `hub_invoke`, `hub_get_request`): see `references/mcp-setup.md`. `hub_invoke` takes
+`integration_id`, `body`, and optionally `operation`, `idempotency_key`, `session`, `prefer_async`,
+`deadline_ms`, `confirm`; a 202 comes back as `outcome: "queued"`, never success. It refuses
+money/quota integrations until you pass `idempotency_key` and `confirm: true`, and you set `confirm`
+only after the user said yes in this conversation.
 
 ## Workflow
 ### 1. Discover
@@ -71,8 +79,8 @@ curl -s -i -X POST "$HUB_BASE_URL/v1/integrations/int_evt_brandA/invoke" \
   -H "Authorization: Bearer $HUB_API_KEY" -H "Content-Type: application/json" \
   -H "Idempotency-Key: order-8821-created" -d @body.json
 ```
-- Multi-operation capabilities: `POST /v1/integrations/{id}/invoke/{op}` (e.g. `generate`, then
-  `verify` with header `X-Hub-Session: <session id from step 1>`).
+- Multi-operation capabilities: `POST /v1/integrations/{id}/invoke/{op}` (e.g. `send_otp`, then
+  `verify_otp` with header `X-Hub-Session: <session id from step 1>`). See "Two-step flows" below.
 - **`Idempotency-Key`**: recommended always, **mandatory where money or vendor quota moves**
   (discovery shows `moves_money_or_quota` / `idempotency_key_required`; missing key → 400 `IDEMPOTENCY_KEY_REQUIRED`).
   Derive it from the business event (`loan-123-bureau-pull`), not a random value per retry. Same
@@ -112,6 +120,35 @@ Final states from `GET /v1/requests/{id}`: `succeeded`, `failed` (sync error), `
 | `EXPIRED` | - | no | Async request passed TTL; decide whether to resubmit |
 Retry only when `retryable: true`, with exponential backoff + jitter, bounded attempts, same
 `Idempotency-Key`. Full table and headers: `references/api-quickref.md`.
+
+## Two-step flows (OTP send, then verify)
+Some capabilities have several **operations** on **one integration id**: for Aadhaar or mobile OTP,
+`send_otp` then `verify_otp`. That is **two calls on the same integration**, linked by a session:
+
+1. `POST /v1/integrations/{id}/invoke/send_otp` with an `Idempotency-Key` (an OTP costs quota, so
+   the key is mandatory). The 200 response carries header **`X-Hub-Session: ses_...`**. Store it
+   with the user's attempt (server side, not in the app).
+2. `POST /v1/integrations/{id}/invoke/verify_otp` with header `X-Hub-Session: <that id>`, a new
+   `Idempotency-Key`, and the OTP the user typed.
+
+The Hub keeps only the vendor's transaction id in the session, for **10 minutes**, and sends step 2
+to the same vendor account that sent the OTP, even if the platform switches vendors in between.
+Your backend owns the journey (which screen, when to offer Resend); the Hub is not a workflow engine.
+
+| Situation | You get | Do |
+| --- | --- | --- |
+| Wrong OTP | 422 `UPSTREAM_REJECTED` ("The OTP does not match"); session stays open | Let the user retry: same `X-Hub-Session`, new `Idempotency-Key` |
+| OTP expired at the vendor | 422 `UPSTREAM_REJECTED` ("... request a new one") | Resend = call `send_otp` again (new session) |
+| Session expired (> 10 min), wrong, or from another integration | 404 `SESSION_NOT_FOUND`, nothing sent | Restart from `send_otp` |
+| Double tap on Send | Same 200 + same `X-Hub-Session`, `X-Hub-Idempotent-Replay: true`; one SMS | Reuse the key for the same attempt |
+| Vendor down / circuit open | 503 `UPSTREAM_UNAVAILABLE`, `retryable: true`, maybe `retry_after_ms`; session survives | "Try again in N s"; same session, same key |
+| No `Idempotency-Key` | 400 `IDEMPOTENCY_KEY_REQUIRED` | Fix the code |
+
+Tell "wrong" from "expired" only by `message` today (a machine-readable reason is planned); never
+branch on `upstream.code`. **Every `send_otp` sends a real SMS: confirm with the user before calling
+it, and use fake numbers in tests.** OTP and other interactive integrations are `sync`: you never get
+a 202 for them. Never log, store or put an Aadhaar number, OTP or phone number in code, tests or the
+idempotency key. Full curl and Go example: `references/examples.md` ("Two-step OTP").
 
 ## Callbacks: verify `X-Hub-Signature`
 For `async_callback` integrations the Hub POSTs results to your registered endpoint with
@@ -168,16 +205,37 @@ export function verifyHubSignature(secret, rawBody /* Buffer */, header, nowMs =
 In Express use `express.raw({ type: 'application/json' })` on the callback route so you get the raw bytes.
 
 ## Go SDK: `pkg/hubclient`
-Module `github.com/Donquixot-Doflamingo/integration-hub/backend/pkg/hubclient`. It returns a **202
-as a distinct `Queued` result type, never as success**, plus an idempotency helper and an SSE reader.
-Check exact names with `go doc github.com/Donquixot-Doflamingo/integration-hub/backend/pkg/hubclient`;
-the shape is:
+Module `github.com/Donquixot-Doflamingo/integration-hub/backend/pkg/hubclient`. `Invoke` returns an
+`Outcome` that is **either `*hubclient.Result` (200) or `*hubclient.Queued` (202), never both**, and
+errors as `*hubclient.Error` (canonical `Code`, `Retryable`, `RetryAfter`, `RequestID`, `Details`).
 ```go
-out, err := hc.Invoke(ctx, "int_evt_brandA", body /* idempotency key option */)
-// err: *hubclient.Error with Code (canonical) and Retryable
-// out: either a Result (200, canonical body) or Queued (202, RequestID + Poll) - handle both branches
+hc, err := hubclient.New(os.Getenv("HUB_BASE_URL"), os.Getenv("HUB_API_KEY"))
+if err != nil { return err }
+out, err := hc.Invoke(ctx, "int_evt_brandA", body,
+	hubclient.WithIdempotencyKey("order-"+orderID+"-created")) // also WithOperation, WithSession, WithDeadline, WithPreferAsync
+var hubErr *hubclient.Error
+switch {
+case errors.As(err, &hubErr):
+	// branch on hubErr.Code; retry only if hubErr.Retryable, after hubErr.RetryAfter, same key
+	return err
+case err != nil:
+	return err // transport error: retry only with the same idempotency key
+}
+switch o := out.(type) {
+case *hubclient.Result:
+	var resp MyCanonicalResponse
+	return o.Decode(&resp) // o.Session holds X-Hub-Session for step 1 of a two-step flow
+case *hubclient.Queued:
+	// NOT done: persist o.RequestID; poll hc.GetRequest(ctx, o.RequestID) until Status.Terminal(),
+	// or wait for the callback
+	return saveQueued(o.RequestID)
+}
 ```
-Do not collapse `Queued` into success; persist its request id and poll or await the callback.
+Also: `hc.GetRequest` (status; `Status.Terminal()`, `Result`, `Error`), `hc.DryRun`,
+`hc.ListIntegrations` / `hc.AllIntegrations`, `hc.GetIntegration`, `hc.GetCapability`,
+`hubclient.NewIdempotencyKey()` (random; prefer a key derived from your business event),
+`hubclient.IsRetryable(err)`. Check with `go doc github.com/Donquixot-Doflamingo/integration-hub/backend/pkg/hubclient`.
+Do not collapse `Queued` into success. A callback verifier is not in the SDK yet: use the snippets above.
 
 ## Requesting a new integration
 If no integration fits, the platform team creates one (callers never configure vendors). Send:
@@ -194,5 +252,5 @@ Use the platform team's normal intake channel; ask the user which one their org 
 
 ## References
 - `references/api-quickref.md` - endpoints, headers, status codes, error codes, request states.
-- `references/mcp-setup.md` - add `hubmcp` to Claude Code (`claude mcp add`, `.mcp.json`), tool list.
-- `references/examples.md` - `events.track@v1` end to end with curl and Go.
+- `references/mcp-setup.md` - add `hubmcp` to Claude Code, Claude Desktop, Codex CLI and Cursor; tenant key vs admin token; tool list.
+- `references/examples.md` - `events.track@v1` end to end with curl and Go; the two-step OTP flow with curl and Go.

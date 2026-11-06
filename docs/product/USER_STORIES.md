@@ -565,6 +565,22 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 **As a** service developer, **I want** an SDK helper that derives stable idempotency keys from my business ids, **so that** retries are safe by default. · **Should**
 - **Given** the same business id, **when** keys are derived, **then** they are equal; different ids produce different keys.
 
+### US-2105 — Operator skill for any AI
+**As a** platform engineer or integration admin (with Claude, Codex, Cursor or another assistant), **I want** a repo skill that shows, for every control-plane task, the console path, the `hubctl` command and the `hubmcp` tool call, **so that** nobody has to guess how to onboard a tenant, vendor or account, register callbacks, switch vendors, write transformers or set up a two-step flow. · **Must**
+- **Given** the repo is open in Claude Code, Codex or Cursor, **when** I ask "how do I move int_evt_brandA to a new account?", **then** the assistant loads `hub-operator` and walks draft → validate → diff → publish (or weights) with the three ways, showing the diff before any live change.
+- **Given** a request to delete, pause, rotate a secret or create an account with credentials through MCP, **when** the assistant answers, **then** it says MCP cannot do it and gives the console (or hubctl / admin API) path instead.
+- **Given** "Aadhaar is get-OTP then verify: two calls?", **when** answered, **then** the assistant explains one integration, two operations, `X-Hub-Session`, and what the operator configures (one transformer pair per operation, `session:` section, sync).
+
+### US-2106 — Consumer skill in any assistant
+**As an** AI-assisted developer on a calling team, **I want** to install the Hub skill in the assistant I already use (Claude Code, claude.ai, Codex, Cursor) or paste one file into any other, **so that** my assistant calls the Hub correctly without a vendor SDK. · **Must**
+- **Given** the README, **when** I follow the steps for my tool, **then** the same `integration-hub` folder loads, with no tool-specific copy.
+- **Given** "verify the user's mobile with an OTP", **when** my assistant writes code, **then** it calls `send_otp`, keeps `X-Hub-Session`, calls `verify_otp` with it and a new `Idempotency-Key`, handles wrong OTP, expired session and retryable errors, and asks me before sending a real OTP.
+
+### US-2107 — hubmcp in my MCP client
+**As an** AI-assisted developer or platform engineer, **I want** a copy-paste `hubmcp` configuration for Claude Code, Claude Desktop, Codex CLI and Cursor, **so that** my assistant can use the Hub tools without secrets landing in committed files. · **Should**
+- **Given** my client, **when** I follow its section, **then** `hubmcp` connects with my tenant key read from my environment or keychain.
+- **Given** I am a platform engineer, **when** I add the admin profile, **then** it runs on stdio with my own token as a separate entry, and the page warns that deletes and secrets stay in the console.
+
 ## F-22 Release-2 capabilities
 
 ### US-2201 — Inbound vendor webhooks
