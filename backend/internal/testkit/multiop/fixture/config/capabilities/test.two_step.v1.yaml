@@ -1,0 +1,4 @@
+# TEST ONLY (HUB-343): a two-operation capability for the per-operation transformer tests.
+capability: test.two_step@v1
+schema_ref: schemas/capabilities/test.two_step.v1.send.request.json
+default_ttl: 1h

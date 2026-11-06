@@ -535,6 +535,7 @@ backend/config/
 
 - **Capability schemas live only in `contracts/schemas/`** (ADR-0004). `backend/config/capabilities/*.yaml` references them by path; a CI check fails if a schema is duplicated under `backend/`. Container builds copy `contracts/` into the image (Go `embed` cannot reach outside the module).
 - Each file is one object; filenames equal IDs; loader errors are path-qualified (`integrations/int_evt_brandA/versions/3.yaml: delivery.wait_ms: must be ≤ 30000`).
+- **Per-operation transformers (HUB-343).** A version target (`targets[]`, `failover[]`, `shadow.target`; `registry.Target`) has the default pair `transformer: {request, response}` and an optional `operations: {<operation>: {request, response}}` (`Target.Operations`). The invoked operation selects the pair (`Target.Pair(op)`, `resolve.Resolution.Pair()`): its own when listed, else the default. Multi-operation transformers declare `operation:`; the build check `operations_have_transformers` refuses a pair serving an operation it is not compiled for and an undeclared operation key (F-14). Stored as part of the version's `spec` (`integration_versions.spec`, admin `TargetRef.operations`); no migration.
 
 ---
 

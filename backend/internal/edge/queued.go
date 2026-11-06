@@ -152,7 +152,7 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 		wait = 3 * time.Second
 	}
 	endpointTimeout := 3 * time.Second
-	if tf := p.caller.Snap.Transformers[p.res.Target.Transformer.Request]; tf != nil {
+	if tf := p.caller.Snap.Transformers[p.res.Pair().Request]; tf != nil {
 		if t, err := targetTimeout(p.caller.Snap, p.res.Target.Account, tf.VendorEndpoint); err == nil {
 			endpointTimeout = t
 		}

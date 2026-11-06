@@ -233,7 +233,14 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 
 // resolve picks the version and target of an attempt: the active version at send time (D10),
 // resolved_version when pinned, and for a vendor session its exact version and account.
+// The envelope's operation selects the transformer pair of the resolved target (HUB-343).
 func (w *Worker) resolve(snap *registry.Snapshot, env core.Envelope, session *sessions.Session) (resolve.Resolution, error) {
+	res, err := w.resolveTarget(snap, env, session)
+	res.Operation = env.Operation
+	return res, err
+}
+
+func (w *Worker) resolveTarget(snap *registry.Snapshot, env core.Envelope, session *sessions.Session) (resolve.Resolution, error) {
 	if session != nil {
 		return resolve.ResolveSession(snap, env.Tenant, env.IntegrationID, session.Version, session.AccountID)
 	}

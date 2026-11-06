@@ -6,6 +6,12 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(registry)` · Select a transformer pair per operation (HUB-343) · HUB-343 · F-14
+  - An integration version target (also failover and shadow) may give operations of a multi-operation capability their own transformer pair (`operations: {<op>: {request, response}}`), so one integration can send each operation to a different vendor endpoint; other operations keep the default `transformer` pair
+  - Sync, wait, async (the worker re-resolves from the envelope's operation), dry-run, session steps, failover and shadow all run the invoked operation's pair; the audit `integration.resolved` / `request.transformed` meta names that pair and endpoint
+  - New publish check `operations_have_transformers` in the registry build (config files, `hubctl apply`, admin validate/publish, every node): an operation key the capability does not declare, or an operation served by a pair compiled for another operation, is refused with a file- and path-qualified error
+  - Admin API (hub-admin 1.2.0) accepts, stores, renders and diffs `TargetRef.operations`; rollback and weight changes keep it; validation reports carry the new check with contract pointers (`/targets/<i>/operations/<op>`, `/targets/<i>/transformer`); breakers and transformer usage count every per-operation endpoint
+
 - 2026-11-07 · `contract(admin)` · Add per-operation transformers to integration targets (HUB-344) · HUB-344 · F-22
   - hub-admin 1.2.0: an integration version target (also failover and shadow) may set `operations: {<operation>: {request, response}}`; listed operations use their own transformer pair, the others the required default `transformer`
   - New `TransformerPair` schema and known validation check `operations_have_transformers`; named examples for a two-operation OTP capability

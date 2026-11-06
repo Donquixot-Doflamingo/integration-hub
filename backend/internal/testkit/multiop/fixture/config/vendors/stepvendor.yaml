@@ -1,0 +1,13 @@
+# TEST ONLY (HUB-343). Fictional vendor with one endpoint per operation; tests point it at
+# mockvendor or a fake upstream. No vendor documentation exists (invented shapes). The
+# credentials go in static headers (X-Account-Id, X-Api-Key from creds.*), like the dev clevertap vendor.
+vendor: stepvendor
+auth: static_headers
+regions:
+  in: http://127.0.0.1:8099
+endpoints:
+  send@1:   { method: POST, path: /v1/codes,        timeout_ms: 3000, connect_timeout_ms: 500, idempotent: false }
+  verify@1: { method: POST, path: /v1/codes/verify, timeout_ms: 3000, connect_timeout_ms: 500, idempotent: true }
+defaults:
+  rate_limit: { per_account_rps: 50 }
+  breaker: { window_s: 30, min_calls: 20, failure_ratio: 0.5, consecutive_timeouts: 5, open_s: 30, open_max_s: 600, half_open_probes: 3 }

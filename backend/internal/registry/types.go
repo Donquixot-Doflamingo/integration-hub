@@ -263,10 +263,34 @@ func (s *Shadow) Ratio() float64 {
 
 // Target is one (vendor, account, transformers) route with a weight.
 type Target struct {
-	Vendor      string          `yaml:"vendor"`
-	Account     string          `yaml:"account"`
+	Vendor  string `yaml:"vendor"`
+	Account string `yaml:"account"`
+	// Transformer is the default pair: it serves every operation Operations does not list (for a
+	// single-operation capability, the only pair).
 	Transformer TransformerPair `yaml:"transformer"`
-	Weight      int             `yaml:"weight,omitempty"` // failover entries have no weight
+	// Operations gives operations of a multi-operation capability their own pair, so each can go
+	// to its own vendor endpoint (HUB-343, admin contract TargetRef.operations).
+	Operations map[string]TransformerPair `yaml:"operations,omitempty"`
+	Weight     int                        `yaml:"weight,omitempty"` // failover entries have no weight
+}
+
+// Pair is the transformer pair that serves operation op: its own pair when Operations lists
+// it, else the default Transformer. A lookup in a small map: safe on the hot path.
+func (t Target) Pair(op string) TransformerPair {
+	if p, ok := t.Operations[op]; ok {
+		return p
+	}
+	return t.Transformer
+}
+
+// Pairs is every pair the target references: the default first, then Operations by name.
+func (t Target) Pairs() []TransformerPair {
+	out := make([]TransformerPair, 0, 1+len(t.Operations))
+	out = append(out, t.Transformer)
+	for _, op := range sortedKeys(t.Operations) {
+		out = append(out, t.Operations[op])
+	}
+	return out
 }
 
 // TransformerPair names the request and response transformers of a target.

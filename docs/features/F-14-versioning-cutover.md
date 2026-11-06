@@ -42,6 +42,7 @@ Vendor and account swaps are big-bang, multi-team deploys today, with no canary 
 | Admin API | `POST .../versions` (draft), `PUT .../versions/{version}` (edit draft), `POST .../versions/{version}/validate` | `#createIntegrationDraft`, `#updateIntegrationDraft`, `#validateIntegrationVersion` |
 | Admin API | `POST .../versions/{version}/publish`, `POST .../rollback`, `POST .../weights`, `GET .../diff?from=&to=` | `#publishIntegrationVersion`, `#rollbackIntegration`, `#updateIntegrationWeights`, `#diffIntegrationVersions` |
 | CLI / console | `hubctl plan/apply`; F-19 integration detail | — |
+| Admin API (1.2.0) | `TargetRef.operations` (per-operation transformer pairs) and the validation check `operations_have_transformers` in every `IntegrationSpec` (HUB-343, contract HUB-344) | `#/components/schemas/TargetRef`, `#/components/schemas/TransformerPair`, `#/components/schemas/ValidationCheck` |
 
 ## Behaviour & rules
 DESIGN §6.3 request handling at publish of v8:
@@ -70,11 +71,22 @@ DESIGN §6.3 request handling at publish of v8:
 - **For the lead**: the scheduler calls `sessions.Expire(ctx, db, now)` each tick; the retire guard calls `sessions.CountOpen(ctx, db, accountID)`.
 - **Deviation**: one PK read per step ≥ 2 request on the sync path — [ADR-0011](../tech/adr/0011-vendor-session-lookup-on-the-request-path.md).
 
+### Per-operation transformers (HUB-343, HUB-345) — implementation notes
+- **Shape.** A target (`targets[]`, `failover[]`, `shadow.target`) has a required default pair `transformer: {request, response}` and an optional `operations: {<operation>: {request, response}}` (registry `Target.Operations`, YAML key `operations`; admin `TargetRef.operations`, hub-admin 1.2.0). A listed operation uses its own pair, both request and response; every other operation uses `transformer`. A single-operation capability omits `operations`. Because a request transformer names one `vendor_endpoint`, this is how one integration sends `send_otp` and `verify_otp` (or `generate` and `verify`, DESIGN §3.1) to different vendor endpoints.
+- **Selection.** `resolve.Resolution.Operation` is the invoked operation (path `/invoke/{operation}`, envelope `operation`); `Resolution.Pair()` = `Target.Pair(Operation)`. The edge sets it after resolve (sync, wait, dry-run with `?operation=`, session steps through `resolve.ResolveSession`); the worker sets it from the envelope when it re-resolves at send time (async, `re_resolve` and `pinned`). Failover and shadow copy the resolution and swap only `Target`, so they select the same way. Cost on the hot path: one lookup in a small map.
+- **Publish check `operations_have_transformers`** (registry `checkOperations`, run by `registry.Build`, so by config files, `hubctl apply`, the admin `validate` and `publish` and every node's snapshot build alike). It fails:
+  - for an `operations` key the capability does not declare — pointer `/targets/<i>/operations/<op>`;
+  - for an operation whose selected pair has a transformer compiled for another operation (the transformer's `operation:`) — pointer `/targets/<i>/operations/<op>` for a listed operation, `/targets/<i>/transformer` for a defaulted one. Same for `/failover/<i>/…` and `/shadow/target/…`.
+  This subsumes **HUB-345**: a multi-operation capability whose only pair is compiled for one operation fails for every other operation at `targets[i].transformer`, instead of silently running the first operation's transformers on the second operation's body. The pair references (exist, right kind, same capability, the target's vendor) are checked for every pair under `references_exist` as before. `operations: {}` is refused (name at least one operation, or omit it).
+- **Shadow `send`** must be safe for every pair of the shadow target: any non-idempotent request endpoint forces `dry_run`.
+- **Copies.** Rollback (`CopyVersion`) and weight changes (`reweigh`) copy the version through its YAML, so `operations` is kept. Breakers listed by the admin API, transformer usage counts and the paired endpoint of a response transformer walk every pair (`Target.Pairs()`).
+- **Not covered:** `hubctl dry-run <integration>` still shows the default pair of the heaviest target (HUB-350). The caller dry-run (`?operation=`) selects per operation.
+
 ## Data model impact
 `integrations(active_version, paused)`, `integration_versions(spec JSONB, author, reason, published_at)` immutable, `request_attempts.integration_version`, `vendor_sessions.version` (DESIGN §18.2).
 
 ## Config impact
-Integration YAML `versions[]`, `targets[].weight`, `targets[].shadow` (proposed field), `delivery.pending`.
+Integration YAML `versions[]`, `targets[].weight`, `targets[].shadow` (proposed field), `delivery.pending`, `targets[].operations` / `failover[].operations` / `shadow.target.operations` (HUB-343). Transformer YAML `operation:` names the operation a transformer is compiled for (required for a multi-operation capability).
 
 ## Observability
 | Kind | Name | Notes |
@@ -86,6 +98,7 @@ Integration YAML `versions[]`, `targets[].weight`, `targets[].shadow` (proposed 
 | Log | `integration_published` | id, from, to, author, reason |
 | Log | `session lookup failed`, `session create failed` (error), `session target gone`, `session data refused` (warn) | integration + error only; never session data |
 | Audit meta | `session` on `integration.resolved` / `response.transformed` | id, event, version, account (HUB-175) |
+| Audit meta | `transformers` on `integration.resolved` (edge) | the pair of the invoked operation (HUB-343); `request.transformed` meta `transformer`/`endpoint` likewise. No new metric, log or span |
 
 ## Security & PII
 Versions never surface to callers except debug header (F-06). Publish requires `editor`/`admin` (F-16).
@@ -98,6 +111,7 @@ Versions never surface to callers except debug header (F-06). Publish requires `
 
 ## Testing
 - **Integration**: the six §6.3 scenarios for each change type (account, vendor, transformer) (DESIGN §19 M6 accept).
+- **Per-operation transformers (HUB-343, HUB-345)**: fixture `internal/testkit/multiop` (capability `test.two_step@v1`, operations `send` and `verify` on two endpoints, goldens per transformer). Registry: `TestPerOperationPairsBuild`, `TestOperationsHaveTransformers` (one pair for two operations = HUB-345, undeclared key, wrong operation, failover, shadow, empty map), `TestOperationsValidShapes`, `TestShadowSendChecksEveryOperationEndpoint`, `TestTargetOperationsRoundTrip`; resolve: `TestPairFollowsTheOperation`; edge: `TestPerOperationSyncSelectsThePair`, `TestPerOperationFailoverSelectsThePair`, `TestPerOperationDryRunSelectsThePair`, `TestPerOperationShadowSelectsThePair`, and (integration) `TestPerOperationWaitMode`, `TestPerOperationAsyncWorker`; admin: `TestSpecOperationsRoundTrip`, `TestOperationsProblemsMapToTheirCheck`, `TestPerOperationEndpointsAreListed`, (integration, contract-validated) `TestPerOperationSpecs`. Session steps on two endpoints: `TestExampleOTPAccountFlow`, `TestExampleOTPRefusesOnePairForBothOperations` (examples/otp-account-flow).
 - **Unit**: weight distribution ± 1 % over 10,000; same key → same target.
 - **Integration**: rollback restores behaviour; history linear.
 
@@ -109,7 +123,7 @@ CleverTap pilot cutover (journey J-B) is the first production exercise.
 - DESIGN §6.4 describes weights "across versions" while §3.4 places `weight` on targets within a version; this doc treats weights as per-target within one version.
 
 ## Tickets
-HUB-170 – HUB-199 (EP-07, filter `feature: F-14`).
+HUB-170 – HUB-199 (EP-07, filter `feature: F-14`). Per-operation transformers: HUB-343 (backend), HUB-344 (admin contract), HUB-345 (refusal), HUB-350 (`hubctl dry-run --operation`, todo).
 
 ## Changelog of this doc
 | Date | Change | Author |
@@ -117,3 +131,4 @@ HUB-170 – HUB-199 (EP-07, filter `feature: F-14`).
 | 2026-10-31 | Created | docs agent |
 | 2026-11-02 | Vendor session implementation notes (HUB-175, HUB-183) | backend-engineer |
 | 2026-11-02 | Shipped in M6: publisher, distribution, shadow, cutover tests | backend-engineer |
+| 2026-11-07 | Per-operation transformers and the `operations_have_transformers` check (HUB-343, HUB-345) | backend-engineer |

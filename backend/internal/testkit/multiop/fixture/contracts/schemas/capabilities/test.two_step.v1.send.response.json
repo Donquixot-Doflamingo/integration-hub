@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hub:capability:test.two_step@v1:send:response",
+  "title": "test.two_step@v1 send response (TEST ONLY)",
+  "type": "object",
+  "required": ["status"],
+  "properties": {
+    "status": { "type": "string", "enum": ["sent"] },
+    "ref": { "type": ["string", "null"] }
+  }
+}

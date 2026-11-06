@@ -1,0 +1,22 @@
+# TEST ONLY (HUB-343). The default pair serves send; operations.verify gives verify its own
+# pair (its own vendor endpoint). The failover target selects the same way.
+integration: int_two_step
+version: 1
+targets:
+  - vendor: stepvendor
+    account: sv-primary
+    transformer: { request: TS-SEND-REQ@1, response: TS-SEND-RES@1 }
+    operations:
+      verify: { request: TS-VERIFY-REQ@1, response: TS-VERIFY-RES@1 }
+    weight: 100
+failover:
+  - vendor: stepvendor
+    account: sv-backup
+    transformer: { request: TS-SEND-REQ@1, response: TS-SEND-RES@1 }
+    operations:
+      verify: { request: TS-VERIFY-REQ@1, response: TS-VERIFY-RES@1 }
+delivery:
+  mode: sync
+  on_circuit_open: failover
+audit: { payloads: masked, retention: 30d }
+publish: { author: test, reason: "per-operation pairs" }

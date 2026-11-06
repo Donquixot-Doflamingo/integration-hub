@@ -3,6 +3,7 @@ package registry
 import (
 	"bytes"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -63,7 +64,7 @@ func TestDesignIntegrationVersionRoundTrips(t *testing.T) {
 	}
 	var back IntegrationVersion
 	roundTrip(t, v, &back)
-	if back.Delivery != v.Delivery || back.Targets[0] != v.Targets[0] || back.Audit != v.Audit || back.Publish != v.Publish {
+	if back.Delivery != v.Delivery || !reflect.DeepEqual(back.Targets, v.Targets) || back.Audit != v.Audit || back.Publish != v.Publish {
 		t.Fatalf("round trip changed the record:\n%+v\n%+v", v, back)
 	}
 }

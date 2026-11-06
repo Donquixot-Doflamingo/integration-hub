@@ -31,7 +31,7 @@ func decodeSpec(raw json.RawMessage, c *catalog, in *registry.Integration) (*reg
 	if capability, ok := c.snap.Capabilities[in.Capability]; ok {
 		ttl = capability.DefaultTTL
 	}
-	return fromAPISpec(spec, "/spec", ttl)
+	return fromAPISpec(spec, ttl)
 }
 
 // mutationTarget loads the integration of a mutating call (no tenant scoping: editors and up).
@@ -192,7 +192,7 @@ func (s *Server) updateIntegrationDraft(w http.ResponseWriter, r *http.Request) 
 
 // knownChecks are the DESIGN §6.4 checks a validation report lists (contract ValidationCheck).
 var knownChecks = []string{"schemas_compile", "expressions_typecheck", "goldens_pass", "response_conforms", "references_exist",
-	"accounts_not_retired", "interactive_sync_only", "weights_sum_100", "delivery_path_declared"}
+	"accounts_not_retired", "interactive_sync_only", "weights_sum_100", "delivery_path_declared", registry.CheckOperationsHaveTransformers}
 
 // validationReport lists every known check: failed ones once per problem, the others as pass.
 func validationReport(problems registry.ConfigErrors) map[string]any {
