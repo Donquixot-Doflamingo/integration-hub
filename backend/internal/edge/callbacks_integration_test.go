@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/callbacks"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
@@ -24,6 +26,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/mockvendor"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
 )
 
 const signingSecret = "fake-signing-secret-0123456789"
@@ -83,6 +86,14 @@ func (l secretsLoader) Load(_ context.Context, ids []string) (map[string]creds.A
 // dispatcher, and the tenant's registrar endpoint pointed at a verifying receiver.
 func callbackRig(t *testing.T, tune func(string, *registry.Integration, *registry.IntegrationVersion)) (*queuedRig, *receiver, *delivery.Scheduler) {
 	t.Helper()
+	return tracedCallbackRig(t, tune, nil)
+}
+
+// tracedCallbackRig is callbackRig with tracing: the worker, the dispatcher and an upstream
+// client that forwards traceparent to every vendor of the snapshot make spans with tp (nil: no
+// tracing). The caller wraps q.h with telemetry.HTTPHandler for the gateway's server span.
+func tracedCallbackRig(t *testing.T, tune func(string, *registry.Integration, *registry.IntegrationVersion), tp trace.TracerProvider) (*queuedRig, *receiver, *delivery.Scheduler) {
+	t.Helper()
 	rc := &receiver{}
 	srv := httptest.NewServer(rc)
 	t.Cleanup(srv.Close)
@@ -111,8 +122,20 @@ func callbackRig(t *testing.T, tune func(string, *registry.Integration, *registr
 			t.Fatal(err)
 		}
 		w.Transitions.OnTerminal = delivery.CallbackHook(enq)
+		if tp != nil {
+			forward := map[string]bool{}
+			for name := range cp.Vendors {
+				forward[name] = true
+			}
+			client, err := upstream.New(m, upstream.Options{TracerProvider: tp, ForwardTraceparent: forward})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(client.Close)
+			d.Upstream, w.Attempter.Upstream, w.TracerProvider = client, client, tp
+		}
 		disp, err := callbacks.NewDispatcher(callbacks.DispatcherDeps{Pool: w.DB, Snapshots: snaps, Secrets: creds.RegistrarSecrets{Cache: cache},
-			Audit: audit.Discard{}, Metrics: m, Log: slog.New(slog.DiscardHandler)},
+			Audit: audit.Discard{}, Metrics: m, Log: slog.New(slog.DiscardHandler), TracerProvider: tp},
 			callbacks.DispatcherOptions{PollInterval: 50 * time.Millisecond, Guard: callbacks.GuardOptions{AllowLoopback: true}})
 		if err != nil {
 			t.Fatal(err)

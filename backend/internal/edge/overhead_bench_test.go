@@ -91,6 +91,11 @@ func BenchmarkInvokeOverhead(b *testing.B) {
 		}
 		cp.Vendors[k] = &vc
 	}
+	// The dev tenant quota (100 rps) would refuse a benchmark loop with 429; a quota far above
+	// any reachable rate keeps the token-bucket code on the measured path.
+	for _, t := range cp.Tenants {
+		t.RateLimit = registry.TenantLimit{RPS: 1_000_000_000, Burst: 1_000_000_000}
+	}
 	m := telemetry.NewMetrics("gateway", "bench")
 	cache, err := creds.NewCache(staticLoaderBench(fakeCreds), telemetry.NewSecretSet(), m, creds.CacheOptions{})
 	if err != nil {

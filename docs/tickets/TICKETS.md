@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **225** · done: **158** · todo: **55** · other (in-progress/in-review/blocked): **12**
+Total tickets: **226** · done: **158** · todo: **55** · other (in-progress/in-review/blocked): **13**
 
 ## Epics
 
@@ -17,7 +17,7 @@ Total tickets: **225** · done: **158** · todo: **55** · other (in-progress/in
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 17 | 16 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 17 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
-| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 19 | 1 |
+| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 1 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 0 |
@@ -1707,14 +1707,14 @@ Export every §16.2 metric with labels tenant, integration, vendor, account, ver
 
 ### HUB-231 — Tracing: edge, transform, upstream, callback spans
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-027, HUB-088, HUB-120 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-review · **Depends on:** HUB-027, HUB-088, HUB-120 · **Feature:** F-18 · **Stories:** US-1806
 - **Branch:** `feat/HUB-231-tracing-spans`
 
-OTel spans for edge, transform, upstream and callback; accept caller `traceparent`; forward it to vendors that accept it (DESIGN §16.4).
+OTel spans for edge, transform, upstream and callback; accept caller `traceparent`; forward it to vendors that accept it (DESIGN §16.4). Decisions in ADR-0013 (vendor forwarding by `HUB_TRACE_FORWARD_VENDORS`, enqueue span in the envelope, `callback_deliveries.traceparent`, link-aware sampler).
 
 **Acceptance criteria**
-- [ ] One trace links caller → gateway → worker → vendor → callback for an async request
-- [ ] Spans carry no secrets or bodies (attribute allowlist test)
+- [x] One trace links caller → gateway → worker → vendor → callback for an async request: `TestAsyncTraceLinksCallerToCallback` (edge, integration): edge span continues the caller's trace, the envelope carries the `hub.queue.enqueue` span, the worker attempt links to it, the upstream span is its child and the vendor receives that span's `traceparent`, the callback span links to the attempt
+- [x] Spans carry no secrets or bodies (attribute allowlist test): `telemetry.AllowedSpanAttributes` + `SpanAttributeViolations`, run over every span in `TestSyncSpans` and `TestAsyncTraceLinksCallerToCallback`; the checker itself in `TestSpanAttributeViolations`
 
 ### HUB-232 — Alert rules and dashboards as code
 - **Epic:** EP-09 · **Type:** chore · **Area:** infra
@@ -1804,6 +1804,18 @@ During the HUB-230 `make itest` run, `TestCutoverCompletedAndNewRequests/transfo
 **Acceptance criteria**
 - [x] Publish-time goldens either measure CPU time, apply the budget only outside `-race`, or retry once before failing on time alone: RunGoldens re-runs a case once on ErrTimeBudget (`TestGoldensRetryTimeBudgetOnce`)
 - [ ] `make itest` passes 10 consecutive full runs on CI hardware
+
+### HUB-240 — Tracing: remaining stage spans and upstream attempt attributes
+- **Epic:** EP-09 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-231 · **Feature:** F-18 · **Stories:** US-1806
+- **Branch:** `feat/HUB-240-tracing-stage-spans`
+
+The spans OBSERVABILITY §5.1 lists as planned after HUB-231: `hub.validate`, `hub.resolve`, `hub.idempotency` (edge, only when sampled), `hub.webhook.inbound`, `hub.snapshot.apply`, `hub.admin.*`, and on the upstream span `hub.attempt`, `hub.breaker_state`, `hub.wait.limiter_ms`, `hub.wait.bulkhead_ms`. Each new key goes into `telemetry.AllowedSpanAttributes`. When the admin contract gains a vendor-definition trace flag (TECH_SPEC §22 q9), switch vendor forwarding to it and retire `HUB_TRACE_FORWARD_VENDORS` (ADR-0013).
+
+**Acceptance criteria**
+- [ ] Each listed span exists with its attributes, created only under a recording parent (0 allocations unsampled)
+- [ ] Allowlist test covers the new spans
+- [ ] Overhead benchmark unchanged within noise
 
 ### HUB-248 — `X-Content-Type-Options: nosniff` on gateway and admin responses
 - **Epic:** EP-09 · **Type:** chore · **Area:** backend

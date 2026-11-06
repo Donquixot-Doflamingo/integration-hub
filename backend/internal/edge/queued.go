@@ -54,8 +54,9 @@ func writeAccepted(w http.ResponseWriter, requestID, status, reason string) {
 }
 
 // envelope builds the queued form of a prepared request: canonical body and integration id,
-// never the vendor payload (DESIGN §11.3).
-func (s *Server) envelope(r *http.Request, p *prepared) core.Envelope {
+// never the vendor payload (DESIGN §11.3). ctx carries the hub.queue.enqueue span whose
+// traceparent the envelope stores, so the worker's attempt links back to this trace.
+func (s *Server) envelope(ctx context.Context, r *http.Request, p *prepared) core.Envelope {
 	d := p.res.Delivery
 	ttl := d.TTL.Std()
 	if ttl <= 0 {
@@ -63,7 +64,7 @@ func (s *Server) envelope(r *http.Request, p *prepared) core.Envelope {
 	}
 	now := p.timings.Start.UTC()
 	env := core.Envelope{
-		RequestID: RequestID(r.Context()), Tenant: p.caller.Tenant.Tenant, IntegrationID: p.integration.Integration,
+		RequestID: RequestID(ctx), Tenant: p.caller.Tenant.Tenant, IntegrationID: p.integration.Integration,
 		ResolvedVersion: p.res.VersionNumber, Pinned: d.Pending == registry.Pinned, Capability: p.integration.Capability,
 		Operation: p.operation, Canonical: json.RawMessage(p.raw), Mode: string(d.Mode),
 		NextAttemptAt: now, ExpiresAt: now.Add(ttl), CreatedAt: now,
@@ -75,9 +76,7 @@ func (s *Server) envelope(r *http.Request, p *prepared) core.Envelope {
 		id := p.session.ID
 		env.SessionID = &id
 	}
-	if tp := r.Header.Get("Traceparent"); tp != "" {
-		env.Trace = map[string]string{"traceparent": tp}
-	}
+	env.Trace = envelopeTrace(ctx)
 	return env
 }
 
@@ -86,7 +85,7 @@ func (s *Server) ledgerRecord(r *http.Request, p *prepared, status core.State) a
 		RequestID: RequestID(r.Context()), CreatedAt: p.timings.Start.UTC(), TenantID: p.caller.Tenant.Tenant,
 		IntegrationID: p.integration.Integration, IntegrationVersion: p.res.VersionNumber, Capability: p.integration.Capability,
 		Operation: p.operation, Mode: string(p.res.Delivery.Mode), Status: string(status), PayloadPolicy: string(p.trail.Policy()),
-		SnapshotVersion: p.caller.Snap.Version, IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		SnapshotVersion: p.caller.Snap.Version, IdempotencyKey: r.Header.Get("Idempotency-Key"), TraceID: traceID(r.Context()),
 	}
 }
 
@@ -121,8 +120,11 @@ func (s *Server) emitEvents(p *prepared) {
 
 // accept is async / async_callback: persist, answer 202, a worker delivers (DESIGN §5.2).
 func (s *Server) accept(w http.ResponseWriter, r *http.Request, p *prepared) {
-	env := s.envelope(r, p)
-	if err := s.persist(r.Context(), s.ledgerRecord(r, p, core.StateAccepted), env, 0); err != nil {
+	ctx, span := startEnqueue(r.Context(), p.integration.Capability)
+	env := s.envelope(ctx, r, p)
+	err := s.persist(ctx, s.ledgerRecord(r, p, core.StateAccepted), env, 0)
+	endEnqueue(span, err)
+	if err != nil {
 		s.log.ErrorContext(r.Context(), "accept failed", slog.String("integration", p.integration.Integration), slog.String("error", err.Error()))
 		s.fail(w, r, p, persistFailed())
 		return
@@ -158,9 +160,12 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 		}
 	}
 	claimFor := wait + endpointTimeout + 5*time.Second
-	env := s.envelope(r, p)
+	ectx, span := startEnqueue(r.Context(), p.integration.Capability)
+	env := s.envelope(ectx, r, p)
 	env.Attempt = 1
-	if err := s.persist(r.Context(), s.ledgerRecord(r, p, core.StateInFlight), env, claimFor); err != nil {
+	err := s.persist(ectx, s.ledgerRecord(r, p, core.StateInFlight), env, claimFor)
+	endEnqueue(span, err)
+	if err != nil {
 		s.log.ErrorContext(r.Context(), "persist failed", slog.String("integration", p.integration.Integration), slog.String("error", err.Error()))
 		s.fail(w, r, p, persistFailed())
 		return
@@ -233,14 +238,16 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 // parkNow is queue_if_allowed with an open circuit: persist the request as parked (no attempt)
 // and answer 202 queued; the drain delivers it after recovery (DESIGN §5.3).
 func (s *Server) parkNow(w http.ResponseWriter, r *http.Request, p *prepared, res delivery.Result) *core.CanonicalError {
-	q, ctx := s.deps.Queueing, r.Context()
-	env, rec := s.envelope(r, p), s.ledgerRecord(r, p, core.StateParked)
+	q := s.deps.Queueing
+	ctx, span := startEnqueue(r.Context(), p.integration.Capability)
+	env, rec := s.envelope(ctx, r, p), s.ledgerRecord(r, p, core.StateParked)
 	err := pgx.BeginFunc(ctx, q.DB, func(tx pgx.Tx) error {
 		if err := q.Ledger.Insert(ctx, tx, rec); err != nil {
 			return err
 		}
 		return q.Queue.EnqueueParked(ctx, tx, env, res.Account, res.Endpoint)
 	})
+	endEnqueue(span, err)
 	if err != nil {
 		s.log.ErrorContext(r.Context(), "park failed", slog.String("integration", p.integration.Integration), slog.String("error", err.Error()))
 		return persistFailed()

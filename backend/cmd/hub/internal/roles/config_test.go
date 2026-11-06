@@ -62,6 +62,12 @@ func TestLoadPrecedence(t *testing.T) {
 			eq(t, c.ConfigDir, "/etc/hub")
 			eq(t, c.ContractsDir, "/srv/contracts")
 		}},
+		{"traceparent goes to no vendor by default", Gateway, base, nil, func(t *testing.T, c Config) {
+			eq(t, len(c.TraceForwardVendors), 0)
+		}},
+		{"trace forward vendors from env", Worker, with("HUB_TRACE_FORWARD_VENDORS", " mock, acme ,,"), nil, func(t *testing.T, c Config) {
+			eq(t, strings.Join(c.TraceForwardVendors, "|"), "mock|acme")
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
