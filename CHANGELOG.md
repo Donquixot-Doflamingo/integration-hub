@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `docs(tickets)` · Track subject index, replay records and erasure CCR (HUB-233) · HUB-233 · F-18
+  - HUB-233 in progress; new todo tickets HUB-245 (hashed subject index), HUB-246 (idempotency replay records of erased requests) and HUB-247 (CCR: admin operation eraseSubjectPayloads)
+  - Ticket totals corrected to the actual count (202)
+
 - 2026-11-06 · `fix(deploy)` · Read /metrics fully in the M0 smoke test instead of piping to grep -q (HUB-230) · HUB-230 · F-01
   - smoke-m0 no longer fails when grep stops reading before curl has written the whole /metrics body (curl exit 23 under pipefail)
 - 2026-11-06 · `docs(tickets)` · Track the transformer time-budget flake seen in the full itest run (HUB-238) · HUB-238 · F-04
