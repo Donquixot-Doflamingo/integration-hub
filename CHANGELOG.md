@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(roles)` · Serve pprof on the ops port only (HUB-403) · HUB-403 · F-18
+  - Every role serves `/debug/pprof/*` on its ops port (TECH_SPEC §2, OBSERVABILITY §8.1), so a running gateway or worker can be CPU- and heap-profiled
+  - The public gateway and admin listeners still answer 404 on `/debug/pprof/`
 - 2026-11-07 · `fix(delivery)` · Base the drain quota on elapsed time so late ticks don't slow the ramp (HUB-155) · HUB-155 · F-12
   - The ramped drain keeps its DESIGN §10.5 rate on a busy scheduler: a late or dropped tick is made up (at most 2 ticks' worth, so no burst)
   - Fixes the intermittent TestChaos2RecoveryAndRampedDrain failure on CI

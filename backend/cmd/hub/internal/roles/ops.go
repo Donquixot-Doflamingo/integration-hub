@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -32,8 +33,10 @@ type health struct {
 }
 
 // opsHandler serves the ops port (TECH_SPEC §2): /healthz (process alive, no dependencies),
-// /readyz (dependencies reachable and the role not shutting down), /metrics.
-// Shapes follow getHealthz / getReadyz in contracts/openapi/hub-public.v1.yaml.
+// /readyz (dependencies reachable and the role not shutting down), /metrics and
+// /debug/pprof/* (OBSERVABILITY §8.1). Shapes follow getHealthz / getReadyz in
+// contracts/openapi/hub-public.v1.yaml. pprof is mounted here explicitly and only here: the
+// package's init side effect registers on http.DefaultServeMux, which no listener serves.
 func opsHandler(role Role, ready *atomic.Bool, checks []Check, m *telemetry.Metrics, log *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -56,6 +59,11 @@ func opsHandler(role Role, ready *atomic.Bool, checks []Check, m *telemetry.Metr
 		writeJSON(w, http.StatusOK, health{Status: "ok", Role: role, Checks: results})
 	})
 	mux.Handle("GET /metrics", m.Handler())
+	mux.HandleFunc("GET /debug/pprof/", pprof.Index) // heap, goroutine, allocs, block, mutex, threadcreate
+	mux.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
 	return mux
 }
 

@@ -187,3 +187,23 @@ func TestGatewayContinuesCallerTrace(t *testing.T) {
 		t.Fatalf("trace id = %s, want %s", got, traceID)
 	}
 }
+
+// pprof is served on the ops port only, never on the public listeners (OBSERVABILITY §8.1).
+func TestPprofOnlyOnOpsPort(t *testing.T) {
+	for _, role := range []Role{Gateway, Admin, Worker} {
+		t.Run(string(role), func(t *testing.T) {
+			addrs := startRole(t, role, Options{})
+			for _, path := range []string{"/debug/pprof/", "/debug/pprof/cmdline", "/debug/pprof/goroutine?debug=1"} {
+				code, body := get(t, "http://"+addrs["ops"]+path, nil)
+				if code != http.StatusOK || body == "" {
+					t.Errorf("ops %s: status %d, body %d bytes; want 200 with a body", path, code, len(body))
+				}
+			}
+			if pub, ok := addrs["http"]; ok {
+				if code, _ := get(t, "http://"+pub+"/debug/pprof/", nil); code != http.StatusNotFound {
+					t.Errorf("public /debug/pprof/: status %d, want 404", code)
+				}
+			}
+		})
+	}
+}

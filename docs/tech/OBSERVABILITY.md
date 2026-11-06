@@ -242,7 +242,7 @@ Stage spans (`validate`, `resolve`, `transform.*`) are created only when the tra
 ## 8. Profiling and memory
 
 ### 8.1 pprof
-- `net/http/pprof` handlers registered **only on the ops mux** (`:9090/debug/pprof/*`), never on the public or admin muxes. A test asserts `/debug/pprof/` returns 404 on `:8080` and `:8081`.
+- `net/http/pprof` handlers registered **only on the ops mux** (`:9090/debug/pprof/*`), never on the public or admin muxes (`roles.opsHandler`, HUB-403). `TestPprofOnlyOnOpsPort` asserts the ops port serves them for the gateway, admin and worker roles and the public listener answers 404.
 - Access: `kubectl port-forward pod/<p> 9090` only; NetworkPolicy blocks ingress to 9090 except from Prometheus.
 - Block and mutex profiling off by default; enable with `runtime.SetBlockProfileRate`/`SetMutexProfileFraction` via the ops endpoint during an investigation.
 
