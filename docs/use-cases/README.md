@@ -2,7 +2,7 @@
 
 **Audience:** product owners, their seniors, and any team that wants to know "can the Hub do X for me, and how would my service call it?"
 **State described:** `main` on 2026-11-06. Milestones M0–M7 are done (gateway, transformers, audit, durable delivery, resilience, versioning, control plane). M8 (observability and load tests) is in progress. Release 2 (EP-12) is planned, not built.
-**Ticket:** HUB-342. Runnable example: [`examples/otp-account-flow/`](../../examples/otp-account-flow/README.md).
+**Ticket:** HUB-342. Runnable examples: [`examples/otp-account-flow/`](../../examples/otp-account-flow/README.md) (fictional vendor), [`examples/aadhaar-okyc/`](../../examples/aadhaar-okyc/README.md) (Aadhaar OTP e-KYC on a real provider's sandbox, HUB-351).
 
 Every use case below has a status line:
 
@@ -535,6 +535,10 @@ For Aadhaar OTP eKYC, step 1 carries the Aadhaar number in the canonical body. T
 1. **Session store refuses it, twice.** `sessions.CheckData` rejects any session data that contains a 12-digit Aadhaar-like number (with or without spaces or hyphens), in keys or values; the `vendor_sessions` table has the same check as a database constraint. A transformer that tries anyway fails the call with `TRANSFORM_FAILED` and opens no session.
 2. **Logs never contain bodies** (redacting logger; codes and counts only).
 3. **Audit trail:** bureau, Aadhaar and PAN integrations use the `sealed` payload policy (decision D6): payloads are stored encrypted under a per-tenant key and are readable only through an audited "unseal" admin action (works today). The 90-day retention and KMS-managed keys are HUB-337. The capability schema tags the field `x-pii: government_id`. **Open question for compliance:** UIDAI rules restrict storing Aadhaar numbers outside an Aadhaar Data Vault. If even encrypted audit copies are not acceptable, the Aadhaar integration should use the `metadata_only` policy (hashes and sizes only, no bodies). Decide this before HUB-334 goes live.
+
+### Try it against a real provider: Aadhaar OTP e-KYC
+
+[`examples/aadhaar-okyc/`](../../examples/aadhaar-okyc/README.md) (HUB-351) runs the same two-step pattern with a real KYC provider's documented API: one integration, `int_aadhaar_okyc`, with operations `send_otp` (Aadhaar number + consent; UIDAI sends the OTP by SMS to the Aadhaar-linked mobile) and `verify_otp` (the OTP + `X-Hub-Session`; minimal e-KYC data back). The provider's reference id travels only in the vendor session, the audit trail is `sealed` (D6), and `run.sh` switches from mockvendor to the provider's sandbox with one environment variable (`HUB_DEMO_TARGET=sandbox`). UIDAI's own APIs need an AUA/KUA licence, so the example uses a licensed provider's OTP-based offline e-KYC; the README explains what is and is not possible. Proof: `TestExampleAadhaarOKYCFlow`, `TestExampleKYCConfigBuilds`.
 
 ### Status: Partly
 

@@ -1,0 +1,4 @@
+{
+  "status": 422,
+  "body": {"type": "validation_error", "code": "insufficient_balance", "message": "Insufficient balance to process this request"}
+}

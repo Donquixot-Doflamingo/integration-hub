@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **236** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **6**
+Total tickets: **237** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **7**
 
 ## Epics
 
@@ -20,7 +20,7 @@ Total tickets: **236** · done: **177** · todo: **53** · other (in-progress/in
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 8 |
-| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 4 |
+| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 20 | 4 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 12 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
@@ -2866,6 +2866,23 @@ Found while building HUB-343. `hubctl dry-run <integration> <body.json>` dry-run
 **Acceptance criteria**
 - [ ] `hubctl dry-run --operation verify_otp int_demo_otp body.json` dry-runs the verify pair's request transformer; without the flag, behaviour is unchanged
 - [ ] Unit test with a fake admin server
+
+### HUB-351 — Aadhaar OTP e-KYC example (two steps, one integration ID)
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-343 · **Feature:** F-22 · **Stories:** US-2205, US-2207
+- **Branch:** `feat/HUB-351-aadhaar-pan-examples`
+
+The user asked how an API like Aadhaar is integrated (get OTP, the person receives it, call again with the OTP to get the Aadhaar data) against a provider that can really be called for testing. UIDAI's own authentication and e-KYC APIs need an AUA/KUA licence, so the example uses a licensed provider's OTP-based offline e-KYC with a public sandbox (Cashfree Secure ID test mode, chosen after comparing Setu, Sandbox.co.in, Surepass, Decentro, IDfy and Signzy on public docs). Build `examples/aadhaar-okyc/` as a registry overlay (like HUB-342): vendor with mock and sandbox base URLs, test account, tenant, example capability `demo.aadhaar_okyc@v1` (`send_otp`, `verify_otp`), integration `int_aadhaar_okyc` (sync, fail_fast, sealed 90 days per D6), four transformers verified against the provider's current docs with goldens for every documented error, mockvendor scenario files shared by the demo and the tests, a demo script that switches from mockvendor to the sandbox with one environment variable, a Go SDK client and an integration test through the gateway.
+
+**Acceptance criteria**
+- [x] Vendor config: base URL per environment (regions `mock`, `sandbox`; production via the control plane), static header auth through `creds.*` only, 10 s timeouts, breaker, a credential-less health probe; doc URLs cited in the vendor and every transformer file (`examples/aadhaar-okyc/config/`)
+- [x] Request and response transformers for `send_otp` (Aadhaar number, consent) and `verify_otp` (OTP + session); the provider's `ref_id` flows only through the `session:` section, never through the caller; minimal response (name, date/year of birth, gender, state/district/pincode, reference)
+- [x] Goldens for success and every documented error (invalid Aadhaar as 200 and 400, mobile not linked, wrong OTP, OTP expired, provider session expired, 409, 401/403/test-key, insufficient balance, 429 with and without `Retry-After`, 500/502, malformed 200), mapped to canonical codes with vendor-neutral messages: 43 cases, run by `TestExampleKYCConfigBuilds`
+- [x] Integration `int_aadhaar_okyc` with per-operation pairs; capability schema as an example overlay (not in `contracts/`; CCR for `kyc.aadhaar_otp@v1` in the report)
+- [x] mockvendor routes emulating the provider's two endpoints: `examples/aadhaar-okyc/mockvendor/aadhaar-*.json`, checked against the vendor's declared paths by `TestExampleKYCScenarioFiles`
+- [x] Integration test `TestExampleAadhaarOKYCFlow`: send_otp → verify_otp through the gateway, session holds only the reference, sealed audit (no Aadhaar number or OTP in clear), no vendor name in caller responses, plus wrong/expired OTP, invalid Aadhaar, rate limit, provider down, double tap, expired session, edge refusals
+- [x] `examples/aadhaar-okyc/README.md`: what is and is not possible with UIDAI, provider choice and sandbox keys, sequence diagram (OTP by SMS to the Aadhaar-linked phone), curl and Go client steps, mock → sandbox switch, app screens between the steps, timeouts and expiry; `run.sh` (mock scenarios, sandbox, serve) and `client/main.go` run against a local gateway
+- [x] Linked from `docs/use-cases/README.md` (use case 6)
 
 ## EP-13 — Operability follow-ups (found writing the M8 runbooks)
 

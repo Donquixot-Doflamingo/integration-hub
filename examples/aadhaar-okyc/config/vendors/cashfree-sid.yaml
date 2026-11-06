@@ -1,0 +1,41 @@
+# EXAMPLE ONLY (HUB-351, HUB-352). Cashfree Secure ID (verification suite), a real Indian KYC
+# provider with a public sandbox. Checked on 2026-11-07 against:
+#   Aadhaar OKYC generate OTP: https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/generate-otp-to-verify-aadhaar
+#   Aadhaar OKYC submit OTP:   https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/submit-otp-to-verify-aadhaar
+#   PAN verify (sync):         https://www.cashfree.com/docs/api-reference/vrs/v2/pan/verify-pan-sync
+#   Getting started, keys:     https://www.cashfree.com/docs/api-reference/vrs/getting-started
+#   Sandbox test data:         https://www.cashfree.com/docs/api-reference/vrs/data-to-test-integration
+#
+# Base URL per environment (the region of the account picks one):
+#   mock     mockvendor on this machine (tests and the default demo). Its routes use the same
+#            /verification prefix as the real hosts, so the vendor paths are identical.
+#   sandbox  https://sandbox.cashfree.com/verification  (test keys, deterministic test data)
+#   prod     https://api.cashfree.com/verification       (set by the control plane, never here)
+#
+# Auth: static headers x-client-id and x-client-secret, mapped from creds.client_id and
+# creds.client_secret by the request transformers (creds only in headers, AGENTS §3.5). The
+# provider also requires a second factor on every environment: whitelist the calling IP in the
+# dashboard. The other option, an x-cf-signature header (RSA over client id + timestamp), cannot
+# be computed by the transformer stdlib today.
+#
+# Aadhaar OKYC is OTP-based offline e-KYC through the provider's licence. The Hub never calls UIDAI
+# directly: UIDAI's own authentication and e-KYC APIs need an AUA/KUA licence (see the README).
+vendor: cashfree-sid
+auth: static_headers
+docs_url: https://www.cashfree.com/docs/api-reference/vrs/getting-started
+regions:
+  mock:    http://127.0.0.1:8099/verification
+  sandbox: https://sandbox.cashfree.com/verification
+endpoints:
+  # Generating an OTP goes to UIDAI and sends an SMS: allow for slow upstreams, never retry
+  # blindly (idempotent: false; the caller's Idempotency-Key dedupes a double tap).
+  okyc_otp@1:    { method: POST, path: /offline-aadhaar/otp,    timeout_ms: 10000, connect_timeout_ms: 1000, idempotent: false }
+  okyc_verify@1: { method: POST, path: /offline-aadhaar/verify, timeout_ms: 10000, connect_timeout_ms: 1000, idempotent: false }
+defaults:
+  # The sandbox and production rate limits are not published; 429s carry codes
+  # too_many_requests_per_operation / too_many_requests_per_ip and map to UPSTREAM_RATE_LIMITED.
+  rate_limit: { per_account_rps: 10 }
+  breaker: { window_s: 30, min_calls: 10, failure_ratio: 0.5, consecutive_timeouts: 3, open_s: 30, open_max_s: 600, half_open_probes: 2 }
+  # The probe POSTs {} without credentials: the provider answers 400 x-client-id_missing (healthy,
+  # below 500) and no OTP is generated or billed.
+  health_probe: { endpoint: okyc_otp@1, dry: false, every_s: 30 }

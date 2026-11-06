@@ -1,0 +1,11 @@
+# EXAMPLE ONLY (HUB-351, HUB-352). The calling service of the KYC examples: an onboarding backend.
+# Its key is a test value for local use only: hk_test_example_kyc_onboarding_local_only
+# (stored here only as its sha256, like every key).
+tenant: kyc-onboarding
+display_name: KYC onboarding (example)
+api_keys:
+  - key_id: key_01JEXAMP1E0KYC0SANDB0X000A
+    hash: sha256:c3c170880ba90166288a578477ddcc0f8be53343e7830aa04853b6ba02794327
+    scopes: [invoke, dry_run, requests_read]
+    state: active
+rate_limit: { rps: 20, burst: 40 }

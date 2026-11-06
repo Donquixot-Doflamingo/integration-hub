@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(examples)` · Add an Aadhaar OTP e-KYC sandbox example (HUB-351) · HUB-351 · F-22
+  - `examples/aadhaar-okyc/`: Aadhaar OTP-based offline e-KYC behind one integration id (`int_aadhaar_okyc`, operations `send_otp` and `verify_otp`), mapped to Cashfree Secure ID's documented API; the provider's reference travels only in the vendor session, the audit is sealed for 90 days, the response is minimal
+  - `run.sh` runs the two steps against mockvendor (six scenarios) or, with `HUB_DEMO_TARGET=sandbox` and test keys, against the provider's sandbox; `client/main.go` does the same with the Go SDK
+  - 43 golden cases cover success and every documented provider error; `TestExampleAadhaarOKYCFlow` runs the flow through the gateway with sealed-audit and no-vendor-leak checks
+  - The README states what is possible without a UIDAI AUA/KUA licence, how to get sandbox keys, and what the app shows between the steps
 - 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
   - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
   - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series

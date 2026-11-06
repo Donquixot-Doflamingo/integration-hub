@@ -586,6 +586,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-2205 — Vendor sessions and hand-offs
 **As a** service developer, **I want** two-step flows (Aadhaar OTP) via `X-Hub-Session` and redirect hand-offs (DigiLocker, eSign, eNACH), **so that** multi-step KYC works through one contract. · **Must**
 - **Given** step 1 `generate`, **when** it returns, **then** I receive `X-Hub-Session`; step 2 `verify` with it is routed to the same account + version within 10 min; after expiry → `SESSION_NOT_FOUND`.
+- **Given** the Aadhaar OTP e-KYC example (`int_aadhaar_okyc`, HUB-351), **when** I call `send_otp` with an Aadhaar number and consent and then `verify_otp` with the OTP and `X-Hub-Session`, **then** I get minimal e-KYC data, the provider's reference never reaches me, the Hub keeps no Aadhaar number in the session and the audit is sealed; switching from mockvendor to the provider's sandbox changes no request or response.
 
 ### US-2206 — Account Aggregator long-running requests
 **As a** service developer, **I want** AA consent → notification → FI fetch handled as one long-running request with a callback, **so that** I receive FI data without orchestrating the AA flow. · **Should**
