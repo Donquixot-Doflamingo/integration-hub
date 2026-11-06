@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `fix(deploy)` · Read /metrics fully in the M0 smoke test instead of piping to grep -q (HUB-230) · HUB-230 · F-01
+  - smoke-m0 no longer fails when grep stops reading before curl has written the whole /metrics body (curl exit 23 under pipefail)
 - 2026-11-06 · `docs(tickets)` · Track the transformer time-budget flake seen in the full itest run (HUB-238) · HUB-238 · F-04
   - New ticket HUB-238: R2@1 goldens exceeded the 5 ms budget once under -race during make itest (8.08 ms); passes in isolation
 - 2026-11-06 · `feat(telemetry)` · Export the full DESIGN §16.2 metric set with a cardinality guard (HUB-230) · HUB-230 · F-18
