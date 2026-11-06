@@ -2513,15 +2513,22 @@ Found while building HUB-342. A target has one transformer pair (`transformer: {
 
 ### HUB-344 — Contract: per-operation transformers in admin integration versions
 - **Epic:** EP-12 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
-- **Branch:** `contract/HUB-344-per-operation-transformers`
+- **Status:** in-review · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
+- **Branch:** `contract/HUB-344-per-operation-transformers` (committed on `feat/HUB-343-per-operation-transformers`, as the first commit of the HUB-343 train)
 
 Contract change request from HUB-342 for the `contract-steward`: the admin integration-version target needs an optional per-operation transformer map next to the existing `transformer` pair, so HUB-343 can be configured, published, diffed and shown by the console and `hubctl` (additive, admin minor bump). The caller API is unchanged: `invokeIntegrationOperation` already exists.
 
 **Acceptance criteria**
-- [ ] `hub-admin.v1.yaml` target schema gains optional `operations: {<operation name>: {request, response}}` (refs `^[A-Za-z][A-Za-z0-9_-]{0,63}@[1-9][0-9]*$`), with an example
-- [ ] `info.version` minor bump, `contracts/CHANGELOG.md` entry, validation clean
-- [ ] Backend and frontend notified
+- [x] `hub-admin.v1.yaml` target schema gains optional `operations: {<operation name>: {request, response}}` (refs `^[A-Za-z][A-Za-z0-9_-]{0,63}@[1-9][0-9]*$`), with an example
+- [x] `info.version` minor bump, `contracts/CHANGELOG.md` entry, validation clean
+- [x] Backend and frontend notified (contract notice below)
+
+#### Contract notice — HUB-344 — hub-admin.v1.yaml 1.1.0 → 1.2.0 (minor)
+- Changed: new schema `TransformerPair` (`request`, `response`: `TransformerRef`, both required); `TargetRef.transformer` now `$ref`s it (same shape, still required: the default pair). New optional `TargetRef.operations`: object, `minProperties: 1`, keys `OperationName` (`^[a-z][a-z0-9_]{0,31}$`), values `TransformerPair`. `TargetRef` is used by `Target` (`targets[]`), `failover[]` and `ShadowPolicy.target`, so it appears in every `IntegrationSpec`. `ValidationCheck.check` lists the new known check `operations_have_transformers`.
+- operationIds whose bodies carry `IntegrationSpec`: `createIntegrationDraft`, `updateIntegrationDraft`, `validateIntegrationVersion`, `getIntegrationVersion`, `getIntegration` (`active`), `publishIntegrationVersion`, `rollbackIntegration`, `updateIntegrationWeights`, `diffIntegrationVersions` (generic diff ops). Named examples `per_operation` on `createIntegrationDraft` (request) and `getIntegrationVersion` (200).
+- Backend (HUB-343): accept, store, round-trip and render `operations` in the admin spec conversion (`internal/control/adminapi/integration_spec.go`) and the registry version file; select the pair by the invoked operation (listed → its pair, otherwise `transformer`) for targets, failover and shadow; report `operations_have_transformers` failures with pointer `/targets/<i>/operations/<op>` (or `/targets/<i>/transformer` for a defaulted operation); extend contract tests with a spec that has `operations`.
+- Frontend: `npm run gen:api` (schema.d.ts gains `TransformerPair` and `operations`; contract.gen.ts version string changes, so the CI freshness check fails until regenerated); show per-operation pairs in the integration version view and draft editor.
+- hubmcp / caller skill: no change (no tool exposes the target; callers never see transformers).
 
 ### HUB-345 — Refuse multi-operation integrations whose single pair serves every operation
 - **Epic:** EP-12 · **Type:** fix · **Area:** backend

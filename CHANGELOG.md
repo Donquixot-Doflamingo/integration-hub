@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `contract(admin)` · Add per-operation transformers to integration targets (HUB-344) · HUB-344 · F-22
+  - hub-admin 1.2.0: an integration version target (also failover and shadow) may set `operations: {<operation>: {request, response}}`; listed operations use their own transformer pair, the others the required default `transformer`
+  - New `TransformerPair` schema and known validation check `operations_have_transformers`; named examples for a two-operation OTP capability
+  - Caller API and MCP tools unchanged; backend implements in HUB-343, the console regenerates its client with `npm run gen:api`
+
 - 2026-11-06 · `docs(use-cases)` · Add the use-case catalogue for product owners (HUB-342) · HUB-342 · F-22
   - docs/use-cases/README.md: how a call flows through the Hub (pipeline and the DESIGN §18.6 latency budget), then events, vendor/account swaps, vendor outages, signed callbacks, idempotent retries, two-step OTP -> verify -> bank account, and the DESIGN §14 lending patterns, each with the caller's exact requests, a sequence diagram, failure behaviour and a status line citing its test or ticket
   - Two-step flows are marked Partly: vendor sessions work today; steps on different vendor endpoints need HUB-343
