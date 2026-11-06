@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `fix(transform)` · Re-run a golden case once when it only overran the time budget (HUB-238) · HUB-238 · F-04
+  - Publish-time goldens no longer fail on a single wall-clock overrun (GC pause, loaded CI under -race); a transformer that overruns twice is still refused
 - 2026-11-06 · `fix(deploy)` · Read /metrics fully in the M0 smoke test instead of piping to grep -q (HUB-230) · HUB-230 · F-01
   - smoke-m0 no longer fails when grep stops reading before curl has written the whole /metrics body (curl exit 23 under pipefail)
 - 2026-11-06 · `docs(tickets)` · Track the transformer time-budget flake seen in the full itest run (HUB-238) · HUB-238 · F-04
