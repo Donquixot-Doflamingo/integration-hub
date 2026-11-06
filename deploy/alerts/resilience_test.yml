@@ -1,0 +1,80 @@
+# promtool unit tests for the hub-resilience group (HUB-232). Run: promtool test rules deploy/alerts/*_test.yml
+rule_files:
+  - hub.rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # BreakerOpenTooLong: open, a half-open probe that fails, open again -> still "not closed".
+  - name: breaker not closed for 5 minutes pages, a short trip does not
+    interval: 1m
+    input_series:
+      # gw-1 sees the outage: open at 2m, half-open probe at 4m, open again at 5m, closed at 10m.
+      - series: 'breaker_state{vendor="clevertap",account="acc_ct_1",endpoint="upload@1",instance="gw-1"}'
+        values: '0 0 2 2 1 2 2 2 2 2 0 0 0'
+      # gw-2 has the same breaker and still reads closed: max across nodes wins.
+      - series: 'breaker_state{vendor="clevertap",account="acc_ct_1",endpoint="upload@1",instance="gw-2"}'
+        values: '0x12'
+      # A 2-minute trip on another endpoint never pages.
+      - series: 'breaker_state{vendor="clevertap",account="acc_ct_1",endpoint="events@1",instance="gw-1"}'
+        values: '0 2 2 0x9'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: BreakerOpenTooLong
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: BreakerOpenTooLong
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              vendor: clevertap
+              account: acc_ct_1
+              endpoint: upload@1
+            exp_annotations:
+              summary: "Circuit for acc_ct_1 / upload@1 has not closed for 5 minutes"
+              description: "The breaker of vendor clevertap, account acc_ct_1, endpoint upload@1 has been open or half-open for more than 5 minutes. Sync calls fail fast and async work is parking."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/BreakerOpenTooLong.md"
+      - eval_time: 11m
+        alertname: BreakerOpenTooLong
+        exp_alerts: []
+
+  # ParkedOldestAgeHigh: only the current scheduler leader's gauge counts.
+  - name: parked backlog older than 10 minutes pages; a former leader's stale gauge does not
+    interval: 1m
+    input_series:
+      - series: 'parked_oldest_age_s{account="acc_ct_1",endpoint="clevertap.upload@1",instance="sched-1"}'
+        values: '300+60x10'
+      - series: 'scheduler_leader{instance="sched-1"}'
+        values: '1x10'
+      # sched-2 lost leadership and still exports the last value it sampled.
+      - series: 'parked_oldest_age_s{account="acc_old",endpoint="clevertap.upload@1",instance="sched-2"}'
+        values: '5000x10'
+      - series: 'scheduler_leader{instance="sched-2"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: ParkedOldestAgeHigh
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: ParkedOldestAgeHigh
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              account: acc_ct_1
+              endpoint: clevertap.upload@1
+            exp_annotations:
+              summary: "Parked backlog of acc_ct_1 / clevertap.upload@1 is older than 10 minutes"
+              description: "The oldest parked envelope for account acc_ct_1, endpoint clevertap.upload@1 is 12m 0s old."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/ParkedOldestAgeHigh.md"
+
+  - name: parked backlog under 10 minutes does not page
+    interval: 1m
+    input_series:
+      - series: 'parked_oldest_age_s{account="acc_ct_1",endpoint="clevertap.upload@1",instance="sched-1"}'
+        values: '0+50x12'
+      - series: 'scheduler_leader{instance="sched-1"}'
+        values: '1x12'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ParkedOldestAgeHigh
+        exp_alerts: []
