@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "body": {
+    "pan": "ABCPV1234D", "type": "Individual", "reference_id": 161, "name_provided": "JOHN DOE", "registered_name": "JOHN DOE",
+    "valid": true, "message": "PAN verified successfully", "name_match_score": "100", "name_match_result": "DIRECT_MATCH",
+    "aadhaar_seeding_status": "Y", "last_updated_at": "01/01/2019", "name_pan_card": "JOHN DOE", "pan_status": "VALID",
+    "pan_status_code": "E", "pan_status_desc": "Existing and Valid", "aadhaar_seeding_status_desc": "Aadhaar is linked to PAN"
+  }
+}

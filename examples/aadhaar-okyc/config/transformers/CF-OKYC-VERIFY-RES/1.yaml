@@ -1,0 +1,85 @@
+# EXAMPLE ONLY (HUB-351). Aadhaar OKYC step 2 response on Cashfree Secure ID, checked on 2026-11-07
+# against https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/submit-otp-to-verify-aadhaar
+# and the sandbox test data https://www.cashfree.com/docs/api-reference/vrs/data-to-test-integration
+#   200 {"ref_id", "status": "VALID", "message": "Aadhaar Card Exists", "care_of", "address", "dob": "DD-MM-YYYY",
+#        "email", "gender": "M" | "F" | ..., "name", "split_address": {"country", "dist", "house", "landmark",
+#        "pincode", "po", "state", "street", "subdist", "vtc", "locality"}, "year_of_birth", "mobile_hash",
+#        "photo_link" (base64), "share_code", "xml_file" (link)}
+#   400 verification_failed: "Session expired, please generate a new OTP" | "Invalid Aadhaar Card" |
+#       "Aadhaar not linked to mobile number" | "Otp expired" | "OTP entered is invalid";
+#       otp_invalid "Please enter a valid otp."; otp_empty; x-client-id_missing; x-client-secret_value_invalid
+#   401 authentication_failed · 403 ip_validation_failed · 409 verification_pending ("Processing request,
+#   please try after 30 sec") · 422 insufficient_balance · 429 too_many_requests_per_operation / _per_ip ·
+#   500 verification_failed | api_error · 502 verification_failed (source down)
+# The provider tells wrong from expired OTPs only in "message", so the rules below match it
+# case-insensitively. Callers get fixed texts; a machine-readable reason is HUB-346.
+#
+# Minimal response (DESIGN §13, D6): name, date and year of birth, gender, state / district /
+# pincode, and the reference. The photo, street address, care-of, e-mail, mobile hash, offline XML
+# link and share code are dropped here and never reach the caller (they stay only in the sealed
+# audit copy of the vendor response).
+transformer: CF-OKYC-VERIFY-RES
+version: 1
+kind: response
+capability: demo.aadhaar_okyc@v1
+operation: verify_otp
+docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/submit-otp-to-verify-aadhaar
+response:
+  status:        '"verified"'
+  name:          res.body.name
+  date_of_birth: '(res.body.dob ?? "") == "" ? nil : formatTime(parseTime(res.body.dob, "02-01-2006"), "DateOnly")'
+  year_of_birth: '(res.body.year_of_birth ?? "") == "" ? nil : int(res.body.year_of_birth)'
+  gender:        '{M: "male", F: "female", T: "transgender"}[res.body.gender ?? ""]'
+  address:
+    state:    res.body.split_address.state
+    district: res.body.split_address.dist
+    pincode:  'res.body.split_address.pincode == nil ? nil : replace(toJSON(res.body.split_address.pincode), "\"", "")'
+  vendor_ref: 'res.body.ref_id == nil ? nil : replace(toJSON(res.body.ref_id), "\"", "")'
+errors:
+  - when: 'res.status < 300 && res.body == nil'
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+    message: '"The verification service returned an unexpected answer; try again"'
+  - when: 'res.status < 300 && res.body.status != "VALID"'
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The Aadhaar could not be verified"'
+  - when: 'res.status == 401 || res.status == 403 || (res.status == 400 && res.body.code in ["x-client-id_missing", "x-client-secret_value_invalid"])'
+    code: UPSTREAM_AUTH_FAILED
+    retryable: false
+  - when: 'res.status == 400 && lower(res.body.message ?? "") matches "expired"'
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The OTP has expired; request a new one"'
+  - when: 'res.status == 400 && (res.body.code == "otp_invalid" || lower(res.body.message ?? "") matches "otp.*invalid|invalid.*otp")'
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The OTP does not match"'
+  - when: 'res.status == 400 && lower(res.body.message ?? "") matches "invalid aadhaar"'
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The Aadhaar number is not valid"'
+  - when: 'res.status == 400 && lower(res.body.message ?? "") matches "not linked"'
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"No mobile number is linked to this Aadhaar"'
+  - when: res.status == 409
+    code: UPSTREAM_RATE_LIMITED
+    retryable: true
+    retry_after_ms: 30000
+    message: '"The OTP is still being processed; try again in 30 seconds"'
+  - when: 'res.status == 422 && res.body.code == "insufficient_balance"'
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+    message: '"The verification service is temporarily unavailable"'
+  - when: res.status == 429
+    code: UPSTREAM_RATE_LIMITED
+    retryable: true
+    retry_after_ms: int(header(res, "Retry-After") ?? "5") * 1000
+  - when: res.status >= 500
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+  - when: res.status >= 400
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The Aadhaar could not be verified"'

@@ -44,3 +44,6 @@ backend/**/dev.key
 # hub local data (snapshot cache, dev blobs), wherever a role was started
 backend/**/.data/
 backend/.data/
+
+# Runnable examples: per-run state (merged config, encrypted demo credentials, logs)
+.demo/

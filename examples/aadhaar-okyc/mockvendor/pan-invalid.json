@@ -1,0 +1,25 @@
+{
+  "description": "PAN: not found at the Income Tax Department, a 200 business answer (the documented INVALID example; sandbox: DEFPV0126D).",
+  "routes": {
+    "pan": {
+      "match": {
+        "method": "POST",
+        "path": "/verification/pan"
+      },
+      "behaviour": {
+        "status": 200,
+        "body": {
+          "pan": "DEFPV0126D",
+          "reference_id": 17974435,
+          "name_provided": null,
+          "valid": false,
+          "message": "Invalid PAN",
+          "name_match_score": 0,
+          "name_match_result": "-",
+          "pan_status_code": "N",
+          "pan_status_desc": "Not found in ITD database or Invalid PAN"
+        }
+      }
+    }
+  }
+}

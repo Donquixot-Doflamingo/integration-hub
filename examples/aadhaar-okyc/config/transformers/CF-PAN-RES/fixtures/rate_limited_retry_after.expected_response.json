@@ -1,0 +1,3 @@
+{
+  "error": {"code": "UPSTREAM_RATE_LIMITED", "retryable": true, "retry_after_ms": 2000}
+}

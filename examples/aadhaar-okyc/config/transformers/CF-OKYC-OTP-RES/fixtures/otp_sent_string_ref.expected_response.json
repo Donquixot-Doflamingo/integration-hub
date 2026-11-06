@@ -1,0 +1,4 @@
+{
+  "response": {"status": "otp_sent", "vendor_ref": "12345"},
+  "session": {"vendor_txn_id": "12345"}
+}

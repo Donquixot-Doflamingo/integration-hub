@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "body": {"pan": "ABCCD8000T", "type": "Company", "reference_id": 162, "registered_nam": "ACME TRADING PRIVATE LIMITED", "valid": true,
+    "message": "PAN verified successfully", "aadhaar_seeding_status": "NA", "pan_status": "VALID", "pan_status_code": "E"}
+}

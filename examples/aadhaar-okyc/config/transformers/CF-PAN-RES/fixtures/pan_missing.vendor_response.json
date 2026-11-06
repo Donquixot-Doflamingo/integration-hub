@@ -1,0 +1,4 @@
+{
+  "status": 400,
+  "body": {"type": "validation_error", "code": "pan_missing", "message": "pan is missing in the request."}
+}

@@ -1,0 +1,6 @@
+{
+  "status": 200,
+  "body": {"pan": "ABCPV1234D", "type": "Individual", "reference_id": 163, "name_provided": "RAHUL SINGH", "registered_name": "JOHN DOE",
+    "valid": true, "message": "PAN verified successfully", "name_match_score": "12", "name_match_result": "POOR_PARTIAL_MATCH",
+    "aadhaar_seeding_status": "R", "pan_status": "VALID"}
+}

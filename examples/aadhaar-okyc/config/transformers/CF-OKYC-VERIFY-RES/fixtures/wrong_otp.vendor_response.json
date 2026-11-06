@@ -1,0 +1,4 @@
+{
+  "status": 400,
+  "body": {"type": "validation_error", "code": "verification_failed", "message": "OTP entered is invalid", "error": null, "refId": 210}
+}

@@ -1,0 +1,24 @@
+# EXAMPLE ONLY (HUB-352). PAN verification on Cashfree Secure ID, checked on 2026-11-07 against
+# https://www.cashfree.com/docs/api-reference/vrs/v2/pan/verify-pan-sync (operation
+# VrsPanVerification) and https://www.cashfree.com/docs/secure-id/kyc-stack/verify-pan (AGENTS §3.3):
+#   POST {base}/pan   headers x-client-id, x-client-secret, x-api-version (optional)
+#   body {"pan": "ABCPV1234D", "name": "John Doe"?}
+# x-api-version: a date after 2022-09-12 adds aadhaar_seeding_status; the verify-pan guide
+# recommends 2024-08-01.
+transformer: CF-PAN-REQ
+version: 1
+kind: request
+capability: demo.pan_verify@v1
+docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/pan/verify-pan-sync
+vendor_endpoint: cashfree-sid.pan_verify@1
+request:
+  method: POST
+  path: /pan
+  headers:
+    Content-Type:    '"application/json"'
+    X-Api-Version:   '"2024-08-01"'
+    X-Client-Id:     creds.client_id
+    X-Client-Secret: creds.client_secret
+  body:
+    pan:  req.pan
+    name: req.name

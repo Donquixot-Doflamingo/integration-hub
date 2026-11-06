@@ -1,0 +1,3 @@
+{
+  "response": {"pan_status": "valid", "pan_masked": "XXXXXX234D", "pan_type": "individual", "registered_name": "JOHN DOE", "name_match": true, "aadhaar_linked": true, "vendor_ref": "161"}
+}
