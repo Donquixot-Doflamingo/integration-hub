@@ -22,7 +22,8 @@ type fakeHub struct {
 	srv    *httptest.Server
 	public *contract.Spec
 	admin  *contract.Spec
-	keys   map[string]bool // accepted tenant API keys
+	keys   map[string]bool   // accepted tenant API keys
+	roles  map[string]string // hub-admin operationId -> x-required-role
 
 	mu      sync.Mutex
 	calls   []hubCall
@@ -56,6 +57,10 @@ func newFakeHub(t testing.TB) *fakeHub {
 		admin:   contract.Load(t, "hub-admin.v1.yaml"),
 		keys:    map[string]bool{testKey: true},
 		replies: map[string][]reply{},
+	}
+	h.roles = map[string]string{}
+	for _, op := range h.admin.Operations() {
+		h.roles[op.ID] = op.Extensions["x-required-role"]
 	}
 	h.srv = httptest.NewServer(http.HandlerFunc(h.serve))
 	t.Cleanup(h.srv.Close)
@@ -121,11 +126,14 @@ func (h *fakeHub) serve(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(rec.Body.Bytes())
 }
 
-// next picks the reply: 401 for a bad credential, else the queued reply for the operation.
+// next picks the reply: 401 for a bad credential, 403 for the viewer token on an operation that
+// needs editor or admin (the Hub's RBAC), else the queued reply for the operation.
 func (h *fakeHub) next(opID string, isAdmin bool, authz string) reply {
 	key := strings.TrimPrefix(authz, "Bearer ")
 	switch {
-	case isAdmin && key != testAdminToken:
+	case isAdmin && key == testViewerToken && (h.roles[opID] == "editor" || h.roles[opID] == "admin"):
+		return reply{status: http.StatusForbidden, body: h.admin.Example(h.t, opID, http.StatusForbidden, "")}
+	case isAdmin && key != testAdminToken && key != testViewerToken:
 		return reply{status: http.StatusUnauthorized, body: h.admin.Example(h.t, opID, http.StatusUnauthorized, "")}
 	case !isAdmin && !h.keys[key]:
 		return reply{status: http.StatusUnauthorized, body: h.public.Example(h.t, opID, http.StatusUnauthorized, "")}

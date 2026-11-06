@@ -119,7 +119,7 @@ integration-hub/
 │   │   ├── hub/                  # main + role wiring (cmd/hub/internal/roles)
 │   │   ├── hubctl/
 │   │   ├── mockvendor/
-│   │   └── hubmcp/               # one main package: tools, GET-only admin client, embedded tool contract (ADR-0018)
+│   │   └── hubmcp/               # one main package: tools, allowlisted admin client (no DELETE), embedded tool contract (ADR-0018, ADR-0020)
 │   ├── internal/
 │   │   ├── edge/  registry/  transform/  resolve/  creds/  upstream/
 │   │   ├── queue/  delivery/  sessions/  idempotency/  audit/  callbacks/  webhooks/
@@ -809,19 +809,21 @@ Rules: tests never call real vendors (AGENTS §3.3) — only `staging`/`prod` re
 flowchart LR
   CL[MCP client] -- stdio / streamable HTTP --> S[hubmcp<br/>go-sdk server]
   S --> T1[hub_list_integrations] & T2[hub_describe_integration] & T3[hub_dry_run] & T4[hub_invoke] & T5[hub_get_request]
-  S -.-> AT[admin tools, read-only<br/>enabled only with HUB_ADMIN_TOKEN]
+  S -.-> AT[admin read tools<br/>with HUB_ADMIN_TOKEN]
+  S -.-> AW[admin write tools<br/>HUB_ADMIN_TOKEN + stdio only]
   T1 & T2 --> D["/v1/integrations, /v1/integrations/{id}, /v1/capabilities/{capability}"]
   T3 --> DR["POST /v1/integrations/{id}/dry-run"]
   T4 --> INV["POST /v1/integrations/{id}/invoke[/{op}]"]
   T5 --> RQ["GET /v1/requests/{request_id}"]
-  AT --> ADM["/admin/v1 GET only: integrations, breakers, requests (metadata), dlq list"]
+  AT --> ADM["/admin/v1 GET + 3 non-mutating POST checks"]
+  AW --> ADMW["/admin/v1 POST/PUT/PATCH of the mapped operations, never DELETE"]
 ```
 
-- **Client only**: talks HTTP to `/v1` (tenant key) and optionally `/admin/v1` (`HUB_ADMIN_TOKEN`); never opens a DB or Redis connection. One `main` package in `cmd/hubmcp` (ADR-0018): the caller side is `pkg/hubclient`, the admin side a GET-only client; the tool definitions are an embedded byte-for-byte copy of `contracts/mcp/hubmcp-tools.json` guarded by a drift test.
+- **Client only**: talks HTTP to `/v1` (tenant key) and optionally `/admin/v1` (`HUB_ADMIN_TOKEN`); never opens a DB or Redis connection. One `main` package in `cmd/hubmcp` (ADR-0018): the caller side is `pkg/hubclient`, the admin side an allowlisted client (operations = the registered tools' `maps_to`, every HTTP client method-guarded against DELETE, ADR-0020); the tool definitions are an embedded byte-for-byte copy of `contracts/mcp/hubmcp-tools.json` guarded by a drift test.
 - **Transports**: stdio (default, one tenant per process, key `HUB_API_KEY`) and streamable HTTP (`-transport http -addr 127.0.0.1:8090`, path `/mcp`). In HTTP mode the tenant key comes from the MCP client's `Authorization: Bearer` header on every request, is checked with the Hub (`listIntegrations`, limit 1; only a SHA-256 fingerprint is cached, 60 s) and is never persisted or logged; non-loopback addresses need `-allow-remote`; `HUB_ADMIN_TOKEN` is refused on a remote-reachable listener; cross-origin requests are refused and the SDK's DNS-rebinding protection is on (ADR-0018).
 - **Tools** (contract owned by the steward in `contracts/`): input schemas derived from the discovery endpoints (ADR-0007), so the LLM sees capability schemas but **never vendor, account or version** (D12), except in `hub_dry_run`, which shows the upstream request with secrets `***` by design (PRD DV-6; key scope `dry_run`). Tool contract: `contracts/mcp/hubmcp-tools.json`. Annotations: list/describe/get/dry-run `readOnlyHint: true`; `hub_invoke` `destructiveHint: true, openWorldHint: true`; `hub_invoke` forwards the caller's `idempotency_key` and never generates one (the contract has no field to return it, ADR-0018); integrations with `moves_money_or_quota` refuse to run without one.
 - **Results**: canonical bodies and the error envelope verbatim; 202 is returned as a distinct "queued" result with a `request_id` for `hub_get_request` (mirrors DESIGN §4.5).
-- **Admin tools**: read-only, never unseal, never return payload bodies (metadata only).
+- **Admin tools** (ADR-0020, contract 1.1.0): 21 read and check tools and 16 write tools, each mapped to exactly one hub-admin operation, with handlers derived from the input schema and the route (path parameters, query or JSON body, `if_match` → `If-Match`, `etag` from `ETag`). They are registered only with `HUB_ADMIN_TOKEN`, **the signed-in user's own token**. Write tools (`requires.transport: ["stdio"]`) exist on stdio only, never on Streamable HTTP. The Hub's RBAC decides, and a 403 is an `isError` result. `reason` is required on writes and forwarded with ` (via hubmcp)` appended. Local refusals that make no Hub call: `SECRET_IN_INPUT` (arguments matching `secret_patterns`, every tool) and `CONFIRMATION_REQUIRED` (`requires_confirm` tools without `confirm: true`). `sensitive_output` (minted key, signing secret) is returned once, then redacted by value. No tool maps to a DELETE or to a `forbidden_operations` entry: `loadContract` refuses such a contract, and the method guard refuses the request. Read tools never unseal and never return payload bodies.
 - Observability: OBSERVABILITY §14. Security: SECURITY §2.5.
 
 ---

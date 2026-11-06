@@ -202,14 +202,15 @@ Worker isolation and startup (HUB-412, HUB-406, ADR-0019): the worker logs `work
 
 | Event (`msg`) | Level | Attributes | When |
 | --- | --- | --- | --- |
-| `hubmcp started` | INFO | `transport`, `hub_base_url`, `admin_tools` (bool), `contract_version`, `version` | start-up |
+| `hubmcp started` | INFO | `transport`, `hub_base_url`, `admin_tools` (bool), `admin_write_tools` (bool: token set and stdio), `tools` (number registered), `contract_version`, `version` | start-up |
 | `admin tools disabled: HUB_ADMIN_TOKEN is not set` | INFO | — | start-up without an admin token |
 | `hubmcp listening` | INFO | `addr`, `path` (`/mcp`) | HTTP transport ready |
-| `tool_called` | INFO | `tool`, `is_error`, `duration_ms`, and when known `integration_id`, `request_id`, `outcome` (`completed`/`queued`/`error`/`refused`) | every tool call |
+| `tool_called` | INFO | `tool`, `is_error`, `duration_ms`, and when known `integration_id`, `request_id`, `outcome` (`completed`/`queued`/`error`/`refused`); admin write tools add `mutating: true` and, on success, `change_id` (the Hub change-log entry; HUB-315) | every tool call, including local refusals (`CONFIRMATION_REQUIRED`, `SECRET_IN_INPUT`: `outcome: refused`, no Hub call) |
 | `hubmcp stopped` | INFO | — | clean shutdown |
 
 - Every outbound call carries `User-Agent: hubclient-go/<sdk version> hubmcp/<version>` (admin calls: `hubmcp/<version>`), so the Hub's logs attribute MCP traffic.
-- Redaction: `HUB_API_KEY`, `HUB_ADMIN_TOKEN` and, over HTTP, each client's own key are redacted by value from every string attribute and from every tool result (`***`). Bodies are never logged; `tool_called` carries ids only.
+- Redaction: `HUB_API_KEY`, `HUB_ADMIN_TOKEN` and, over HTTP, each client's own key are redacted by value from every string attribute and from every tool result (`***`). Write-once secrets a tool mints (`sensitive_output`: the API key of `hub_admin_create_api_key`, the signing secret of `hub_admin_create_registrar_endpoint`) are returned in that one result and then added to the same redaction set, so they never appear in a log line or a later result (`TestSensitiveOutputIsReturnedOnceAndNeverLogged`, `TestMCPEndToEnd`). Bodies and tool arguments (including `reason`) are never logged; `tool_called` carries ids only.
+- The actor of an admin write is not in hubmcp's logs: the Hub's change log records it (the token's subject, with the reason plus " (via hubmcp)"), and `change_id` joins the two.
 
 ---
 

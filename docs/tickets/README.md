@@ -58,9 +58,9 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-08 | M7 Control plane & hubctl | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | F-18 | HUB-230–HUB-249 | 20 | 7 |
 | EP-10 | Admin console (SvelteKit) | F-19 | HUB-250–HUB-299 | 40 | 29 |
-| EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 17 | 8 |
+| EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 19 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 22 | 4 |
-| **Total** | | | | **250** | **177** |
+| **Total** | | | | **252** | **177** |
 
 ## Sizing
 
@@ -105,7 +105,7 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | F-17 | hubctl & config-as-code | EP-08 | 5 |
 | F-18 | Observability: metrics, traces, alerts, dashboards, load tests | EP-09, EP-13 | 23 |
 | F-19 | Admin console (SvelteKit frontend) | EP-10 | 40 |
-| F-20 | Hub MCP server (`hubmcp`) | EP-11 | 12 |
+| F-20 | Hub MCP server (`hubmcp`) | EP-11 | 14 |
 | F-21 | Consumer Claude skill & Go SDK (`hubclient`) | EP-04, EP-11 | 7 |
 | F-22 | Release-2 capabilities | EP-12 | 18 |
 

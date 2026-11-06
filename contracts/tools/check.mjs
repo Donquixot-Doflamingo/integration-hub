@@ -25,6 +25,12 @@
 //            receiveVendorWebhook (README "Non-negotiables").
 // 7. MCP     every `maps_to` operationId exists in its spec; tenant tools map to hub-public,
 //            admin tools to hub-admin.
+//    7b.     admin safety (HUB-314): maps_to http_method matches the spec; no tool maps to a DELETE
+//            or a forbidden operation; every hub-admin DELETE is forbidden and every hub-admin
+//            operation is classified once (tool / forbidden / not exposed); no secret (or, on
+//            mutating tools, kill-switch) input property; destructiveHint=false, readOnlyHint
+//            matches the mapped operation, x-required-role matches, mutating tools are stdio-only
+//            with a required reason; requires_confirm / sensitive_output where required.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -713,6 +719,144 @@ if (mcp) {
       }
     });
   });
+
+  // ---- 7b. Admin safety rules (HUB-314, contracts/mcp/README.md "Admin write tools").
+  section = 'mcp safety';
+  const opInfo = {}; // spec basename -> operationId -> { method, role, mutating }
+  for (const [kind, f] of Object.entries(SPECS)) {
+    const m = (opInfo[path.posix.basename(f)] = {});
+    for (const o of opsBySpec[kind] ?? [])
+      m[o.op.operationId] = {
+        method: o.m.toUpperCase(),
+        role: o.op['x-required-role'],
+        mutating: kind === 'admin' && ['post', 'put', 'patch', 'delete'].includes(o.m) && !ADMIN_NON_MUTATING.has(o.op.operationId),
+      };
+  }
+  const ADMIN_SPEC = path.posix.basename(SPECS.admin);
+  const ROLE_RANK = { tenant_viewer: 0, viewer: 1, editor: 2, admin: 3 };
+  // Operations that must carry the confirm guard / a sensitive_output declaration whatever else
+  // the contract says (the user's requirement; README "Admin write tools").
+  const MUST_CONFIRM_LIVE = new Set(['publishIntegrationVersion', 'updateIntegrationWeights', 'rollbackIntegration']);
+  const MUST_DECLARE_SECRET = new Set(['createApiKey', 'createRegistrarEndpoint']);
+  const CONFIRM_KINDS = new Set(['live_traffic', 'mints_secret']);
+  const strList = (v, name) => {
+    if (!Array.isArray(v) || !v.every((x) => typeof x === 'string' && x)) {
+      err(`${MCP}: ${name} must be an array of non-empty strings`);
+      return new Set();
+    }
+    return new Set(v);
+  };
+  const forbiddenIn = strList(mcp.forbidden_input_properties, 'forbidden_input_properties');
+  const forbiddenMutIn = strList(mcp.forbidden_mutation_input_properties, 'forbidden_mutation_input_properties');
+  if (!Array.isArray(mcp.secret_patterns) || !mcp.secret_patterns.length) err(`${MCP}: secret_patterns must be a non-empty array`);
+  for (const sp of mcp.secret_patterns ?? []) {
+    try {
+      new RegExp(sp.pattern);
+    } catch (e) {
+      err(`${MCP}: secret_patterns '${sp?.name}' is not a valid regex: ${e.message}`);
+    }
+  }
+  // Every property name anywhere in a schema (properties, items, combinators), through $refs.
+  function propNames(schema, file, out = new Set(), depth = 0) {
+    if (depth > 40) return out;
+    const { value: s, file: f } = deref(schema, file);
+    if (!isObj(s)) return out;
+    for (const [k, v] of Object.entries(s.properties ?? {})) {
+      out.add(k);
+      propNames(v, f, out, depth + 1);
+    }
+    for (const k of ['items', 'additionalProperties', 'not', 'if', 'then', 'else', 'contains'])
+      if (isObj(s[k])) propNames(s[k], f, out, depth + 1);
+    for (const k of ['allOf', 'anyOf', 'oneOf', 'prefixItems']) for (const sub of s[k] ?? []) propNames(sub, f, out, depth + 1);
+    return out;
+  }
+  // Classification lists: each entry names an existing operation with its real method.
+  const classified = new Map(); // operationId -> where it is classified
+  const classify = (id, where) => {
+    if (classified.has(id)) err(`${where}: ${ADMIN_SPEC}#${id} is also ${classified.get(id)}`);
+    else classified.set(id, where);
+  };
+  for (const listName of ['forbidden_operations', 'not_exposed_operations']) {
+    if (!Array.isArray(mcp[listName])) {
+      err(`${MCP}: missing array ${listName}`);
+      continue;
+    }
+    mcp[listName].forEach((e, i) => {
+      const where = `${MCP} ${listName}[${i}] ${e?.operationId}`;
+      if (e?.spec !== ADMIN_SPEC) return err(`${where}: spec must be ${ADMIN_SPEC}`);
+      const info = opInfo[ADMIN_SPEC][e.operationId];
+      if (!info) return err(`${where}: operation does not exist`);
+      if (e.http_method !== info.method) err(`${where}: http_method '${e.http_method}' is not the spec's ${info.method}`);
+      if (!String(e.reason ?? '').trim()) err(`${where}: missing reason`);
+      classify(e.operationId, listName);
+    });
+  }
+  const forbiddenIds = new Set((mcp.forbidden_operations ?? []).map((e) => e?.operationId));
+  for (const spec of Object.keys(opInfo))
+    for (const [id, info] of Object.entries(opInfo[spec]))
+      if (spec === ADMIN_SPEC && info.method === 'DELETE' && !forbiddenIds.has(id)) err(`${MCP}: ${spec}#${id} is an HTTP DELETE but not in forbidden_operations`);
+
+  (mcp.tools ?? []).forEach((t, i) => {
+    const where = `${MCP} tool ${t.name ?? i}`;
+    const isAdmin = t.audience === 'admin';
+    const maps = Array.isArray(t.maps_to) ? t.maps_to : [];
+    let mutating = false;
+    let role = null;
+    for (const mt of maps) {
+      const info = opInfo[mt.spec]?.[mt.operationId];
+      if (!info) continue; // reported above
+      if (mt.http_method !== info.method) err(`${where}: maps_to ${mt.operationId} http_method '${mt.http_method}' is not the spec's ${info.method}`);
+      if (info.method === 'DELETE') err(`${where}: maps to an HTTP DELETE (${mt.operationId})`);
+      if (forbiddenIds.has(mt.operationId)) err(`${where}: maps to forbidden operation ${mt.operationId}`);
+      if (isAdmin) {
+        if (classified.has(mt.operationId) && classified.get(mt.operationId) !== 'a tool') err(`${where}: maps to ${mt.operationId}, which is listed in ${classified.get(mt.operationId)}`);
+        classified.set(mt.operationId, 'a tool');
+        mutating ||= info.mutating;
+        if (role === null || ROLE_RANK[info.role] > ROLE_RANK[role]) role = info.role;
+      }
+    }
+    if (!isAdmin) return;
+    const ann = t.annotations ?? {};
+    if (ann.destructiveHint !== false) err(`${where}: admin tools must set destructiveHint=false (destructive operations are excluded)`);
+    if (ann.readOnlyHint !== !mutating) err(`${where}: readOnlyHint must be ${!mutating} (it maps to ${mutating ? 'a mutating' : 'only non-mutating'} operation${maps.length > 1 ? 's' : ''})`);
+    if (t.requires?.env !== 'HUB_ADMIN_TOKEN') err(`${where}: requires.env must be HUB_ADMIN_TOKEN`);
+    if (role && t.requires?.['x-required-role'] !== role) err(`${where}: requires.x-required-role '${t.requires?.['x-required-role']}' is not the spec's ${role}`);
+    const transport = t.requires?.transport;
+    if (mutating && !(Array.isArray(transport) && transport.length === 1 && transport[0] === 'stdio')) err(`${where}: a mutating admin tool must declare requires.transport ["stdio"]`);
+    const input = isObj(t.inputSchema) ? t.inputSchema : {};
+    const names = propNames(input, MCP);
+    for (const n of names) {
+      if (forbiddenIn.has(n)) err(`${where}: input property '${n}' is in forbidden_input_properties (no secrets through MCP)`);
+      if (mutating && forbiddenMutIn.has(n)) err(`${where}: input property '${n}' is in forbidden_mutation_input_properties`);
+    }
+    const props = input.properties ?? {};
+    const required = new Set(input.required ?? []);
+    if (mutating) {
+      if (!props.reason || !required.has('reason')) err(`${where}: a mutating admin tool must require 'reason'`);
+      else if (props.reason.type !== 'string' || !(props.reason.minLength >= 3) || !(props.reason.maxLength <= 1000))
+        err(`${where}: reason must be a string of 3..1000 characters (room for the " (via hubmcp)" marker)`);
+    }
+    const ids = maps.map((mt) => mt.operationId);
+    if (Object.hasOwn(t, 'requires_confirm')) {
+      if (!CONFIRM_KINDS.has(t.requires_confirm)) err(`${where}: requires_confirm must be one of ${[...CONFIRM_KINDS]}`);
+      if (!mutating) err(`${where}: requires_confirm on a non-mutating tool`);
+      if (props.confirm?.type !== 'boolean' || props.confirm?.default !== false) err(`${where}: requires_confirm needs input 'confirm' (boolean, default false)`);
+      if (!/confirm=true/.test(String(t.description))) err(`${where}: requires_confirm, but the description does not tell the model to pass confirm=true`);
+    } else if (props.confirm && isAdmin) err(`${where}: has a 'confirm' input but no requires_confirm`);
+    if (ids.some((id) => MUST_CONFIRM_LIVE.has(id)) && t.requires_confirm !== 'live_traffic') err(`${where}: changes live traffic and must declare requires_confirm "live_traffic"`);
+    if (ids.some((id) => MUST_DECLARE_SECRET.has(id))) {
+      if (t.requires_confirm !== 'mints_secret') err(`${where}: mints a secret and must declare requires_confirm "mints_secret"`);
+      if (!Array.isArray(t.sensitive_output) || !t.sensitive_output.length) err(`${where}: returns a write-once secret and must declare sensitive_output`);
+    }
+    for (const ptr of t.sensitive_output ?? []) {
+      const key = typeof ptr === 'string' && /^\/[^/]+$/.test(ptr) ? ptr.slice(1) : null;
+      if (!key || !t.outputSchema?.properties?.[key]) err(`${where}: sensitive_output '${ptr}' is not a top-level property of outputSchema`);
+      else if (!(t.outputSchema.required ?? []).includes(key)) err(`${where}: sensitive_output '${ptr}' must be required in outputSchema`);
+      if (!/SENSITIVE/.test(String(t.description))) err(`${where}: sensitive_output, but the description has no SENSITIVE OUTPUT instruction`);
+    }
+  });
+  for (const id of Object.keys(opInfo[ADMIN_SPEC]))
+    if (!classified.has(id)) err(`${MCP}: ${ADMIN_SPEC}#${id} is not classified: map it from a tool or list it in forbidden_operations or not_exposed_operations`);
 }
 
 // ---------------------------------------------------------------- report

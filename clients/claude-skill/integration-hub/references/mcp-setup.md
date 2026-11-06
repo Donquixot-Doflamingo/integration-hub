@@ -47,8 +47,17 @@ Rules for the admin profile:
 - Add it as a **separate server entry** (`hubmcp-admin`) so you turn admin tools on only when you
   need them, and keep the tenant entry for everyday work.
 - Your token expires; when tools answer `UNAUTHORIZED`, get a new one and restart the server.
-- The Hub's RBAC decides: a write above your role comes back `FORBIDDEN`. Every write needs a
-  `reason` and lands in the change log as you, marked `(via hubmcp)`.
+- The Hub's RBAC decides: a write above your role comes back `FORBIDDEN`. A `viewer` token can
+  read only; creating tenants, API keys and vendors needs `admin`; transformers, integrations,
+  drafts, publish, weights and rollback need `editor`. Every write needs a `reason` and lands in
+  the change log as you, marked `(via hubmcp)`.
+- Local dev token (admin started with dev OIDC):
+  ```bash
+  hubctl login -dev -role editor -email you@example.com   # or -role admin / viewer
+  # Saved to ~/.config/hubctl/token (Linux) or ~/Library/Application Support/hubctl/token (macOS);
+  # HUBCTL_TOKEN_FILE overrides. Dev tokens last 8 hours.
+  export HUB_ADMIN_TOKEN="$(cat ~/.config/hubctl/token)"
+  ```
 - **No deletes, ever.** Deleting, purging or replaying the DLQ, unseal, pause/resume, disabling
   tenants or callback endpoints, key revoke/rotate, secret rotation, credential changes, account
   drain/retire and breaker force stay manual in the console for roles that have them. Account
@@ -221,3 +230,9 @@ the returned session, then `hub_invoke` with `operation: "verify_otp"` and `sess
   runs over HTTP.
 - Admin tools fail with connection errors: `HUB_ADMIN_BASE_URL` missing or without `/admin/v1`.
 - Empty integration list: your tenant owns or is granted nothing in this environment.
+- `FORBIDDEN` from an admin tool: your role does not allow it. Ask an admin; MCP does not work
+  around RBAC.
+- Refused locally (nothing was sent to the Hub):
+  - `CONFIRMATION_REQUIRED`: show the user the change and ask before retrying with `confirm: true`.
+  - `SECRET_IN_INPUT`: an argument looks like a Hub API key or signing secret. Remove it; refer to
+    keys by `key_id` or `prefix`.

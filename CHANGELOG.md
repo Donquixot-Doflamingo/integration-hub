@@ -6,6 +6,33 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(hubmcp)` · Resolve the leftover merge markers in the MCP setup guide and F-20 (HUB-315) · HUB-315 · F-20
+  - mcp-setup.md keeps the per-client guide and adds the role requirements, the dev token commands and the local refusal codes; F-20 keeps both history rows
+- 2026-11-07 · `test(hubmcp)` · Wait for the asynchronous audit trail in the hubmcp e2e test (HUB-315) · HUB-315 · F-20
+  - TestMCPEndToEnd polls the request timeline until the worker's attempt events land, instead of reading it once right after the request succeeds
+- 2026-11-07 · `docs(hubmcp)` · Document the hubmcp admin write tools and ADR-0020 (HUB-315) · HUB-315 · F-20
+  - ADR-0020 amends ADR-0006 and ADR-0018: admin tools act as the signed-in user, writes exist on stdio only, the Hub's RBAC decides, and no MCP path can delete
+  - SECURITY §2.5 has rows for the no-delete path, the confirm guard, secret inputs and minted secrets; TECH_SPEC §18, TESTING_STRATEGY §13, OBSERVABILITY §4.6 (`mutating`, `change_id`, minted-secret redaction), F-20 and the PRD scope lines (DV-4, FR-48, NFR-13) match
+  - The consumer skill's `mcp-setup.md` explains how to get and pass your own admin token, lists the admin tools and refusals, and has snippets (marked unverified) for the Codex CLI, Cursor and Claude Desktop
+  - HUB-315 in review
+- 2026-11-07 · `test(hubmcp)` · Onboard a team through hubmcp against a live Hub (HUB-315) · HUB-315 · F-20
+  - `TestMCPEndToEnd` now creates a tenant, an API key (secret returned once), a vendor and endpoint, a transformer version, an integration and its draft, validates, publishes with confirm, invokes it with the minted key, sets weights and rolls back, all through hubmcp with a `hubctl login -dev -role admin` token
+  - Each change is checked in the change log under the user's subject with the " (via hubmcp)" reason; nothing is deleted; a publish without confirm changes nothing; a viewer token gets FORBIDDEN on a write tool; the minted key never reaches hubmcp's logs
+- 2026-11-07 · `feat(hubmcp)` · Add the admin write tools of hubmcp-tools 1.1.0 (HUB-315) · HUB-315 · F-20
+  - With the user's own `HUB_ADMIN_TOKEN`, hubmcp offers all 42 contract tools on stdio: 16 write tools (tenants, API keys, vendors, endpoints, accounts, transformers, integrations, callback endpoints) and 21 admin read and check tools; Streamable HTTP never offers a write tool
+  - The admin client can only send the method and path of a mapped operation; no code path can send an HTTP DELETE, and a contract copy that maps a DELETE or forbidden operation refuses to load
+  - Live-traffic and secret-minting tools refuse locally with `CONFIRMATION_REQUIRED` without `confirm: true`; any argument that looks like a Hub API key or signing secret is refused with `SECRET_IN_INPUT`, `hub_invoke` included
+  - `reason` reaches the change log with " (via hubmcp)" appended, `if_match` is sent as `If-Match`, get tools return `etag`; a 403 from the Hub's RBAC is an `isError` result
+  - A minted API key or signing secret is returned once, never logged, and redacted from every later result and log line
+- 2026-11-07 · `docs(tickets)` · Track the hubmcp admin write tools (HUB-314, HUB-315) · HUB-314 · F-20
+  - HUB-314 (contract, in review) carries the contract notice for hubmcp-tools 1.1.0
+  - New HUB-315 (todo): implement the tools in hubmcp, with stdio-only registration, the no-DELETE/forbidden test, the confirm guard, secret-free inputs, per-tool contract tests and an e2e run against a live Hub
+- 2026-11-07 · `contract(mcp)` · Add admin write tools with no delete path (HUB-314) · HUB-314 · F-20
+  - `hubmcp-tools` 1.1.0: a team's Claude can onboard and change tenants, API keys, vendors, endpoints, account config and quota, transformers, integrations (drafts, validate, publish, weights, rollback) and callback endpoints, signed in as the user, with the Hub's RBAC deciding
+  - No MCP tool can delete, purge, replay, unseal, retire, pause, force a breaker, revoke or rotate keys, or accept a credential; deleting stays manual in the console
+  - Live-traffic changes and secret-minting tools need `confirm: true`; minted keys and signing secrets are marked sensitive and shown once
+  - `make contracts-check` now fails if any tool maps to a DELETE or forbidden operation, accepts a secret input, or leaves a hub-admin operation unclassified
+  - hubmcp must implement the new tools in HUB-315; until then its frozen-contract drift tests fail on this branch
 - 2026-11-07 · `test(edge)` · Take a last drain sample when the ramp test stops (HUB-412) · HUB-412 · F-12
   - `TestChaos2RecoveryAndRampedDrain` no longer fails intermittently with "all 160 released -2562047h after the close": with continuous claiming the worker delivers the last released envelopes between two 100 ms samples, so the sampler now records the counter once more when the test stops it
 - 2026-11-07 · `test(edge)` · Prove vendor isolation with noisy-neighbour chaos tests (HUB-412) · HUB-412 · F-13
