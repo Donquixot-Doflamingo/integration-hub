@@ -11,9 +11,6 @@ import (
 	"time"
 )
 
-// devAPIKey is the dev tenant's test key (config/README.md; local only).
-const devAPIKey = "hk_test_dev_orders_service_local_only"
-
 const trackBody = `{"user": {"id": "u_48213"}, "event": {"name": "order_placed", "timestamp": "2026-10-31T09:15:00Z", "properties": {"order_id": "ord_8821"}}}`
 
 func send(t *testing.T, method, url, body string, hdr map[string]string) (int, string) {

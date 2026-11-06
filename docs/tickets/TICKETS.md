@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **220** · done: **157** · todo: **55** · other (in-progress/in-review/blocked): **8**
+Total tickets: **223** · done: **158** · todo: **56** · other (in-progress/in-review/blocked): **9**
 
 ## Epics
 
@@ -14,10 +14,10 @@ Total tickets: **220** · done: **157** · todo: **55** · other (in-progress/in
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
-| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 16 | 15 |
+| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 17 | 16 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
-| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 17 | 1 |
+| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 19 | 1 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 18 | 0 |
@@ -1288,7 +1288,7 @@ Scenario 5 plus the milestone wrap-up.
 
 ### HUB-155 — Drain quota follows elapsed time, not the nominal tick
 - **Epic:** EP-06 · **Type:** fix · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-149 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Merged:** Merge pull request #22 from Donquixot-Doflamingo/fix/HUB-155-drain-elapsed-time · **Depends on:** HUB-149 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `fix/HUB-155-drain-elapsed-time`
 
 `TestChaos2RecoveryAndRampedDrain` failed on two PRs that do not touch the drain (#18: ramp step 2 released 15/20; #19: step 4 released 39/50). Root cause: the drain released `rate × nominal tick` per scheduler tick. A `time.Ticker` drops ticks when the scheduler is busy (probes, expiry sweeps, slow Postgres), so the quota of a late or dropped tick was lost and the drain ran below the DESIGN §10.5 rate on a loaded node. This is a production behaviour bug, not only a test one.
@@ -1297,6 +1297,18 @@ Scenario 5 plus the milestone wrap-up.
 - [x] The quota uses the time elapsed since the key's previous drain, capped at 2 ticks so a stall never becomes a burst (`TestDrainQuotaUsesElapsedTime`)
 - [x] Late ticks over 1.05 s at 50/s release 52, where the nominal-tick quota released 35
 - [x] `TestChaos2RecoveryAndRampedDrain` and `TestChaos3ReopenMidDrain` pass 3/3 under load
+
+### HUB-156 — Drain catch-up cap: one second of the rate, not two ticks
+- **Epic:** EP-06 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-155 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `fix/HUB-156-drain-catch-up`
+
+After HUB-155, `TestChaos2RecoveryAndRampedDrain` still failed once on CI (#19: ramp step 2 released 15/20). With a 100 ms tick, a scheduler pass slower than 200 ms (probes, expiry, Postgres and Redis round trips on a slow runner) hit the 2-tick catch-up cap and the rest of its quota was lost again. One second of quota is the account's own per-second budget, so capping the catch-up there makes up any realistic stall without ever releasing above the ramped rate.
+
+**Acceptance criteria**
+- [x] `maxCatchUp(tick) = max(2 ticks, 1 s)` (`TestMaxCatchUp`); a 5-tick stall releases 5 ticks of quota, a 30-tick stall one second's (`TestDrainQuotaUsesElapsedTime`)
+- [x] `TestChaos2RecoveryAndRampedDrain` / `TestChaos3ReopenMidDrain` pass 3/3 with both CPUs saturated by busy loops (step 4: 50, 52, 50; it had dropped to 46 with the 2-tick cap)
+- [x] The ramp test checks what DESIGN §10.5 needs instead of exact 1 s windows, which a delayed scheduler pass on a CI runner broke (#25: step 4 at 29/50, the quota released after the window): released by each step's end never ahead of the ramp (+10 %); owed quota out within one catch-up horizon; all 160 out by 5.8 s (a drain at 70 % of the rate fails it at 6.29 s)
 ## EP-07 — M6 Versioning & cutover
 
 ### HUB-170 — Publish pipeline with full validation
@@ -1723,15 +1735,16 @@ Shipped as the `hub erase-subject` maintenance command, because the admin contra
 
 ### HUB-234 — Security hardening checks
 - **Epic:** EP-09 · **Type:** chore · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-086, HUB-022 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-review · **Depends on:** HUB-086, HUB-022 · **Feature:** F-18 · **Stories:** US-18xx
 - **Branch:** `chore/HUB-234-security-hardening`
 
 Add `gosec` and `govulncheck` to CI, verify TLS 1.2+ and egress allowlist enforcement, body limits and secret redaction across all roles (DESIGN §16.5, `docs/tech/SECURITY.md`).
 
 **Acceptance criteria**
-- [ ] CI fails on a high-severity gosec or known vulnerability
-- [ ] Test proves TLS < 1.2 vendor handshake fails
-- [ ] Secret grep over logs from the full itest run is empty
+- [x] CI fails on a high-severity gosec or known vulnerability: `backend.yml` jobs `gosec` (`make gosec`, gosec v2.30.0, fails on medium+ findings) and `govulncheck` (`make vuln`, v1.9.0); toolchain pinned to go1.26.10 (36 reachable stdlib vulns in go1.26.0) and `golang.org/x/net` v0.62.0; findings triaged in SECURITY.md §8.1
+- [x] Test proves TLS < 1.2 vendor handshake fails: `TestTLS` (upstream; TLS 1.0/1.1-only vendors with a positive control, TLS 1.2/1.3 succeed), `TestTLSFloorIsExplicit`, `TestGuardRefusesTLSBelow12` (callbacks)
+- [x] Secret grep over logs from the full itest run is empty: every role started by the `roles` tests logs through the production logger into one capture that `TestMain` greps for every declared secret; `TestRoleLogsCarryNoSecrets` runs gateway + worker + scheduler + admin on the encrypted credential source (sync, vendor echoing credentials, async + signed callback, connection test, rotation, unknown key)
+- Also verified: egress allowlist (`TestUndeclaredHostRefusedBeforeDial`, `TestDialerChecksEgress`, existing) and body limits through the handler (`TestBodyLimitsAtTheEdge`: 1 MB default, 4 MB LLM, declared and chunked)
 
 ### HUB-235 — Load test: 500 sync RPS + 2 000 async msg/s
 - **Epic:** EP-09 · **Type:** perf · **Area:** infra
@@ -1782,6 +1795,27 @@ During the HUB-230 `make itest` run, `TestCutoverCompletedAndNewRequests/transfo
 - [x] Publish-time goldens either measure CPU time, apply the budget only outside `-race`, or retry once before failing on time alone: RunGoldens re-runs a case once on ErrTimeBudget (`TestGoldensRetryTimeBudgetOnce`)
 - [ ] `make itest` passes 10 consecutive full runs on CI hardware
 
+### HUB-248 — `X-Content-Type-Options: nosniff` on gateway and admin responses
+- **Epic:** EP-09 · **Type:** chore · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-234 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `chore/HUB-248-nosniff`
+
+Found in HUB-234: gosec G705 flags `getSnapshot` writing archived registry JSON. It is served as `application/json` (triaged in SECURITY.md §8.1), but no response from the gateway or admin sets `X-Content-Type-Options: nosniff`, so the defence relies on browsers honouring the content type. Add the header in one middleware per public listener. Check with the contract steward whether a response header that is not in the contract needs a contract note first.
+
+**Acceptance criteria**
+- [ ] Every gateway and admin response carries `X-Content-Type-Options: nosniff` (test over each listener)
+- [ ] Contract steward confirmed whether `contracts/` needs a note; contract tests green
+
+### HUB-249 — Read timeout and header limit on the gateway and admin servers
+- **Epic:** EP-09 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-234 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `fix/HUB-249-server-read-timeouts`
+
+Found in HUB-234: SECURITY.md §2.1 lists `ReadHeaderTimeout` 5 s, a read timeout and max header bytes against slowloris, but `roles.Run` sets only `ReadHeaderTimeout`. A client can drip a body (up to the 1 MB / 4 MB limit) indefinitely and hold a connection and a goroutine. Set a body read deadline (`ReadTimeout` or per-request `http.ResponseController.SetReadDeadline` sized for the 4 MB LLM body), an explicit `MaxHeaderBytes`, and an `IdleTimeout`.
+
+**Acceptance criteria**
+- [ ] A body sent slower than the read deadline is cut off (test with a dripping client)
+- [ ] Oversized headers are refused with 431; documented values in SECURITY.md §2.1
 ### HUB-245 — Hashed subject index for the erasure job
 - **Epic:** EP-09 · **Type:** perf · **Area:** backend
 - **Status:** todo · **Depends on:** HUB-233 · **Feature:** F-18 · **Stories:** US-1805

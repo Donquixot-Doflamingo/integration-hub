@@ -21,7 +21,7 @@ func RetireGuard(pool *pgxpool.Pool) func(ctx context.Context, snap *registry.Sn
 		for id, in := range snap.Integrations {
 			for n, v := range in.Versions {
 				if slices.ContainsFunc(append(slices.Clone(v.Targets), v.Failover...), func(t registry.Target) bool { return t.Account == account }) {
-					ids, versions = append(ids, id), append(versions, int32(n)) //nolint:gosec // integration versions are small
+					ids, versions = append(ids, id), append(versions, int32(n)) // #nosec G115 -- integration versions are small
 				}
 			}
 		}

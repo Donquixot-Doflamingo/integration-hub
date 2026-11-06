@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -75,12 +74,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		fmt.Fprintf(stderr, "hub %s: invalid configuration:\n%v\n", role, err)
 		return 2
 	}
-	secrets := telemetry.NewSecretSet()
-	if u, err := url.Parse(string(cfg.PGDSN)); err == nil && u.User != nil {
-		if pw, ok := u.User.Password(); ok {
-			secrets.Add(pw)
-		}
-	}
+	secrets := telemetry.NewSecretSet() // roles.Run registers the config secrets before logging
 	log := telemetry.NewLogger(stderr, cfg.LogLevel, secrets, string(role))
 	if err := roles.Run(ctx, cfg, log, roles.Options{Version: version, Secrets: secrets}); err != nil {
 		log.ErrorContext(ctx, "role exited with error", slog.String("error", err.Error()))
