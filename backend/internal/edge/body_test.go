@@ -3,6 +3,7 @@ package edge
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
 
 type unknownLengthReader struct{ r *strings.Reader }
@@ -32,6 +34,92 @@ func TestBodyLimits(t *testing.T) {
 	}
 	if bodyLimit("llm.chat@v1") != LLMBodyLimit || bodyLimit("events.track@v1") != DefaultBodyLimit {
 		t.Fatal("limits per capability")
+	}
+}
+
+// sizedTrackBody is a valid events.track body of exactly n bytes (padding in a property).
+func sizedTrackBody(t *testing.T, n int) string {
+	t.Helper()
+	const prefix = `{"user": {"id": "u_48213"}, "event": {"name": "order_placed", "timestamp": "2026-10-31T09:15:00Z", "properties": {"pad": "`
+	const suffix = `"}}}`
+	pad := n - len(prefix) - len(suffix)
+	if pad < 0 {
+		t.Fatalf("size %d too small", n)
+	}
+	return prefix + strings.Repeat("a", pad) + suffix
+}
+
+// llmSnapshot serves int_evt_brandA under an "llm." capability key (same schema), so the edge
+// applies the 4 MB LLM limit to it.
+func llmSnapshot(t *testing.T) *registry.Snapshot {
+	t.Helper()
+	snap := *devSnapshot(t)
+	snap.Capabilities = maps.Clone(snap.Capabilities)
+	snap.Capabilities["llm.chat@v1"] = snap.Capabilities["events.track@v1"]
+	snap.Integrations = maps.Clone(snap.Integrations)
+	in := *snap.Integrations["int_evt_brandA"]
+	in.Capability = "llm.chat@v1"
+	snap.Integrations["int_evt_brandA"] = &in
+	return &snap
+}
+
+// TestBodyLimitsAtTheEdge (HUB-234, DESIGN §16.5): through the real handler, a body up to the
+// limit passes the body stage (it is validated; what happens after is not the limit's business)
+// and one byte more is 413 PAYLOAD_TOO_LARGE before validation, resolution or any vendor call:
+// 1 MB by default, 4 MB for LLM capabilities, declared or chunked.
+func TestBodyLimitsAtTheEdge(t *testing.T) {
+	const path = "/v1/integrations/int_evt_brandA/invoke"
+	cases := []struct {
+		name    string
+		snap    *registry.Snapshot
+		size    int
+		chunked bool
+		refused bool
+	}{
+		{"default: exactly 1 MB", devSnapshot(t), DefaultBodyLimit, false, false},
+		{"default: 1 MB + 1", devSnapshot(t), DefaultBodyLimit + 1, false, true},
+		{"default: 1 MB + 1, chunked", devSnapshot(t), DefaultBodyLimit + 1, true, true},
+		{"llm: 2 MB is under the LLM limit", llmSnapshot(t), 2 << 20, false, false},
+		{"llm: exactly 4 MB, chunked", llmSnapshot(t), LLMBodyLimit, true, false},
+		{"llm: 4 MB + 1", llmSnapshot(t), LLMBodyLimit + 1, false, true},
+		{"llm: 4 MB + 1, chunked", llmSnapshot(t), LLMBodyLimit + 1, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			up := &fakeUpstream{steps: []step{ok200()}}
+			h, sink := invokeServer(t, tc.snap, up)
+			body := sizedTrackBody(t, tc.size)
+			var rec *httptest.ResponseRecorder
+			if tc.chunked {
+				req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, unknownLengthReader{strings.NewReader(body)})
+				req.ContentLength = -1
+				req.Header.Set("Authorization", "Bearer "+devKey)
+				req.Header.Set("Content-Type", "application/json")
+				rec = httptest.NewRecorder()
+				h.ServeHTTP(rec, req)
+			} else {
+				rec = post(t, h, devKey, path, body)
+			}
+			events := types(sink.only(t))
+			if !tc.refused {
+				if rec.Code == http.StatusRequestEntityTooLarge || !strings.Contains(events, "request.validated") {
+					t.Fatalf("a body within the limit was refused: %d %.300s (events %s)", rec.Code, rec.Body, events)
+				}
+				return
+			}
+			if rec.Code != http.StatusRequestEntityTooLarge {
+				t.Fatalf("status %d, want 413: %.300s", rec.Code, rec.Body)
+			}
+			if code := errorCode(t, rec.Body.String())["code"]; code != string(core.CodePayloadTooLarge) {
+				t.Fatalf("code %v, want %s", code, core.CodePayloadTooLarge)
+			}
+			if up.calls() != 0 {
+				t.Fatalf("an oversized body reached the vendor %d times", up.calls())
+			}
+			if events != "request.received,request.failed" {
+				t.Fatalf("events %s", events)
+			}
+		})
 	}
 }
 

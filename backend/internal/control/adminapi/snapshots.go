@@ -356,7 +356,7 @@ func (s *Server) getSnapshotBlob(w http.ResponseWriter, r *http.Request) {
 	if acceptsGzip(r) {
 		w.Header().Set("Content-Encoding", "gzip")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(gz) //nolint:gosec // archived registry JSON served as application/json, not HTML
+		_, _ = w.Write(gz) // #nosec G705 -- archived registry JSON served as application/json, not HTML
 		return
 	}
 	raw, _, err := blobConfig(gz)
@@ -366,7 +366,7 @@ func (s *Server) getSnapshotBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(raw) //nolint:gosec // archived registry JSON served as application/json, not HTML
+	_, _ = w.Write(raw) // #nosec G705 -- archived registry JSON served as application/json, not HTML
 }
 
 func acceptsGzip(r *http.Request) bool {
