@@ -152,10 +152,10 @@ func writeTree(dir string, files map[string][]byte, force bool) error {
 			return fmt.Errorf("refusing unsafe path %q from the snapshot", p)
 		}
 		full := filepath.Join(dir, filepath.FromSlash(p))
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil { //nolint:gosec // registry config directory, readable by design
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil { // #nosec G301 -- registry config directory, readable by design
 			return err
 		}
-		if err := os.WriteFile(full, b, 0o644); err != nil { //nolint:gosec // registry config, no secrets
+		if err := os.WriteFile(full, b, 0o644); err != nil { // #nosec G306 -- registry config, no secrets
 			return err
 		}
 	}

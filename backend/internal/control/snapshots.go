@@ -88,7 +88,7 @@ func (d DirBlobStore) Get(_ context.Context, ref string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return os.ReadFile(p) //nolint:gosec // path is confined to Root above
+	return os.ReadFile(p) // #nosec G304 -- path is confined to Root above
 }
 
 // Delete removes a blob; a missing blob is not an error.

@@ -225,17 +225,20 @@ func (r *Resilience) drain(ctx context.Context, db queue.DB, tick time.Duration)
 	}
 }
 
-// maxCatchUpTicks bounds how much of a late tick the drain makes up at once (HUB-155).
-const maxCatchUpTicks = 2
+// maxCatchUp bounds how much elapsed time one drain pass makes up (HUB-155, HUB-156): two ticks,
+// or one second when that is longer. One second of quota is the account's own per-second budget,
+// so catching up to it never releases faster than the ramped rate allows; a 2-tick cap alone lost
+// quota whenever a scheduler pass took longer than two ticks (CI runners, a slow Postgres).
+func maxCatchUp(tick time.Duration) time.Duration { return max(2*tick, time.Second) }
 
 // drainQuota returns how many envelopes to release for elapsed time at rate (per second), and
 // the fractional remainder to carry. It uses the time that actually passed since the previous
 // drain of the key, not the nominal tick: a time.Ticker drops ticks when the scheduler is busy
 // (probes, expiry sweeps, slow Postgres), and quota computed per nominal tick was then lost for
 // good, so the drain ran below the DESIGN §10.5 rate on a loaded node. The catch-up is capped at
-// maxCatchUpTicks ticks so a long stall never turns into one burst at the recovering vendor.
+// maxCatchUp so a long stall never turns into a burst above the account rate at the recovering vendor.
 func drainQuota(carry, rate float64, elapsed, tick time.Duration) (int, float64) {
-	elapsed = min(max(elapsed, 0), maxCatchUpTicks*tick)
+	elapsed = min(max(elapsed, 0), maxCatchUp(tick))
 	want := carry + rate*elapsed.Seconds()
 	n := int(math.Floor(want))
 	return n, want - float64(n)

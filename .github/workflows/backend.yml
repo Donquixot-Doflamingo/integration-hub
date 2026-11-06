@@ -1,5 +1,6 @@
 # Backend CI (HUB-022): lint, unit (-race), integration (compose Postgres 16 + Redis 7),
-# build, and the M0 smoke test (HUB-032). Frontend jobs live in frontend.yml.
+# build, the M0 smoke test (HUB-032) and the security scanners gosec + govulncheck (HUB-234;
+# versions pinned in backend/Makefile). Frontend jobs live in frontend.yml.
 name: backend
 
 on:
@@ -46,6 +47,30 @@ jobs:
           cache-dependency-path: backend/go.sum
       - name: Generated sqlc code is fresh
         run: make sqlc-check
+
+  gosec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: gosec (fails on medium/high findings not triaged with #nosec, SECURITY.md §8.1)
+        run: make gosec
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: govulncheck (fails on reachable known vulnerabilities, stdlib included)
+        run: make vuln
 
   test:
     runs-on: ubuntu-latest

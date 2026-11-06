@@ -44,7 +44,7 @@ func dryRunCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	integration, file := fs.Arg(0), fs.Arg(1)
-	raw, err := os.ReadFile(file) //nolint:gosec // the operator names the body file on the command line
+	raw, err := os.ReadFile(file) // #nosec G304 -- the operator names the body file on the command line
 	if err != nil {
 		fmt.Fprintf(stderr, "hubctl: %v\n", err)
 		return 1

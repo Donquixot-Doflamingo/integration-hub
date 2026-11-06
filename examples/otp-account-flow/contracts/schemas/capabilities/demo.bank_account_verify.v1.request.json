@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hub:capability:demo.bank_account_verify@v1:default:request",
+  "title": "demo.bank_account_verify@v1 request (EXAMPLE ONLY, not a frozen contract)",
+  "description": "Example capability for examples/otp-account-flow (HUB-342): verify that a bank account exists and read the name the bank holds (penny-drop style). Not part of contracts/: a production capability goes through the contract-steward.",
+  "x-capability": "demo.bank_account_verify@v1",
+  "x-capability-minor": 0,
+  "interactive": true,
+  "operations": {
+    "default": {
+      "description": "Verify a bank account number + IFSC and return the account holder's name at the bank.",
+      "idempotent": false,
+      "request_schema": "demo.bank_account_verify.v1.request.json",
+      "response_schema": "demo.bank_account_verify.v1.response.json"
+    }
+  },
+  "type": "object",
+  "required": ["account_number", "ifsc"],
+  "additionalProperties": false,
+  "properties": {
+    "account_number": {
+      "description": "Bank account number, digits only.",
+      "type": "string",
+      "pattern": "^[0-9]{9,18}$",
+      "x-pii": "financial"
+    },
+    "ifsc": {
+      "description": "IFSC of the branch.",
+      "type": "string",
+      "pattern": "^[A-Z]{4}0[A-Z0-9]{6}$"
+    },
+    "name": {
+      "description": "Name the user entered, for the name match.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-pii": "name"
+    }
+  },
+  "examples": [
+    { "account_number": "50100123456789", "ifsc": "DEMO0001234", "name": "Asha Verma" }
+  ]
+}

@@ -19,6 +19,48 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Span attributes are allowlisted (telemetry.AllowedSpanAttributes); tests fail on any other key or on a credential, API key or body fragment in a value
 - 2026-11-06 · `test(edge)` · Raise the tenant quota in the overhead benchmark so it runs again (HUB-231) · HUB-231 · F-18
   - BenchmarkInvokeOverhead no longer stops with 429 UPSTREAM_RATE_LIMITED after the dev tenant's 100 rps quota; the token bucket stays on the measured path
+- 2026-11-07 · `test(edge)` · Check the ramped drain by step boundaries, not 1 s windows (HUB-156) · HUB-156 · F-12
+  - TestChaos2RecoveryAndRampedDrain no longer fails when a slow CI runner delays a scheduler pass: it asserts the drain is never ahead of the ramp, loses no quota (owed releases are out within one catch-up horizon) and empties the 160-envelope backlog by 5.8 s
+- 2026-11-07 · `fix(delivery)` · Cap the drain catch-up at one second of the rate, not two ticks (HUB-156) · HUB-156 · F-12
+  - The ramped drain makes up scheduler passes slower than two ticks instead of losing their quota; it never releases above the ramped account rate
+- 2026-11-07 · `docs(security)` · Document the HUB-234 security gates and tests · HUB-234 · F-18
+  - SECURITY.md: gosec/govulncheck gates and the reviewed #nosec triage table (§8.1), explicit TLS floor and egress tests (§5), redaction set contents (§3), role-log secret grep (§9)
+  - HUB-234 in review with all acceptance criteria met; new todo tickets HUB-248 (nosniff header) and HUB-249 (server read timeout and header limit)
+- 2026-11-07 · `test(roles)` · Grep every role's itest logs for secrets · HUB-234 · F-18
+  - Every role the roles tests start now logs through the production logger into one capture; the package fails if any secret a test declared appears in it (labels printed, never values)
+  - TestRoleLogsCarryNoSecrets runs gateway, worker, scheduler and admin on the encrypted credential source through sync calls, a vendor echoing credentials, async delivery with a signed callback, connection tests, a rotation and an unknown API key
+- 2026-11-07 · `fix(roles)` · Redact the DSN password and mask key by value · HUB-234 · F-18
+  - HUB_AUDIT_MASK_KEY is now redacted by value from every log line, like credentials (it was only hidden when logged as a config value)
+  - The Postgres DSN password is registered by roles.Run itself, so every entry point (hub binary, tests, future wiring) redacts it
+- 2026-11-07 · `test(edge)` · Cover body limits through the gateway handler · HUB-234 · F-18
+  - TestBodyLimitsAtTheEdge proves through the real handler and contract validation: up to 1 MB (4 MB for llm. capabilities) passes the body stage, one byte more is 413 PAYLOAD_TOO_LARGE, declared or chunked, with no vendor call and request.received,request.failed audited
+- 2026-11-07 · `fix(callbacks)` · Enforce an explicit TLS 1.2 floor on callbacks · HUB-234 · F-18
+  - Signed callbacks to tenant endpoints refuse TLS below 1.2 by the guard's own configuration instead of relying on Go's default client floor
+  - The guard's test seam can add trusted roots but can never lower the floor
+- 2026-11-07 · `test(upstream)` · Prove vendor TLS handshakes below 1.2 fail · HUB-234 · F-18
+  - TestTLS now runs the real upstream client against vendors that speak only TLS 1.0 or 1.1 (with a positive control that they do) and against TLS 1.2-only and 1.3 vendors
+  - TestTLSFloorIsExplicit fails if the client's own TLS 1.2 floor or verification is removed
+- 2026-11-07 · `ci(backend)` · Gate merges on pinned gosec and govulncheck · HUB-234 · F-18
+  - New blocking CI jobs gosec (any untriaged medium/high finding in non-test code fails) and govulncheck (any reachable known vulnerability fails); local: make gosec, make vuln, make security
+  - Tool versions pinned in backend/Makefile: gosec v2.30.0, govulncheck v1.9.0
+  - Every gosec false positive carries a scoped // #nosec <rule> -- <reason> annotation that both gosec and golangci-lint honour (triage table in SECURITY.md §8.1)
+- 2026-11-07 · `build(backend)` · Pin Go toolchain 1.26.10 and x/net v0.62.0 · HUB-234 · F-18
+  - Builds and CI use Go 1.26.10: govulncheck found 36 standard-library vulnerabilities reachable from Hub code in go1.26.0 (crypto/x509, net/url, html/template, net/http among them)
+  - golang.org/x/net v0.62.0 fixes GO-2026-6866 and GO-2026-6860 (required module, not called)
+- 2026-11-06 · `docs(use-cases)` · Add the use-case catalogue for product owners (HUB-342) · HUB-342 · F-22
+  - docs/use-cases/README.md: how a call flows through the Hub (pipeline and the DESIGN §18.6 latency budget), then events, vendor/account swaps, vendor outages, signed callbacks, idempotent retries, two-step OTP -> verify -> bank account, and the DESIGN §14 lending patterns, each with the caller's exact requests, a sequence diagram, failure behaviour and a status line citing its test or ticket
+  - Two-step flows are marked Partly: vendor sessions work today; steps on different vendor endpoints need HUB-343
+  - Linked from the root README and the feature index; F-22 records the R2-5 status and the new items R2-11 (HUB-347) and R2-12 (HUB-348); HUB-342 in review
+- 2026-11-06 · `test(edge)` · Build the example snapshots once per test rig (HUB-342) · HUB-342 · F-22
+  - TestExampleOTPAccountFlow builds the two example snapshots (and runs their goldens) once instead of nine times, so it is far less exposed to the transform time-budget flake under load (HUB-238)
+- 2026-11-06 · `test(edge)` · Add a runnable OTP to bank-account example flow (HUB-342) · HUB-342 · F-22
+  - examples/otp-account-flow: an example registry overlay (two interactive capability schemas, fictional vendor demo-kyc on mockvendor, two accounts, tenant loan-onboarding, int_demo_otp v1/v2, int_demo_bank_verify, four transformers with goldens), kept out of backend/config and contracts/
+  - TestExampleOTPConfigBuilds builds the overlay and runs its goldens; TestExampleOTPAccountFlow runs send OTP -> verify in the session (pinned to account A across a publish) -> bank verification through the real gateway, plus wrong OTP, expired session, double tap, vendor down and edge refusals
+  - examples/otp-account-flow/README.md: how to run it and the exact requests and responses
+- 2026-11-06 · `docs(tickets)` · Add HUB-342 and gap tickets HUB-343 to HUB-348 (HUB-342) · HUB-342 · F-22
+  - New ticket HUB-342 (use-case catalogue and runnable OTP example), in progress
+  - Gaps found while scoping it: per-operation transformers (HUB-343) and their admin contract change (HUB-344), refusing multi-operation configs that would misroute today (HUB-345), a canonical reason on error rules (HUB-346), the lookup result cache (HUB-347) and the upload + job pattern (HUB-348)
+  - Ticket counters recomputed (they were one ticket behind for EP-09)
 - 2026-11-07 · `fix(delivery)` · Base the drain quota on elapsed time so late ticks don't slow the ramp (HUB-155) · HUB-155 · F-12
   - The ramped drain keeps its DESIGN §10.5 rate on a busy scheduler: a late or dropped tick is made up (at most 2 ticks' worth, so no burst)
   - Fixes the intermittent TestChaos2RecoveryAndRampedDrain failure on CI

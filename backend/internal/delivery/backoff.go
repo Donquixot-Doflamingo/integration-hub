@@ -42,7 +42,7 @@ func (b Backoff) Delay(n int, retryAfter time.Duration) (time.Duration, bool) {
 	if n < 1 || n >= len(s) {
 		return 0, false
 	}
-	r := rand.Float64 //nolint:gosec // jitter, not security
+	r := rand.Float64 // #nosec G404 -- jitter, not security
 	if b.Rand != nil {
 		r = b.Rand
 	}

@@ -1,0 +1,17 @@
+# EXAMPLE ONLY (HUB-342). "demo-kyc" is a fictional KYC vendor. It does not exist: every call goes
+# to mockvendor, which the example test programs per step. There is no vendor documentation to cite;
+# the shapes below are invented for the example and must not be copied for a real vendor.
+#
+# The fictional vendor has ONE OTP endpoint for both steps (action "send" / "verify"): today an
+# integration version has one request transformer, so one vendor endpoint, for every operation
+# (HUB-343). A real KYC vendor with separate generate/verify endpoints needs HUB-343 first.
+vendor: demo-kyc
+auth: bearer
+regions:
+  in: http://127.0.0.1:8099
+endpoints:
+  otp@1:         { method: POST, path: /v1/otp,                   timeout_ms: 3000, connect_timeout_ms: 500, idempotent: false }
+  bank_verify@1: { method: POST, path: /v1/bank-accounts/verify,  timeout_ms: 5000, connect_timeout_ms: 500, idempotent: false }
+defaults:
+  rate_limit: { per_account_rps: 20 }
+  breaker: { window_s: 30, min_calls: 20, failure_ratio: 0.5, consecutive_timeouts: 5, open_s: 30, open_max_s: 600, half_open_probes: 3 }

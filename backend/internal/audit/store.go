@@ -83,7 +83,7 @@ func (s PGStore) Write(ctx context.Context, b Batch) error {
 			batch := &pgx.Batch{}
 			for _, r := range b.Records {
 				batch.Queue(upsertRecord, r.RequestID, r.CreatedAt, r.TenantID, r.IntegrationID, nullable(r.IntegrationVersion),
-					r.Capability, r.Operation, r.Mode, r.DryRun, r.Status, r.PayloadPolicy, nullable(int64(r.SnapshotVersion)), //nolint:gosec // snapshot versions stay far below 2^63
+					r.Capability, r.Operation, r.Mode, r.DryRun, r.Status, r.PayloadPolicy, nullable(int64(r.SnapshotVersion)), // #nosec G115 -- snapshot versions stay far below 2^63
 					nullable(r.IdempotencyKey), nullable(r.TraceID), nullable(r.HTTPStatus), nullable(r.ErrorCode), r.Attempts,
 					r.HubOverheadMS, r.VendorMS, r.QueueWaitMS, nullable(r.CompletedAt))
 			}

@@ -124,7 +124,7 @@ func (s *Sealer) Seal(tenant, requestID string, seq int, plaintext []byte, trunc
 	if truncated {
 		flags |= flagTruncated
 	}
-	header := append(append([]byte(nil), sealMagic...), flags, byte(len(id))) //nolint:gosec // 1..255, checked above
+	header := append(append([]byte(nil), sealMagic...), flags, byte(len(id))) // #nosec G115 -- 1..255, checked above
 	header = append(header, id...)
 	nonce := make([]byte, a.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
