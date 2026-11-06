@@ -2,7 +2,7 @@
 NODE22 := /opt/homebrew/opt/node@22/bin
 export PATH := $(NODE22):$(PATH)
 
-.PHONY: doctor up down check backend-check frontend-check contracts-check contracts-tools contracts-version-check
+.PHONY: doctor up down dev-up dev-down check backend-check frontend-check contracts-check contracts-tools contracts-version-check
 
 doctor:
 	$(MAKE) -C backend doctor
@@ -13,6 +13,14 @@ up:
 
 down:
 	$(MAKE) -C backend down
+
+# Whole local stack for manual testing (HUB-286): Postgres + Redis, migrations, seed, mockvendor,
+# the hub roles and the console against the real admin API. See README "Run the whole stack locally".
+dev-up:
+	scripts/dev-up.sh
+
+dev-down:
+	scripts/dev-down.sh
 
 backend-check:
 	$(MAKE) -C backend lint test

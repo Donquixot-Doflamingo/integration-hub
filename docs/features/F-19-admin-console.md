@@ -60,6 +60,7 @@ None.
 ## Config impact
 `PUBLIC_ADMIN_API_BASE` (runtime, default `/admin/v1` on the console origin).
 Auth (HUB-253): `PUBLIC_AUTH_MODE` (`dev` selects the role-picker provider; anything else OIDC), `HUB_SESSION_SECRET` (session cookie HMAC key, 32+ chars, required for OIDC), `HUB_OIDC_ISSUER`, `HUB_OIDC_CLIENT_ID`, `HUB_OIDC_REDIRECT_URI` (OIDC placeholder; wiring in HUB-282).
+Against a running Hub (HUB-286, [ADR-0019](../tech/adr/0019-console-same-origin-admin-proxy.md)): `HUB_ADMIN_UPSTREAM` (the console server proxies `/admin/v1/**` there with the session's token; unset = routed in front) and `HUB_DEV_OIDC_ISSUER` (dev sign-in mints the token at the admin's dev OIDC issuer). `make dev-up` sets both.
 Build-time `HUB_API_MOCKING=true` (`npm run dev:mock` / `build:mock`) runs the console on MSW contract mocks with client-side rendering; normal builds contain no mock code.
 
 ## Observability
@@ -80,7 +81,7 @@ Session in an HMAC-signed httpOnly SameSite=Lax cookie set by the login action; 
 
 ## Testing
 - **Unit / component**: Vitest + Testing Library.
-- **E2E**: Playwright against the contract mock server, then against the real backend in M7. In CI since HUB-280 (job `e2e` in `.github/workflows/frontend.yml`: cached Chromium headless shell pinned by the `@playwright/test` version, 8 min cap, HTML report and traces uploaded on failure).
+- **E2E**: Playwright against the contract mock server, then against the real backend in M7. Manual and exploratory runs against the real stack: `make dev-up` (HUB-286). In CI since HUB-280 (job `e2e` in `.github/workflows/frontend.yml`: cached Chromium headless shell pinned by the `@playwright/test` version, 8 min cap, HTML report and traces uploaded on failure).
 - **Contract**: generated client type-checks (`npm run check`).
 - **Accessibility**: axe checks in Playwright.
 
@@ -89,7 +90,7 @@ Screens ship as their admin endpoints freeze; behind OIDC from the first deploy.
 
 ## Open questions
 - `runTransformerGoldens` diffs: the contract does not say which side of a `DiffOp` is the golden. The console shows `before` as Expected and `after` as Actual (the publish diff's old/new convention); to be confirmed by the steward (description-only change).
-- Hosting (same origin as admin API or separate)?
+- Hosting (same origin as admin API or separate)? For now: the console server proxies `/admin/v1` on its own origin (ADR-0019, HUB-286).
 - Does the health board need live streaming (SSE) in v1?
 
 ## Tickets
@@ -141,6 +142,7 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-274 | Change log `/change-log` (`listChangeLog`: actor, action, object type, object id, UTC range, page size in the URL; chips; paging; reversed range refused) and `/change-log/{change_id}` (`getChangeLogEntry`: what, reason, when, actor, snapshot; before / after as `DiffPaths` from `$lib/utils/json-diff.ts`, both objects in full). Objects link to their console page (integration, transformer, tenant, request). `ChangeNotice` links the entry itself |
 | HUB-280 | CI job `e2e` in `.github/workflows/frontend.yml` beside `console`: `npm ci`, browser cache keyed by OS + pinned `@playwright/test` version, `playwright install --with-deps --only-shell chromium` on a miss (`install-deps` on a hit), `npm run test:e2e` (build:mock + preview), `timeout-minutes: 8`, report + traces uploaded `if: failure()`; HTML reporter under `CI`. Verified locally only (99 tests, about 60 s, 3 runs green); the axe helper waits for `aria-busy` to clear first |
 | HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
+| HUB-286 | One-command local stack (`scripts/dev-up.sh`, `make dev-up`): Postgres/Redis (compose or env), migrations, seed, mockvendor, hub admin (dev OIDC), gateway, worker, scheduler, console. Console: same-origin `/admin/v1` proxy with the session token (`admin-proxy.ts`), dev sign-in through the admin's dev issuer, SSR serialization of `x-hub-request-id` / `etag` |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
 CCR-004 (2026-11-01, HUB-272): an example of the registrar SSRF refusal (pointer `/url`), example-only; requested.
@@ -184,3 +186,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-11-01 | HUB-274: change log list and entry | frontend-engineer |
 | 2026-11-01 | HUB-273: snapshots view | frontend-engineer |
 | 2026-11-01 | HUB-280: e2e in CI | frontend-engineer |
+| 2026-11-07 | HUB-286: console against a running Hub (proxy, dev issuer sign-in, dev stack scripts) | frontend-engineer |

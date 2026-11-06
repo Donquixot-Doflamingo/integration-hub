@@ -44,3 +44,6 @@ backend/**/dev.key
 # hub local data (snapshot cache, dev blobs), wherever a role was started
 backend/**/.data/
 backend/.data/
+
+# local dev stack state (scripts/dev-up.sh): logs, pids, dev credentials, snapshot blobs
+.dev-stack/

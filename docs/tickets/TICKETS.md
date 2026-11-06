@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **236** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **6**
+Total tickets: **240** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **10**
 
 ## Epics
 
@@ -18,7 +18,7 @@ Total tickets: **236** · done: **177** · todo: **53** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 17 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 40 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 4 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 12 | 0 |
@@ -2475,6 +2475,59 @@ Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits
 **Acceptance criteria**
 - [ ] After a failed submit, focus moves into the dialog (the error panel's heading or the reason field) and Escape closes it
 - [ ] Component test and one e2e keyboard check
+
+### HUB-286 — Console against a running Hub with one command
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** in-progress · **Depends on:** HUB-253, HUB-207 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1906
+- **Branch:** `feat/HUB-286-console-real-backend`
+
+The console has only ever run on MSW contract mocks. Make it work end to end against the real admin API: dev sign-in through the admin's dev OIDC issuer (`hub admin -admin-dev-oidc`, M7), a same-origin `/admin/v1` proxy in the console server that adds the session token ([ADR-0019](../tech/adr/0019-console-same-origin-admin-proxy.md)), and SSR serialization of the admin response headers. Add `scripts/dev-up.sh` / `scripts/dev-down.sh` (and `make dev-up` / `make dev-down`) that start Postgres and Redis (docker compose when Docker or Colima runs, else the services the env names), migrations and the dev seed, mockvendor, the hub roles gateway, worker, scheduler and admin, and the console, then print the URLs, the dev login and a tenant API key.
+
+**Acceptance criteria**
+- [ ] Dev sign-in mints a real admin token through the dev issuer; the token stays in the httpOnly session (`dev-issuer.test.ts`)
+- [ ] `/admin/v1/**` is proxied with the session token, only contract headers pass each way, cross-origin mutations are refused (`admin-proxy.test.ts`)
+- [ ] Every page loads real data with SSR (no "Failed to get response header") and create/update flows work against the running Hub (walked with Playwright)
+- [ ] `scripts/dev-up.sh` brings the whole stack up with one command on macOS arm64 (Colima) and Linux, prints URLs, login and a tenant key; `scripts/dev-down.sh` stops it (`--purge` also removes state)
+- [ ] Documented in the root `README.md` and `frontend/README.md`
+
+### HUB-287 — Console visual polish against the real stack
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** in-progress · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1903, US-1904, US-1905, US-1906
+- **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-288, HUB-289)
+
+Walk every route with Playwright against the real stack (desktop and 390 px mobile) and fix what looks wrong: spacing, typography, empty/loading/error states, tables, forms, status colours and mobile width, consistently across screens (frontend-design and admin-console-ux skills).
+
+**Acceptance criteria**
+- [ ] No route scrolls sideways at 390 px; wide tables scroll inside their own container
+- [ ] The mobile header keeps breadcrumbs readable
+- [ ] Before/after screenshots of every route reviewed (kept outside the repo)
+- [ ] e2e green, axe clean (no serious/critical)
+
+### HUB-288 — Destructive actions only for roles that may do them
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** in-progress · **Depends on:** HUB-253 · **Feature:** F-19 · **Stories:** US-1902, US-1904, US-1906
+- **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-287, HUB-289)
+
+"If a user doesn't have access there should be no delete option at all." Delete, purge, retire, revoke, unseal, rollback and force controls are not rendered unless the signed-in role satisfies the operation's `x-required-role` in `hub-admin.v1.yaml`. The minimum role per operation is generated from the contract (`npm run gen:api` -> `src/lib/api/roles.gen.ts`) so the UI cannot drift from the API. The 403 handling stays.
+
+**Acceptance criteria**
+- [ ] `roles.gen.ts` generated from `x-required-role` for every operation; CI fails when it is stale
+- [ ] `RoleGate op=` / `can(access, op)` gate every destructive control; nothing is rendered disabled instead
+- [ ] Tests per role (admin, editor, viewer, tenant_viewer) for every destructive control
+- [ ] A 403 from the API is still shown in the dialog
+
+### HUB-289 — Console bug bash against the real stack
+- **Epic:** EP-10 · **Type:** fix · **Area:** frontend
+- **Status:** in-progress · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1902, US-1906
+- **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-287, HUB-288)
+
+Bugs found running the console against a real Hub, each fixed with a test. Backend bugs are reported, not fixed here.
+
+**Acceptance criteria**
+- [ ] A 409 that means "in use" or "already exists" shows the API message, not "someone else changed it, reload"
+- [ ] Keys seeded without a prefix are named by key id (labels, revoke confirmation text is never empty)
+- [ ] The publish button says "Publish draft" before a draft exists (was "Publish v?")
+- [ ] Every other bug found is listed in the PR with its test
 
 ## EP-11 — MCP server + consumer skill + SDK
 

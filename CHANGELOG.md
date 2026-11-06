@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(frontend)` · Run the console against a real Hub with one command (HUB-286) · HUB-286 · F-19
+  - `make dev-up` (or `scripts/dev-up.sh`) starts Postgres and Redis (docker compose with Docker/Colima, else the services in `HUB_PG_DSN` / `HUB_REDIS_ADDR`), migrations, the dev seed, mockvendor, the hub admin (dev OIDC issuer), gateway, worker, scheduler and the console, then prints the URLs, how to sign in and a tenant API key; `make dev-down` stops it
+  - Dev sign-in against a running Hub mints a real admin token through the admin's dev issuer; the token stays in the httpOnly session
+  - The console server proxies `/admin/v1` to `HUB_ADMIN_UPSTREAM` with the session's token, passing only contract headers and refusing cross-origin mutations (ADR-0019)
+  - Server-rendered pages no longer fail on real admin responses ("Failed to get response header")
 - 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
   - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
   - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series

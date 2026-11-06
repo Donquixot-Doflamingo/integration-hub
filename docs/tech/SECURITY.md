@@ -61,7 +61,7 @@ flowchart LR
 | Threat | STRIDE | Mitigation |
 | --- | --- | --- |
 | Unauthorised config change redirects data to an attacker host | T/E | RBAC (§7), egress allowlist is part of vendor definitions and itself an admin-only change; publish validation; every mutation in `change_log` with before/after/reason |
-| Token theft from the browser | S | BFF pattern: tokens only server-side in the SvelteKit session (TECH_SPEC §17.3); `HttpOnly`, `Secure`, `SameSite=Lax`; CSRF protection on form actions (SvelteKit origin check) |
+| Token theft from the browser | S | BFF pattern: tokens only server-side in the SvelteKit session (TECH_SPEC §17.3); `HttpOnly`, `Secure`, `SameSite=Lax`; CSRF protection on form actions (SvelteKit origin check); the console server proxies `/admin/v1` and adds the session's token itself, forwarding only contract headers and refusing cross-origin mutations (ADR-0019) |
 | Over-broad unseal | I | `admin` only, mandatory reason, audited as an event on the request and in `change_log`; rate-limited; alert on unseal volume |
 | CSRF/XSS in console | T | Svelte auto-escaping, strict CSP (`default-src 'self'`), no `{@html}` with API data; transformer YAML shown in a code viewer, never rendered as HTML |
 | Insider replays DLQ to a changed transformer | T | replay requires `editor`+, recorded in `change_log`, replay re-resolves through the published (validated) version only |
