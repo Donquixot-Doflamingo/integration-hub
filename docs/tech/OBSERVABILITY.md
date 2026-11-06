@@ -184,6 +184,8 @@ Logs **never** contain request or response bodies, canonical or vendor (backend/
 
 Vendor sessions (HUB-175, F-14): session data is never logged either. The edge logs `session lookup failed` / `session create failed` (ERROR, Postgres errors), `session target gone` (WARN, the session's version or account left the snapshot) and `session data refused` (WARN, the store refused an Aadhaar-like number or oversize data) with the integration and the error only; the worker logs `session lookup failed`. Session open/use is in the audit trail as `session` meta (id, event, version, account) on `response.transformed` / `integration.resolved`. No new metrics: the lookup is timed in the `resolve` stage of `hub_overhead_ms`.
 
+Subject erasure (HUB-233, `hub erase-subject`, ADR-0012) writes one INFO line, `erase-subject finished`, with `tenant`, `change_id`, `dry_run` and the counts (`erased`, `deferred`, `events`, `results`, `dead_letters`, `callbacks`, `sessions`). On failure it writes one ERROR line, `erase-subject failed, nothing changed`, with `tenant` and `error`. The line never carries the identifier or its `subject_ref`. The identifier, the mask key and the DSN password are registered with the redacting handler as defence in depth. It records no metric: the command is one-shot and never scraped. `change_log` (`action = eraseSubjectPayloads`) is the system of record for deletions, and the JSON result on stdout is the operator's report.
+
 ### 4.5 Sampling
 - Hot-path WARN events that can storm (Redis timeout, limiter rejection) are rate-limited per `(msg, account)` key: first 10 per 10 s, then 1 in 100, with `sampled_out` count on the next emitted line.
 - ERROR is never sampled.

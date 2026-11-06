@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **204** · done: **157** · todo: **43** · other (in-progress/in-review/blocked): **4**
+Total tickets: **207** · done: **157** · todo: **45** · other (in-progress/in-review/blocked): **5**
 
 ## Epics
 
@@ -17,7 +17,7 @@ Total tickets: **204** · done: **157** · todo: **43** · other (in-progress/in
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
-| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 14 | 1 |
+| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 17 | 1 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
@@ -1696,15 +1696,17 @@ Shipped: `deploy/alerts/hub.rules.yaml` + `*_test.yml`, `deploy/dashboards/{tena
 
 ### HUB-233 — PII deletion job by subject identifier
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-093, HUB-208 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-review · **Depends on:** HUB-093, HUB-208 · **Feature:** F-18 · **Stories:** US-1805
 - **Branch:** `feat/HUB-233-pii-deletion`
 
 Job that purges stored payloads by subject identifier using `x-pii` tags while keeping hashes and metadata (DESIGN §16.5).
 
+Shipped as the `hub erase-subject` maintenance command, because the admin contract has no erasure operation (CCR: HUB-247). See ADR-0012 and SECURITY §4.1. Follow-ups: HUB-245 (subject index) and HUB-246 (Redis idempotency replay records).
+
 **Acceptance criteria**
-- [ ] After deletion, no stored body contains the subject identifier (grep test)
-- [ ] Hashes, sizes and timelines remain
-- [ ] Deletion recorded in change_log
+- [x] After deletion, no stored body contains the subject identifier (grep test): `TestEraseSubjectPurgesEveryStoredBody` greps every bytea/json/jsonb/text column of every `hub` table and opens the sealed payloads
+- [x] Hashes, sizes and timelines remain: same test, before/after comparison of events (sha256, bytes, type, time, meta), requests, attempts, dead-letter and callback metadata
+- [x] Deletion recorded in change_log: same test, one `eraseSubjectPayloads` row per run with actor, reason, counts and `subject_ref`; the dry run writes none
 
 ### HUB-234 — Security hardening checks
 - **Epic:** EP-09 · **Type:** chore · **Area:** backend
@@ -1765,6 +1767,124 @@ During the HUB-230 `make itest` run, `TestCutoverCompletedAndNewRequests/transfo
 - [x] Publish-time goldens either measure CPU time, apply the budget only outside `-race`, or retry once before failing on time alone: RunGoldens re-runs a case once on ErrTimeBudget (`TestGoldensRetryTimeBudgetOnce`)
 - [ ] `make itest` passes 10 consecutive full runs on CI hardware
 
+### HUB-245 — Hashed subject index for the erasure job
+- **Epic:** EP-09 · **Type:** perf · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-233 · **Feature:** F-18 · **Stories:** US-1805
+- **Branch:** `perf/HUB-245-subject-index`
+
+`hub erase-subject` (HUB-233, ADR-0012) finds a subject's requests by scanning every event of the tenant in the window and opening every sealed payload, which is linear in the tenant's history. Record a keyed hash of each `x-pii` identifier value (HMAC with the erase-ref domain label, per tenant) per request, off the hot path: in the audit writer batch, not in the request goroutine. Store it in a day-partitioned `request_subjects` table owned by `audit`, so the job reads only the subject's request ids. The full scan stays as a `-scan` fallback for rows written before the index existed.
+
+**Acceptance criteria**
+- [ ] The erasure reads only the subject's rows when the index covers the window (EXPLAIN in an integration test)
+- [ ] No per-request work on the sync path beyond the existing audit batch (benchmark unchanged within noise)
+- [ ] HUB-233 grep test still passes with the index
+
+### HUB-246 — Purge idempotency replay records of erased requests
+- **Epic:** EP-09 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-233 · **Feature:** F-18 · **Stories:** US-1805
+- **Branch:** `feat/HUB-246-erase-idempotency-records`
+
+Redis idempotency records keep the replayable 200/202 body for 24 h (F-10). `hub erase-subject` (HUB-233) does not touch them: `Release` would let a retry with the same key run fresh, and for `moves_money_or_quota` integrations that can double-charge. Replace the stored body of an erased request's record with a tombstone that still answers the key, for example a 409 or a body-less replay. Keep the key reserved until its TTL, and make the change through an idempotency port that the erasure command calls after its transaction commits.
+
+**Acceptance criteria**
+- [ ] After erasure, the Redis record of an erased request holds no body, and a retry with the same key does not reach the vendor
+- [ ] Decision on the replay answer recorded (ADR or F-10 update) and, if it changes the caller response, a CCR first
+
+### HUB-247 — CCR: admin operation for subject erasure
+- **Epic:** EP-09 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-233 · **Feature:** F-18 · **Stories:** US-1805
+- **Branch:** `contract/HUB-247-erase-subject`
+
+HUB-233 shipped the erasure as the `hub erase-subject` maintenance command because `hub-admin.v1.yaml` has no such operation (ADR-0012). An admin operation gives it RBAC, a console screen and the same `change_log` row.
+
+### CCR: Subject erasure operation
+- **Requested by**: backend-engineer (ticket HUB-233)
+- **Why**: US-1805, F-18, DESIGN §16.5. Compliance must purge a data subject's stored payloads without shell access to a node, under admin RBAC.
+- **Document**: hub-admin.v1.yaml
+- **Operation / schema**: `eraseSubjectPayloads`, `POST /subjects/erase` (role `admin`; the identifier travels in the body, never in the URL or query, so access logs never see it)
+- **Before**:
+  ```yaml
+  # does not exist
+  ```
+- **After**:
+  ```yaml
+  /subjects/erase:
+    post:
+      operationId: eraseSubjectPayloads
+      tags: [requests]
+      summary: Purge a data subject's stored payloads (audited)
+      description: |
+        admin only. Purges every stored body of the tenant's requests that hold the identifier
+        (any stored form: raw, masked HMAC, inside sealed payloads), keeping hashes, sizes,
+        timelines and metadata (DESIGN §13.3, §16.5). Requests still queued or with callbacks to
+        deliver are deferred and listed; call again once they are terminal. One change_log row
+        (action eraseSubjectPayloads) unless dry_run. The identifier is never stored or logged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubjectErasureRequest' }
+            example: { tenant_id: lending-app, subject: ABCDE1234F, reason: "Erasure request PRIV-42", dry_run: false }
+      responses:
+        '200':
+          description: Erasure done (possibly with deferred requests).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubjectErasureResult' }
+              example:
+                change_id: chg_01JC0000000000000000000000
+                subject_ref: subject:8c4dd35326648b733a76c00b7a83bf38
+                tenant_id: lending-app
+                dry_run: false
+                erased_request_ids: [req_01JC0000000000000000000001]
+                deferred_request_ids: []
+                counts: { events: 6, results: 1, dead_letters: 0, callbacks: 1, sessions: 0 }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: 'CONFLICT: sealed payloads exist but no seal key is configured; nothing changed.' }
+  components:
+    schemas:
+      SubjectErasureRequest:
+        type: object
+        required: [tenant_id, subject, reason]
+        properties:
+          tenant_id: { type: string }
+          subject: { type: string, minLength: 3, maxLength: 256, description: 'The identifier. Never echoed back.' }
+          reason: { type: string, minLength: 10, maxLength: 1024 }
+          since: { type: [string, 'null'], format: date-time }
+          until: { type: [string, 'null'], format: date-time }
+          dry_run: { type: boolean, default: false }
+      SubjectErasureResult:
+        type: object
+        required: [change_id, subject_ref, tenant_id, dry_run, erased_request_ids, deferred_request_ids, counts]
+        properties:
+          change_id: { type: [string, 'null'], description: 'null for a dry run' }
+          subject_ref: { type: string, description: 'HMAC reference recorded in change_log; not a stored form of the identifier.' }
+          tenant_id: { type: string }
+          dry_run: { type: boolean }
+          erased_request_ids: { type: array, items: { $ref: '#/components/schemas/RequestIdValue' } }
+          deferred_request_ids: { type: array, items: { $ref: '#/components/schemas/RequestIdValue' } }
+          counts:
+            type: object
+            required: [events, results, dead_letters, callbacks, sessions]
+            properties:
+              events: { type: integer, minimum: 0 }
+              results: { type: integer, minimum: 0 }
+              dead_letters: { type: integer, minimum: 0 }
+              callbacks: { type: integer, minimum: 0 }
+              sessions: { type: integer, minimum: 0 }
+  # Optional, additive: add `subject` to ObjectType if change_log rows should name the subject
+  # reference as their object (today: object_type request, object_id = id | bulk | none).
+  ```
+- **Breaking?**: no (additive). `info.version` 1.1.0 → 1.2.0
+- **Consumers affected**: backend (`internal/control/adminapi` handler over `control.Erasure`), frontend (optional compliance screen), hubmcp (none: admin tools stay metadata-only, SECURITY §2.5)
+- **Error codes**: VALIDATION_FAILED, UNAUTHORIZED, FORBIDDEN, CONFLICT (no seal key), INTERNAL_ERROR; no new code
+- **Rollout**: contract PR first; the handler reuses `control.Erasure` unchanged
+
+**Acceptance criteria**
+- [ ] Steward reviewed and merged the contract change (or rejected with reasons)
+- [ ] Backend handler + contract test; RBAC table row added (SECURITY §7)
 ### HUB-241 — Attempt-level and DLQ counters for the auth, transform and DLQ alerts
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
 - **Status:** todo · **Depends on:** HUB-232 · **Feature:** F-18 · **Stories:** US-1801
