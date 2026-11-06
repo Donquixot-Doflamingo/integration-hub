@@ -32,8 +32,10 @@ type specTarget struct {
 	VendorID    string          `json:"vendor_id"`
 	AccountID   string          `json:"account_id"`
 	Transformer specTransformer `json:"transformer"`
-	Weight      *int            `json:"weight,omitempty"`
-	Params      json.RawMessage `json:"params,omitempty"`
+	// Operations is TargetRef.operations (hub-admin 1.2.0, HUB-343): per-operation pairs.
+	Operations map[string]specTransformer `json:"operations,omitempty"`
+	Weight     *int                       `json:"weight,omitempty"`
+	Params     json.RawMessage            `json:"params,omitempty"`
 }
 
 type specDelivery struct {
@@ -92,11 +94,23 @@ func toTarget(t specTarget, ptr string, weighted bool) (registry.Target, error) 
 	}
 	out := registry.Target{Vendor: t.VendorID, Account: t.AccountID}
 	var err error
-	if out.Transformer.Request, err = registry.ParseTransformerRef(t.Transformer.Request); err != nil {
-		return out, badRequest(ptr+"/transformer/request", err.Error())
+	if out.Transformer, err = toPair(t.Transformer, ptr+"/transformer"); err != nil {
+		return out, err
 	}
-	if out.Transformer.Response, err = registry.ParseTransformerRef(t.Transformer.Response); err != nil {
-		return out, badRequest(ptr+"/transformer/response", err.Error())
+	if t.Operations != nil {
+		if len(t.Operations) == 0 {
+			return out, badRequest(ptr+"/operations", "operations must name at least one operation (or be omitted)")
+		}
+		out.Operations = make(map[string]registry.TransformerPair, len(t.Operations))
+		for _, op := range slices.Sorted(maps.Keys(t.Operations)) {
+			at := ptr + "/operations/" + op
+			if !operationName.MatchString(op) {
+				return out, badRequest(at, fmt.Sprintf("operation names must match %s", operationName))
+			}
+			if out.Operations[op], err = toPair(t.Operations[op], at); err != nil {
+				return out, err
+			}
+		}
 	}
 	if t.Weight != nil {
 		if !weighted {
@@ -107,10 +121,27 @@ func toTarget(t specTarget, ptr string, weighted bool) (registry.Target, error) 
 	return out, nil
 }
 
-// fromAPISpec converts a contract spec (pointer prefix ptr, e.g. "/spec") to a registry version
-// with the DESIGN §2 defaults filled, so drafts and published versions render alike.
-// defaultTTL is the capability's default TTL.
-func fromAPISpec(s apiSpec, ptr string, defaultTTL time.Duration) (*registry.IntegrationVersion, error) {
+// operationName is the contract's OperationName.
+var operationName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+
+// toPair parses a contract TransformerPair at ptr.
+func toPair(p specTransformer, ptr string) (registry.TransformerPair, error) {
+	var out registry.TransformerPair
+	var err error
+	if out.Request, err = registry.ParseTransformerRef(p.Request); err != nil {
+		return out, badRequest(ptr+"/request", err.Error())
+	}
+	if out.Response, err = registry.ParseTransformerRef(p.Response); err != nil {
+		return out, badRequest(ptr+"/response", err.Error())
+	}
+	return out, nil
+}
+
+// fromAPISpec converts a contract spec (the request member "spec": its pointers start with
+// /spec) to a registry version with the DESIGN §2 defaults filled, so drafts and published
+// versions render alike. defaultTTL is the capability's default TTL.
+func fromAPISpec(s apiSpec, defaultTTL time.Duration) (*registry.IntegrationVersion, error) {
+	const ptr = "/spec"
 	v := &registry.IntegrationVersion{}
 	for i, t := range s.Targets {
 		rt, err := toTarget(t, fmt.Sprintf("%s/targets/%d", ptr, i), true)
@@ -199,9 +230,19 @@ func normalize(v *registry.IntegrationVersion, defaultTTL time.Duration) {
 	}
 }
 
+func renderPair(p registry.TransformerPair) map[string]any {
+	return map[string]any{"request": p.Request.String(), "response": p.Response.String()}
+}
+
 func renderTarget(t registry.Target, weighted bool) map[string]any {
-	m := map[string]any{"vendor_id": t.Vendor, "account_id": t.Account,
-		"transformer": map[string]any{"request": t.Transformer.Request.String(), "response": t.Transformer.Response.String()}}
+	m := map[string]any{"vendor_id": t.Vendor, "account_id": t.Account, "transformer": renderPair(t.Transformer)}
+	if len(t.Operations) > 0 {
+		ops := make(map[string]any, len(t.Operations))
+		for op, p := range t.Operations {
+			ops[op] = renderPair(p)
+		}
+		m["operations"] = ops
+	}
 	if weighted {
 		m["weight"] = t.Weight
 	}
@@ -294,8 +335,12 @@ var registryNames = map[string]string{"account": "account_id", "vendor": "vendor
 var pathSegment = regexp.MustCompile(`[A-Za-z_]+`)
 
 // contractPath renames the members of a registry problem path (targets[1].account →
-// targets[1].account_id) so the pointer addresses the contract's IntegrationSpec.
+// targets[1].account_id) so the pointer addresses the contract's IntegrationSpec. Operation
+// names (targets[0].operations.<op>) are keys, never renamed.
 func contractPath(p string) string {
+	if head, op, ok := strings.Cut(p, ".operations."); ok {
+		return contractPath(head) + ".operations." + op
+	}
 	return pathSegment.ReplaceAllStringFunc(p, func(s string) string {
 		if n, ok := registryNames[s]; ok {
 			return n

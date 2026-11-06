@@ -120,10 +120,12 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 			return p, internalError()
 		}
 	}
+	res.Operation = operation // selects the target's transformer pair (HUB-343)
 	p.res = res
+	pair := res.Pair()
 	resolved := map[string]any{
 		"integration": id, "version": res.VersionNumber, "vendor": res.Target.Vendor, "account": res.Target.Account,
-		"transformers": map[string]string{"request": res.Target.Transformer.Request.String(), "response": res.Target.Transformer.Response.String()},
+		"transformers": map[string]string{"request": pair.Request.String(), "response": pair.Response.String()},
 		"target_index": res.TargetIndex, "policy": string(p.trail.Policy()), "snapshot_version": res.SnapshotVersion,
 	}
 	if p.session != nil { // meta only: never the session data
@@ -197,7 +199,7 @@ func (s *Server) record(r *http.Request, p *prepared, status string, httpStatus 
 		RequestID: RequestID(r.Context()), CreatedAt: p.timings.Start, TenantID: p.caller.Tenant.Tenant,
 		IntegrationID: in.Integration, IntegrationVersion: p.res.VersionNumber, Capability: in.Capability,
 		Operation: p.operation, Mode: string(in.Active().Delivery.Mode), DryRun: p.dryRun, Status: status,
-		SnapshotVersion: p.caller.Snap.Version, IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		SnapshotVersion: p.caller.Snap.Version, IdempotencyKey: r.Header.Get("Idempotency-Key"), TraceID: traceID(r.Context()),
 		HTTPStatus: httpStatus, ErrorCode: code, Attempts: p.attempts,
 		HubOverheadMS: telemetry.Millis(p.timings.Overhead(now)), VendorMS: telemetry.Millis(p.timings.Stage(telemetry.StageUpstream)),
 		CompletedAt: now,

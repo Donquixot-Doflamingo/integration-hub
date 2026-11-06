@@ -168,3 +168,31 @@ func TestResolveSessionPinsVersionAndAccount(t *testing.T) {
 		}
 	}
 }
+
+// TestPairFollowsTheOperation is HUB-343: the invoked operation selects the target's pair, a
+// failover or shadow copy that swaps Target keeps selecting the same way, and an operation the
+// target does not list (or none) uses the default pair.
+func TestPairFollowsTheOperation(t *testing.T) {
+	def := registry.TransformerPair{Request: registry.TransformerRef{ID: "SEND", Version: 1}, Response: registry.TransformerRef{ID: "SEND_R", Version: 1}}
+	ver := registry.TransformerPair{Request: registry.TransformerRef{ID: "VER", Version: 1}, Response: registry.TransformerRef{ID: "VER_R", Version: 1}}
+	primary := registry.Target{Account: "acct-a", Weight: 100, Transformer: def, Operations: map[string]registry.TransformerPair{"verify": ver}}
+	snap := snapshot(primary)
+	for _, tc := range []struct {
+		op   string
+		want registry.TransformerPair
+	}{{"verify", ver}, {"send", def}, {"", def}} {
+		r, err := Resolve(snap, "orders-service", "int_x", 0, "k")
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Operation = tc.op
+		if r.Pair() != tc.want {
+			t.Errorf("op %q: %v, want %v", tc.op, r.Pair(), tc.want)
+		}
+		alt := r
+		alt.Target = registry.Target{Account: "acct-fo", Transformer: def, Operations: map[string]registry.TransformerPair{"verify": ver}}
+		if alt.Pair() != tc.want {
+			t.Errorf("failover op %q: %v, want %v", tc.op, alt.Pair(), tc.want)
+		}
+	}
+}

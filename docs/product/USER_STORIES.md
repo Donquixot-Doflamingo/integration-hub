@@ -470,11 +470,21 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 **As a** service developer, **I want** a tenant dashboard of my requests, error codes and latencies, **so that** I can self-diagnose. · **Should**
 - **Given** the dashboards JSON, **when** imported, **then** tenant, vendor and platform dashboards render with the §16.2 metrics.
 
+### US-1806 — One trace per request, across the queue
+**As an** on-call SRE, **I want** the spans of a request (edge, transform, upstream, worker attempt, callback) linked into one trace that continues my caller's `traceparent`, **so that** I can see where an async request spent its time without reading logs. · **Must**
+- **Given** an async request with a sampled caller `traceparent`, **when** the worker delivers it and the callback is sent, **then** the edge span continues the caller's trace, the worker attempt links to the accepting trace, the upstream span is the attempt's child, and the callback span links to the attempt; every span carries `hub.request_id`.
+- **Given** a vendor listed in `HUB_TRACE_FORWARD_VENDORS`, **when** the Hub calls it, **then** the request carries the Hub's `traceparent` and no `tracestate`; other vendors get neither.
+- **Given** any span, **then** its attributes are on the allowlist and none contains a body, a header credential or a secret.
 ### US-1805 — Erase a data subject's stored payloads
 **As a** compliance officer, **I want** to purge every stored payload that holds a data subject's identifier while keeping hashes, sizes and timelines, **so that** we can honour an erasure request without losing the proof of what happened. · **Must**
 - **Given** a tenant's requests whose stored bodies hold an identifier (full, masked, sealed, envelopes, results, callbacks, sessions), **when** the erasure runs, **then** no stored body holds it in any stored form, and event sha256, bytes, times and the final records remain.
 - **Given** an erasure, **when** it finishes, **then** `change_log` has one row with actor, reason, counts and a subject reference, never the identifier.
 - **Given** a request still queued or with a callback to deliver, **when** the erasure runs, **then** it is deferred and reported, and a re-run after it is terminal erases it.
+
+### US-1807 — Runbook for every alert
+**As an** on-call SRE, **I want** every alert to link a short runbook with the checks, likely causes, fixes and escalation rules, **so that** I can act on a page at night without reading the code. · **Must**
+- **Given** any rule in `deploy/alerts/hub.rules.yaml`, **when** I open its `runbook_url`, **then** `docs/runbooks/<AlertName>.md` exists and lists what fired, the caller impact in canonical codes, the first checks (dashboard panel, query, command), causes with fixes, and when to escalate.
+- **Given** a runbook step that acts on the Hub, **when** I follow it, **then** it uses a real `hubctl` command or an admin `operationId` from `contracts/openapi/hub-admin.v1.yaml`.
 
 ## F-19 Admin console
 
@@ -519,7 +529,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-2003 — Guarded invoke
 **As an** AI-assisted developer, **I want** `hub_invoke` to require `confirm: true` for integrations with `moves_money_or_quota: true`, **so that** an assistant cannot trigger real side effects by accident. · **Must**
 - **Given** a `moves_money_or_quota` integration and no `confirm: true` or no `idempotency_key`, **when** Claude calls `hub_invoke`, **then** the tool returns `outcome: refused` and explains it needs explicit confirmation, without calling the Hub.
-- **Given** `confirm: true`, **when** called, **then** it sends with an auto-generated `Idempotency-Key` (unless one is provided) and returns `Result` or `Queued` distinctly.
+- **Given** `confirm: true` and an `idempotency_key`, **when** called, **then** it sends that `Idempotency-Key` and returns `outcome: completed` or `outcome: queued` distinctly. No key is generated: the frozen tool contract requires the caller's key for these integrations (ADR-0018).
 
 ### US-2004 — Check a request
 **As an** AI-assisted developer, **I want** `hub_get_request`, **so that** Claude can poll a 202. · **Must**
@@ -532,7 +542,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 
 ### US-2006 — Transports
 **As an** AI-assisted developer, **I want** stdio and streamable HTTP transports, **so that** I can run it locally or share it. · **Should**
-- **Given** `hubmcp --transport stdio`, **when** started by Claude Code, **then** tools list within 1 s; given `--transport http --addr :8090`, the same tools are served.
+- **Given** `hubmcp --transport stdio`, **when** started by Claude Code, **then** tools list within 1 s; given `--transport http --addr 127.0.0.1:8090` (a non-loopback address also needs `--allow-remote`), the same tools are served at `/mcp` to clients that send their tenant API key as bearer token (ADR-0018).
 
 ## F-21 Consumer Claude skill & Go SDK (`hubclient`)
 

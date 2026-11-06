@@ -133,7 +133,7 @@ func (s *Shadower) dryRun(ctx context.Context, j Job) string {
 	if ce != nil {
 		return "failed"
 	}
-	ref := j.Res.Target.Transformer.Request
+	ref := j.Res.Pair().Request
 	req, err := j.Snap.Programs[ref].BuildRequest(in)
 	if errors.Is(err, transform.ErrTimeBudget) {
 		req, err = j.Snap.Programs[ref].BuildRequest(in)

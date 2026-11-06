@@ -32,7 +32,15 @@ type Resolution struct {
 	Failover        []registry.Target
 	Delivery        registry.Delivery
 	SnapshotVersion uint64
+	// Operation is the invoked operation of the capability (envelope operation). The caller of
+	// Resolve sets it; Pair uses it to pick the target's transformer pair (HUB-343).
+	Operation string
 }
+
+// Pair is the transformer pair of Target for the invoked operation: its per-operation pair
+// when the target lists one, else the default pair. Failover and shadow copies of a
+// Resolution swap Target and keep Operation, so they select the same way.
+func (r Resolution) Pair() registry.TransformerPair { return r.Target.Pair(r.Operation) }
 
 // Granted reports whether tenant may invoke the integration: the owner or a grantee.
 func Granted(in *registry.Integration, tenant string) bool {
@@ -78,7 +86,7 @@ func pick(targets []registry.Target, routeKey string) (int, error) {
 	}
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(routeKey))
-	slot := int(h.Sum64() % 100) //nolint:gosec // modulo 100 fits in int
+	slot := int(h.Sum64() % 100) // #nosec G115 -- modulo 100 fits in int
 	sum := 0
 	for i, t := range targets {
 		sum += t.Weight

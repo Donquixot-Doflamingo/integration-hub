@@ -76,17 +76,19 @@ func breakerTargets(snap *registry.Snapshot) map[breakerRef][]string {
 			continue
 		}
 		for _, t := range append(slices.Clone(v.Targets), v.Failover...) {
-			tf := snap.Transformers[t.Transformer.Request]
-			if tf == nil {
-				continue
-			}
-			vendor, ep, ok := strings.Cut(tf.VendorEndpoint, ".")
-			if !ok {
-				continue
-			}
-			ref := breakerRef{Account: t.Account, Vendor: vendor, Endpoint: ep}
-			if !slices.Contains(out[ref], id) {
-				out[ref] = append(out[ref], id)
+			for _, pair := range t.Pairs() { // one endpoint per operation pair (HUB-343)
+				tf := snap.Transformers[pair.Request]
+				if tf == nil {
+					continue
+				}
+				vendor, ep, ok := strings.Cut(tf.VendorEndpoint, ".")
+				if !ok {
+					continue
+				}
+				ref := breakerRef{Account: t.Account, Vendor: vendor, Endpoint: ep}
+				if !slices.Contains(out[ref], id) {
+					out[ref] = append(out[ref], id)
+				}
 			}
 		}
 	}

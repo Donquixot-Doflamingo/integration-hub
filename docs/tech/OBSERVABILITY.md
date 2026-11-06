@@ -176,11 +176,14 @@ Request-scoped fields are attached once via a `slog.Logger` stored in the contex
 - The set (`telemetry.SecretSet`) supports `Add`, `Remove` and `Replace` at runtime (credential warm-up and rotation). Readers are lock-free (an atomic pointer to a `strings.Replacer`, longest secret first). Values shorter than 6 bytes are ignored.
 - Keys named `authorization`, `proxy_authorization`, `cookie`, `set_cookie`, `api_key`, `password`, `secret`, `token` or `passcode` (any case) are always replaced with `***`, whatever their value.
 - Measured overhead (Apple M-series, Go 1.27, `BenchmarkRedactHandler`, 4 attrs, 50 registered secrets): ~1.0 µs and 21 allocs per line, vs ~0.57 µs and 4 allocs for the bare JSON handler. The cost is off the per-stage budget, since hot-path logging is debug-level and sampled (§4.2). Revisit with an Aho-Corasick matcher if the set grows into the thousands.
+- What is registered: decrypted vendor credentials and registrar signing secrets (credential cache, at warm-up and rotation) and the process's config secrets, the Postgres DSN password and `HUB_AUDIT_MASK_KEY` (`roles.Run`, HUB-234).
 - Tenant API keys never reach logs: edge logs only `key_id`.
-- Test: the M3 grep test asserts no registered secret appears in captured logs or stored audit events (TESTING_STRATEGY §3.4).
+- Test: the M3 grep test asserts no registered secret appears in captured logs or stored audit events (TESTING_STRATEGY §3.4). HUB-234 adds the role-log secret grep: all roles' logs from the `roles` integration run are captured and grepped for every secret the tests used (SECURITY.md §9). No new metrics, log lines or spans.
 
 ### 4.4 Bodies
 Logs **never** contain request or response bodies, canonical or vendor (backend/AGENTS.md). For debugging, use the audit timeline (subject to payload policy) or `dry-run`. The only exception is `mockvendor`, which may log bodies because it only sees synthetic data.
+
+Per-operation transformers (HUB-343, F-14): no new metric, log or span. The `transformers` meta of `integration.resolved` and the `transformer` / `endpoint` meta of `request.transformed` name the pair and endpoint of the invoked operation, so the audit timeline shows which endpoint each operation used; breakers stay per (account, endpoint), one per operation endpoint.
 
 Vendor sessions (HUB-175, F-14): session data is never logged either. The edge logs `session lookup failed` / `session create failed` (ERROR, Postgres errors), `session target gone` (WARN, the session's version or account left the snapshot) and `session data refused` (WARN, the store refused an Aadhaar-like number or oversize data) with the integration and the error only; the worker logs `session lookup failed`. Session open/use is in the audit trail as `session` meta (id, event, version, account) on `response.transformed` / `integration.resolved`. No new metrics: the lookup is timed in the `resolve` stage of `hub_overhead_ms`.
 
@@ -190,34 +193,51 @@ Subject erasure (HUB-233, `hub erase-subject`, ADR-0012) writes one INFO line, `
 - Hot-path WARN events that can storm (Redis timeout, limiter rejection) are rate-limited per `(msg, account)` key: first 10 per 10 s, then 1 in 100, with `sampled_out` count on the next emitted line.
 - ERROR is never sampled.
 
+### 4.6 `hubmcp` (F-20)
+`hubmcp` (the MCP server, `backend/cmd/hubmcp`) writes JSON logs to **stderr** (stdout carries the MCP stdio stream) with `role: hubmcp` and `version`. It has no metrics endpoint: it is a client process, and the Hub's own metrics count its traffic.
+
+| Event (`msg`) | Level | Attributes | When |
+| --- | --- | --- | --- |
+| `hubmcp started` | INFO | `transport`, `hub_base_url`, `admin_tools` (bool), `contract_version`, `version` | start-up |
+| `admin tools disabled: HUB_ADMIN_TOKEN is not set` | INFO | — | start-up without an admin token |
+| `hubmcp listening` | INFO | `addr`, `path` (`/mcp`) | HTTP transport ready |
+| `tool_called` | INFO | `tool`, `is_error`, `duration_ms`, and when known `integration_id`, `request_id`, `outcome` (`completed`/`queued`/`error`/`refused`) | every tool call |
+| `hubmcp stopped` | INFO | — | clean shutdown |
+
+- Every outbound call carries `User-Agent: hubclient-go/<sdk version> hubmcp/<version>` (admin calls: `hubmcp/<version>`), so the Hub's logs attribute MCP traffic.
+- Redaction: `HUB_API_KEY`, `HUB_ADMIN_TOKEN` and, over HTTP, each client's own key are redacted by value from every string attribute and from every tool result (`***`). Bodies are never logged; `tool_called` carries ids only.
+
 ---
 
 ## 5. Tracing
 
 - OpenTelemetry Go SDK, OTLP/gRPC to the collector, W3C `traceparent`/`tracestate` propagation.
-- **Sampling**: parent-based; root ratio `HUB_TRACE_SAMPLE_RATIO` (default 5 %). Caller's sampled flag is respected. Collector-side tail sampling keeps 100 % of traces with an error status or duration > 1 s.
-- **Async continuity**: the envelope stores `trace.traceparent` (DESIGN §11.3). The worker's attempt span is a new root **linked** (span link) to the accepting trace, so long-delayed retries do not create hour-long traces.
-- **To vendors**: forward `traceparent` only for vendors flagged to accept it (TECH_SPEC §22.9); `tracestate` is stripped.
+- **Sampling** (`telemetry.Sampler`): parent-based; root ratio `HUB_TRACE_SAMPLE_RATIO` (default 5 %). Caller's sampled flag is respected. A new root that is **linked** to a sampled span (worker attempt, callback delivery) is sampled too, so an async request sampled at the gateway keeps its worker and callback spans. Collector-side tail sampling keeps 100 % of traces with an error status or duration > 1 s.
+- **Async continuity** (HUB-231, ADR-0013): the edge opens a `hub.queue.enqueue` producer span and the envelope stores *its* `traceparent` in `trace.traceparent` (DESIGN §11.3), in the same transaction as the outbox row. The worker's attempt span is a new root **linked** (span link) to it, so long-delayed retries do not create hour-long traces. Terminal transitions write their span's `traceparent` on each `hub.callback_deliveries` row; the dispatcher's `hub.callback.deliver` span is a new root linked to it. One async request is therefore one linked chain, every span tagged with `hub.request_id`: caller → edge → enqueue ⇢ worker attempt → transform / upstream → vendor ⇢ callback.
+- **To vendors**: the upstream client injects the Hub's own `traceparent` (the upstream span) only for vendors listed in `HUB_TRACE_FORWARD_VENDORS` (comma-separated registry vendor names, default none; ADR-0013 until a vendor-definition field is contracted). `tracestate` is never sent, and a `traceparent`/`tracestate` mapped by a transformer is always dropped.
 - **Back to callers**: never return internal span attributes; `X-Hub-Request-Id` is the caller-facing correlation id.
+- **Request explorer**: `hub.requests.trace_id` is the edge span's trace id (sync, wait and async), so `/requests/{request_id}` links to the trace.
 
 ### 5.1 Spans
-| Span | Kind | Where | Key attributes |
-| --- | --- | --- | --- |
-| `hub.edge` | server | `edge` | `hub.request_id`, `hub.tenant`, `hub.integration_id`, `hub.mode`, `http.route`, `http.response.status_code`, `hub.code` |
-| `hub.validate` | internal | `edge` | `hub.capability` |
-| `hub.resolve` | internal | `resolve` | `hub.integration_version`, `hub.snapshot_version`, `hub.target_index`, `hub.failover` |
-| `hub.idempotency` | client | `edge` | `hub.idempotency.result` |
-| `hub.transform.request` / `hub.transform.response` | internal | `transform` | `hub.transformer`, `hub.transformer_version` |
-| `hub.upstream` | client | `upstream` | `hub.vendor`, `hub.account`, `hub.endpoint`, `hub.attempt`, `hub.breaker_state`, `server.address`, `http.response.status_code`, `hub.wait.limiter_ms`, `hub.wait.bulkhead_ms` |
-| `hub.queue.enqueue` | producer | `queue` | `hub.pool` |
-| `hub.worker.attempt` | consumer (linked) | `delivery` | `hub.attempt`, `hub.queue_wait_ms`, `hub.outcome` |
-| `hub.callback.deliver` | client | `callbacks` | `hub.endpoint_id`, `hub.callback.attempt`, `hub.callback.event`, `hub.request_id`, `http.response.status_code`, `hub.outcome` |
-| `hub.webhook.inbound` | server | `webhooks` | `hub.vendor`, `hub.account`, `hub.event_type`, `hub.correlated` |
-| `hub.snapshot.apply` | internal | `registry` | `hub.snapshot_version`, `hub.compile_ms` |
-| `hub.admin.*` | server | `control` | `hub.actor`, `hub.action` |
-| `hubmcp.tool` | server | `hubmcp` | `mcp.tool`, `mcp.transport` |
+| Span (name) | Kind | Where | Key attributes | Status |
+| --- | --- | --- | --- | --- |
+| `{method} {route}`, e.g. `POST /v1/integrations/{integration_id}/invoke` (edge server span) | server | `telemetry.HTTPHandler` (otelhttp) + `edge` | `hub.request_id`, `hub.tenant`, `hub.integration_id`, `hub.integration_version`, `hub.mode`, `hub.code`, `http.route`, `http.response.status_code` (+ otelhttp semconv keys below) | HUB-231 |
+| `hub.transform.request` / `hub.transform.response` | internal | `delivery` (Attempter) | `hub.transformer`, `hub.transformer_version`; status `transform_failed` / `time_budget` | HUB-231 |
+| `upstream {vendor}.{endpoint}` | client | `upstream` | `hub.vendor`, `hub.account`, `hub.endpoint`, `server.address`, `http.request.method`, `http.response.status_code`, `hub.transport_error` | HUB-088, forwarding HUB-231 |
+| `hub.queue.enqueue` | producer | `edge` (async, wait, park) | `hub.pool`; status `persist_failed` | HUB-231 |
+| `hub.worker.attempt` | consumer (new root, linked) | `delivery` (Worker) | `hub.request_id`, `hub.tenant`, `hub.integration_id`, `hub.pool`, `hub.attempt`, `hub.queue_wait_ms`, `hub.outcome` (final state or short reason); status `transition_failed` | HUB-231 |
+| `hub.callback.deliver` | client (new root, linked) | `callbacks` | `hub.endpoint_id`, `hub.callback.attempt`, `hub.callback.event`, `hub.request_id`, `http.response.status_code`, `hub.outcome` | HUB-120, link HUB-231 |
+| `hub.validate`, `hub.resolve`, `hub.idempotency` | internal / client | `edge` | `hub.capability`; `hub.snapshot_version`, `hub.target_index`, `hub.failover`; `hub.idempotency.result` | planned (HUB-240) |
+| upstream `hub.attempt`, `hub.breaker_state`, `hub.wait.limiter_ms`, `hub.wait.bulkhead_ms` | — | `upstream` | — | planned (HUB-240) |
+| `hub.webhook.inbound` | server | `webhooks` | `hub.vendor`, `hub.account`, `hub.event_type`, `hub.correlated` | planned (HUB-240) |
+| `hub.snapshot.apply` | internal | `registry` | `hub.snapshot_version`, `hub.compile_ms` | planned (HUB-240) |
+| `hub.admin.*` | server | `control` | `hub.actor`, `hub.action` | planned (HUB-240) |
+| `hubmcp.tool` | server | `hubmcp` | `mcp.tool`, `mcp.transport` | HUB-300 |
 
-Stage spans (`validate`, `resolve`, `transform.*`) are created only when the trace is sampled; unsampled requests pay only the histogram cost. Span attributes never include body content, header values, or credential material. `hub.vendor`/`hub.account` are internal attributes; the trace backend is internal-only.
+Stage spans (`transform.*`) are created only when the parent span is recording; unsampled requests pay a context lookup (0 allocations, `TestSpanHelpersDoNotAllocateUnsampled`, `TestTransformSpans`) plus the histogram cost. `hub.vendor`/`hub.account` are internal attributes; the trace backend is internal-only.
+
+### 5.2 Attribute allowlist
+Span attributes never include body content, credential material or header values, with one exception: otelhttp's `user_agent.original` (the client software string, never a credential). Every key the Hub may emit is listed in `telemetry.AllowedSpanAttributes`: the `hub.*` keys above plus the otelhttp semantic-convention keys (`http.route`, `http.request.method`, `http.request.method_original`, `http.response.status_code`, `url.scheme`, `url.path`, `server.address`, `server.port`, `network.protocol.version`, `network.peer.address`, `network.peer.port`, `client.address`, `user_agent.original`, `http.request.body.size`, `http.response.body.size`). `telemetry.SpanAttributeViolations` fails a test on any key outside the list, and on any attribute, event, link or status value that contains a forbidden string. `TestSyncSpans` and `TestAsyncTraceLinksCallerToCallback` run it over every span of a request with the tenant API key and its hash, the vendor credentials, the callback signing secret and body fragments as forbidden values. Error text never goes into a span (no `RecordError`): statuses carry a short class only. Adding an attribute means adding it to the list and to the table above.
 
 ---
 
@@ -272,7 +292,7 @@ Pools exist only for: request body buffers, response serialisation buffers, audi
 
 ## 9. Debugging runbook
 
-Each alert's `runbook_url` points at `docs/runbooks/<AlertName>.md` (written in HUB-237); the sections below are the debugging guide those runbooks build on.
+Each alert's `runbook_url` points at `docs/runbooks/<AlertName>.md`; the index is [`docs/runbooks/README.md`](../runbooks/README.md) (HUB-237). The runbooks are the on-call procedure (checks, causes, fixes, escalation); the sections below are the debugging background they build on.
 
 ### 9.1 High Hub overhead (`HubOverheadP99High`)
 1. Platform dashboard → "Overhead by stage": which `hub_stage_duration_ms{stage}` moved?
@@ -339,7 +359,7 @@ SLO tiles S1 (overhead p99, sync + wait) and S3 (availability, Hub-caused failur
 ## 11. Alerts as code (`deploy/alerts/hub.rules.yaml`)
 
 ### 11.1 DESIGN §16.3 rules (shipped, HUB-232)
-Groups `hub-resilience`, `hub-delivery`, `hub-errors`, `hub-platform`. Every alert has `severity` (`page`/`warn`), `summary`, `description` and `runbook_url` = `https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/<AlertName>.md` (runbooks: HUB-237). Unit tests: `deploy/alerts/{resilience,delivery,errors,platform}_test.yml`, a firing and a non-firing case per alert. The file is the source of truth; the table is a summary.
+Groups `hub-resilience`, `hub-delivery`, `hub-errors`, `hub-platform`. Every alert has `severity` (`page`/`warn`), `summary`, `description` and `runbook_url` = `https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/<AlertName>.md` (runbooks: [index](../runbooks/README.md), HUB-237). Unit tests: `deploy/alerts/{resilience,delivery,errors,platform}_test.yml`, a firing and a non-firing case per alert. The file is the source of truth; the table is a summary.
 
 | Alert | Expression (PromQL, abridged) | For | Severity | Debugging |
 | --- | --- | --- | --- | --- |
@@ -412,6 +432,8 @@ Also new for the load runs: `net/http/pprof` is mounted on the ops port of every
 ---
 
 ## 14. MCP server observability (`hubmcp`)
+> **Status (2026-11-07):** HUB-300–307 ship the logs of §4.6 and the `User-Agent`; the metrics, span and alert below are planned in HUB-311.
+
 - **Metrics** (on its own ops port in HTTP mode; stdio mode exports via OTLP push or not at all):
   `hubmcp_tool_calls_total{tool, outcome}` (outcome = `ok`, `queued`, `hub_error:<code>`, `invalid_input`, `transport_error`), `hubmcp_tool_duration_seconds{tool}`, `hubmcp_sessions_active{transport}`, `hubmcp_hub_http_requests_total{operation, status}`.
 - **Logs**: §4.1 schema with `role=hubmcp`, `component=tool`, plus `mcp_tool`, `mcp_session` (random id, not user identity). Tool arguments and results are **never logged** (they contain canonical bodies); log `request_id` from Hub responses instead. In stdio mode logs go to **stderr** only (stdout is the protocol channel).

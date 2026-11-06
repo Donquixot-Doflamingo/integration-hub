@@ -45,6 +45,7 @@ func TestPromotionReachesThreeNodes(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	forbid("vendor credential", "fake-acct-ROT1", "fake-pass-ROT1", "fake-acct-ROT2", "fake-pass-ROT2") // secret grep (logscan_test.go)
 	rdb := redis.NewClient(&redis.Options{Addr: os.Getenv("HUB_REDIS_ADDR")})
 	t.Cleanup(func() { _ = rdb.Close() })
 

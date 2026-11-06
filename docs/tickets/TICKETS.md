@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **208** · done: **157** · todo: **45** · other (in-progress/in-review/blocked): **6**
+Total tickets: **229** · done: **158** · todo: **50** · other (in-progress/in-review/blocked): **21**
 
 ## Epics
 
@@ -14,13 +14,14 @@ Total tickets: **208** · done: **157** · todo: **45** · other (in-progress/in
 | EP-03 | M2 Transformer engine | M2 | F-04 | HUB-060–HUB-079 | 12 | 12 |
 | EP-04 | M3 Gateway sync path + audit | M3 | F-05, F-06, F-07, F-08 | HUB-080–HUB-109 | 19 | 18 |
 | EP-05 | M4 Outbox, worker, modes, idempotency, callbacks | M4 | F-09, F-10, F-11 | HUB-110–HUB-139 | 15 | 14 |
-| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 16 | 15 |
-| EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
+| EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 17 | 16 |
+| EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 17 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
-| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 17 | 1 |
+| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 1 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
-| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
-| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
+| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 0 |
+| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 0 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 5 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -1287,7 +1288,7 @@ Scenario 5 plus the milestone wrap-up.
 
 ### HUB-155 — Drain quota follows elapsed time, not the nominal tick
 - **Epic:** EP-06 · **Type:** fix · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-149 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Merged:** Merge pull request #22 from Donquixot-Doflamingo/fix/HUB-155-drain-elapsed-time · **Depends on:** HUB-149 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `fix/HUB-155-drain-elapsed-time`
 
 `TestChaos2RecoveryAndRampedDrain` failed on two PRs that do not touch the drain (#18: ramp step 2 released 15/20; #19: step 4 released 39/50). Root cause: the drain released `rate × nominal tick` per scheduler tick. A `time.Ticker` drops ticks when the scheduler is busy (probes, expiry sweeps, slow Postgres), so the quota of a late or dropped tick was lost and the drain ran below the DESIGN §10.5 rate on a loaded node. This is a production behaviour bug, not only a test one.
@@ -1296,6 +1297,18 @@ Scenario 5 plus the milestone wrap-up.
 - [x] The quota uses the time elapsed since the key's previous drain, capped at 2 ticks so a stall never becomes a burst (`TestDrainQuotaUsesElapsedTime`)
 - [x] Late ticks over 1.05 s at 50/s release 52, where the nominal-tick quota released 35
 - [x] `TestChaos2RecoveryAndRampedDrain` and `TestChaos3ReopenMidDrain` pass 3/3 under load
+
+### HUB-156 — Drain catch-up cap: one second of the rate, not two ticks
+- **Epic:** EP-06 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-155 · **Feature:** F-12 · **Stories:** US-12xx
+- **Branch:** `fix/HUB-156-drain-catch-up`
+
+After HUB-155, `TestChaos2RecoveryAndRampedDrain` still failed once on CI (#19: ramp step 2 released 15/20). With a 100 ms tick, a scheduler pass slower than 200 ms (probes, expiry, Postgres and Redis round trips on a slow runner) hit the 2-tick catch-up cap and the rest of its quota was lost again. One second of quota is the account's own per-second budget, so capping the catch-up there makes up any realistic stall without ever releasing above the ramped rate.
+
+**Acceptance criteria**
+- [x] `maxCatchUp(tick) = max(2 ticks, 1 s)` (`TestMaxCatchUp`); a 5-tick stall releases 5 ticks of quota, a 30-tick stall one second's (`TestDrainQuotaUsesElapsedTime`)
+- [x] `TestChaos2RecoveryAndRampedDrain` / `TestChaos3ReopenMidDrain` pass 3/3 with both CPUs saturated by busy loops (step 4: 50, 52, 50; it had dropped to 46 with the 2-tick cap)
+- [x] The ramp test checks what DESIGN §10.5 needs instead of exact 1 s windows, which a delayed scheduler pass on a CI runner broke (#25: step 4 at 29/50, the quota released after the window): released by each step's end never ahead of the ramp (+10 %); owed quota out within one catch-up horizon; all 160 out by 5.8 s (a drain at 70 % of the rate fails it at 6.29 s)
 ## EP-07 — M6 Versioning & cutover
 
 ### HUB-170 — Publish pipeline with full validation
@@ -1487,7 +1500,17 @@ Golden fixtures live in `transformers/<ID>/fixtures/`, shared by every version o
 - [x] Versions without one keep using the shared fixtures
 - [x] A failing per-version golden names `fixtures/v<N>/<case>`
 
-## EP-08 — M7 Control plane & hubctl
+### HUB-349 — Publisher archives a snapshot that does not rebuild when a draining account is targeted again
+- **Epic:** EP-07 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-15 · **Stories:** US-15xx
+- **Branch:** `fix/HUB-349-reactivate-rebuild`
+
+Found while building HUB-343 (`TestPerOperationSpecs`). `control.(*tree).drainUnreferenced` moves an account that is targeted again from `draining` back to `active` by rewriting its file in the edit tree, but returns only the accounts it *drained*. `commit` rebuilds the snapshot only when that list is non-empty, so on a re-activation it archives the edited tree with the checksum of the tree *before* the rewrite. Every later `Current()` / `Latest()` then fails with `corrupt snapshot blob: content rebuilds to …` and the admin API answers 500. Reproduce: publish a version that drops an account (it drains), then roll back to a version that targets it again.
+
+**Acceptance criteria**
+- [ ] `commit` rebuilds the snapshot whenever `drainUnreferenced` changed any account state (drained or re-activated)
+- [ ] Integration test in `internal/control`: drop an account, roll back, then `Current()` succeeds and the account is `active`
+
 
 ### HUB-200 — Admin server, OIDC dev stub, RBAC and /me
 - **Epic:** EP-08 · **Type:** feat · **Area:** backend
@@ -1684,14 +1707,14 @@ Export every §16.2 metric with labels tenant, integration, vendor, account, ver
 
 ### HUB-231 — Tracing: edge, transform, upstream, callback spans
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-027, HUB-088, HUB-120 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-review · **Depends on:** HUB-027, HUB-088, HUB-120 · **Feature:** F-18 · **Stories:** US-1806
 - **Branch:** `feat/HUB-231-tracing-spans`
 
-OTel spans for edge, transform, upstream and callback; accept caller `traceparent`; forward it to vendors that accept it (DESIGN §16.4).
+OTel spans for edge, transform, upstream and callback; accept caller `traceparent`; forward it to vendors that accept it (DESIGN §16.4). Decisions in ADR-0013 (vendor forwarding by `HUB_TRACE_FORWARD_VENDORS`, enqueue span in the envelope, `callback_deliveries.traceparent`, link-aware sampler).
 
 **Acceptance criteria**
-- [ ] One trace links caller → gateway → worker → vendor → callback for an async request
-- [ ] Spans carry no secrets or bodies (attribute allowlist test)
+- [x] One trace links caller → gateway → worker → vendor → callback for an async request: `TestAsyncTraceLinksCallerToCallback` (edge, integration): edge span continues the caller's trace, the envelope carries the `hub.queue.enqueue` span, the worker attempt links to it, the upstream span is its child and the vendor receives that span's `traceparent`, the callback span links to the attempt
+- [x] Spans carry no secrets or bodies (attribute allowlist test): `telemetry.AllowedSpanAttributes` + `SpanAttributeViolations`, run over every span in `TestSyncSpans` and `TestAsyncTraceLinksCallerToCallback`; the checker itself in `TestSpanAttributeViolations`
 
 ### HUB-232 — Alert rules and dashboards as code
 - **Epic:** EP-09 · **Type:** chore · **Area:** infra
@@ -1722,15 +1745,16 @@ Shipped as the `hub erase-subject` maintenance command, because the admin contra
 
 ### HUB-234 — Security hardening checks
 - **Epic:** EP-09 · **Type:** chore · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-086, HUB-022 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-review · **Depends on:** HUB-086, HUB-022 · **Feature:** F-18 · **Stories:** US-18xx
 - **Branch:** `chore/HUB-234-security-hardening`
 
 Add `gosec` and `govulncheck` to CI, verify TLS 1.2+ and egress allowlist enforcement, body limits and secret redaction across all roles (DESIGN §16.5, `docs/tech/SECURITY.md`).
 
 **Acceptance criteria**
-- [ ] CI fails on a high-severity gosec or known vulnerability
-- [ ] Test proves TLS < 1.2 vendor handshake fails
-- [ ] Secret grep over logs from the full itest run is empty
+- [x] CI fails on a high-severity gosec or known vulnerability: `backend.yml` jobs `gosec` (`make gosec`, gosec v2.30.0, fails on medium+ findings) and `govulncheck` (`make vuln`, v1.9.0); toolchain pinned to go1.26.10 (36 reachable stdlib vulns in go1.26.0) and `golang.org/x/net` v0.62.0; findings triaged in SECURITY.md §8.1
+- [x] Test proves TLS < 1.2 vendor handshake fails: `TestTLS` (upstream; TLS 1.0/1.1-only vendors with a positive control, TLS 1.2/1.3 succeed), `TestTLSFloorIsExplicit`, `TestGuardRefusesTLSBelow12` (callbacks)
+- [x] Secret grep over logs from the full itest run is empty: every role started by the `roles` tests logs through the production logger into one capture that `TestMain` greps for every declared secret; `TestRoleLogsCarryNoSecrets` runs gateway + worker + scheduler + admin on the encrypted credential source (sync, vendor echoing credentials, async + signed callback, connection test, rotation, unknown key)
+- Also verified: egress allowlist (`TestUndeclaredHostRefusedBeforeDial`, `TestDialerChecksEgress`, existing) and body limits through the handler (`TestBodyLimitsAtTheEdge`: 1 MB default, 4 MB LLM, declared and chunked)
 
 ### HUB-235 — Load test: 500 sync RPS + 2 000 async msg/s
 - **Epic:** EP-09 · **Type:** perf · **Area:** infra
@@ -1758,13 +1782,15 @@ Multi-hour soak with randomised mockvendor outages and worker restarts; reconcil
 
 ### HUB-237 — Runbooks and M8 summary
 - **Epic:** EP-09 · **Type:** docs · **Area:** docs
-- **Status:** todo · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-progress · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-1807
 - **Branch:** `docs/HUB-237-runbooks-m8`
 
 Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`, credential rotation, snapshot lag; post the M8 wrap-up. The alert rules (HUB-232) link `docs/runbooks/<AlertName>.md` for all ten alerts in `deploy/alerts/hub.rules.yaml` (six page, four warn).
 
+Part 1 done: `docs/runbooks/` has one runbook per alert (all ten, page and warn), the index `README.md` and `credential-rotation.md`, linked from OBSERVABILITY §9/§11.1 and F-18. Part 2: M8 summary and v1.0.0 release notes.
+
 **Acceptance criteria**
-- [ ] Each paging alert links a runbook
+- [x] Each paging alert links a runbook: `docs/runbooks/<AlertName>.md` exists for every `runbook_url` in `deploy/alerts/hub.rules.yaml` (the four warn alerts too)
 - [ ] Milestone summary posted; F-18 doc updated
 - [ ] Release notes for v1.0.0 prepared per `docs/process/RELEASE.md`
 
@@ -1779,6 +1805,39 @@ During the HUB-230 `make itest` run, `TestCutoverCompletedAndNewRequests/transfo
 - [x] Publish-time goldens either measure CPU time, apply the budget only outside `-race`, or retry once before failing on time alone: RunGoldens re-runs a case once on ErrTimeBudget (`TestGoldensRetryTimeBudgetOnce`)
 - [ ] `make itest` passes 10 consecutive full runs on CI hardware
 
+### HUB-240 — Tracing: remaining stage spans and upstream attempt attributes
+- **Epic:** EP-09 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-231 · **Feature:** F-18 · **Stories:** US-1806
+- **Branch:** `feat/HUB-240-tracing-stage-spans`
+
+The spans OBSERVABILITY §5.1 lists as planned after HUB-231: `hub.validate`, `hub.resolve`, `hub.idempotency` (edge, only when sampled), `hub.webhook.inbound`, `hub.snapshot.apply`, `hub.admin.*`, and on the upstream span `hub.attempt`, `hub.breaker_state`, `hub.wait.limiter_ms`, `hub.wait.bulkhead_ms`. Each new key goes into `telemetry.AllowedSpanAttributes`. When the admin contract gains a vendor-definition trace flag (TECH_SPEC §22 q9), switch vendor forwarding to it and retire `HUB_TRACE_FORWARD_VENDORS` (ADR-0013).
+
+**Acceptance criteria**
+- [ ] Each listed span exists with its attributes, created only under a recording parent (0 allocations unsampled)
+- [ ] Allowlist test covers the new spans
+- [ ] Overhead benchmark unchanged within noise
+
+### HUB-248 — `X-Content-Type-Options: nosniff` on gateway and admin responses
+- **Epic:** EP-09 · **Type:** chore · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-234 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `chore/HUB-248-nosniff`
+
+Found in HUB-234: gosec G705 flags `getSnapshot` writing archived registry JSON. It is served as `application/json` (triaged in SECURITY.md §8.1), but no response from the gateway or admin sets `X-Content-Type-Options: nosniff`, so the defence relies on browsers honouring the content type. Add the header in one middleware per public listener. Check with the contract steward whether a response header that is not in the contract needs a contract note first.
+
+**Acceptance criteria**
+- [ ] Every gateway and admin response carries `X-Content-Type-Options: nosniff` (test over each listener)
+- [ ] Contract steward confirmed whether `contracts/` needs a note; contract tests green
+
+### HUB-249 — Read timeout and header limit on the gateway and admin servers
+- **Epic:** EP-09 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-234 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `fix/HUB-249-server-read-timeouts`
+
+Found in HUB-234: SECURITY.md §2.1 lists `ReadHeaderTimeout` 5 s, a read timeout and max header bytes against slowloris, but `roles.Run` sets only `ReadHeaderTimeout`. A client can drip a body (up to the 1 MB / 4 MB limit) indefinitely and hold a connection and a goroutine. Set a body read deadline (`ReadTimeout` or per-request `http.ResponseController.SetReadDeadline` sized for the 4 MB LLM body), an explicit `MaxHeaderBytes`, and an `IdleTimeout`.
+
+**Acceptance criteria**
+- [ ] A body sent slower than the read deadline is cut off (test with a dripping client)
+- [ ] Oversized headers are refused with 431; documented values in SECURITY.md §2.1
 ### HUB-245 — Hashed subject index for the erasure job
 - **Epic:** EP-09 · **Type:** perf · **Area:** backend
 - **Status:** todo · **Depends on:** HUB-233 · **Feature:** F-18 · **Stories:** US-1805
@@ -2417,92 +2476,98 @@ Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits
 
 ### HUB-300 — hubmcp scaffold with official MCP Go SDK (stdio)
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-020, HUB-006, HUB-094 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-300-hubmcp-scaffold`
+- **Status:** in-review · **Depends on:** HUB-020, HUB-006, HUB-094 · **Feature:** F-20 · **Stories:** US-2006
+- **Branch:** `feat/HUB-300-hubmcp-scaffold` (delivered on `feat/HUB-300-hubmcp` with HUB-301–307)
 
 Create `cmd/hubmcp` using the official MCP Go SDK with stdio transport, config (Hub URL, tenant key from env, optional admin token) and tool registration from the frozen MCP tool definitions.
 
 **Acceptance criteria**
-- [ ] `hubmcp` starts over stdio and lists tools matching the contract
-- [ ] Tenant key read from env only and redacted in logs
-- [ ] Calls go through `pkg/hubclient`
+- [x] `hubmcp` starts over stdio and lists tools matching the contract (`TestStdioServesContractTools`, `TestToolListEqualsFrozenContract`)
+- [x] Tenant key read from env only and redacted in logs (`TestLoadConfig`, `TestSecretsAreRedactedInLogsAndOutput`)
+- [x] Calls go through `pkg/hubclient` (the app holds only a `hubclient.Client` for the caller API; archtest forbids `internal/`; User-Agent asserted in the HUB-302 tests)
 
 ### HUB-301 — Streamable HTTP transport
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-301-hubmcp-http`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2006
+- **Branch:** `feat/HUB-301-hubmcp-http` (delivered on `feat/HUB-300-hubmcp`)
 
 Add streamable HTTP transport with bearer auth for shared deployments.
 
 **Acceptance criteria**
-- [ ] Same tool list over HTTP and stdio
-- [ ] Unauthenticated HTTP clients rejected
+- [x] Same tool list over HTTP and stdio (`TestHTTPTransportServesSameToolsAsStdio`, `TestRunServesHTTPUntilCancelled`)
+- [x] Unauthenticated HTTP clients rejected (`TestHTTPTransportRejectsUnauthenticated`, `TestHTTPKeyVerificationIsCachedAndFailsClosed`; the bearer is the client's tenant key, ADR-0018)
 
 ### HUB-302 — Discovery tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-302-mcp-discovery-tools`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2001
+- **Branch:** `feat/HUB-302-mcp-discovery-tools` (delivered on `feat/HUB-300-hubmcp`)
 
 Tools to list integrations, describe one, and fetch a capability's schemas, backed by the discovery endpoints (HUB-090 contract).
 
 **Acceptance criteria**
-- [ ] Tool outputs never contain vendor, account or version
-- [ ] Tested against a contract-validated fake Hub
+- [x] Tool outputs never contain vendor, account or version (`TestDiscoveryNeverLeaksVendorIdentity` plants vendor/account/version fields and debug headers in every Hub response; outputs are built field by field)
+- [x] Tested against a contract-validated fake Hub (`TestListIntegrations`, `TestDescribeIntegration`: every exchange validated against hub-public.v1.yaml, every output against the tool's outputSchema)
 
 ### HUB-303 — Invoke, request status and dry-run tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-303-mcp-invoke-tools`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2002, US-2003, US-2004
+- **Branch:** `feat/HUB-303-mcp-invoke-tools` (delivered on `feat/HUB-300-hubmcp`)
 
 Tools to invoke an integration (returning Result vs Queued explicitly), get request status, and dry-run.
 
 **Acceptance criteria**
-- [ ] A 202 is reported as queued with the poll id, never as success
-- [ ] Error envelope surfaced with code, retryable, retry_after_ms
+- [x] A 202 is reported as queued with the poll id, never as success (`TestInvoke/202_queued_is_not_success`, `/202_in_flight`: `outcome: queued`, `accepted.poll`, `request_id`, `result: null`, text tells the model it is pending)
+- [x] Error envelope surfaced with code, retryable, retry_after_ms (`TestInvoke` error cases incl. circuit, reason, upstream and details; `TestGetRequest`, `TestDryRun` error cases; auto-retry at most once, retryable only, only with an idempotency key)
 
 ### HUB-304 — Confirm guard for money/quota integrations
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-303 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-304-mcp-confirm-guard`
+- **Status:** in-review · **Depends on:** HUB-303 · **Feature:** F-20 · **Stories:** US-2003
+- **Branch:** `feat/HUB-304-mcp-confirm-guard` (delivered on `feat/HUB-300-hubmcp`)
 
 For integrations with `moves_money_or_quota: true` (read via `getIntegration`), the invoke tool requires an explicit `confirm: true` and an idempotency key, and echoes a summary before calling.
 
 **Acceptance criteria**
-- [ ] Invoke without confirm returns a confirmation request and makes no Hub call
-- [ ] Missing idempotency key rejected client-side
+- [x] Invoke without confirm returns a confirmation request and makes no Hub call (`TestConfirmGuard`: `outcome: refused`, `CONFIRMATION_REQUIRED`, zero invoke calls, summary of the held-back call in the text; only the `getIntegration` read happens)
+- [x] Missing idempotency key rejected client-side (`TestConfirmGuard/confirm_but_no_key`: `IDEMPOTENCY_KEY_REQUIRED`, zero invoke calls; `TestConfirmGuardFailsClosed`: an unreadable flag invokes nothing)
 
 ### HUB-305 — Admin read-only tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-305-mcp-admin-readonly`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2005
+- **Branch:** `feat/HUB-305-mcp-admin-readonly` (delivered on `feat/HUB-300-hubmcp`)
 
 Read-only admin tools (request search/timeline, breaker states, DLQ list, integration versions) using a viewer token against `contracts/openapi/hub-admin.v1.yaml`; no mutating tools.
 
+Delivered: the three admin tools of the frozen tool contract (`hub_admin_search_requests`, `hub_admin_request_timeline`, `hub_admin_breaker_states`). DLQ list and integration versions are not in `contracts/mcp/hubmcp-tools.json` 1.0.0; they need a CCR first (tracked in HUB-312).
+
 **Acceptance criteria**
-- [ ] Tool set contains no mutating operation (test)
-- [ ] Fails clearly when no admin token is configured
+- [x] Tool set contains no mutating operation (test) (`TestAdminToolsAreReadOnly`: every admin `maps_to` is a hub-admin GET and exercising every tool sends only those GETs; the admin client has only a GET method)
+- [x] Fails clearly when no admin token is configured (`TestAdminToolsWithoutToken`: tools not registered, a call fails with an unknown-tool error naming the tool, server instructions and the start-up log say HUB_ADMIN_TOKEN is not set)
 
 ### HUB-306 — MCP tests
 - **Epic:** EP-11 · **Type:** test · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-301, HUB-302, HUB-303, HUB-304, HUB-305 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `test/HUB-306-mcp-tests`
+- **Status:** in-review · **Depends on:** HUB-301, HUB-302, HUB-303, HUB-304, HUB-305 · **Feature:** F-20 · **Stories:** US-2001–US-2006
+- **Branch:** `test/HUB-306-mcp-tests` (delivered on `feat/HUB-300-hubmcp`)
 
 Tool schema snapshot tests against the MCP contract, handler tests against a fake Hub, and an MCP Inspector smoke run.
 
+The protocol smoke run is `TestSpawnedBinaryOverStdio` (the binary spawned over real stdio by the go-sdk client). Running the MCP Inspector itself needs the npm package, which could not be fetched in this environment; it stays a manual step (HUB-313).
+
 **Acceptance criteria**
-- [ ] Tool schemas equal the frozen definitions
-- [ ] Every tool has success and error tests
+- [x] Tool schemas equal the frozen definitions (`TestToolListEqualsFrozenContract`, `TestEmbeddedContractIsTheFrozenOne`)
+- [x] Every tool has success and error tests (`TestEveryToolSuccessAndError`, driven by the contract's tool list, plus the per-tool tables)
 
 ### HUB-307 — MCP e2e against a running Hub
 - **Epic:** EP-11 · **Type:** test · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-306, HUB-097, HUB-123 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `test/HUB-307-mcp-e2e`
+- **Status:** in-review · **Depends on:** HUB-306, HUB-097, HUB-123 · **Feature:** F-20 · **Stories:** US-2001–US-2005
+- **Branch:** `test/HUB-307-mcp-e2e` (delivered on `feat/HUB-300-hubmcp`)
 
 Run hubmcp against a compose Hub + mockvendor and exercise discovery, sync invoke, async invoke + status, dry-run.
 
+`TestMCPEndToEnd` (`backend/cmd/hubmcp/e2e_integration_test.go`, tag `integration`) builds `hub`, `hubctl` and `mockvendor`, runs admin + gateway + worker + mockvendor as processes on `HUB_PG_DSN`/`HUB_REDIS_ADDR` (the compose services; no Docker needed), with a copy of `backend/config` pointed at mockvendor and dev credentials from `hubctl creds`.
+
 **Acceptance criteria**
-- [ ] All flows pass end to end
-- [ ] No vendor identity in any tool output except `hub_dry_run`, the documented exception (grep)
+- [x] All flows pass end to end (discovery, dry-run, sync invoke + status, async invoke → queued → succeeded via `hub_get_request`, money/quota refusal then confirmed invoke, the three admin tools)
+- [x] No vendor identity in any tool output except `hub_dry_run`, the documented exception (grep) (subtest `no_vendor_identity_outside_hub_dry_run_(grep)` over every tenant tool output, with the gateway sending debug version headers; the dry-run subtest proves the exception shows the mockvendor URL with secrets `***`)
 
 ### HUB-308 — hubclient polish: retries, polling, callback verifier
 - **Epic:** EP-11 · **Type:** feat · **Area:** backend
@@ -2538,6 +2603,38 @@ Add an SSE reader to `pkg/hubclient` mapping canonical chunks (`delta.text`, `fi
 **Acceptance criteria**
 - [ ] Reader yields chunks in order and surfaces a terminal error event as an error
 - [ ] Context cancellation closes the stream
+
+### HUB-311 — hubmcp metrics and traces (OBSERVABILITY §14)
+- **Epic:** EP-11 · **Type:** feat · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-306 · **Feature:** F-20 · **Stories:** US-2005
+- **Branch:** `feat/HUB-311-hubmcp-telemetry`
+
+OBSERVABILITY §14 plans `hubmcp_tool_calls_total`, `hubmcp_tool_duration_seconds`, `hubmcp_sessions_active`, `hubmcp_hub_http_requests_total`, a `hubmcp.tool` span with `traceparent` propagation to the Hub and the `MCPInvokeErrorsHigh` alert. HUB-300–307 ship the `tool_called` log and the User-Agent only. Decide where metrics are exposed (stdio has no listener: ops port in HTTP mode only, or OTLP push) and implement.
+
+**Acceptance criteria**
+- [ ] Metrics and span exist as listed in §14, with the exposure decision recorded
+- [ ] `traceparent` from the tool span reaches the Hub (hubclient `WithTraceparent`)
+
+### HUB-312 — CCR + hub_admin DLQ and integration-version tools
+- **Epic:** EP-11 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-305 · **Feature:** F-20 · **Stories:** US-2005
+- **Branch:** `contract/HUB-312-mcp-admin-dlq-versions`
+
+HUB-305's description lists a DLQ list and integration versions, but `contracts/mcp/hubmcp-tools.json` 1.0.0 has only three admin tools. Ask `contract-steward` for read-only `hub_admin_dlq_list` (`hub-admin#listDlq`) and `hub_admin_integration_versions` tools (minor bump), then implement them GET-only like HUB-305.
+
+**Acceptance criteria**
+- [ ] Contract change merged first (own commit, version bump)
+- [ ] Tools implemented with success/error and read-only tests
+
+### HUB-313 — MCP Inspector smoke run
+- **Epic:** EP-11 · **Type:** test · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-306 · **Feature:** F-20 · **Stories:** US-2006
+- **Branch:** `test/HUB-313-mcp-inspector`
+
+Run `@modelcontextprotocol/inspector` (CLI mode) against `bin/hubmcp` in CI or as a scripted manual check (list tools, call `hub_list_integrations` against mockvendor). HUB-306 covers the protocol with a spawned-binary go-sdk test; the Inspector package could not be fetched in the build environment.
+
+**Acceptance criteria**
+- [ ] Scripted Inspector run lists the contract tools and calls one tool successfully
 
 ## EP-12 — Release 2 (DESIGN §19 Phase 2)
 
@@ -2661,6 +2758,176 @@ Coarse placeholder for Release 2 (DESIGN §19 Phase 2). §9: `CredentialSource` 
 **Acceptance criteria**
 - [ ] Split into ~1-day tickets in this range before work starts
 - [ ] Feature doc F-22 section updated with scope and contracts
+
+### HUB-342 — Use-case catalogue and a runnable OTP → account-verification example
+- **Epic:** EP-12 · **Type:** docs · **Area:** docs
+- **Status:** in-review · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
+- **Branch:** `docs/HUB-342-use-cases`
+
+The product owner asked how calls work and how UX-style flows ("first an OTP, then the user gives the account number") are handled inside the Hub. Write `docs/use-cases/README.md`: a catalogue for non-engineers of what the Hub does today vs what is planned, with the caller's exact requests and responses (shapes from `contracts/openapi/hub-public.v1.yaml`, no vendor names), a sequence diagram, failure behaviour and a status line citing the test that proves it. Back the two-step flow with a runnable example under `examples/otp-account-flow/` (registry overlay kept out of `backend/config` and `contracts/`, fictional vendor `demo-kyc` on mockvendor) and an integration test through the real gateway. Gaps found on the way become their own tickets (HUB-343 … HUB-348).
+
+**Acceptance criteria**
+- [x] `docs/use-cases/README.md` covers: how a call flows (pipeline, DESIGN §18.6 latency budget), events sync/async with multi-account and a minimal response, vendor/account swap with zero caller change, vendor down (fail_fast / wait / async parking and drain), async with signed callback, idempotent retry, two-step OTP → verify → bank account, the DESIGN §14 lending patterns with their EP-12 tickets
+- [x] Each use case has the caller's HTTP requests/responses, a mermaid sequence diagram, failure behaviour and a status line (Works today + test / Partly / Planned + ticket)
+- [x] `examples/otp-account-flow/` overlay: two example capability schemas, vendor `demo-kyc`, two accounts, tenant `loan-onboarding`, integrations `int_demo_otp` (v1, v2) and `int_demo_bank_verify`, four transformers with goldens; nothing added to `backend/config` or `contracts/`
+- [x] `TestExampleOTPConfigBuilds` (unit) builds the overlay and runs its goldens; `TestExampleOTPAccountFlow` (integration) runs step 1 (session opened, vendor txn id kept) → publish v2 → step 2 pinned to account A → step 3 bank verification, plus wrong OTP, vendor-expired OTP, expired session (`SESSION_NOT_FOUND`), double tap, vendor down, edge refusals, invalid account
+- [x] `examples/otp-account-flow/README.md` with how to run it and the exact requests
+- [x] Linked from the root `README.md` and `docs/features/README.md`; CHANGELOG entry
+
+### HUB-343 — Per-operation transformers on integration version targets
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-344 · **Feature:** F-22 (built in F-14) · **Stories:** US-2205
+- **Branch:** `feat/HUB-343-per-operation-transformers`
+
+Found while building HUB-342. A target has one transformer pair (`transformer: {request, response}`), and the attempter uses it for every operation (`internal/delivery/attempter.go`). Because a request transformer names one `vendor_endpoint` and is compiled against one operation's schema, a multi-operation capability (DESIGN §3.1 `kyc.aadhaar_otp@v1` with `generate` and `verify`, each on its own vendor endpoint) cannot be expressed today. Let a target map each operation to its own pair, keeping the current single pair for single-operation capabilities. Needs the admin contract change in HUB-344 first (integration versions are created and shown through `/admin/v1`).
+
+**Acceptance criteria**
+- [x] A target may set `operations: {<op>: {request, response}}`; the publish check refuses a version that leaves an operation of its capability without a pair, or pairs a transformer compiled for another operation (every operation always has a pair, the default `transformer` is required by the contract; the check `operations_have_transformers` refuses an undeclared key and any operation whose selected pair is compiled for another operation): `TestOperationsHaveTransformers`, `TestPerOperationSpecs` (admin validate and publish, contract pointers)
+- [x] Sync, wait, async and dry-run select the pair of the invoked operation (envelope `operation`), including session steps and the failover chain: `TestPerOperationSyncSelectsThePair`, `TestPerOperationFailoverSelectsThePair`, `TestPerOperationDryRunSelectsThePair`, `TestPerOperationShadowSelectsThePair`, `TestPerOperationWaitMode`, `TestPerOperationAsyncWorker`, session steps in `TestExampleOTPAccountFlow`
+- [x] Integration test: `generate` and `verify` on two mockvendor endpoints in one session; goldens per transformer: `TestExampleOTPAccountFlow` (`send_otp` → `/v1/otp/send`, `verify_otp` → `/v1/otp/verify` in one session, pinned to v1 / account A across a publish), goldens for all four OTP transformers and the four `internal/testkit/multiop` transformers
+- [x] `examples/otp-account-flow` moves to two operations (`send_otp`, `verify_otp`) and `docs/use-cases/README.md` drops the "one operation" note
+
+### HUB-344 — Contract: per-operation transformers in admin integration versions
+- **Epic:** EP-12 · **Type:** contract · **Area:** contracts
+- **Status:** in-review · **Depends on:** — · **Feature:** F-22 · **Stories:** US-2205
+- **Branch:** `contract/HUB-344-per-operation-transformers` (committed on `feat/HUB-343-per-operation-transformers`, as the first commit of the HUB-343 train)
+
+Contract change request from HUB-342 for the `contract-steward`: the admin integration-version target needs an optional per-operation transformer map next to the existing `transformer` pair, so HUB-343 can be configured, published, diffed and shown by the console and `hubctl` (additive, admin minor bump). The caller API is unchanged: `invokeIntegrationOperation` already exists.
+
+**Acceptance criteria**
+- [x] `hub-admin.v1.yaml` target schema gains optional `operations: {<operation name>: {request, response}}` (refs `^[A-Za-z][A-Za-z0-9_-]{0,63}@[1-9][0-9]*$`), with an example
+- [x] `info.version` minor bump, `contracts/CHANGELOG.md` entry, validation clean
+- [x] Backend and frontend notified (contract notice below)
+
+#### Contract notice — HUB-344 — hub-admin.v1.yaml 1.1.0 → 1.2.0 (minor)
+- Changed: new schema `TransformerPair` (`request`, `response`: `TransformerRef`, both required); `TargetRef.transformer` now `$ref`s it (same shape, still required: the default pair). New optional `TargetRef.operations`: object, `minProperties: 1`, keys `OperationName` (`^[a-z][a-z0-9_]{0,31}$`), values `TransformerPair`. `TargetRef` is used by `Target` (`targets[]`), `failover[]` and `ShadowPolicy.target`, so it appears in every `IntegrationSpec`. `ValidationCheck.check` lists the new known check `operations_have_transformers`.
+- operationIds whose bodies carry `IntegrationSpec`: `createIntegrationDraft`, `updateIntegrationDraft`, `validateIntegrationVersion`, `getIntegrationVersion`, `getIntegration` (`active`), `publishIntegrationVersion`, `rollbackIntegration`, `updateIntegrationWeights`, `diffIntegrationVersions` (generic diff ops). Named examples `per_operation` on `createIntegrationDraft` (request) and `getIntegrationVersion` (200).
+- Backend (HUB-343): accept, store, round-trip and render `operations` in the admin spec conversion (`internal/control/adminapi/integration_spec.go`) and the registry version file; select the pair by the invoked operation (listed → its pair, otherwise `transformer`) for targets, failover and shadow; report `operations_have_transformers` failures with pointer `/targets/<i>/operations/<op>` (or `/targets/<i>/transformer` for a defaulted operation); extend contract tests with a spec that has `operations`.
+- Frontend: `npm run gen:api` (schema.d.ts gains `TransformerPair` and `operations`; contract.gen.ts version string changes, so the CI freshness check fails until regenerated); show per-operation pairs in the integration version view and draft editor.
+- hubmcp / caller skill: no change (no tool exposes the target; callers never see transformers).
+
+### HUB-345 — Refuse multi-operation integrations whose single pair serves every operation
+- **Epic:** EP-12 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** — · **Feature:** F-03 · **Stories:** US-0301
+- **Branch:** `fix/HUB-345-multi-op-single-pair` (delivered on `feat/HUB-343-per-operation-transformers`: the HUB-343 check `operations_have_transformers` subsumes it)
+
+Found while building HUB-342. A capability with operations `send` and `verify`, bound to an integration whose target pair is compiled for `send` (`operation: send`), builds a snapshot without any problem. Invoking `verify` then runs the `send` transformers on a `verify` body and validates the result against the `send` response schema. Until HUB-343 lands, the registry should refuse such a version with a path-qualified error instead of failing at request time.
+
+**Acceptance criteria**
+- [x] `registry.Build` refuses an integration version whose target transformers are compiled for a different operation than one the capability declares, naming the file and `targets[i].transformer` (registry `checkOperations`, check `operations_have_transformers`). With HUB-343 a multi-operation capability is no longer refused as such: it is refused when its default pair would serve an operation it is not compiled for, which is exactly the one-pair case this ticket is about
+- [x] Table test in `internal/registry` (two-operation capability, one pair) fails before the fix and passes after: `TestOperationsHaveTransformers/two-operation_capability,_one_pair_(HUB-345)` (verified by disabling the check); the example config proves it too (`TestExampleOTPRefusesOnePairForBothOperations`)
+- [x] `go test -race ./internal/registry/...` green
+
+### HUB-346 — Transformer error rules map a canonical `reason`
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-04 · **Stories:** US-0405
+- **Branch:** `feat/HUB-346-error-rule-reason`
+
+Found while building HUB-342. An OTP screen must tell "wrong OTP, try again" from "OTP expired, resend" and "too many attempts". Today a transformer error rule can set `code`, `retryable`, `retry_after_ms` and `message` only, so callers can branch on nothing but free text (`upstream.code` is opaque by contract). Allow `reason:` on error rules. New reason values (e.g. `otp_mismatch`, `otp_expired`, `otp_attempts_exceeded`) must first be listed in the `reason` description of `contracts/schemas/events/canonical-error.json` (contract-steward, minor bump).
+
+**Acceptance criteria**
+- [ ] Contract change request filed and merged for the new reason values before the backend change
+- [ ] Error rules accept `reason` (expression or literal, ≤ 64 chars); golden error cases can pin it
+- [ ] Unit tests in `internal/transform`; contract test shows the reason in the 422 envelope
+
+### HUB-347 — Per-integration result cache for sync lookups
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237 · **Feature:** F-22 · **Stories:** US-2205
+- **Branch:** `feat/HUB-347-lookup-result-cache`
+
+Coarse placeholder for Release 2, found while writing the HUB-342 use-case catalogue. DESIGN §14 lists an "optional per-integration result cache (e.g. PAN–Aadhaar link, 24 h)" for sync lookups; nothing implements it and no ticket tracked it. Split into ~1-day tickets (with stories, feature doc and any contract or config change) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 section updated with scope, cache key rules (tenant + integration + canonical body hash) and audit behaviour of a cache hit
+
+### HUB-348 — Upload + job pattern (bank statement analysis, bulk CKYC)
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-237, HUB-098 · **Feature:** F-22 · **Stories:** US-2205
+- **Branch:** `feat/HUB-348-upload-job`
+
+Coarse placeholder for Release 2, found while writing the HUB-342 use-case catalogue. DESIGN §14 "Upload + job": large payloads in object storage with pointers in the ledger, and job poll/webhook adapters (bank statement analysis, bulk CKYC). F-22 and EP-12 had no item for it. Split into ~1-day tickets (with stories, feature doc and contract change requests) before starting.
+
+**Acceptance criteria**
+- [ ] Split into ~1-day tickets in this range before work starts
+- [ ] Feature doc F-22 gains the item, with the contract changes it needs (upload size limits, job status) listed as CCRs
+
+### HUB-350 — `hubctl dry-run` for one operation of a multi-operation integration
+- **Epic:** EP-12 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-343 · **Feature:** F-17 · **Stories:** US-17xx
+- **Branch:** `feat/HUB-350-hubctl-dry-run-operation`
+
+Found while building HUB-343. `hubctl dry-run <integration> <body.json>` dry-runs the default request transformer of the heaviest target (`cmd/hubctl/ops.go`). For an integration whose target has per-operation pairs, the operator cannot see the request of another operation (e.g. `verify_otp`). Add `--operation <name>` that picks `operations.<name>.request` when the target lists it (else the default), through the existing `POST /admin/v1/transformers/dry-run` (no contract change: the client reads `operations` from `getIntegration`, hub-admin 1.2.0).
+
+**Acceptance criteria**
+- [ ] `hubctl dry-run --operation verify_otp int_demo_otp body.json` dry-runs the verify pair's request transformer; without the flag, behaviour is unchanged
+- [ ] Unit test with a fake admin server
+
+## EP-13 — Operability follow-ups (found writing the M8 runbooks)
+
+Range HUB-400–HUB-429. The EP-09 range is full; these came out of HUB-237.
+
+### HUB-400 — hubctl on-call commands for the runbooks
+- **Epic:** EP-13 · **Type:** chore · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-18 · **Stories:** US-1807
+- **Branch:** `chore/HUB-400-hubctl-oncall`
+
+The alert runbooks (HUB-237) fall back to curl for actions that have admin operations but no `hubctl` command. Add thin `hubctl` wrappers over the existing admin operationIds, so no contract change is needed. Also fix `hubctl replay`'s usage text, which leaves out its `-vendor` flag.
+
+**Acceptance criteria**
+- [ ] `hubctl breakers list|get|force-open|force-close|clear-force`
+- [ ] `hubctl pause|resume <integration> -reason`
+- [ ] `hubctl dlq list` (replay exists)
+- [ ] `hubctl account get|test-connection|rotate` (add-next, promote, delete-old)
+- [ ] `hubctl snapshot latest`
+- [ ] Runbooks switched from curl to these commands; table-driven tests against a contract-validated fake admin API
+
+### HUB-401 — SnapshotBehind fires falsely after a restart: snapshot_version is per process
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-18 · **Stories:** US-1807
+- **Branch:** `fix/HUB-401-snapshot-version`
+
+`registry.Store.Swap` counts versions per process from 1, so a node restarted after any publish reports a lower `snapshot_version` than its peers forever, and `SnapshotBehind` fires falsely. Audit rows store the same local number, so it cannot be compared across nodes. Use the published archive version (or checksum) for the gauge and the audit field.
+
+**Acceptance criteria**
+- [ ] The gauge and audit `snapshot_version` carry the archive version; a restarted node matches its peers
+- [ ] Alert test (promtool) for a restart after a publish: no `SnapshotBehind`
+- [ ] Runbook SnapshotBehind.md: false-positive section removed
+
+### HUB-402 — Enforce the credential minimum length on the admin API
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-15 · **Stories:** US-15xx
+- **Branch:** `fix/HUB-402-cred-min-length`
+
+`addNextCredential` does not enforce the 6-byte minimum that `hubctl creds set` does, yet TECH_SPEC §9 says it is validated at save. Values shorter than the redaction minimum would not be redacted from logs. Return the existing validation error code from the admin API, matching the contract's 422 shape.
+
+**Acceptance criteria**
+- [ ] `addNextCredential` refuses a value under 6 bytes with the contract's validation error (contract test)
+- [ ] Unit test: every credential write path shares one validator
+
+### HUB-403 — Wire the promised ops settings: pprof, log level, worker concurrency
+- **Epic:** EP-13 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `feat/HUB-403-ops-settings`
+
+OBSERVABILITY §8.1 and TECH_SPEC §8.1 promise pprof on the ops port, `PUT /debug/loglevel`, and `HUB_WORKER_CONCURRENCY` / `HUB_WORKER_CLAIM_BATCH`. None of these is wired: workers are fixed at 16 in flight and 32 per claim. The audit buffer (10 000) cannot be configured, and "archive unreachable" is logged only at DEBUG.
+
+**Acceptance criteria**
+- [ ] pprof served on the internal ops port only (never the public port), with a test
+- [ ] Runtime log-level change on the ops port
+- [ ] Worker concurrency, claim batch and audit buffer read from config, with defaults unchanged
+- [ ] "archive unreachable" logged at WARN
+
+### HUB-404 — Reconcile OBSERVABILITY §9 with the code
+- **Epic:** EP-13 · **Type:** docs · **Area:** docs
+- **Status:** todo · **Depends on:** — · **Feature:** F-18 · **Stories:** US-1807
+- **Branch:** `docs/HUB-404-observability-drift`
+
+OBSERVABILITY §9 cites things that do not exist: the metrics `drain_release_rate`, `worker_inflight`, `outbox_*` and `http_request_size_bytes`; the log events `envelope.poisoned` and `snapshot.apply_failed`; a "promote previous" credential step; and `audit_events_dropped_total{reason="encode_error"}`. Fix the doc to match the code, or file the missing pieces as tickets. Restoring the `previous` credential slot needs a contract change request.
+
+**Acceptance criteria**
+- [ ] Every metric, log event and operation named in OBSERVABILITY.md exists in the code or contract (a check script lists none missing)
+- [ ] CCR filed if restoring the previous credential slot is kept
 
 ## Parallel tracks
 

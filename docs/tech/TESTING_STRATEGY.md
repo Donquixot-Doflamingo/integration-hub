@@ -61,6 +61,7 @@ flowchart TB
 - Every transformer must have at least: a happy path, an optional field absent (`??` defaults), each `errors:` rule, and a max-size payload.
 - Comparison is semantic JSON equality with a stable diff output; volatile values (`now()`, `uuid()`) are pinned by a fake clock and seeded uuid in the expr env.
 - **Secret grep (M3)**: goldens use fixture credentials registered with the redactor; the test asserts the expected request contains them **only** in header/query/auth targets and that the `request.transformed` audit form contains `***`.
+- **Role-log secret grep (HUB-234)**: every role started by the `cmd/hub/internal/roles` tests logs through the production logger into one capture; `TestMain` fails the package if any secret a test declared with `forbid` appears in it, and `TestRoleLogsCarryNoSecrets` drives gateway + worker + scheduler + admin through every secret-handling path on the encrypted credential source (SECURITY.md §9).
 - `-update` flag regenerates expected files; CI rejects runs with `-update`.
 
 ## 4. Contract tests
@@ -89,6 +90,7 @@ Contract change → `contracts/` commit → backend contract tests fail until im
   - Idempotency: duplicate submissions with the same key → one vendor call; concurrent duplicates (in-progress marker).
   - Wait mode: 200 within window; 202 + worker completion; gateway crash during wait → reclaimed.
   - Audit: full §13.1 timeline for sync and async; sha256/bytes present; masked policy via `x-pii`; **grep test: no registered secret anywhere in `request_events`**.
+  - Tracing (HUB-231): one async request through gateway, outbox, worker, mockvendor and callback dispatcher with an in-memory span recorder; asserts the caller → edge → enqueue ⇢ worker attempt → upstream (vendor got its `traceparent`) ⇢ callback chain and runs the span attribute allowlist (`telemetry.SpanAttributeViolations`: no key outside `AllowedSpanAttributes`, no credential, API key or body fragment in any value).
   - Subject erasure (HUB-233): **schema-wide grep**. Every bytea/json/jsonb/text column of every `hub` table (catalog-driven, so new tables are covered automatically), plus the opened sealed payloads, holds no stored form of the subject after erasure. The same grep before erasure must hit, so the test cannot pass vacuously. Hashes, sizes, timelines and metadata compare equal before and after; deferral of in-flight requests; `change_log` row (`TestEraseSubjectPurgesEveryStoredBody`, `TestEraseSubjectScope`).
   - Partitions: point lookup by ULID hits one partition (`EXPLAIN`); partition maintenance job idempotent.
   - Migrations: `goose up` from empty, `goose down` one step, and up again.
@@ -163,10 +165,14 @@ Defined in `OBSERVABILITY.md` §12 (L1–L6): 500 sync RPS + 2,000 async msg/s (
 - Accessibility: `axe-core` assertions in component tests and Playwright (`@axe-core/playwright`) on every route.
 
 ## 13. MCP server tests (`hubmcp`)
-- **Unit**: each tool handler with a fake Hub HTTP server serving contract examples; input-schema validation; 202 → "queued" result; error envelope passthrough; idempotency key generation for `hub_invoke`; admin tools absent when `HUB_ADMIN_TOKEN` is unset.
-- **Leak test**: tool list, tool schemas, and every tool result in tests contain no vendor/account/version fields (same scanner as §4.1).
-- **Protocol**: in-memory transport from the go-sdk (client ↔ server) for `initialize`, `tools/list`, `tools/call`; stdio test spawning the binary; streamable HTTP test with session ids, `Origin` validation, missing/invalid `Authorization` rejected.
-- **E2E**: against the compose stack: list → describe → dry-run → invoke → get_request for `int_evt_brandA` through mockvendor.
+All in `backend/cmd/hubmcp` (package `main`), `go test -race`, goleak in `TestMain`.
+- **Contract**: `TestEmbeddedContractIsTheFrozenOne` (embedded copy == `contracts/mcp/hubmcp-tools.json`); `TestToolListEqualsFrozenContract` (advertised name, title, description, annotations, input and output schemas equal the frozen file, with and without `HUB_ADMIN_TOKEN`).
+- **Fake Hub** (`fakehub_test.go`): one httptest server for `/v1` and `/admin/v1`; each request is matched to its operationId, answered with contract examples (optionally mutated) and the whole exchange is validated against `hub-public.v1.yaml` / `hub-admin.v1.yaml` (`internal/testkit/contract`). Every tool output is validated against the tool's `outputSchema` (`callTool`).
+- **Unit**: per-tool tables for success and error paths (`TestListIntegrations`, `TestDescribeIntegration`, `TestInvoke`, `TestGetRequest`, `TestDryRun`, `TestAdmin*`); `TestEveryToolSuccessAndError` runs one success and one error scenario for every contract tool and asserts each tool only calls the operations in its `maps_to`. Input-schema validation, 202 → `queued`, error envelope passthrough, auto-retry rules, the 60 s pre-check cache, the money/quota guard (`TestConfirmGuard`), admin tools absent without a token. No idempotency key is generated (ADR-0018).
+- **Leak test**: `callTool` scans every tenant tool result (structured and text) for planted vendor/account/version values, field names and debug headers; `TestDiscoveryNeverLeaksVendorIdentity` plants them in every Hub response. Credentials are asserted absent from every output and log.
+- **Protocol**: in-memory go-sdk transport for most tests; `TestStdioServesContractTools` (the entry point over stdio pipes); `TestSpawnedBinaryOverStdio` (the binary spawned with `mcp.CommandTransport`: initialize, tools/list, tools/call); streamable HTTP tests for the tool list, missing/invalid bearer → 401, cross-origin → 403, key verification cache and fail-closed (`httpserve_test.go`).
+- **E2E** (`//go:build integration`, `e2e_integration_test.go`): builds `hub` and `mockvendor`, runs gateway + worker + admin on the test database with a copy of `backend/config` pointed at mockvendor, and drives hubmcp over the in-memory transport: list → describe → dry-run → sync invoke → async invoke + get_request → money/quota refusal → admin tools; tenant outputs are grepped for vendor identity.
+- **MCP Inspector**: manual (`npx @modelcontextprotocol/inspector bin/hubmcp`, env `HUB_BASE_URL`, `HUB_API_KEY`); not run in CI (HUB-313).
 - **Evaluation**: the `mcp-builder` skill's evaluation harness (`backend/.claude/skills/mcp-builder/scripts/evaluation.py`) with ~10 realistic questions; run manually before a release, not in CI.
 
 ## 14. CI stages and gates
@@ -191,6 +197,7 @@ flowchart LR
 | Hygiene, commit message format, CHANGELOG entry per commit | yes |
 | Contract lint + `info.version` bumped when `contracts/` changed | yes |
 | golangci-lint, arch test, `govulncheck` (no known vulns in called code) | yes |
+| `gosec` (no untriaged medium/high finding in non-test code, SECURITY.md §8.1) | yes |
 | `make test` (-race, goldens, contract coverage) | yes |
 | `make itest`, chaos (path-filtered) | yes |
 | Benchmark regression | yes for hot-path packages; advisory elsewhere |

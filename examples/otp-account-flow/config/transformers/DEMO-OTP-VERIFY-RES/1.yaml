@@ -1,0 +1,33 @@
+# EXAMPLE ONLY (HUB-342, HUB-343). Fictional vendor "demo-kyc" (see DEMO-OTP-VERIFY-REQ@1).
+# Wrong or expired OTPs map to UPSTREAM_REJECTED with a fixed, vendor-neutral message. No session:
+# section: a later step never opens a session.
+transformer: DEMO-OTP-VERIFY-RES
+version: 1
+kind: response
+capability: demo.mobile_otp@v1
+operation: verify_otp
+response:
+  status:     '"verified"'
+  vendor_ref: res.body.ref
+errors:
+  - when: res.status == 401 || res.status == 403
+    code: UPSTREAM_AUTH_FAILED
+    retryable: false
+  - when: res.status == 429
+    code: UPSTREAM_RATE_LIMITED
+    retryable: true
+    retry_after_ms: int(header(res, "Retry-After") ?? "1") * 1000
+  - when: res.status >= 500
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+  - when: 'res.status == 422 && res.body.error == "OTP_MISMATCH"'
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The OTP does not match"'
+  - when: 'res.status == 422 && res.body.error == "OTP_EXPIRED"'
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The OTP has expired; request a new one"'
+  - when: res.status >= 400
+    code: UPSTREAM_REJECTED
+    retryable: false

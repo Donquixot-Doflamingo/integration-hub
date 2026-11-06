@@ -2,8 +2,8 @@
 
 | | |
 | --- | --- |
-| Status | Phase 1 (plan) |
-| Date | 2026-10-31 |
+| Status | Phase 1 (plan); HUB-234 hardening checks in CI and tests |
+| Date | 2026-10-31 (updated 2026-11-07, HUB-234) |
 | Behaviour source | DESIGN §9 (credentials), §12 (webhooks), §13.2 (payload policies), §16.1 (RBAC), §16.5 (security) |
 
 ## 1. Assets and trust boundaries
@@ -52,7 +52,7 @@ flowchart LR
 | Stolen/guessed tenant key | S | 256-bit random keys, stored as SHA-256 hash (high-entropy keys do not need a slow KDF), constant-time lookup via hash map; shown once; rotation with overlap; optional mTLS identity (DESIGN §4.2) |
 | Tenant invokes another tenant's integration | E | grant check on every request (owner or `integration_grants`) before validation; returns 403 `FORBIDDEN`, and 404 for integrations the tenant cannot see in discovery (no existence oracle) |
 | Caller learns vendor/account/version | I | contract scanner (TESTING §4.1), D12; the one documented exception is `dryRunIntegration` (exact upstream request, secrets `***`), gated by key scope `dry_run` that is not granted by default (PRD DV-6); `X-Hub-Integration-Version` debug header **disabled in prod** by default; error envelope `upstream` carries only numeric status/code; vendor error messages passed through for `UPSTREAM_REJECTED` are a leak risk → transformers must map them to canonical text where they name the vendor (review checklist) |
-| Body bombs / slowloris | D | body limit 1 MB (4 MB LLM) (DESIGN §16.5), `ReadHeaderTimeout` 5 s, read timeout, max header bytes, global in-flight limit, tenant token buckets |
+| Body bombs / slowloris | D | body limit 1 MB (4 MB LLM) (DESIGN §16.5; `TestBodyLimitsAtTheEdge`: declared and chunked bodies, 413 `PAYLOAD_TOO_LARGE` before validation or any vendor call), `ReadHeaderTimeout` 5 s, read timeout and max header bytes (not set yet: HUB-249), global in-flight limit, tenant token buckets |
 | Replay of side-effecting calls | T | `Idempotency-Key` mandatory for integrations with `moves_money_or_quota: true` (DESIGN §4.2), enforced at the edge with 400 `IDEMPOTENCY_KEY_REQUIRED` |
 | Request smuggling | T | single HTTP parser (Go), ingress normalises; reject ambiguous `Content-Length`/`Transfer-Encoding` |
 | Repudiation of calls | R | audit `request.received` with tenant key hash + key id |
@@ -91,13 +91,14 @@ flowchart LR
 | Prompt injection via vendor response causes unwanted `hub_invoke` | E/T | `hub_invoke` annotated destructive so clients ask for confirmation; idempotency key on every invoke; scoped tenant key (grants limit blast radius); recommend `hub_dry_run` first; results are returned as data |
 | Leakage of vendor/account/version to the LLM | I | tools built on discovery endpoints only (ADR-0007); leak test (TESTING §13) |
 | PII to an LLM context | I | admin tools are metadata-only, never unseal, never return payloads; tenant tools return what the tenant already receives |
-| Token handling | S | stdio: key from env; HTTP: per-session `Authorization` forwarded, never stored or logged; bind `127.0.0.1` by default; `Origin` validation (DNS rebinding); TLS required when exposed |
+| Token handling | S | stdio: key from env; HTTP: the client's `Authorization` bearer is its tenant key, checked with the Hub on first use (fingerprint cached 60 s, fail closed when the Hub is unreachable), never stored or logged; bind `127.0.0.1` by default, `-allow-remote` required otherwise; cross-origin and DNS-rebinding requests refused; TLS (terminating proxy) required when exposed; `HUB_ADMIN_TOKEN` refused on a remote-reachable listener (ADR-0018) |
 | Admin token misuse | E | admin tools exist only when `HUB_ADMIN_TOKEN` is set; token should be a `viewer` or `tenant_viewer` role; GET-only client enforced in code |
 
 ## 3. Secrets handling
 - **At rest**: envelope encryption, per-account data key wrapped by KMS/Vault transit (DESIGN §9). DB stores ciphertext + wrapped key only. Registrar and webhook secrets use the same mechanism (`secret_ref`).
 - **In memory**: decrypted cache only (TTL 5 min, warmed on snapshot load); no decrypt on the request path; values registered with the redactor (TECH_SPEC §9).
-- **In logs/traces/metrics**: never. Redaction by value plus key-name denylist (OBSERVABILITY §4.3). Audit `request.transformed` stores redacted headers.
+- **In logs/traces/metrics**: never. Redaction by value plus key-name denylist (OBSERVABILITY §4.3). The process redaction set holds the decrypted credentials and registrar signing secrets (credential cache) and, since HUB-234, the Postgres DSN password and `HUB_AUDIT_MASK_KEY` (`roles.Run`, for every entry point). Span attributes come from an allowlist (`telemetry.AllowedSpanAttributes`, OBSERVABILITY §5.2) enforced by tests; span statuses carry error classes, never error text. Audit `request.transformed` stores redacted headers.
+- **Trace ids to third parties**: only vendors listed in `HUB_TRACE_FORWARD_VENDORS` receive the Hub's `traceparent`; `tracestate` is never sent (ADR-0013).
 - **In Git**: never. `backend/config/` holds references; dev secrets in `dev-secrets.enc` encrypted with a git-ignored dev key. Secret scanning (gitleaks) in CI.
 - **In fixtures**: fixed fake values clearly marked (`test-passcode-not-real`).
 - **Rotation**: accounts `active`/`next` (DESIGN §6.6); tenant keys overlap; registrar secrets dual-sign window; KMS key rotation by the provider.
@@ -129,7 +130,9 @@ Always: SHA-256 + byte size of every payload, so losslessness is verifiable (DES
 ## 5. Egress allowlist and TLS
 - Allowed hosts = the union of hosts in vendor definitions (`regions`, endpoint hosts) of the **current snapshot** plus registrar hosts. The upstream dialer refuses any other host (checked after DNS resolution, same IP-range rules as SSRF for non-vendor targets).
 - Network layer: Kubernetes NetworkPolicy / egress gateway mirrors the allowlist (defence in depth); changes go through the deploy repo.
-- TLS 1.2+ with verification; no `InsecureSkipVerify` (lint rule); optional certificate pinning per account for regulated partners; per-account mTLS client certs (DESIGN §9).
+- TLS 1.2+ with verification; no `InsecureSkipVerify` (lint rule); optional certificate pinning per account for regulated partners; per-account mTLS client certs (DESIGN §9). The floor is explicit (`MinVersion: tls.VersionTLS12`) in both egress clients, `upstream.Client` (vendors) and `callbacks.Guard` (tenant callbacks; its test seam can add roots but never lower the floor), rather than relying on Go's default client floor.
+- Tests (HUB-234): `TestTLS` (upstream) runs the real client against vendors that speak only TLS 1.0 or 1.1 and expects a tls-phase `ErrConnect` with no request served, with a positive control proving those vendors complete the old handshake with a permissive client; TLS 1.2-only and 1.3 vendors succeed. `TestTLSFloorIsExplicit` pins the configured floor, and `TestGuardRefusesTLSBelow12` covers callbacks. Note for test authors: since Go 1.22 a Go **server** defaults to a TLS 1.2 floor, so a test server with only `MaxVersion: TLS11` speaks no version at all and proves nothing; set `MinVersion` explicitly.
+- Egress tests: `TestUndeclaredHostRefusedBeforeDial` (undeclared host, port, scheme, unparsable URL and plain http to a remote host are refused before the dialer, counted in `upstream_egress_denied_total`) and `TestDialerChecksEgress` (the dial functions refuse undeclared addresses and dials without an allowlist).
 - Regional accounts enforce data residency: an integration version cannot target an account outside the tenant's allowed regions (publish check).
 
 ## 6. Tenant key lifecycle
@@ -179,7 +182,7 @@ Legend: **R** read · **W** create/update · **X** execute action · — denied.
 Every W/X writes `change_log` (actor, action, object, before, after, reason). Irreversible actions require a reason (frontend/AGENTS.md). The admin API is the enforcement point; the console only hides controls.
 
 ## 8. Supply chain
-- **Go**: `go.mod`/`go.sum` committed; minimal dependency set (TECH_SPEC §13); `govulncheck ./...` in CI (blocking); Renovate/Dependabot weekly with grouped minor updates; `GOFLAGS=-mod=readonly`; `GOTOOLCHAIN` pinned in `go.mod` (`toolchain go1.25.x`).
+- **Go**: `go.mod`/`go.sum` committed; minimal dependency set (TECH_SPEC §13); `govulncheck` and `gosec` in CI (blocking, §8.1); Renovate/Dependabot weekly with grouped minor updates; `GOFLAGS=-mod=readonly`; the toolchain is pinned in `go.mod` (`toolchain go1.26.10` since HUB-234: go1.26.0 had 36 stdlib vulnerabilities reachable from Hub code, among them crypto/x509, net/url and html/template).
 - **Node**: `package-lock.json` committed, `npm ci` only, exact versions for generators (`openapi-typescript`, `openapi-fetch`); `npm audit --audit-level=high` blocking; `ignore-scripts=true` in `.npmrc` except allowlisted packages.
 - **Images**: base images pinned by digest; distroless/non-root; SBOM (syft) and provenance (SLSA, `actions/attest-build-provenance`) on release; image scan (grype/trivy) blocking on critical.
 - **CI**: GitHub Actions pinned by commit SHA; least-privilege `permissions:`; no secrets on PRs from forks.
@@ -187,5 +190,30 @@ Every W/X writes `change_log` (actor, action, object, before, after, reason). Ir
 - **Secret scanning**: gitleaks on every PR, plus the `hub_` key prefix rule.
 - **Contracts**: only the steward edits `contracts/`; CODEOWNERS enforces review.
 
+### 8.1 Static analysis and vulnerability gates (HUB-234)
+| Gate | Command (backend/) | Tool version | Fails on |
+| --- | --- | --- | --- |
+| CI job `govulncheck` | `make vuln` | `golang.org/x/vuln` v1.9.0 | any known vulnerability in a called symbol of the stdlib or a module (imported-but-not-called findings are informational) |
+| CI job `gosec` | `make gosec` | `github.com/securego/gosec/v2` v2.30.0, `-severity medium` | any medium- or high-severity finding in non-test code that is not triaged (gosec does not scan `_test.go`) |
+| CI job `lint` | `golangci-lint run` | v2.15.0 (bundled gosec) | as before; honours the same `#nosec` annotations |
+
+Both tools run with `go run <module>@<version>` (pinned in the Makefile; bump deliberately). Locally: `make security`.
+
+**Triage policy.** Fix real findings. A false positive gets a narrowly scoped annotation on the flagged line: `// #nosec <rule> -- <reason>` (one rule ID, a reason a reviewer can check). Both gosec and golangci-lint honour it; `//nolint:gosec` is not used because standalone gosec ignores it. No gosec config-level exclusions exist. The annotations in the tree at HUB-234 (all false positives, reviewed):
+
+| Rule | Where | Why it is safe |
+| --- | --- | --- |
+| G115 (integer conversion) | `audit/store.go`, `audit/ledger.go` (`int64(SnapshotVersion)`), `control/guard.go` (`int32` version), `audit/seal.go` (`byte(len(id))`), `registry/watch.go`, `core/ids.go`, `core/state.go`, `resolve/resolve.go`, `testkit/mockvendor/server.go` | values are bounded (versions far below 2^31, id length checked to 1..255, 48-bit timestamps, modulo 100) or only hashed/compared for equality |
+| G304 (file path from variable) | `creds/localfile.go` (`HUB_DEV_KEY_FILE`), `control/snapshots.go` (path confined to the blob root), `cmd/hubctl/ops.go` (file named by the operator) | operator configuration or confined path, never request input |
+| G301 / G306 (dir 0755 / file 0644) | `cmd/hubctl/config.go` | writes registry config pulled from a snapshot: readable by design, no secrets (snapshots contain none) |
+| G705 (XSS via `Write`) | `control/adminapi/snapshots.go` (`getSnapshot`) | archived registry JSON served with `Content-Type: application/json`, never HTML; `nosniff` hardening tracked in HUB-248 |
+| G107 / G704 (request to variable URL) | `testkit/contract/contract.go` | test helper calling the test's own server |
+| G404 (math/rand) | `delivery/backoff.go`, `testkit/mockvendor/server.go` | retry jitter and a deterministic test double, not security |
+| G101 (hardcoded credentials) | `cmd/hubctl/creds.go`, `cmd/hubmcp/httpserve.go` (`tokenExtra*`) | usage text that mentions `signing_secret=`; context map key names; no credential |
+
 ## 9. Security testing
-SSRF, signature, redaction and secret-grep tests (TESTING_STRATEGY §2, §3, §5); fuzzing of parsers (§8); RBAC table test generated from §7 (every role × action → expected 2xx/403); dependency and image scans (§8); a pre-production review of the threat model before the first real vendor account is created.
+SSRF, signature, redaction and secret-grep tests (TESTING_STRATEGY §2, §3, §5); the role-log secret grep (HUB-234, below); fuzzing of parsers (§8); RBAC table test generated from §7 (every role × action → expected 2xx/403); dependency and image scans (§8); a pre-production review of the threat model before the first real vendor account is created.
+
+**Role-log secret grep (HUB-234).** In `cmd/hub/internal/roles`, every role a test starts (`startRoleWith`) logs through the production logger (`telemetry.NewLogger`: JSON, value redaction, debug level) into one capture shared by the package. Tests declare every secret they hand to the roles with `forbid` (vendor credentials, registrar signing secrets, the dev master key in base64/hex forms, the audit mask key, tenant API keys including unknown ones a caller presented, admin access tokens). `TestMain` fails the package if any declared value appears in the captured logs of the whole run, printing labels, never values. `TestRoleLogsCarryNoSecrets` runs gateway, worker, scheduler and admin together on the encrypted localfile credential source and drives every secret-handling path: a sync call (positive control: the vendor receives the passcode), a vendor that echoes the credentials in 400/401 error bodies (gateway and worker), async delivery with a signed callback (positive control: `X-Hub-Signature` received), an admin connection test, a rotation (add next, test, promote) followed by a call that uses the rotated value, an unknown account, and an unknown API key. It also asserts lines from every role, a request-path line and the rotation lines reached the capture. Mutation check: logging a vendor error body is redacted (`***`); with credential registration disabled the test fails.
+
+Scope note: per-package integration tests outside `roles` keep their own log captures and greps (`TestE2EErrorClasses` in `edge` greps its gateway logs and the stored audit events); the Postgres password of the local test DSN (`hub`) is too short and common to grep and is covered by `TestRunRegistersConfigSecrets` instead.

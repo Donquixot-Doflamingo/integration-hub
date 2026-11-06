@@ -46,6 +46,7 @@ func (s *Server) invoke(w http.ResponseWriter, r *http.Request) {
 		op = "default"
 	}
 	p, ce := s.prepare(r, ScopeInvoke, op)
+	tagIntegration(r.Context(), p)
 	if p != nil {
 		defer s.metrics.RecordTimings(&p.timings, s.deps.Now(), p.integration.Integration, string(p.integration.Active().Delivery.Mode))
 	}

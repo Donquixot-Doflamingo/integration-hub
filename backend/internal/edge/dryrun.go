@@ -34,6 +34,7 @@ func (s *Server) dryRun(w http.ResponseWriter, r *http.Request) {
 		op = "default"
 	}
 	p, ce := s.prepare(r, ScopeDryRun, op)
+	tagIntegration(r.Context(), p)
 	if ce != nil {
 		s.fail(w, r, p, ce)
 		return
@@ -45,7 +46,7 @@ func (s *Server) dryRun(w http.ResponseWriter, r *http.Request) {
 	}
 	in.Session = p.sessionData()                                              // a later step's dry-run reads its session (X-Hub-Session)
 	in.UUID = func() string { return "00000000-0000-4000-8000-000000000000" } // stable output, no randomness
-	prog := p.caller.Snap.Programs[p.res.Target.Transformer.Request]
+	prog := p.caller.Snap.Programs[p.res.Pair().Request]
 	start := s.deps.Now()
 	plain, err := prog.BuildRequest(in)
 	if err != nil {

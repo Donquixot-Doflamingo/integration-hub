@@ -14,6 +14,126 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 - 2026-11-07 · `feat(roles)` · Serve pprof on the ops port only (HUB-403) · HUB-403 · F-18
   - Every role serves `/debug/pprof/*` on its ops port (TECH_SPEC §2, OBSERVABILITY §8.1), so a running gateway or worker can be CPU- and heap-profiled
   - The public gateway and admin listeners still answer 404 on `/debug/pprof/`
+- 2026-11-07 · `fix(hubmcp)` · Triage the hubmcp context keys for gosec with #nosec (HUB-300) · HUB-300 · F-20
+  - The gosec CI gate (HUB-234) passes on hubmcp: the two context map key names flagged as G101 carry reviewed `#nosec` annotations and are listed in SECURITY.md §8.1
+- 2026-11-07 · `fix(hubmcp)` · Refuse idempotency keys the Idempotency-Key header cannot carry (HUB-303) · HUB-303 · F-20
+  - hub_invoke answers VALIDATION_FAILED for an idempotency_key with spaces or non-ASCII characters instead of a misleading "could not reach the Hub"
+  - The HUB_BASE_URL hint now appears only for real connection failures
+- 2026-11-07 · `test(hubmcp)` · Run hubmcp end to end against a running Hub and mockvendor (HUB-307) · HUB-307 · F-20
+  - The integration suite builds and runs admin, gateway, worker and mockvendor and drives every hubmcp flow: discovery, dry-run, sync invoke, async invoke until succeeded, money/quota refusal and confirmed invoke, admin tools
+  - A grep over every tenant tool output proves no vendor, account or version appears outside hub_dry_run
+  - US-2003 and US-2006 now match the contract (no generated idempotency key; HTTP clients send their tenant key)
+- 2026-11-07 · `test(hubmcp)` · Cover every MCP tool's success and error path and spawn the binary (HUB-306) · HUB-306 · F-20
+  - A contract-driven test runs a success and an error scenario for every tool and checks each tool only calls the Hub operations in its `maps_to`
+  - A protocol smoke test spawns hubmcp over stdio (initialize, tools/list, tools/call)
+  - TESTING_STRATEGY §13 describes the hubmcp suite; follow-ups HUB-311 (metrics/traces), HUB-312 (admin DLQ/versions CCR), HUB-313 (Inspector)
+- 2026-11-07 · `feat(hubmcp)` · Add the read-only hub_admin_* tools for on-call (HUB-305) · HUB-305 · F-20
+  - With HUB_ADMIN_TOKEN set, an assistant can search requests (default: last hour), read a request's timeline and attempts (payloads only on request) and list breaker states
+  - Admin tools only send GETs; they never unseal, replay, purge, pause or force; without a token they are not registered and the server says why
+- 2026-11-07 · `feat(hubmcp)` · Refuse money/quota invokes without confirm and idempotency key (HUB-304) · HUB-304 · F-20
+  - hub_invoke on an integration with `moves_money_or_quota` returns `outcome: refused` (`CONFIRMATION_REQUIRED` or `IDEMPOTENCY_KEY_REQUIRED`) and does not call the Hub until the input has `confirm: true` and an `idempotency_key`
+  - The refusal echoes a summary of the held-back call so the assistant can show the user what would be sent
+- 2026-11-07 · `feat(hubmcp)` · Add the hub_invoke, hub_get_request and hub_dry_run tools (HUB-303) · HUB-303 · F-20
+  - hub_invoke reports 200 as `completed`, 202 as `queued` with the poll URL (never as success) and Hub errors as `error` with the canonical envelope (code, retryable, retry_after_ms, ...)
+  - hub_invoke checks the integration first (cached ≤ 60 s) and does not call a paused one; it retries at most once, only retryable errors, only with an idempotency key
+  - hub_get_request returns a request's status, result or error; hub_dry_run shows the upstream request with every redacted header forced to `***`
+- 2026-11-07 · `feat(hubmcp)` · Add the hub_list_integrations and hub_describe_integration tools (HUB-302) · HUB-302 · F-20
+  - An assistant can list the integrations its tenant may invoke and get each operation's canonical request and response schemas
+  - Outputs carry only caller-API fields; vendor, account and version never appear, even if a Hub response carried them
+  - Hub errors come back as tool results with the canonical error object
+- 2026-11-07 · `feat(hubmcp)` · Serve hubmcp over Streamable HTTP with per-client key auth (HUB-301) · HUB-301 · F-20
+  - `hubmcp -transport http` serves the same tools at `/mcp` (default `127.0.0.1:8090`; `-allow-remote` needed for other addresses)
+  - Each HTTP client authenticates with its own tenant API key as bearer token; hubmcp checks it with the Hub and uses it for that client's calls; requests without a valid key get 401
+  - Cross-origin browser requests are refused; HUB_ADMIN_TOKEN is refused on a remote-reachable listener
+  - ADR-0018 records the HTTP auth, idempotency-key and layout choices
+- 2026-11-07 · `feat(hubmcp)` · Scaffold hubmcp on the official MCP Go SDK over stdio (HUB-300) · HUB-300 · F-20
+  - `hubmcp` starts over stdio and advertises exactly the tools of contracts/mcp/hubmcp-tools.json (admin tools only when HUB_ADMIN_TOKEN is set)
+  - HUB_API_KEY and HUB_ADMIN_TOKEN come from the environment only and are redacted (`***`) in logs and tool output
+  - Tool arguments are validated against the contract input schemas before any Hub call
+- 2026-11-07 · `chore(frontend)` · Regenerate the admin client for contract 1.2.0 (HUB-344) · HUB-344 · F-19
+  - The console's generated types and contract mocks include per-operation transformers on integration targets
+- 2026-11-07 · `test(edge)` · Move the OTP example to send_otp and verify_otp (HUB-343) · HUB-343 · F-14
+  - examples/otp-account-flow: `demo.mobile_otp@v1` has two operations, `send_otp` and `verify_otp`, on two demo-kyc endpoints (`/v1/otp/send`, `/v1/otp/verify`), each with its own transformer pair and goldens; callers use `invoke/send_otp` and `invoke/verify_otp` (the single-operation stand-in is gone)
+  - TestExampleOTPAccountFlow proves step 1 and step 2 hit different vendor endpoints in one session, pinned to v1 / account A across a publish; TestExampleOTPRefusesOnePairForBothOperations shows the build refusing the config without its verify_otp pair
+  - Use case 6 of the use-case catalogue: per-operation routing and the publish-time refusal are Works today, with their tests; HUB-343 in review; new todo tickets HUB-349 (publisher archives an unrebuildable snapshot when a draining account is targeted again) and HUB-350 (`hubctl dry-run --operation`)
+
+- 2026-11-07 · `fix(registry)` · Refuse one transformer pair serving every operation (HUB-345) · HUB-345 · F-03
+  - A multi-operation capability whose only transformer pair is compiled for one operation is refused when the snapshot is built (config files, `hubctl apply`, admin publish), naming the version file and `targets[i].transformer`, instead of running that operation's transformers for the others at request time
+  - Delivered by the HUB-343 check `operations_have_transformers`; registry rule documented in F-03
+
+- 2026-11-07 · `feat(registry)` · Select a transformer pair per operation (HUB-343) · HUB-343 · F-14
+  - An integration version target (also failover and shadow) may give operations of a multi-operation capability their own transformer pair (`operations: {<op>: {request, response}}`), so one integration can send each operation to a different vendor endpoint; other operations keep the default `transformer` pair
+  - Sync, wait, async (the worker re-resolves from the envelope's operation), dry-run, session steps, failover and shadow all run the invoked operation's pair; the audit `integration.resolved` / `request.transformed` meta names that pair and endpoint
+  - New publish check `operations_have_transformers` in the registry build (config files, `hubctl apply`, admin validate/publish, every node): an operation key the capability does not declare, or an operation served by a pair compiled for another operation, is refused with a file- and path-qualified error
+  - Admin API (hub-admin 1.2.0) accepts, stores, renders and diffs `TargetRef.operations`; rollback and weight changes keep it; validation reports carry the new check with contract pointers (`/targets/<i>/operations/<op>`, `/targets/<i>/transformer`); breakers and transformer usage count every per-operation endpoint
+
+- 2026-11-07 · `contract(admin)` · Add per-operation transformers to integration targets (HUB-344) · HUB-344 · F-22
+  - hub-admin 1.2.0: an integration version target (also failover and shadow) may set `operations: {<operation>: {request, response}}`; listed operations use their own transformer pair, the others the required default `transformer`
+  - New `TransformerPair` schema and known validation check `operations_have_transformers`; named examples for a two-operation OTP capability
+  - Caller API and MCP tools unchanged; backend implements in HUB-343, the console regenerates its client with `npm run gen:api`
+
+- 2026-11-07 · `fix(control)` · Regenerate sqlc models for the callback traceparent column (HUB-231) · HUB-231 · F-18
+  - internal/control/db models match migration 00010, so the sqlc CI check passes
+- 2026-11-06 · `docs(adr)` · Renumber the trace-context ADR to 0013 and its story to US-1806 (HUB-231) · HUB-231 · F-18
+  - ADR-0012 and US-1805 are taken by the subject-erasure work merging alongside; references updated
+- 2026-11-06 · `feat(telemetry)` · Trace async requests from caller to callback (HUB-231) · HUB-231 · F-18
+  - The gateway's server span is named after the route and carries request id, tenant, integration, version, mode and canonical code; hub.transform.request/response spans appear under sampled requests
+  - Async, wait and parked requests store the Hub's hub.queue.enqueue span in the envelope; each worker attempt is a hub.worker.attempt root linked to it, parent of its transform and upstream spans, and stays sampled when the accepting trace was
+  - Callback deliveries link to the attempt that settled the request (new nullable hub.callback_deliveries.traceparent, migration 00010)
+  - HUB_TRACE_FORWARD_VENDORS lists the vendors that receive the Hub's traceparent (default none; tracestate is never sent)
+  - hub.requests.trace_id is filled, so the request explorer links to the trace
+  - Span attributes are allowlisted (telemetry.AllowedSpanAttributes); tests fail on any other key or on a credential, API key or body fragment in a value
+- 2026-11-06 · `test(edge)` · Raise the tenant quota in the overhead benchmark so it runs again (HUB-231) · HUB-231 · F-18
+  - BenchmarkInvokeOverhead no longer stops with 429 UPSTREAM_RATE_LIMITED after the dev tenant's 100 rps quota; the token bucket stays on the measured path
+- 2026-11-07 · `docs(tickets)` · File the operability follow-ups the runbooks found (HUB-237) · HUB-237 · F-18
+  - New epic EP-13 (HUB-400–HUB-429): hubctl on-call commands, a SnapshotBehind false positive after restarts, the admin API credential minimum length, unwired ops settings (pprof, log level, worker concurrency), and OBSERVABILITY §9 drift
+- 2026-11-07 · `docs(runbooks)` · Add runbooks for every alert (HUB-237) · HUB-237 · F-18
+  - Every `runbook_url` in `deploy/alerts/hub.rules.yaml` now resolves: `docs/runbooks/<AlertName>.md` for all ten alerts (six page, four warn), each with what fired, caller impact in canonical codes, first checks (dashboard panel, PromQL, hubctl or admin operationId), causes and fixes, and escalation
+  - `docs/runbooks/README.md` indexes them with severity and meaning; `credential-rotation.md` is the add next, test, promote, watch, delete old procedure
+  - SnapshotBehind documents a known false positive: `snapshot_version` is a per-process swap counter, so a node restarted after a publish reports a lower number while serving the newest config
+  - Linked from OBSERVABILITY §9 and §11.1 and from F-18 (whose breaker alert row now says "not closed"); new story US-1807; HUB-237 in progress with its first criterion met
+- 2026-11-07 · `test(edge)` · Check the ramped drain by step boundaries, not 1 s windows (HUB-156) · HUB-156 · F-12
+  - TestChaos2RecoveryAndRampedDrain no longer fails when a slow CI runner delays a scheduler pass: it asserts the drain is never ahead of the ramp, loses no quota (owed releases are out within one catch-up horizon) and empties the 160-envelope backlog by 5.8 s
+- 2026-11-07 · `fix(delivery)` · Cap the drain catch-up at one second of the rate, not two ticks (HUB-156) · HUB-156 · F-12
+  - The ramped drain makes up scheduler passes slower than two ticks instead of losing their quota; it never releases above the ramped account rate
+- 2026-11-07 · `docs(security)` · Document the HUB-234 security gates and tests · HUB-234 · F-18
+  - SECURITY.md: gosec/govulncheck gates and the reviewed #nosec triage table (§8.1), explicit TLS floor and egress tests (§5), redaction set contents (§3), role-log secret grep (§9)
+  - HUB-234 in review with all acceptance criteria met; new todo tickets HUB-248 (nosniff header) and HUB-249 (server read timeout and header limit)
+- 2026-11-07 · `test(roles)` · Grep every role's itest logs for secrets · HUB-234 · F-18
+  - Every role the roles tests start now logs through the production logger into one capture; the package fails if any secret a test declared appears in it (labels printed, never values)
+  - TestRoleLogsCarryNoSecrets runs gateway, worker, scheduler and admin on the encrypted credential source through sync calls, a vendor echoing credentials, async delivery with a signed callback, connection tests, a rotation and an unknown API key
+- 2026-11-07 · `fix(roles)` · Redact the DSN password and mask key by value · HUB-234 · F-18
+  - HUB_AUDIT_MASK_KEY is now redacted by value from every log line, like credentials (it was only hidden when logged as a config value)
+  - The Postgres DSN password is registered by roles.Run itself, so every entry point (hub binary, tests, future wiring) redacts it
+- 2026-11-07 · `test(edge)` · Cover body limits through the gateway handler · HUB-234 · F-18
+  - TestBodyLimitsAtTheEdge proves through the real handler and contract validation: up to 1 MB (4 MB for llm. capabilities) passes the body stage, one byte more is 413 PAYLOAD_TOO_LARGE, declared or chunked, with no vendor call and request.received,request.failed audited
+- 2026-11-07 · `fix(callbacks)` · Enforce an explicit TLS 1.2 floor on callbacks · HUB-234 · F-18
+  - Signed callbacks to tenant endpoints refuse TLS below 1.2 by the guard's own configuration instead of relying on Go's default client floor
+  - The guard's test seam can add trusted roots but can never lower the floor
+- 2026-11-07 · `test(upstream)` · Prove vendor TLS handshakes below 1.2 fail · HUB-234 · F-18
+  - TestTLS now runs the real upstream client against vendors that speak only TLS 1.0 or 1.1 (with a positive control that they do) and against TLS 1.2-only and 1.3 vendors
+  - TestTLSFloorIsExplicit fails if the client's own TLS 1.2 floor or verification is removed
+- 2026-11-07 · `ci(backend)` · Gate merges on pinned gosec and govulncheck · HUB-234 · F-18
+  - New blocking CI jobs gosec (any untriaged medium/high finding in non-test code fails) and govulncheck (any reachable known vulnerability fails); local: make gosec, make vuln, make security
+  - Tool versions pinned in backend/Makefile: gosec v2.30.0, govulncheck v1.9.0
+  - Every gosec false positive carries a scoped // #nosec <rule> -- <reason> annotation that both gosec and golangci-lint honour (triage table in SECURITY.md §8.1)
+- 2026-11-07 · `build(backend)` · Pin Go toolchain 1.26.10 and x/net v0.62.0 · HUB-234 · F-18
+  - Builds and CI use Go 1.26.10: govulncheck found 36 standard-library vulnerabilities reachable from Hub code in go1.26.0 (crypto/x509, net/url, html/template, net/http among them)
+  - golang.org/x/net v0.62.0 fixes GO-2026-6866 and GO-2026-6860 (required module, not called)
+- 2026-11-06 · `docs(use-cases)` · Add the use-case catalogue for product owners (HUB-342) · HUB-342 · F-22
+  - docs/use-cases/README.md: how a call flows through the Hub (pipeline and the DESIGN §18.6 latency budget), then events, vendor/account swaps, vendor outages, signed callbacks, idempotent retries, two-step OTP -> verify -> bank account, and the DESIGN §14 lending patterns, each with the caller's exact requests, a sequence diagram, failure behaviour and a status line citing its test or ticket
+  - Two-step flows are marked Partly: vendor sessions work today; steps on different vendor endpoints need HUB-343
+  - Linked from the root README and the feature index; F-22 records the R2-5 status and the new items R2-11 (HUB-347) and R2-12 (HUB-348); HUB-342 in review
+- 2026-11-06 · `test(edge)` · Build the example snapshots once per test rig (HUB-342) · HUB-342 · F-22
+  - TestExampleOTPAccountFlow builds the two example snapshots (and runs their goldens) once instead of nine times, so it is far less exposed to the transform time-budget flake under load (HUB-238)
+- 2026-11-06 · `test(edge)` · Add a runnable OTP to bank-account example flow (HUB-342) · HUB-342 · F-22
+  - examples/otp-account-flow: an example registry overlay (two interactive capability schemas, fictional vendor demo-kyc on mockvendor, two accounts, tenant loan-onboarding, int_demo_otp v1/v2, int_demo_bank_verify, four transformers with goldens), kept out of backend/config and contracts/
+  - TestExampleOTPConfigBuilds builds the overlay and runs its goldens; TestExampleOTPAccountFlow runs send OTP -> verify in the session (pinned to account A across a publish) -> bank verification through the real gateway, plus wrong OTP, expired session, double tap, vendor down and edge refusals
+  - examples/otp-account-flow/README.md: how to run it and the exact requests and responses
+- 2026-11-06 · `docs(tickets)` · Add HUB-342 and gap tickets HUB-343 to HUB-348 (HUB-342) · HUB-342 · F-22
+  - New ticket HUB-342 (use-case catalogue and runnable OTP example), in progress
+  - Gaps found while scoping it: per-operation transformers (HUB-343) and their admin contract change (HUB-344), refusing multi-operation configs that would misroute today (HUB-345), a canonical reason on error rules (HUB-346), the lookup result cache (HUB-347) and the upload + job pattern (HUB-348)
+  - Ticket counters recomputed (they were one ticket behind for EP-09)
 - 2026-11-07 · `fix(delivery)` · Base the drain quota on elapsed time so late ticks don't slow the ramp (HUB-155) · HUB-155 · F-12
   - The ramped drain keeps its DESIGN §10.5 rate on a busy scheduler: a late or dropped tick is made up (at most 2 ticks' worth, so no burst)
   - Fixes the intermittent TestChaos2RecoveryAndRampedDrain failure on CI

@@ -119,7 +119,7 @@ integration-hub/
 │   │   ├── hub/                  # main + role wiring (cmd/hub/internal/roles)
 │   │   ├── hubctl/
 │   │   ├── mockvendor/
-│   │   └── hubmcp/               # main + cmd/hubmcp/internal/{tools,client}
+│   │   └── hubmcp/               # one main package: tools, GET-only admin client, embedded tool contract (ADR-0018)
 │   ├── internal/
 │   │   ├── edge/  registry/  transform/  resolve/  creds/  upstream/
 │   │   ├── queue/  delivery/  sessions/  idempotency/  audit/  callbacks/  webhooks/
@@ -420,7 +420,7 @@ Columns per DESIGN §18.2. This section adds keys, indexes, partitioning and ret
 | `outbox` | `request_id` | partial `(next_attempt_at) WHERE status IN ('accepted','retry_scheduled')` (claim); partial `(account_id, endpoint_id, next_attempt_at) WHERE status='parked'` (release, arrival order); partial `(claimed_until) WHERE status='in_flight'` (reclaim); `(expires_at) WHERE status IN ('retry_scheduled','parked')` (TTL); `(ordering_key, created_at) WHERE ordering_key IS NOT NULL` | **Not partitioned.** Row deleted on terminal ack in the same TX as the `requests` status change, so it stays small. `fillfactor=70`, aggressive autovacuum (`autovacuum_vacuum_scale_factor=0.01`). DESIGN §18.2 lists `(status, next_attempt_at)` and `(status, account_id, endpoint_id)`; partial indexes are the same keys narrowed by status. |
 | `dead_letters` | `request_id` | `(reason, created_at)`, `(account_id, created_at)` (replay filters, DESIGN §10.6) | 14-day retention |
 | `vendor_sessions` | `session_id` | `(expires_at)` (scheduler sweep); `(account_id, expires_at)` (retire guard `CountOpen`; a partial index on `expires_at > now()` is not allowed, `now()` is not immutable) | Columns: DESIGN §18.2 + `tenant_id`, `created_at` (migration `00006_sessions.sql`). 10-min default TTL; expired rows are invisible to `Get` and deleted by `sessions.Expire`. `data` (JSON object, ≤ 16 KB) and `vendor_txn_id` carry CHECKs refusing a 12-digit (4-4-4) number: the Aadhaar number is never stored (DESIGN §14). Read by the gateway only for requests carrying `X-Hub-Session` (one PK read, ADR-0011) |
-| `callback_deliveries` | `delivery_id` | partial `(next_attempt_at) WHERE status IN ('pending','retry_scheduled')`; `(request_id)`; partial `(claimed_until) WHERE status='in_flight'` (reclaim, HUB-120); partial `(created_at) WHERE status='dead_lettered'` (DLQ count/replay, HUB-120); unique `(event_id, endpoint_id)` | own DLQ via `status='dead_lettered'`; `payload` holds the exact signed bytes (migration `00005_callbacks.sql`) |
+| `callback_deliveries` | `delivery_id` | partial `(next_attempt_at) WHERE status IN ('pending','retry_scheduled')`; `(request_id)`; partial `(claimed_until) WHERE status='in_flight'` (reclaim, HUB-120); partial `(created_at) WHERE status='dead_lettered'` (DLQ count/replay, HUB-120); unique `(event_id, endpoint_id)` | own DLQ via `status='dead_lettered'`; `payload` holds the exact signed bytes (migration `00005_callbacks.sql`); nullable `traceparent` of the terminal transition's span, linked by `hub.callback.deliver` (`00010_callback_trace.sql`, HUB-231) |
 
 **Claim query** (DESIGN §11.2, §18.4):
 ```sql
@@ -502,6 +502,7 @@ Flags override env. Env names: `HUB_*`. Loaded once at start into an immutable s
 | `HUB_WORKER_POOL`, `HUB_WORKER_CLAIM_BATCH`, `HUB_WORKER_CONCURRENCY` | `messaging`, 32, 256 | worker |
 | `HUB_SHUTDOWN_GRACE` | `25s` | all |
 | `HUB_OTLP_ENDPOINT`, `HUB_TRACE_SAMPLE_RATIO` | empty (off), `0.05` | all |
+| `HUB_TRACE_FORWARD_VENDORS` | empty (no vendor receives `traceparent`; comma-separated vendor names, ADR-0013) | gateway, worker |
 | `HUB_LOG_LEVEL`, `HUB_LOG_FORMAT` | `info`, `json` (`text` allowed in dev) | all |
 | `GOMEMLIMIT`, `GOGC` | see `OBSERVABILITY.md` §8.3 | all |
 | `HUB_OIDC_ISSUER`, `HUB_OIDC_AUDIENCE` | dev stub issuer | admin |
@@ -538,6 +539,7 @@ backend/config/
 
 - **Capability schemas live only in `contracts/schemas/`** (ADR-0004). `backend/config/capabilities/*.yaml` references them by path; a CI check fails if a schema is duplicated under `backend/`. Container builds copy `contracts/` into the image (Go `embed` cannot reach outside the module).
 - Each file is one object; filenames equal IDs; loader errors are path-qualified (`integrations/int_evt_brandA/versions/3.yaml: delivery.wait_ms: must be ≤ 30000`).
+- **Per-operation transformers (HUB-343).** A version target (`targets[]`, `failover[]`, `shadow.target`; `registry.Target`) has the default pair `transformer: {request, response}` and an optional `operations: {<operation>: {request, response}}` (`Target.Operations`). The invoked operation selects the pair (`Target.Pair(op)`, `resolve.Resolution.Pair()`): its own when listed, else the default. Multi-operation transformers declare `operation:`; the build check `operations_have_transformers` refuses a pair serving an operation it is not compiled for and an undeclared operation key (F-14). Stored as part of the version's `spec` (`integration_versions.spec`, admin `TargetRef.operations`); no migration.
 
 ---
 
@@ -814,9 +816,9 @@ flowchart LR
   AT --> ADM["/admin/v1 GET only: integrations, breakers, requests (metadata), dlq list"]
 ```
 
-- **Client only**: talks HTTP to `/v1` (tenant key `HUB_API_KEY`) and optionally `/admin/v1` (`HUB_ADMIN_TOKEN`); never opens a DB or Redis connection. Its HTTP client lives in `cmd/hubmcp/internal/client`, typed from the public/admin contracts.
-- **Transports**: stdio (default, one tenant per process) and streamable HTTP (`--http :8090`). In HTTP mode the tenant key comes from the MCP client's `Authorization` header per session and is never persisted or logged; bind `127.0.0.1` by default; validate `Origin`.
-- **Tools** (contract owned by the steward in `contracts/`): input schemas derived from the discovery endpoints (ADR-0007), so the LLM sees capability schemas but **never vendor, account or version** (D12), except in `hub_dry_run`, which shows the upstream request with secrets `***` by design (PRD DV-6; key scope `dry_run`). Tool contract: `contracts/mcp/hubmcp-tools.json`. Annotations: list/describe/get/dry-run `readOnlyHint: true`; `hub_invoke` `destructiveHint: true, openWorldHint: true`; `hub_invoke` requires an idempotency key (generated if absent and returned in the result).
+- **Client only**: talks HTTP to `/v1` (tenant key) and optionally `/admin/v1` (`HUB_ADMIN_TOKEN`); never opens a DB or Redis connection. One `main` package in `cmd/hubmcp` (ADR-0018): the caller side is `pkg/hubclient`, the admin side a GET-only client; the tool definitions are an embedded byte-for-byte copy of `contracts/mcp/hubmcp-tools.json` guarded by a drift test.
+- **Transports**: stdio (default, one tenant per process, key `HUB_API_KEY`) and streamable HTTP (`-transport http -addr 127.0.0.1:8090`, path `/mcp`). In HTTP mode the tenant key comes from the MCP client's `Authorization: Bearer` header on every request, is checked with the Hub (`listIntegrations`, limit 1; only a SHA-256 fingerprint is cached, 60 s) and is never persisted or logged; non-loopback addresses need `-allow-remote`; `HUB_ADMIN_TOKEN` is refused on a remote-reachable listener; cross-origin requests are refused and the SDK's DNS-rebinding protection is on (ADR-0018).
+- **Tools** (contract owned by the steward in `contracts/`): input schemas derived from the discovery endpoints (ADR-0007), so the LLM sees capability schemas but **never vendor, account or version** (D12), except in `hub_dry_run`, which shows the upstream request with secrets `***` by design (PRD DV-6; key scope `dry_run`). Tool contract: `contracts/mcp/hubmcp-tools.json`. Annotations: list/describe/get/dry-run `readOnlyHint: true`; `hub_invoke` `destructiveHint: true, openWorldHint: true`; `hub_invoke` forwards the caller's `idempotency_key` and never generates one (the contract has no field to return it, ADR-0018); integrations with `moves_money_or_quota` refuse to run without one.
 - **Results**: canonical bodies and the error envelope verbatim; 202 is returned as a distinct "queued" result with a `request_id` for `hub_get_request` (mirrors DESIGN §4.5).
 - **Admin tools**: read-only, never unseal, never return payload bodies (metadata only).
 - Observability: OBSERVABILITY §14. Security: SECURITY §2.5.
@@ -874,4 +876,4 @@ See DESIGN §3.1. Additional: **stage** — one timed step of the hot path (§11
 6. **Node → admin service authentication** for snapshot long-poll (§7).
 7. **`pool` column** on `outbox` (§6.3) — implied by DESIGN §17, not in §18.2.
 8. **Dev OIDC stub** source (§17.3).
-9. **Trace propagation to vendors** needs a vendor-definition flag (e.g. `propagate_trace: true`); DESIGN §16.4 says "vendors that accept it" without a field.
+9. **Trace propagation to vendors** needs a vendor-definition flag (e.g. `propagate_trace: true`); DESIGN §16.4 says "vendors that accept it" without a field. *Interim (HUB-231, ADR-0013):* process config `HUB_TRACE_FORWARD_VENDORS`; the vendor field awaits a contract change.

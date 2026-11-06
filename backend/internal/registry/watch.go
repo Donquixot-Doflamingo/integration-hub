@@ -104,8 +104,8 @@ func fingerprint(src Sources) ([]byte, error) {
 			}
 			h.Write([]byte(p))
 			var b [16]byte
-			binary.BigEndian.PutUint64(b[:8], uint64(info.Size()))               //nolint:gosec // size is never negative
-			binary.BigEndian.PutUint64(b[8:], uint64(info.ModTime().UnixNano())) //nolint:gosec // only compared for equality
+			binary.BigEndian.PutUint64(b[:8], uint64(info.Size()))               // #nosec G115 -- size is never negative
+			binary.BigEndian.PutUint64(b[8:], uint64(info.ModTime().UnixNano())) // #nosec G115 -- only compared for equality
 			h.Write(b[:])
 			return nil
 		})

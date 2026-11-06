@@ -155,10 +155,11 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 		return r
 	}
 	in.Session = j.Session
-	reqProg := j.Snap.Programs[j.Res.Target.Transformer.Request]
-	respProg := j.Snap.Programs[j.Res.Target.Transformer.Response]
+	pair := j.Res.Pair() // the invoked operation's pair (HUB-343)
+	reqProg := j.Snap.Programs[pair.Request]
+	respProg := j.Snap.Programs[pair.Response]
 	integration := j.Res.Integration.Integration
-	ref := j.Res.Target.Transformer.Request
+	ref := pair.Request
 	tf := j.Snap.Transformers[ref]
 	target, err := upstream.TargetFor(j.Snap, c.AccountID, tf.VendorEndpoint)
 	if err != nil {
@@ -178,10 +179,12 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	}
 
 	start = time.Now()
+	span := startTransform(ctx, "hub.transform.request", ref)
 	req, err := reqProg.BuildRequest(in)
 	if errors.Is(err, transform.ErrTimeBudget) { // a stall, most likely: transforms are pure, run again
 		req, err = reqProg.BuildRequest(in)
 	}
+	endTransform(span, err)
 	j.Timings.Observe(telemetry.StageTransform, start)
 	if err != nil {
 		adm.record(a.now(), upstream.OutcomeIgnore)
@@ -223,10 +226,12 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	}
 
 	start = time.Now()
+	span = startTransform(ctx, "hub.transform.response", j.Res.Target.Transformer.Response)
 	out, session, vce, err := respProg.MapResponseSession(att.Response, in)
 	if errors.Is(err, transform.ErrTimeBudget) {
 		out, session, vce, err = respProg.MapResponseSession(att.Response, in)
 	}
+	endTransform(span, err)
 	j.Timings.Observe(telemetry.StageResponseMap, start)
 	adm.record(a.now(), responseOutcome(att.Response.Status, vce))
 	if err != nil {

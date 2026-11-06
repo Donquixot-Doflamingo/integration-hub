@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": {"result": "VALID", "beneficiary_name": "ASHA VERMA", "name_match_score": 96, "ref": "dk_ref_0003"}
+}

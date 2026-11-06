@@ -61,3 +61,35 @@ func withHeader(ex Exchange, k, v string) Exchange {
 	ex.Header.Set(k, v)
 	return ex
 }
+
+func TestOperationIDAndExample(t *testing.T) {
+	pub := Load(t, "hub-public.v1.yaml")
+	adm := Load(t, "hub-admin.v1.yaml")
+	tests := []struct {
+		spec         *Spec
+		method, path string
+		want         string
+	}{
+		{pub, "GET", "/v1/integrations", "listIntegrations"},
+		{pub, "POST", "/v1/integrations/int_evt_brandA/invoke/send", "invokeIntegrationOperation"},
+		{adm, "GET", "/admin/v1/breakers", "listBreakers"},
+	}
+	for _, tt := range tests {
+		got, err := tt.spec.OperationID(httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, nil))
+		if err != nil || got != tt.want {
+			t.Errorf("%s %s: %q, %v; want %q", tt.method, tt.path, got, err, tt.want)
+		}
+	}
+	if _, err := pub.OperationID(httptest.NewRequestWithContext(t.Context(), "GET", "/v1/nope", nil)); err == nil {
+		t.Error("unknown path matched an operation")
+	}
+	for _, ex := range [][]byte{
+		pub.Example(t, "listIntegrations", 200, ""),                    // inline example
+		pub.Example(t, "getRequestStatus", 200, "parked"),              // inline examples
+		pub.Example(t, "invokeIntegration", 503, "INTEGRATION_PAUSED"), // via components.responses
+	} {
+		if !strings.HasPrefix(string(ex), "{") {
+			t.Errorf("example is not a JSON object: %s", ex)
+		}
+	}
+}

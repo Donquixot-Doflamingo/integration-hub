@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hub:capability:test.two_step@v1:verify:request",
+  "title": "test.two_step@v1 verify request (TEST ONLY)",
+  "type": "object",
+  "required": ["mobile", "code"],
+  "additionalProperties": false,
+  "properties": {
+    "mobile": { "type": "string", "pattern": "^\\+91[6-9][0-9]{9}$", "x-pii": "phone" },
+    "code": { "type": "string", "pattern": "^[0-9]{4,8}$", "x-pii": "free_text" }
+  }
+}
