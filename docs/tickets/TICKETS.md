@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **239** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **9**
+Total tickets: **245** · done: **177** · todo: **59** · other (in-progress/in-review/blocked): **9**
 
 ## Epics
 
@@ -18,10 +18,10 @@ Total tickets: **239** · done: **177** · todo: **53** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 17 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 40 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 17 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 4 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 12 | 0 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 14 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -2476,6 +2476,54 @@ Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits
 - [ ] After a failed submit, focus moves into the dialog (the error panel's heading or the reason field) and Escape closes it
 - [ ] Component test and one e2e keyboard check
 
+### HUB-290 — Console: vendors and vendor endpoints pages
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-290-console-vendors`
+
+Found writing the operator skill (HUB-316): the console has no vendor pages, so onboarding a vendor ('client') needs the admin API or MCP. Add list, detail, create and update for vendors (`listVendors`, `getVendor`, `createVendor`, `updateVendor`) and endpoints (`listVendorEndpoints`, `getVendorEndpoint`, `createVendorEndpoint`; endpoint versions are immutable).
+
+**Acceptance criteria**
+- [ ] List, detail, create and edit pages through the generated client, with ETag/If-Match on edits
+- [ ] Validation errors from the API shown on the field
+- [ ] Role gating per `x-required-role`; component and e2e tests
+
+### HUB-291 — Console: accounts page with write-only credentials and rotation
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-291-console-accounts`
+
+Accounts (a vendor's credentials and quota) can only be created by calling the admin API today, yet the MCP contract and the operator skill send people to the console for anything with secrets. Add list, detail, create (`createAccount`), config and quota edit (`updateAccount`), test connection, and credential rotation (`addNextCredential`, `promoteNextCredential`; `deleteOldCredential` only for roles that have it). Secrets are write-only: never shown after submit.
+
+**Acceptance criteria**
+- [ ] Create an account with credentials from the console; values never rendered again or kept in client state after submit
+- [ ] Rotation flow add next → test → promote; delete-old hidden without the role
+- [ ] Lifecycle actions (retire) role-gated; tests per role
+
+### HUB-292 — Console: create an integration, edit drafts, validate and publish
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-292-console-integration-authoring`
+
+The console shows integrations and versions but cannot create one or edit a draft. Add create integration, a draft editor (targets, per-operation transformers, delivery, weights), validate with the report shown inline, a diff against the active version, and publish/rollback with a reason.
+
+**Acceptance criteria**
+- [ ] Create integration and draft, edit, validate (errors inline), diff, publish with reason
+- [ ] Per-operation targets (`TargetRef.operations`) editable
+- [ ] e2e against the real stack (`scripts/dev-up.sh`)
+
+### HUB-293 — Console: create transformer versions and run goldens
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-293-console-transformer-authoring`
+
+Transformer pages are read-only. Add create transformer version (YAML editor plus golden fixtures), run goldens with diffs, and dry-run, using `createTransformerVersion`, `runTransformerGoldens` and `dryRunTransformer`.
+
+**Acceptance criteria**
+- [ ] Create a version from the console; publish blocked while goldens fail (as the API enforces)
+- [ ] Golden diffs rendered per case; dry-run output masked
+- [ ] Tests
+
 ## EP-11 — MCP server + consumer skill + SDK
 
 ### HUB-300 — hubmcp scaffold with official MCP Go SDK (stdio)
@@ -3056,6 +3104,26 @@ Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md` §3.3). At abou
 - [ ] Batched `COPY` (or multi-row insert) and a configurable number of writer goroutines; buffer size configurable (with HUB-403)
 - [ ] `hubload` async step at the gateway's accept limit shows no `buffer_full` drops on the same machine, or the report names the new limit
 - [ ] Benchmark of events/s per writer vs `main` (benchstat)
+
+### HUB-414 — Contract mismatch: admin server accepts delivery.polling
+- **Epic:** EP-13 · **Type:** fix · **Area:** contracts
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `fix/HUB-414-delivery-polling`
+
+Found writing HUB-316: the admin server accepts `delivery.polling` in integration versions, but `DeliveryPolicy` in hub-admin 1.2.0 does not define it. Either the contract-steward adds it (minor bump, CCR already noted in M7) or the server refuses it.
+
+**Acceptance criteria**
+- [ ] CCR decided; contract and server agree; contract test covers it
+
+### HUB-415 — Gateway does not check the requests_read key scope
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-05 · **Stories:** US-05xx
+- **Branch:** `fix/HUB-415-requests-read-scope`
+
+Found writing HUB-316: API key scope `requests_read` is defined, but nothing on the gateway checks it, so any key can read request status.
+
+**Acceptance criteria**
+- [ ] `getRequestStatus` requires `requests_read` (or the documented scope); table test per scope; docs updated
 
 ## Parallel tracks
 

@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(skills)` · Fix the transformer skill and file the gaps the operator skill found (HUB-316) · HUB-316 · F-21
+  - hub-transformers skill: the header field is `docs_url` and `hubctl transform test` takes transformer IDs (`T1`, `T2@3`), matching the code
+  - New tickets: console pages for vendors, accounts with write-only credentials, integration authoring and transformer authoring (HUB-290 to HUB-293); `delivery.polling` contract mismatch (HUB-414); unchecked `requests_read` scope (HUB-415)
 - 2026-11-07 · `docs(clients)` · Document hubmcp setup for every MCP client (HUB-318) · HUB-318 · F-21
   - `mcp-setup.md` now has verified configs for Claude Code, Claude Desktop, Codex CLI and Cursor, each reading the key from your environment or keychain instead of a committed file
   - The tenant key and the admin token are separate profiles: the admin one runs on stdio only, with your own token, as its own server entry, and needs `HUB_ADMIN_BASE_URL` ending in `/admin/v1`
