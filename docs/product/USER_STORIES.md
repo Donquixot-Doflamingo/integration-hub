@@ -486,6 +486,11 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** any rule in `deploy/alerts/hub.rules.yaml`, **when** I open its `runbook_url`, **then** `docs/runbooks/<AlertName>.md` exists and lists what fired, the caller impact in canonical codes, the first checks (dashboard panel, query, command), causes with fixes, and when to escalate.
 - **Given** a runbook step that acts on the Hub, **when** I follow it, **then** it uses a real `hubctl` command or an admin `operationId` from `contracts/openapi/hub-admin.v1.yaml`.
 
+### US-1808 — A sync call costs the vendor's time, not double
+**As a** service developer calling the Hub synchronously, **I want** the Hub to add almost nothing to the vendor's own response time, **so that** routing through the Hub never makes my user wait noticeably longer than calling the vendor directly. · **Must**
+- **Given** a vendor that answers in 100 ms, **when** I make sync calls through the Hub, **then** p50 ≤ 102 ms and p99 ≤ 110 ms, and the CI gate `latency-budget` fails if that regresses.
+- **Given** a sync call, **when** the Hub records audit, accepts async work or sends callbacks, **then** none of that delays my response; the only network calls on my request are the vendor call and, if I send `Idempotency-Key`, one Redis check.
+
 ## F-19 Admin console
 
 ### US-1901 — Request explorer with timeline

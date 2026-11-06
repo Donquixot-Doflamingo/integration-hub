@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · File the sync latency budget as HUB-413 (HUB-413) · HUB-413 · F-18
+  - New ticket HUB-413 (EP-13): a CI gate that keeps a 100 ms vendor at ≤ 110 ms p99 through the Hub, tests that audit, async accepts and callbacks never delay a sync call, and `docs/tech/LATENCY.md`
+  - New user story US-1808 (a sync call costs the vendor's time, not double); HUB-408 and HUB-401 in progress
 - 2026-11-07 · `fix(edge)` · Read the clock for hub_overhead_ms when the request ends (HUB-405) · HUB-405 · F-18
   - hub_overhead_ms is the Hub's own time again (about 1 ms with a 20 ms vendor) instead of "prepare time minus vendor time", which was negative on almost every request
   - The HubOverheadP99High alert, the S1 overhead SLO and the platform dashboard now read a correct series
