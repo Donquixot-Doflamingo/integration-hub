@@ -141,9 +141,94 @@ func trackOrderCreated(ctx context.Context, orderID, userID string) error {
 	}
 }
 ```
-In real services prefer the SDK, which models this as typed results. With `pkg/hubclient`
-(module `github.com/Donquixot-Doflamingo/integration-hub/backend/pkg/hubclient`) the call returns
-either a `Result` (200) or a `Queued` (202) and a typed error carrying the canonical code; check
-exact function and option names with `go doc` before writing code. Never treat `Queued` as success.
-For fire-and-forget event tracking, a queued result is usually fine to accept, but record its
-request id rather than reporting "sent".
+In real services prefer the SDK (`pkg/hubclient`), which returns `*hubclient.Result` (200) or
+`*hubclient.Queued` (202) and a typed `*hubclient.Error`: see the SKILL.md "Go SDK" section. Never
+treat `Queued` as success. For fire-and-forget event tracking, a queued result is usually fine to
+accept, but record its request id rather than reporting "sent".
+
+# Example: two-step OTP (send, then verify)
+
+Scenario: a loan onboarding backend verifies a mobile number. One integration, `int_demo_otp`
+(from the runnable example `examples/otp-account-flow/` in the Hub repo), capability
+`demo.mobile_otp@v1` with operations `send_otp` and `verify_otp`. Aadhaar OTP e-KYC has the same
+shape (`examples/aadhaar-okyc/`: `int_aadhaar_okyc`, `send_otp` with the Aadhaar number and consent,
+then `verify_otp` with the OTP). Always read the real operation names and schemas from discovery.
+Use fake numbers: every `send_otp` sends a real SMS in a real environment, so ask the user first.
+
+## 1. Discover the operations
+```bash
+curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/integrations/int_demo_otp" | jq '.operations, .moves_money_or_quota'
+curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/capabilities/demo.mobile_otp@v1" | jq '.'
+```
+
+## 2. Step 1: send the OTP and keep the session id
+```bash
+curl -s -i -X POST "$HUB_BASE_URL/v1/integrations/int_demo_otp/invoke/send_otp" \
+  -H "Authorization: Bearer $HUB_API_KEY" -H "Content-Type: application/json" \
+  -H "Idempotency-Key: otp-send-attempt-77" \
+  -d '{"mobile": "+919812345678"}'
+```
+```http
+HTTP/1.1 200 OK
+X-Hub-Request-Id: req_01M6S0SYJ7KK3N8BBET4GQDSFD
+X-Hub-Session: ses_01M6S0SYJAPG6N5XSV02NPW0ED
+
+{"expires_in_s": 300, "status": "otp_sent", "vendor_ref": "dk_ref_0001"}
+```
+
+## 3. Step 2: verify inside the session
+```bash
+curl -s -i -X POST "$HUB_BASE_URL/v1/integrations/int_demo_otp/invoke/verify_otp" \
+  -H "Authorization: Bearer $HUB_API_KEY" -H "Content-Type: application/json" \
+  -H "Idempotency-Key: otp-verify-attempt-77-1" \
+  -H "X-Hub-Session: ses_01M6S0SYJAPG6N5XSV02NPW0ED" \
+  -d '{"mobile": "+919812345678", "otp": "482913"}'
+```
+```http
+HTTP/1.1 200 OK
+
+{"status": "verified", "vendor_ref": "dk_ref_0002"}
+```
+Wrong OTP: `422 {"error": {"code": "UPSTREAM_REJECTED", "message": "The OTP does not match", "retryable": false, ...}}`
+(retry with the same session and a new key). Expired session: `404 SESSION_NOT_FOUND` (start again
+at step 1). The SKILL.md table "Two-step flows" lists every case.
+
+To check a mapping first, a developer key with scope `dry_run` can dry-run one operation:
+`POST /v1/integrations/int_demo_otp/dry-run?operation=verify_otp` with the same `X-Hub-Session` header.
+
+## 4. Go with `hubclient`
+```go
+// sendOTP is step 1. attemptID is your own id for this onboarding attempt.
+func sendOTP(ctx context.Context, hc *hubclient.Client, attemptID, mobile string) (session string, err error) {
+	out, err := hc.Invoke(ctx, "int_demo_otp", map[string]any{"mobile": mobile},
+		hubclient.WithOperation("send_otp"),
+		hubclient.WithIdempotencyKey("otp-send-"+attemptID)) // same attempt, same key: one SMS
+	if err != nil {
+		return "", err // *hubclient.Error: check Code / Retryable
+	}
+	res, ok := out.(*hubclient.Result)
+	if !ok {
+		return "", errors.New("unexpected queued OTP send") // OTP integrations are sync
+	}
+	return res.Session, nil // persist with the attempt, server side
+}
+
+// verifyOTP is step 2. try counts the user's attempts so each gets its own key.
+func verifyOTP(ctx context.Context, hc *hubclient.Client, attemptID string, try int, session, mobile, otp string) (bool, error) {
+	_, err := hc.Invoke(ctx, "int_demo_otp", map[string]any{"mobile": mobile, "otp": otp},
+		hubclient.WithOperation("verify_otp"),
+		hubclient.WithSession(session),
+		hubclient.WithIdempotencyKey(fmt.Sprintf("otp-verify-%s-%d", attemptID, try)))
+	var hubErr *hubclient.Error
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.As(err, &hubErr) && hubErr.Code == hubclient.CodeUpstreamRejected:
+		return false, nil // wrong or expired OTP: show hubErr.Message, let the user retry or resend
+	case errors.As(err, &hubErr) && hubErr.Code == hubclient.CodeSessionNotFound:
+		return false, errRestartFromSend
+	default:
+		return false, err // retryable errors: retry with the same session and the same key
+	}
+}
+```

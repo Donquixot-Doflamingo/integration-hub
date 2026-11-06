@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **241** · done: **177** · todo: **53** · other (in-progress/in-review/blocked): **11**
+Total tickets: **250** · done: **177** · todo: **59** · other (in-progress/in-review/blocked): **14**
 
 ## Epics
 
@@ -18,10 +18,10 @@ Total tickets: **241** · done: **177** · todo: **53** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 17 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
-| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 16 | 8 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 40 | 29 |
+| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 19 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 4 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 12 | 0 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 14 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -2476,6 +2476,54 @@ Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits
 - [ ] After a failed submit, focus moves into the dialog (the error panel's heading or the reason field) and Escape closes it
 - [ ] Component test and one e2e keyboard check
 
+### HUB-290 — Console: vendors and vendor endpoints pages
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-290-console-vendors`
+
+Found writing the operator skill (HUB-316): the console has no vendor pages, so onboarding a vendor ('client') needs the admin API or MCP. Add list, detail, create and update for vendors (`listVendors`, `getVendor`, `createVendor`, `updateVendor`) and endpoints (`listVendorEndpoints`, `getVendorEndpoint`, `createVendorEndpoint`; endpoint versions are immutable).
+
+**Acceptance criteria**
+- [ ] List, detail, create and edit pages through the generated client, with ETag/If-Match on edits
+- [ ] Validation errors from the API shown on the field
+- [ ] Role gating per `x-required-role`; component and e2e tests
+
+### HUB-291 — Console: accounts page with write-only credentials and rotation
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-291-console-accounts`
+
+Accounts (a vendor's credentials and quota) can only be created by calling the admin API today, yet the MCP contract and the operator skill send people to the console for anything with secrets. Add list, detail, create (`createAccount`), config and quota edit (`updateAccount`), test connection, and credential rotation (`addNextCredential`, `promoteNextCredential`; `deleteOldCredential` only for roles that have it). Secrets are write-only: never shown after submit.
+
+**Acceptance criteria**
+- [ ] Create an account with credentials from the console; values never rendered again or kept in client state after submit
+- [ ] Rotation flow add next → test → promote; delete-old hidden without the role
+- [ ] Lifecycle actions (retire) role-gated; tests per role
+
+### HUB-292 — Console: create an integration, edit drafts, validate and publish
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-292-console-integration-authoring`
+
+The console shows integrations and versions but cannot create one or edit a draft. Add create integration, a draft editor (targets, per-operation transformers, delivery, weights), validate with the report shown inline, a diff against the active version, and publish/rollback with a reason.
+
+**Acceptance criteria**
+- [ ] Create integration and draft, edit, validate (errors inline), diff, publish with reason
+- [ ] Per-operation targets (`TargetRef.operations`) editable
+- [ ] e2e against the real stack (`scripts/dev-up.sh`)
+
+### HUB-293 — Console: create transformer versions and run goldens
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
+- **Branch:** `feat/HUB-293-console-transformer-authoring`
+
+Transformer pages are read-only. Add create transformer version (YAML editor plus golden fixtures), run goldens with diffs, and dry-run, using `createTransformerVersion`, `runTransformerGoldens` and `dryRunTransformer`.
+
+**Acceptance criteria**
+- [ ] Create a version from the console; publish blocked while goldens fail (as the API enforces)
+- [ ] Golden diffs rendered per case; dry-run output masked
+- [ ] Tests
+
 ## EP-11 — MCP server + consumer skill + SDK
 
 ### HUB-300 — hubmcp scaffold with official MCP Go SDK (stdio)
@@ -2682,6 +2730,46 @@ Implement the 34 new admin tools of `contracts/mcp/hubmcp-tools.json` 1.1.0 (REA
 - [x] Docs: ADR amending ADR-0006/ADR-0018 (admin tools are no longer read-only; user token, stdio-only writes), SECURITY.md §2.5 rows, TECH_SPEC §18, F-20 and OBSERVABILITY (tool log fields for write tools; no secret values)
 
 Built (in review): `admintools.go` (contract-driven handlers), `guard.go` (`SECRET_IN_INPUT`, `CONFIRMATION_REQUIRED`), allowlisted and method-guarded admin client (`adminclient.go`), stdio-only registration of write tools (`server.go`), sensitive output redacted after the one result. Tests: `TestToolRegistrationByTransport`, `TestNoToolMapsToDeleteOrForbidden`, `TestAdminClientCannotDelete`, `TestSourceHasNoDeletePath`, `TestLoadContractRefusesUnsafeTools`, `TestAdminRoutesMatchTheContract`, `TestWriteToolConfirmGuard`, `TestNoSecretInputProperties`, `TestSecretInInputIsRefused`, `TestSensitiveOutputIsReturnedOnceAndNeverLogged`, `TestReasonIfMatchAndETag`, `TestEveryToolSuccessAndError` (42 tools), `TestMCPEndToEnd` (integration). ADR-0020. The new user story (US-20xx) is left to docs-keeper. The e2e's invoke targets the dev `clevertap` account, because accounts cannot be created through MCP (`createAccount` is forbidden: it needs credentials); the vendor and endpoint created through MCP are checked but not invoked.
+
+### HUB-316 — Operator skills in the repo
+- **Epic:** EP-11 · **Type:** docs · **Area:** docs
+- **Status:** in-review · **Depends on:** HUB-305, HUB-314 · **Feature:** F-21 · **Stories:** US-2105
+- **Branch:** `docs/HUB-316-operator-skills`
+
+So nobody has to guess how to run the Hub, whatever AI they use: one repo-wide skill, `.claude/skills/hub-operator/` (SKILL.md + seven `references/`), also linked from `.agents/skills/hub-operator` for OpenAI Codex (Cursor reads `.claude/skills/` itself). Topics: tenants and API keys (scopes); vendors, endpoints and accounts with credentials; callback endpoints and signature verification; changing vendor/account config safely; switching an integration to another vendor or account (draft, validate, diff, publish, weights, shadow, rollback, re-resolve vs pinned); transformers (canonical → vendor → canonical walk-through, error mapping, goldens, dry-run); multi-step flows (operations, `X-Hub-Session`). Each task shows the console path, the `hubctl` command and the `hubmcp` tool call, with the admin API as the fallback, and says plainly where a way does not exist yet. One skill rather than several: one trigger surface ("operate the Hub"), shared access and safety rules in SKILL.md, topics loaded on demand.
+
+**Acceptance criteria**
+- [x] Skill follows the skill-creator structure: frontmatter `name` / `description` with trigger phrases (1,115 characters, under Claude Code's 1,536 cap), SKILL.md under 500 lines, progressive disclosure through `references/` with a table of contents on long files
+- [x] Every topic above covered, each with console, `hubctl` and MCP (or an explicit "not available, use X")
+- [x] States that MCP has no delete tools and that deletes and other destructive actions are console-only for roles that have them; secrets never go through MCP
+- [x] Every cited `hubctl` command and flag, MCP tool name (hubmcp-tools 1.1.0), admin `operationId` and relative link checked by a script against the code and contracts (0 errors)
+- [x] Codex discovery: `.agents/skills/hub-operator` symlink (Codex follows symlinked skill folders)
+
+### HUB-317 — Consumer skill for any AI agent
+- **Epic:** EP-11 · **Type:** docs · **Area:** docs
+- **Status:** in-review · **Depends on:** HUB-303, HUB-316 · **Feature:** F-21 · **Stories:** US-2106
+- **Branch:** `docs/HUB-316-operator-skills`
+
+Make `clients/claude-skill/` usable from whatever assistant a calling team has. Research (2026-11-07) showed one `SKILL.md` folder serves Claude Code (`~/.claude/skills/`, `.claude/skills/`), claude.ai / Claude Desktop (ZIP upload), OpenAI Codex (`~/.agents/skills/`, `.agents/skills/`; needs `name` + `description`) and Cursor (`.cursor/skills/`, `.agents/skills/`, also reads `.claude/skills/`; `name` must equal the folder), so there is no per-tool copy. README with verified install steps and doc URLs per tool, a Cursor `.mdc` rule option, and `PASTE-INTO-ANY-ASSISTANT.md` for chat assistants and `AGENTS.md`. Skill content: two-step OTP flow (`send_otp` → `verify_otp` with `X-Hub-Session`) with its failure table, the real `hubclient` API (`Result` / `Queued`, `WithOperation`, `WithSession`, `GetRequest`), `hub_invoke` parameters, `send_otp`/`verify_otp` in the quick reference. The folder keeps its name: renaming would break 25 links across the repo and collide with the parallel hubmcp branch editing `references/mcp-setup.md`; the README says it is tool-neutral.
+
+**Acceptance criteria**
+- [x] Install instructions per tool (Claude Code, claude.ai / Desktop, Codex, Cursor, any assistant) checked against current docs, with URLs; one shared `SKILL.md`, no duplicates
+- [x] Caller flows covered: discover → dry-run → invoke with `Idempotency-Key` → 200 vs 202 → poll or callback; two-step OTP; error handling; never moving money or quota without confirmation
+- [x] Go snippets compile against `pkg/hubclient` (`go vet` on a scratch copy); cited MCP tools, operationIds, links and paths pass the check script
+- [ ] Rename to a neutral folder name: deferred (see above); a follow-up can rename with a symlink once the hubmcp branch has merged
+
+### HUB-318 — MCP setup for every client
+- **Epic:** EP-11 · **Type:** docs · **Area:** mcp
+- **Status:** in-review · **Depends on:** HUB-301, HUB-314 · **Feature:** F-20, F-21 · **Stories:** US-2107
+- **Branch:** `docs/HUB-316-operator-skills`
+
+`clients/claude-skill/integration-hub/references/mcp-setup.md` covers Claude Code (`claude mcp add`, `.mcp.json` with `${VAR}`), Claude Desktop (`claude_desktop_config.json` per OS with a keychain wrapper, since its `env` values are literal), Codex CLI (`~/.codex/config.toml` `[mcp_servers.*]` with `env_vars` forwarding, `codex mcp add`) and Cursor (`.cursor/mcp.json` with `${env:NAME}`, `envFile`), each verified against the client's docs (URLs in the file). Two profiles: the tenant key, and separately the user's own admin token (stdio only, a separate `hubmcp-admin` entry, never in a committed or hosted config, `HUB_ADMIN_BASE_URL` with `/admin/v1`). Also the hosted Streamable HTTP option per client and the full tool list of hubmcp-tools 1.1.0, consistent with `contracts/mcp/README.md`. The hubmcp backend branch may edit the same file; the lead merges.
+
+**Acceptance criteria**
+- [x] Config snippets for Claude Code, Claude Desktop, Codex CLI and Cursor, each with its doc URL, checked on 2026-11-07
+- [x] Tenant key and admin token documented separately; admin write tools stdio only; no deletes; no secrets in committed files
+- [x] Every tool of hubmcp-tools 1.1.0 named, and the env vars and flags (`-transport`, `-addr`, `-allow-remote`) match `backend/cmd/hubmcp`
+- [ ] Each snippet run on a clean machine per client: not possible in this container (no desktop clients); left for HUB-309
 
 ## EP-12 — Release 2 (DESIGN §19 Phase 2)
 
@@ -3104,6 +3192,26 @@ Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md` §3.3). At abou
 - [ ] Batched `COPY` (or multi-row insert) and a configurable number of writer goroutines; buffer size configurable (with HUB-403)
 - [ ] `hubload` async step at the gateway's accept limit shows no `buffer_full` drops on the same machine, or the report names the new limit
 - [ ] Benchmark of events/s per writer vs `main` (benchstat)
+
+### HUB-414 — Contract mismatch: admin server accepts delivery.polling
+- **Epic:** EP-13 · **Type:** fix · **Area:** contracts
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `fix/HUB-414-delivery-polling`
+
+Found writing HUB-316: the admin server accepts `delivery.polling` in integration versions, but `DeliveryPolicy` in hub-admin 1.2.0 does not define it. Either the contract-steward adds it (minor bump, CCR already noted in M7) or the server refuses it.
+
+**Acceptance criteria**
+- [ ] CCR decided; contract and server agree; contract test covers it
+
+### HUB-415 — Gateway does not check the requests_read key scope
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-05 · **Stories:** US-05xx
+- **Branch:** `fix/HUB-415-requests-read-scope`
+
+Found writing HUB-316: API key scope `requests_read` is defined, but nothing on the gateway checks it, so any key can read request status.
+
+**Acceptance criteria**
+- [ ] `getRequestStatus` requires `requests_read` (or the documented scope); table test per scope; docs updated
 
 ## Parallel tracks
 
