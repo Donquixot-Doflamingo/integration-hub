@@ -499,7 +499,8 @@ Flags override env. Env names: `HUB_*`. Loaded once at start into an immutable s
 | `HUB_CONFIG_WATCH` | `false` (rebuild and swap on file changes, HUB-045) | dev only |
 | `HUB_DATA_DIR` | `.data` (local cache `snapshot.json.gz` of the last good snapshot, HUB-048) | all |
 | `HUB_CONTRACTS_DIR` | `../contracts` | admin, dev loader |
-| `HUB_WORKER_POOL`, `HUB_WORKER_CLAIM_BATCH`, `HUB_WORKER_CONCURRENCY` | `messaging`, 32, 256 | worker |
+| `HUB_WORKER_POOL`, `HUB_WORKER_CLAIM_BATCH`, `HUB_WORKER_CONCURRENCY` | `messaging`, 32, 256 (64 for `llm`); `0` = default | worker |
+| `HUB_WORKER_TARGET_CAP` | `0` = a quarter of the concurrency, at most 64 (the per-account bulkhead): the most attempts one `(account, endpoint)` may have in flight in one worker (HUB-412, ADR-0019) | worker |
 | `HUB_SHUTDOWN_GRACE` | `25s` | all |
 | `HUB_OTLP_ENDPOINT`, `HUB_TRACE_SAMPLE_RATIO` | empty (off), `0.05` | all |
 | `HUB_TRACE_FORWARD_VENDORS` | empty (no vendor receives `traceparent`; comma-separated vendor names, ADR-0013) | gateway, worker |

@@ -53,7 +53,7 @@ One noisy tenant can exhaust a shared vendor account; one slow vendor can exhaus
 `api_keys.rate_limit` / tenant limits; account `quota` in config. Redis buckets.
 
 ## Config impact
-Vendor `defaults.rate_limit.per_account_rps`; account `quota: { rps, daily }`; tenant `rate_limit`; bulkhead `max_in_flight` per vendor endpoint (proposed field).
+Vendor `defaults.rate_limit.per_account_rps`; account `quota: { rps, daily }`; tenant `rate_limit`; bulkhead `max_in_flight` per vendor endpoint (proposed field). Worker process settings (TECH_SPEC §8.1): `HUB_WORKER_CONCURRENCY` (256 messaging, 64 llm), `HUB_WORKER_CLAIM_BATCH` (32), `HUB_WORKER_TARGET_CAP` (concurrency / 4, at most 64).
 
 ## Observability
 | Kind | Name | Notes |

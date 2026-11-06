@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(hub)` · Read worker concurrency, claim batch and target cap from config (HUB-407) · HUB-407 · F-09
+  - `HUB_WORKER_CONCURRENCY`, `HUB_WORKER_CLAIM_BATCH` and `HUB_WORKER_TARGET_CAP` (or `-worker-concurrency`, `-worker-claim-batch`, `-worker-target-cap`) size the worker; `0` keeps the defaults (256 / 64 llm, 32, concurrency / 4 up to 64)
+  - Non-integers, negative values or a target cap above the concurrency stop the process at start with a clear error
 - 2026-11-07 · `fix(delivery)` · Claim continuously and cap worker slots per vendor account (HUB-412) · HUB-412 · F-13
   - One slow or hanging vendor no longer delays other vendors' async deliveries: the worker claims as soon as a slot frees instead of waiting for its whole batch, and one (account, endpoint) may hold at most a quarter of the worker's slots (64 of 256 by default)
   - A claim takes no more of a vendor's backlog than its free slots, so a large backlog for a slow vendor never crowds others out; an envelope that still finds its vendor full is put back without counting an attempt, a breaker failure or a retry token

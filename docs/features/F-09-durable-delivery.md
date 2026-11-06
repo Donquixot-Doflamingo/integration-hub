@@ -76,7 +76,7 @@ stateDiagram-v2
 `outbox` (indexes `(status, next_attempt_at)`, `(status, account_id, endpoint_id)`), `dead_letters` (DESIGN §18.2).
 
 ## Config impact
-Integration version `delivery: { mode, wait_ms, ttl, retry? }`; capability default TTL.
+Integration version `delivery: { mode, wait_ms, ttl, retry? }`; capability default TTL. Worker process: `HUB_WORKER_CONCURRENCY`, `HUB_WORKER_CLAIM_BATCH`, `HUB_WORKER_TARGET_CAP` (TECH_SPEC §8.1).
 
 ## Observability
 | Kind | Name | Notes |
