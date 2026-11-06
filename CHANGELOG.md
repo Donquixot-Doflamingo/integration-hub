@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(hubmcp)` · Scaffold hubmcp on the official MCP Go SDK over stdio (HUB-300) · HUB-300 · F-20
+  - `hubmcp` starts over stdio and advertises exactly the tools of contracts/mcp/hubmcp-tools.json (admin tools only when HUB_ADMIN_TOKEN is set)
+  - HUB_API_KEY and HUB_ADMIN_TOKEN come from the environment only and are redacted (`***`) in logs and tool output
+  - Tool arguments are validated against the contract input schemas before any Hub call
 - 2026-11-06 · `docs(tickets)` · Close HUB-230 and track HUB-238/HUB-239 for review (HUB-239) · HUB-239 · F-18
   - HUB-230 done (PR #16 merged); HUB-238 in review; new ticket HUB-239 for the registry watch flake
 - 2026-11-06 · `test(registry)` · Write config edits atomically in the watch test (HUB-239) · HUB-239 · F-03

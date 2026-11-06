@@ -2238,15 +2238,15 @@ Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits
 
 ### HUB-300 — hubmcp scaffold with official MCP Go SDK (stdio)
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-020, HUB-006, HUB-094 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-300-hubmcp-scaffold`
+- **Status:** in-review · **Depends on:** HUB-020, HUB-006, HUB-094 · **Feature:** F-20 · **Stories:** US-2006
+- **Branch:** `feat/HUB-300-hubmcp-scaffold` (delivered on `feat/HUB-300-hubmcp` with HUB-301–307)
 
 Create `cmd/hubmcp` using the official MCP Go SDK with stdio transport, config (Hub URL, tenant key from env, optional admin token) and tool registration from the frozen MCP tool definitions.
 
 **Acceptance criteria**
-- [ ] `hubmcp` starts over stdio and lists tools matching the contract
-- [ ] Tenant key read from env only and redacted in logs
-- [ ] Calls go through `pkg/hubclient`
+- [x] `hubmcp` starts over stdio and lists tools matching the contract (`TestStdioServesContractTools`, `TestToolListEqualsFrozenContract`)
+- [x] Tenant key read from env only and redacted in logs (`TestLoadConfig`, `TestSecretsAreRedactedInLogsAndOutput`)
+- [x] Calls go through `pkg/hubclient` (the app holds only a `hubclient.Client` for the caller API; archtest forbids `internal/`; User-Agent asserted in the HUB-302 tests)
 
 ### HUB-301 — Streamable HTTP transport
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp

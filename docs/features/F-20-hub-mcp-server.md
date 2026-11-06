@@ -4,7 +4,7 @@
 `backend/cmd/hubmcp`: a Go MCP server (stdio + streamable HTTP) that lets Claude and other MCP clients discover, dry-run and invoke Hub integrations as a tenant, plus optional read-only admin tools for on-call (PRD DV-4).
 
 ## Status
-`proposed` — 2026-10-31.
+`in-progress` — 2026-11-07 (HUB-300 onward on `feat/HUB-300-hubmcp`).
 
 ## Owner
 `backend-engineer` (uses `backend/.claude/skills/mcp-builder`); `contract-steward` for the tool contract.
@@ -74,8 +74,9 @@ Env vars above; `--transport stdio|http`, `--addr`.
 ## Observability
 | Kind | Name | Notes |
 | --- | --- | --- |
-| Log | `tool_called` | tool name, integration id, request_id (stderr in stdio mode) |
-| Header | `User-Agent: hubmcp/<version>` | lets the Hub attribute MCP traffic |
+| Log | `tool_called` | tool name, is_error, duration_ms, integration id, request_id, outcome (always stderr) |
+| Log | `hubmcp started` / `hubmcp stopped` / `admin tools disabled: …` | lifecycle; see OBSERVABILITY §4.6 |
+| Header | `User-Agent: hubclient-go/<v> hubmcp/<version>` | lets the Hub attribute MCP traffic |
 
 ## Security & PII
 Runs with the developer's tenant key: same permissions as their service. Guarded invoke prevents accidental side effects. Admin tools read-only.
@@ -102,7 +103,14 @@ Distributed as a binary in releases; documented in the consumer skill (F-21).
 ## Tickets
 HUB-300 – HUB-329 (EP-11, filter `feature: F-20`).
 
+## Implementation notes
+- **SDK:** official `github.com/modelcontextprotocol/go-sdk` v1.8.0, low-level `Server.AddTool`, so the advertised `inputSchema`/`outputSchema` are the contract's JSON verbatim. Arguments are validated against the contract input schema (santhosh-tekuri/jsonschema, formats asserted) before a handler runs; a violation is a tool result with `isError: true` and `VALIDATION_FAILED`, so the model can fix the call.
+- **Contract copy:** `go:embed` cannot reach `contracts/`, so `backend/cmd/hubmcp/hubmcp-tools.json` is a byte-for-byte copy (`go generate ./cmd/hubmcp` refreshes it). `TestEmbeddedContractIsTheFrozenOne` fails on any drift and `TestToolListEqualsFrozenContract` compares the advertised tools with `contracts/mcp/hubmcp-tools.json` itself.
+- **Isolation:** caller tools use `pkg/hubclient`; admin tools use a GET-only client. `internal/archtest` forbids `cmd/hubmcp` from importing `internal/`.
+- **Config:** `HUB_BASE_URL`, `HUB_API_KEY` (env only, no flag), optional `HUB_ADMIN_TOKEN` / `HUB_ADMIN_BASE_URL`; flags `-transport`, `-log-level`. Secrets print as `***` (`%v`, `%#v`, slog) and are redacted by value from logs and tool results.
+
 ## Changelog of this doc
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-07 | In progress: scaffold, implementation notes, observability (HUB-300) | backend-engineer |
