@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `docs(tickets)` · Set HUB-232 in review and file its follow-ups (HUB-232) · HUB-232 · F-18
+  - HUB-232 in review: §16.3 rules with promtool tests done; Grafana import check left open (HUB-247)
+  - New todo tickets: HUB-245 attempt and DLQ counters, HUB-246 parked gauges kept by a former scheduler leader, HUB-247 Grafana import check, HUB-248 OBSERVABILITY §11.2 alert rules
+  - HUB-237 lists the ten runbook files the alert rules link
 - 2026-11-06 · `ci(backend)` · Check alert rules and dashboards in CI (HUB-232) · HUB-232 · F-18
   - New backend CI job monitoring: installs promtool 3.4.2 from the release tarball (SHA-256 verified) and runs make monitoring
   - deploy/README.md documents the rule file, dashboard import and the checks
