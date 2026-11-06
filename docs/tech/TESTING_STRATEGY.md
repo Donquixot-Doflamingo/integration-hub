@@ -151,7 +151,7 @@ Defined in `OBSERVABILITY.md` §12 (L1–L6): 500 sync RPS + 2,000 async msg/s (
 
 ## 11. Other checks
 - `promtool check rules` + `promtool test rules` for `deploy/alerts/` (one test per alert with a firing and a non-firing case; `TestAlertRulesCoverDesign` enforces it and that every DESIGN §16.3 alert has a rule).
-- Dashboard JSON lint and query check (`TestDashboardsAreValidAndUseExportedMetrics`, ADR-0013): valid JSON, stable uid, unique panel ids, datasource through `${datasource}`, every variable defined; every rule and panel query parses and uses only metric and label names the registry exports (`TestAlertRulesUseExportedMetrics`). Run all of it with `make monitoring` (CI job `monitoring`).
+- Dashboard JSON lint and query check (`TestDashboardsAreValidAndUseExportedMetrics`, ADR-0015): valid JSON, stable uid, unique panel ids, datasource through `${datasource}`, every variable defined; every rule and panel query parses and uses only metric and label names the registry exports (`TestAlertRulesUseExportedMetrics`). Run all of it with `make monitoring` (CI job `monitoring`).
 - Migration lint (no destructive change without a two-step expand/contract).
 - Arch test: package dependency rules (TECH_SPEC §4.4).
 

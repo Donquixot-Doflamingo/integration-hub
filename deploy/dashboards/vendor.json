@@ -506,7 +506,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "Vendor calls by outcome",
-      "description": "Every vendor call, retries included. Canonical codes per attempt need vendor_attempts_total (HUB-245).",
+      "description": "Every vendor call, retries included. Canonical codes per attempt need vendor_attempts_total (HUB-241).",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"

@@ -7,7 +7,7 @@
 #
 # Two counters the design planned (vendor_attempts_total, dlq_entries_total) do not exist yet, so
 # the auth/transform alerts read the final-outcome counter hub_requests_total and the DLQ alert
-# reads the dlq_count gauge (ADR-0012; HUB-245 adds the counters).
+# reads the dlq_count gauge (ADR-0014; HUB-241 adds the counters).
 #
 # "Any X" on a counter: hub_requests_total and audit_events_dropped_total create a series on its
 # first increment, and increase() needs two samples of a series, so a plain increase() never sees
@@ -32,7 +32,7 @@ groups:
 
       - alert: ParkedOldestAgeHigh
         # Only the scheduler leader samples the parked backlog. A former leader keeps its last values
-        # (HUB-246), so only series of the process that currently leads count.
+        # (HUB-242), so only series of the process that currently leads count.
         expr: max by (account, endpoint) (parked_oldest_age_s and on (instance) (scheduler_leader == 1)) > 600
         for: 1m
         labels:

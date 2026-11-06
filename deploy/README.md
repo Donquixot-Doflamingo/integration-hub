@@ -9,7 +9,7 @@
 | `k8s/` | manifests (later) | — |
 
 ## Alerts (`alerts/`)
-- `hub.rules.yaml`: one rule per DESIGN §16.3 alert, in groups `hub-resilience`, `hub-delivery`, `hub-errors`, `hub-platform`. Labels: `severity` = `page` | `warn`. Annotations: `summary`, `description`, `runbook_url` (`docs/runbooks/<AlertName>.md`, HUB-237). Expressions and caveats: `docs/tech/OBSERVABILITY.md` §11.1, ADR-0012.
+- `hub.rules.yaml`: one rule per DESIGN §16.3 alert, in groups `hub-resilience`, `hub-delivery`, `hub-errors`, `hub-platform`. Labels: `severity` = `page` | `warn`. Annotations: `summary`, `description`, `runbook_url` (`docs/runbooks/<AlertName>.md`, HUB-237). Expressions and caveats: `docs/tech/OBSERVABILITY.md` §11.1, ADR-0014.
 - `*_test.yml`: `promtool test rules` unit tests, a firing and a non-firing case for every alert.
 - Load it as a Prometheus rule file (`rule_files: [hub.rules.yaml]`). Rules and dashboards read classic histogram buckets (`*_bucket`): if the Prometheus scrape uses native histograms, set `always_scrape_classic_histograms: true` on the Hub job.
 - Rules rely on the scrape label `instance` (one per Hub process) and nothing else from the scrape config.
@@ -29,7 +29,7 @@ It runs `promtool check rules`, `promtool test rules`, and Go tests in `backend/
 - lint the dashboards (valid JSON, stable `hub-*` uid, unique panel ids, datasource only through `${datasource}`, every `$variable` defined);
 - check that every DESIGN §16.3 alert has exactly one rule, its annotations and runbook link, and a firing and a non-firing promtool case.
 
-Grafana itself is not started, so a dashboard import is not proven in CI (HUB-247). Install promtool from the release tarball (`go install` of `cmd/promtool` is refused because the Prometheus module has `replace` directives):
+Grafana itself is not started, so a dashboard import is not proven in CI (HUB-243). Install promtool from the release tarball (`go install` of `cmd/promtool` is refused because the Prometheus module has `replace` directives):
 ```bash
 curl -sSfLO https://github.com/prometheus/prometheus/releases/download/v3.4.2/prometheus-3.4.2.linux-amd64.tar.gz
 echo "630177c6ad011193987904f09ffafec29d531abfeb5e43fa3714e376e5f28ddc  prometheus-3.4.2.linux-amd64.tar.gz" | sha256sum -c -

@@ -1,11 +1,11 @@
-# ADR-0013: Verify alert and dashboard queries against the exported metric catalogue
+# ADR-0015: Verify alert and dashboard queries against the exported metric catalogue
 
 | | |
 | --- | --- |
 | Status | Accepted |
 | Date | 2026-11-06 |
 | Deciders | backend-engineer (for lead review) |
-| Tickets | HUB-232, HUB-247 |
+| Tickets | HUB-232, HUB-243 |
 | DESIGN refs | §16.2, §16.3; TESTING_STRATEGY §11 |
 
 ## Context
@@ -23,7 +23,7 @@ Option 3, in `backend/cmd/hub/internal/roles/deploy_queries_test.go`, using `git
 - Positive: renaming a metric or label, or dropping a label from a metric, fails CI with the exact alert or panel. Rules and dashboards cannot reference planned-but-unbuilt metrics.
 - Costs: `go.mod` gains `prometheus/prometheus` (plus `grafana/regexp`, `dennwc/varint`; about 70 `go.sum` lines). Histograms and summaries are listed by hand in the test (`histogramNames`, `summaryNames`); a stale entry fails the test, a missing one fails as "not exported" on first use.
 - Labels added by the scrape config (`job`, `instance`, `pod`, `namespace`, `role`) are accepted on every metric.
-- Grafana import is not proven; HUB-247 adds that job once a Grafana image is pinned.
+- Grafana import is not proven; HUB-243 adds that job once a Grafana image is pinned.
 
 ## Deviation from DESIGN.md
 None. TECH_SPEC §13 lists the new test dependency.
