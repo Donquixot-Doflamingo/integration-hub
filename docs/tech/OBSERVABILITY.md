@@ -289,6 +289,8 @@ Pools exist only for: request body buffers, response serialisation buffers, audi
 ### 8.6 Benchmark regression
 `make bench` runs `-count=10`; CI compares against the `main` baseline with `benchstat`; > 10 % slowdown (p < 0.05) on any hot-path benchmark fails the job (TESTING_STRATEGY §9).
 
+The caller's end-to-end view is gated separately: `make latency-budget` (CI job `latency-budget`, HUB-413) keeps a 100 ms vendor at p50 ≤ 102 ms and p99 ≤ 110 ms through the gateway stack and logs the audit ledger's `hub_overhead_ms` per attempt as a diagnostic ([LATENCY.md](LATENCY.md)).
+
 ---
 
 ## 9. Debugging runbook

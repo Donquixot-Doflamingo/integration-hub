@@ -29,6 +29,7 @@ flowchart TB
 | Integration | `backend/internal/**` | every PR (`make itest`) | `integration` | < 8 min |
 | Chaos | `backend/test/chaos/` | every PR touching `upstream`, `delivery`, `queue`; nightly otherwise | `chaos` | < 10 min |
 | E2E | `backend/test/e2e/`, `frontend/tests/e2e/`, `backend/cmd/hubmcp/e2e/` | every PR (smoke), nightly (full) | `e2e` | < 15 min |
+| Sync latency budget (HUB-413) | `backend/internal/edge/latency_budget_test.go` (`make latency-budget`, CI job `latency-budget`, no `-race`; [LATENCY.md](LATENCY.md)) | every PR | `integration latency` | ~2 min |
 | Benchmarks | `*_test.go` `Benchmark*` | every PR (hot-path packages) | none | < 6 min |
 | Fuzz | `Fuzz*` | nightly 10 min/target; seeds run in unit tests | none | — |
 | Load / soak | `deploy/load/` + `backend/cmd/hubload` (`make load`) | weekly + before release (staging); laptop scale on demand | — | ~25 min laptop, 1–24 h staging |

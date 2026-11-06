@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(edge)` · Gate sync latency at vendor + 2 ms p50 and + 10 ms p99 (HUB-413) · HUB-413 · F-18
+  - `make latency-budget` (CI job `latency-budget`, no `-race`) runs the gateway stack against a 100 ms mockvendor and fails if a caller's p50 exceeds 102 ms, its p99 110 ms, or the Hub adds more than 2 ms p50 / 10 ms p99 over direct calls; attempts frozen by other processes are retried, never judged leniently
+  - `docs/tech/LATENCY.md`: the budget, how it is measured and run, the I/O left on the sync path, and numbers at 0/50/100/200 ms: the Hub adds about 1.2 ms p50 and 4 to 5.5 ms p99, wait mode about 5.5 ms p50
+  - The gate is red today on the p50 bound (102.1 ms; 102.9 ms with an Idempotency-Key) until HUB-409 moves audit masking off the request goroutine
+
 - 2026-11-07 · `docs(adr)` · Renumber the account limiter lease ADR to 0021 (HUB-408) · HUB-408 · F-13
   - The account limiter lease decision is now ADR-0021 (`docs/tech/adr/0021-account-limiter-leases-tokens.md`); 0019 and 0020 are taken by other branches. References in TECH_SPEC, OBSERVABILITY, F-13, TICKETS, the limiter code comment and the HUB-408 changelog entry follow
 

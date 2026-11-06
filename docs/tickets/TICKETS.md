@@ -3019,16 +3019,16 @@ Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md` §3.3). At abou
 
 ### HUB-413 — Latency budget: a 100 ms vendor stays ≤ 110 ms through the Hub
 - **Epic:** EP-13 · **Type:** perf · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-408 · **Feature:** F-18 · **Stories:** US-1808, US-1802
+- **Status:** blocked · **Depends on:** HUB-408, HUB-409 · **Feature:** F-18 · **Stories:** US-1808, US-1802
 - **Branch:** `perf/HUB-413-latency-budget`
 
 The user's requirement: if the vendor answers in 100 ms, a sync call through the Hub must take at most 110 ms, never 200 ms; nothing that can be async may delay a sync call. Today's evidence is the M8 load report (the Hub adds about 1.3 ms p50 and 3.5 ms p99 at a 200 ms vendor) and a benchmark at a 0 ms vendor, neither of which is a CI gate. Add a gate that runs the real gateway stack against a 100 ms mockvendor and fails on a regression, prove that the optional work (audit, async accepts, callbacks) is off the caller's request, and document the I/O that remains on the sync path.
 
 **Acceptance criteria**
-- [ ] Gate test: mockvendor at a fixed 100 ms; sequential and modestly concurrent sync calls through the real gateway handler stack (auth, validate, resolve, transform, upstream, response map, audit, metrics, account limiter) over HTTP; caller-observed p99 ≤ 110 ms and p50 ≤ 102 ms, and the added latency against the same calls made directly to mockvendor is asserted too
-- [ ] The gate runs without `-race` in its own make target (`make latency-budget`) and CI job (`latency-budget`), with warm-up and enough samples to be stable on a 2-CPU runner; green 3 times in a row locally
+- [ ] Gate test: mockvendor at a fixed 100 ms; sequential and modestly concurrent sync calls through the real gateway handler stack (auth, validate, resolve, transform, upstream, response map, audit, metrics, account limiter) over HTTP; caller-observed p99 ≤ 110 ms and p50 ≤ 102 ms, and the added latency against the same calls made directly to mockvendor is asserted too. *Written (`TestLatencyBudget`, `latency_budget_test.go`) and asserting the full budget, but red: p99 holds, p50 is 102.1 ms (102.9 ms with an Idempotency-Key) because mockvendor's 100 ms answers at 100.9 ms direct and audit masking runs on the request goroutine (HUB-409). See LATENCY.md §6 for what turns it green.*
+- [ ] The gate runs without `-race` in its own make target (`make latency-budget`) and CI job (`latency-budget`), with warm-up and enough samples to be stable on a 2-CPU runner; green 3 times in a row locally. *Target, CI job, warm-up, 690 samples per attempt and a stall guard (discard and retry an attempt frozen > 20 ms, fail after 3) are in; not green (above)*
 - [x] Tests: audit is non-blocking on a sync request; async and async_callback answer 202 without waiting for the vendor; callback delivery never runs on the caller's request (`TestSyncRequestDoesNotWaitForAudit`: real audit.Writer on a hung store with a one-batch buffer, 50 sync calls answer, drops counted, hangs if `Emit` blocks; `TestAsyncModesAcceptWithoutWaitingForTheVendor`: 202 before a 2 s vendor is called, the worker pays it; `TestCallbackDeliveryIsNotOnTheCallersRequest`: wait-mode 200 while the receiver hangs the callback, delivered by the dispatcher afterwards)
-- [ ] `docs/tech/LATENCY.md`: the budget, how it is measured and run, the I/O left on the sync path and why, and measured numbers (direct vs through the Hub, p50/p95/p99, vendor at 0/50/100/200 ms)
+- [x] `docs/tech/LATENCY.md`: the budget, how it is measured and run, the I/O left on the sync path and why, and measured numbers (direct vs through the Hub, p50/p95/p99, vendor at 0/50/100/200 ms) (the 200 ms row comes from a stalled attempt: the shared container never gave a clean one)
 
 ## Parallel tracks
 
