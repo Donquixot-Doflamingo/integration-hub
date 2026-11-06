@@ -19,7 +19,7 @@ Total tickets: **198** · done: **156** · todo: **41** · other (in-progress/in
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 10 | 1 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
-| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
+| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
@@ -2307,14 +2307,16 @@ Delivered: the three admin tools of the frozen tool contract (`hub_admin_search_
 
 ### HUB-306 — MCP tests
 - **Epic:** EP-11 · **Type:** test · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-301, HUB-302, HUB-303, HUB-304, HUB-305 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `test/HUB-306-mcp-tests`
+- **Status:** in-review · **Depends on:** HUB-301, HUB-302, HUB-303, HUB-304, HUB-305 · **Feature:** F-20 · **Stories:** US-2001–US-2006
+- **Branch:** `test/HUB-306-mcp-tests` (delivered on `feat/HUB-300-hubmcp`)
 
 Tool schema snapshot tests against the MCP contract, handler tests against a fake Hub, and an MCP Inspector smoke run.
 
+The protocol smoke run is `TestSpawnedBinaryOverStdio` (the binary spawned over real stdio by the go-sdk client). Running the MCP Inspector itself needs the npm package, which could not be fetched in this environment; it stays a manual step (HUB-313).
+
 **Acceptance criteria**
-- [ ] Tool schemas equal the frozen definitions
-- [ ] Every tool has success and error tests
+- [x] Tool schemas equal the frozen definitions (`TestToolListEqualsFrozenContract`, `TestEmbeddedContractIsTheFrozenOne`)
+- [x] Every tool has success and error tests (`TestEveryToolSuccessAndError`, driven by the contract's tool list, plus the per-tool tables)
 
 ### HUB-307 — MCP e2e against a running Hub
 - **Epic:** EP-11 · **Type:** test · **Area:** mcp
@@ -2361,6 +2363,38 @@ Add an SSE reader to `pkg/hubclient` mapping canonical chunks (`delta.text`, `fi
 **Acceptance criteria**
 - [ ] Reader yields chunks in order and surfaces a terminal error event as an error
 - [ ] Context cancellation closes the stream
+
+### HUB-311 — hubmcp metrics and traces (OBSERVABILITY §14)
+- **Epic:** EP-11 · **Type:** feat · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-306 · **Feature:** F-20 · **Stories:** US-2005
+- **Branch:** `feat/HUB-311-hubmcp-telemetry`
+
+OBSERVABILITY §14 plans `hubmcp_tool_calls_total`, `hubmcp_tool_duration_seconds`, `hubmcp_sessions_active`, `hubmcp_hub_http_requests_total`, a `hubmcp.tool` span with `traceparent` propagation to the Hub and the `MCPInvokeErrorsHigh` alert. HUB-300–307 ship the `tool_called` log and the User-Agent only. Decide where metrics are exposed (stdio has no listener: ops port in HTTP mode only, or OTLP push) and implement.
+
+**Acceptance criteria**
+- [ ] Metrics and span exist as listed in §14, with the exposure decision recorded
+- [ ] `traceparent` from the tool span reaches the Hub (hubclient `WithTraceparent`)
+
+### HUB-312 — CCR + hub_admin DLQ and integration-version tools
+- **Epic:** EP-11 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-305 · **Feature:** F-20 · **Stories:** US-2005
+- **Branch:** `contract/HUB-312-mcp-admin-dlq-versions`
+
+HUB-305's description lists a DLQ list and integration versions, but `contracts/mcp/hubmcp-tools.json` 1.0.0 has only three admin tools. Ask `contract-steward` for read-only `hub_admin_dlq_list` (`hub-admin#listDlq`) and `hub_admin_integration_versions` tools (minor bump), then implement them GET-only like HUB-305.
+
+**Acceptance criteria**
+- [ ] Contract change merged first (own commit, version bump)
+- [ ] Tools implemented with success/error and read-only tests
+
+### HUB-313 — MCP Inspector smoke run
+- **Epic:** EP-11 · **Type:** test · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-306 · **Feature:** F-20 · **Stories:** US-2006
+- **Branch:** `test/HUB-313-mcp-inspector`
+
+Run `@modelcontextprotocol/inspector` (CLI mode) against `bin/hubmcp` in CI or as a scripted manual check (list tools, call `hub_list_integrations` against mockvendor). HUB-306 covers the protocol with a spawned-binary go-sdk test; the Inspector package could not be fetched in the build environment.
+
+**Acceptance criteria**
+- [ ] Scripted Inspector run lists the contract tools and calls one tool successfully
 
 ## EP-12 — Release 2 (DESIGN §19 Phase 2)
 

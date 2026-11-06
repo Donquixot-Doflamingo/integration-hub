@@ -75,7 +75,8 @@ Env vars above (`HUB_API_KEY` is used over stdio only); flags `-transport stdio|
 | Kind | Name | Notes |
 | --- | --- | --- |
 | Log | `tool_called` | tool name, is_error, duration_ms, integration id, request_id, outcome (always stderr) |
-| Log | `hubmcp started` / `hubmcp stopped` / `admin tools disabled: …` | lifecycle; see OBSERVABILITY §4.6 |
+| Log | `hubmcp started` / `hubmcp listening` / `hubmcp stopped` / `admin tools disabled: …` | lifecycle; see OBSERVABILITY §4.6 |
+| Metrics, span | OBSERVABILITY §14 | planned, HUB-311 |
 | Header | `User-Agent: hubclient-go/<v> hubmcp/<version>` | lets the Hub attribute MCP traffic |
 
 ## Security & PII
@@ -88,10 +89,12 @@ Runs with the developer's tenant key: same permissions as their service. Guarded
 | 401 | Tool error suggesting key check | — |
 
 ## Testing
-- **Unit**: tool handlers against an `httptest` server serving contract fixtures.
-- **Integration**: hubmcp → hub (dev) → mockvendor.
-- **Contract**: tool schemas validated; responses checked for absence of vendor/account/version fields.
-- **Eval**: mcp-builder evaluation set (discover → dry-run → invoke flows).
+See TESTING_STRATEGY §13 for the full list.
+- **Unit**: tool handlers against a contract-validated fake Hub serving contract examples; every output validated against the tool's `outputSchema`; a success and an error scenario per tool.
+- **Integration (e2e)**: hubmcp → hub gateway/worker/admin (built binaries, test database) → mockvendor.
+- **Contract**: advertised tools equal `contracts/mcp/hubmcp-tools.json`; tenant outputs scanned for vendor/account/version.
+- **Protocol**: in-memory, stdio pipes, spawned binary, streamable HTTP (auth, origin).
+- **Eval**: mcp-builder evaluation set (discover → dry-run → invoke flows), manual. MCP Inspector: manual (HUB-313).
 
 ## Rollout & migration
 Distributed as a binary in releases; documented in the consumer skill (F-21).
@@ -125,3 +128,4 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-20`).
 | 2026-11-07 | Invoke, request status and dry-run tools; idempotency rule 4 aligned with the contract (HUB-303, ADR-0018) | backend-engineer |
 | 2026-11-07 | Money/quota confirm guard (HUB-304) | backend-engineer |
 | 2026-11-07 | Admin read-only tools (HUB-305) | backend-engineer |
+| 2026-11-07 | Test suite (HUB-306); follow-ups HUB-311 (metrics/traces), HUB-312 (admin DLQ/versions CCR), HUB-313 (Inspector) | backend-engineer |

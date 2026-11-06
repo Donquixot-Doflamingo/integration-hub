@@ -26,7 +26,13 @@ const (
 	testAdminToken = "eyJ.admin-token-canary-4b8d.notreal"
 )
 
+// TestMain verifies no goroutine leaks. With HUBMCP_TEST_EXEC_MAIN=1 the test binary acts as the
+// hubmcp binary instead, so protocol tests can spawn it over real stdio.
 func TestMain(m *testing.M) {
+	if os.Getenv("HUBMCP_TEST_EXEC_MAIN") == "1" {
+		main()
+		return
+	}
 	goleak.VerifyTestMain(m)
 }
 

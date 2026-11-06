@@ -409,6 +409,8 @@ Accepted request ids are recorded by the k6 script and reconciled against `reque
 ---
 
 ## 14. MCP server observability (`hubmcp`)
+> **Status (2026-11-07):** HUB-300–307 ship the logs of §4.6 and the `User-Agent`; the metrics, span and alert below are planned in HUB-311.
+
 - **Metrics** (on its own ops port in HTTP mode; stdio mode exports via OTLP push or not at all):
   `hubmcp_tool_calls_total{tool, outcome}` (outcome = `ok`, `queued`, `hub_error:<code>`, `invalid_input`, `transport_error`), `hubmcp_tool_duration_seconds{tool}`, `hubmcp_sessions_active{transport}`, `hubmcp_hub_http_requests_total{operation, status}`.
 - **Logs**: §4.1 schema with `role=hubmcp`, `component=tool`, plus `mcp_tool`, `mcp_session` (random id, not user identity). Tool arguments and results are **never logged** (they contain canonical bodies); log `request_id` from Hub responses instead. In stdio mode logs go to **stderr** only (stdout is the protocol channel).
