@@ -1,0 +1,10 @@
+# EXAMPLE ONLY (HUB-352). PAN verification: one sync lookup, no session. Each lookup is billed by
+# the provider, so every call needs an Idempotency-Key (a retry with the same key replays the
+# stored answer instead of paying twice).
+integration: int_pan_verify
+owner_tenant: kyc-onboarding
+capability: demo.pan_verify@v1
+grants: []
+active_version: 1
+description: PAN verification (example)
+moves_money_or_quota: true

@@ -1,0 +1,4 @@
+{
+  "status": 502,
+  "body": {"type": "internal_error", "code": "verification_failed", "message": "Authorised source is temporarily unavailable, please try again shortly"}
+}

@@ -1,0 +1,13 @@
+# EXAMPLE ONLY (HUB-353). sync: measure one request, no outbox. masked audit: nothing personal here.
+integration: int_latency_echo
+version: 1
+targets:
+  - vendor: postman-echo
+    account: echo-public
+    transformer: { request: ECHO-REQ@1, response: ECHO-RES@1 }
+    weight: 100
+delivery:
+  mode: sync
+  on_circuit_open: fail_fast
+audit: { payloads: masked, retention: 7d }
+publish: { author: example, reason: "first version" }

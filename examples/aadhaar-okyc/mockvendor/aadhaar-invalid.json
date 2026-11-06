@@ -1,0 +1,19 @@
+{
+  "description": "Aadhaar OKYC: the provider says the Aadhaar number is invalid (200 INVALID; sandbox: 655675523710).",
+  "routes": {
+    "okyc-otp": {
+      "match": {
+        "method": "POST",
+        "path": "/verification/offline-aadhaar/otp"
+      },
+      "behaviour": {
+        "status": 200,
+        "body": {
+          "ref_id": 208,
+          "status": "INVALID",
+          "message": "Invalid Aadhaar Card"
+        }
+      }
+    }
+  }
+}

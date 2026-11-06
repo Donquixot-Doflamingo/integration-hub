@@ -1,0 +1,4 @@
+{
+  "status": 404,
+  "body": {"type": "invalid_request_error", "code": "not_found", "message": "Not found"}
+}

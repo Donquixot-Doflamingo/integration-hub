@@ -1,0 +1,58 @@
+# EXAMPLE ONLY (HUB-352). PAN verification response on Cashfree Secure ID, checked on 2026-11-07
+# against https://www.cashfree.com/docs/api-reference/vrs/v2/pan/verify-pan-sync:
+#   200 {"pan", "type": "Individual" | "Company", "reference_id": 161, "name_provided", "registered_name",
+#        "valid": true, "message", "name_match_score", "name_match_result": DIRECT_MATCH | GOOD_PARTIAL_MATCH |
+#        MODERATE_PARTIAL_MATCH | POOR_PARTIAL_MATCH | NO_MATCH, "aadhaar_seeding_status": Y | R | NA,
+#        "last_updated_at", "name_pan_card", "pan_status": VALID | INVALID | DELETED | DEACTIVATED,
+#        "pan_status_code", "pan_status_desc", "aadhaar_seeding_status_desc"}
+#   200 invalid {"pan", "reference_id", "valid": false, "message": "Invalid PAN", "name_match_result": "-", ...}
+#   400 pan_length_short | pan_missing | x-client-id_missing | x-client-secret_value_invalid
+#   401 authentication_failed · 403 ip_validation_failed, x-cf-signature missing · 422 insufficient_balance ·
+#   429 too_many_requests_per_operation / _per_ip · 500 verification_failed | api_error · 502 source down
+# The documented business example spells registered_nam (a docs typo, mapped as a fallback).
+# The name match needs activation by the provider; without it name_match is null. The score is
+# not passed on: callers get a yes/no (direct or good partial match = yes).
+transformer: CF-PAN-RES
+version: 1
+kind: response
+capability: demo.pan_verify@v1
+docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/pan/verify-pan-sync
+response:
+  pan_status: >-
+    {VALID: "valid", INVALID: "invalid", DELETED: "deleted", DEACTIVATED: "deactivated"}[res.body.pan_status ?? ""]
+    ?? (res.body.valid == true ? "valid" : "invalid")
+  pan_masked:      'res.body.pan == nil ? nil : maskPAN(res.body.pan)'
+  pan_type:        'res.body.type == nil ? nil : lower(res.body.type)'
+  registered_name: res.body.registered_name ?? res.body.registered_nam
+  name_match: >-
+    {DIRECT_MATCH: true, GOOD_PARTIAL_MATCH: true, MODERATE_PARTIAL_MATCH: false, POOR_PARTIAL_MATCH: false,
+    NO_MATCH: false}[res.body.name_match_result ?? ""]
+  aadhaar_linked: '{Y: true, R: false}[res.body.aadhaar_seeding_status ?? ""]'
+  vendor_ref:     'res.body.reference_id == nil ? nil : replace(toJSON(res.body.reference_id), "\"", "")'
+errors:
+  - when: 'res.status < 300 && res.body == nil'
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+    message: '"The verification service returned an unexpected answer; try again"'
+  - when: 'res.status == 401 || res.status == 403 || (res.status == 400 && res.body.code in ["x-client-id_missing", "x-client-secret_value_invalid"])'
+    code: UPSTREAM_AUTH_FAILED
+    retryable: false
+  - when: 'res.status == 400 && res.body.code in ["pan_length_short", "pan_missing"]'
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The PAN is not valid"'
+  - when: 'res.status == 422 && res.body.code == "insufficient_balance"'
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+    message: '"The verification service is temporarily unavailable"'
+  - when: res.status == 429
+    code: UPSTREAM_RATE_LIMITED
+    retryable: true
+    retry_after_ms: int(header(res, "Retry-After") ?? "5") * 1000
+  - when: res.status >= 500
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+  - when: res.status >= 400
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The PAN could not be verified"'
