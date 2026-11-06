@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(runbooks)` · Add runbooks for every alert (HUB-237) · HUB-237 · F-18
+  - Every `runbook_url` in `deploy/alerts/hub.rules.yaml` now resolves: `docs/runbooks/<AlertName>.md` for all ten alerts (six page, four warn), each with what fired, caller impact in canonical codes, first checks (dashboard panel, PromQL, hubctl or admin operationId), causes and fixes, and escalation
+  - `docs/runbooks/README.md` indexes them with severity and meaning; `credential-rotation.md` is the add next, test, promote, watch, delete old procedure
+  - SnapshotBehind documents a known false positive: `snapshot_version` is a per-process swap counter, so a node restarted after a publish reports a lower number while serving the newest config
+  - Linked from OBSERVABILITY §9 and §11.1 and from F-18 (whose breaker alert row now says "not closed"); new story US-1807; HUB-237 in progress with its first criterion met
 - 2026-11-06 · `docs(use-cases)` · Add the use-case catalogue for product owners (HUB-342) · HUB-342 · F-22
   - docs/use-cases/README.md: how a call flows through the Hub (pipeline and the DESIGN §18.6 latency budget), then events, vendor/account swaps, vendor outages, signed callbacks, idempotent retries, two-step OTP -> verify -> bank account, and the DESIGN §14 lending patterns, each with the caller's exact requests, a sequence diagram, failure behaviour and a status line citing its test or ticket
   - Two-step flows are marked Partly: vendor sessions work today; steps on different vendor endpoints need HUB-343

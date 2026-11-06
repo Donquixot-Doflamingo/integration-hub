@@ -33,6 +33,7 @@ Without consistent metrics, labels and alerts, outages are found by callers and 
 - [US-1803](../product/USER_STORIES.md) — Load and soak tests
 - [US-1804](../product/USER_STORIES.md) — Dashboards
 - [US-1805](../product/USER_STORIES.md) — Erase a data subject's stored payloads
+- [US-1807](../product/USER_STORIES.md) — Runbook for every alert
 
 ## UX / API surface
 | Surface | Item | Contract ref |
@@ -46,7 +47,7 @@ Alerts (DESIGN §16.3):
 
 | Alert | Condition | Severity |
 | --- | --- | --- |
-| Breaker open | `breaker_state == open` > 5 min | page |
+| Breaker open | breaker not closed (open or half-open) > 5 min | page |
 | Parked backlog | `parked_oldest_age_s` > 10 min | page |
 | Queue backlog | `queue_oldest_age_s` > 2 min | page |
 | DLQ burst | > 50 DLQ entries / 10 min / account | page |
@@ -56,6 +57,8 @@ Alerts (DESIGN §16.3):
 | Credential expiry | < 7 days | warn |
 | Overhead | `hub_overhead_ms` p99 > 5 ms for 10 min | warn |
 | Audit drops | any `audit_events_dropped_total` increase | warn |
+
+Runbooks: one per alert, indexed in [`docs/runbooks/README.md`](../runbooks/README.md) (HUB-237), plus the [credential rotation](../runbooks/credential-rotation.md) procedure.
 
 1. Metric names and labels follow `docs/tech/OBSERVABILITY.md`; each feature doc lists its additions.
 2. `tenant` and `integration` labels allowed; `request_id` never a label.
@@ -110,3 +113,4 @@ HUB-230 – HUB-249.
 | 2026-11-06 | HUB-230 shipped: full §16.2 metric set, cardinality guard, status in-progress | backend-engineer |
 | 2026-11-06 | HUB-233: subject erasure job (`hub erase-subject`, ADR-0012), US-1805 | backend-engineer |
 | 2026-11-06 | HUB-232: alert rules with promtool tests, tenant/vendor/platform dashboards, exported-metrics check; ADR-0014, ADR-0015 | backend-engineer |
+| 2026-11-07 | HUB-237: runbooks for the ten alerts and the credential rotation procedure (`docs/runbooks/`), US-1807; breaker alert condition corrected to "not closed" | docs-keeper |

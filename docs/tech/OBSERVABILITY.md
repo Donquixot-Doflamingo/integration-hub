@@ -272,7 +272,7 @@ Pools exist only for: request body buffers, response serialisation buffers, audi
 
 ## 9. Debugging runbook
 
-Each alert's `runbook_url` points at `docs/runbooks/<AlertName>.md` (written in HUB-237); the sections below are the debugging guide those runbooks build on.
+Each alert's `runbook_url` points at `docs/runbooks/<AlertName>.md`; the index is [`docs/runbooks/README.md`](../runbooks/README.md) (HUB-237). The runbooks are the on-call procedure (checks, causes, fixes, escalation); the sections below are the debugging background they build on.
 
 ### 9.1 High Hub overhead (`HubOverheadP99High`)
 1. Platform dashboard → "Overhead by stage": which `hub_stage_duration_ms{stage}` moved?
@@ -339,7 +339,7 @@ SLO tiles S1 (overhead p99, sync + wait) and S3 (availability, Hub-caused failur
 ## 11. Alerts as code (`deploy/alerts/hub.rules.yaml`)
 
 ### 11.1 DESIGN §16.3 rules (shipped, HUB-232)
-Groups `hub-resilience`, `hub-delivery`, `hub-errors`, `hub-platform`. Every alert has `severity` (`page`/`warn`), `summary`, `description` and `runbook_url` = `https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/<AlertName>.md` (runbooks: HUB-237). Unit tests: `deploy/alerts/{resilience,delivery,errors,platform}_test.yml`, a firing and a non-firing case per alert. The file is the source of truth; the table is a summary.
+Groups `hub-resilience`, `hub-delivery`, `hub-errors`, `hub-platform`. Every alert has `severity` (`page`/`warn`), `summary`, `description` and `runbook_url` = `https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/<AlertName>.md` (runbooks: [index](../runbooks/README.md), HUB-237). Unit tests: `deploy/alerts/{resilience,delivery,errors,platform}_test.yml`, a firing and a non-firing case per alert. The file is the source of truth; the table is a summary.
 
 | Alert | Expression (PromQL, abridged) | For | Severity | Debugging |
 | --- | --- | --- | --- | --- |

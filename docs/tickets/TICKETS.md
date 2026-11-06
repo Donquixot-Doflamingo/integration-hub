@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **215** · done: **157** · todo: **51** · other (in-progress/in-review/blocked): **7**
+Total tickets: **215** · done: **157** · todo: **50** · other (in-progress/in-review/blocked): **8**
 
 ## Epics
 
@@ -1758,13 +1758,15 @@ Multi-hour soak with randomised mockvendor outages and worker restarts; reconcil
 
 ### HUB-237 — Runbooks and M8 summary
 - **Epic:** EP-09 · **Type:** docs · **Area:** docs
-- **Status:** todo · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-progress · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-1807
 - **Branch:** `docs/HUB-237-runbooks-m8`
 
 Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`, credential rotation, snapshot lag; post the M8 wrap-up. The alert rules (HUB-232) link `docs/runbooks/<AlertName>.md` for all ten alerts in `deploy/alerts/hub.rules.yaml` (six page, four warn).
 
+Part 1 done: `docs/runbooks/` has one runbook per alert (all ten, page and warn), the index `README.md` and `credential-rotation.md`, linked from OBSERVABILITY §9/§11.1 and F-18. Part 2: M8 summary and v1.0.0 release notes.
+
 **Acceptance criteria**
-- [ ] Each paging alert links a runbook
+- [x] Each paging alert links a runbook: `docs/runbooks/<AlertName>.md` exists for every `runbook_url` in `deploy/alerts/hub.rules.yaml` (the four warn alerts too)
 - [ ] Milestone summary posted; F-18 doc updated
 - [ ] Release notes for v1.0.0 prepared per `docs/process/RELEASE.md`
 
