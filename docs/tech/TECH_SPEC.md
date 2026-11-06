@@ -77,6 +77,7 @@ flowchart LR
 | worker | `hub worker --pool=messaging\|llm` | `:9090` ops only | claim loops, per-account bulkheads, callback dispatcher, audit writer, snapshot watcher, breaker sync | `queue_depth` per pool (KEDA or custom HPA metric) | ≥ 2 per pool |
 | scheduler | `hub scheduler` | `:9090` ops only | leader election, drain ramp, TTL expiry, visibility reclaim, health probes, session expiry, partition maintenance, zero-loss reconciler | singleton (leader) + hot standby | 2 |
 | admin | `hub admin` | `:8081` `/admin/v1`, `:9090` ops | HTTP server, publish pipeline, snapshot long-poll hub | fixed | 2 |
+| — | `hub erase-subject` | CLI (one-shot, needs the roles' environment) | purges a data subject's stored bodies by identifier read from stdin, keeps hashes/sizes/timelines, writes `change_log` (DESIGN §16.5, ADR-0012) | — | — |
 | — | `hubctl` | CLI | `plan`, `apply`, `transform test`, `dry-run`, `replay` | — | — |
 | — | `mockvendor` | `:8099` vendor surface, `:8098` control API | programmable behaviours (DESIGN §19 M0) | — | dev/test only |
 | — | `hubmcp` | stdio, or `:8090` streamable HTTP | MCP session handling, HTTP client to `/v1` and `/admin/v1` | stateless | optional |
@@ -207,6 +208,8 @@ Each table is written by exactly one package; others read through that package's
 | `audit` | `requests`, `request_events`, `request_attempts` |
 | `sessions` | `vendor_sessions` |
 | `callbacks` | `callback_deliveries` |
+
+Subject erasure (ADR-0012) follows the same rule: each owner exposes its own search and purge (`audit.FindSubjectRequests`/`PurgeRequests`, `queue.Outbox.FindSubject`/`LockForErase`/`EraseDeadLetters`, `callbacks.FindSubject`/`Undelivered`/`ErasePayloads`, `sessions.EraseSubject`) and `control.Erasure` composes them in one transaction with the `change_log` row.
 
 sqlc generates per-owner query packages (`internal/<pkg>/db`). A transaction that spans owners (e.g. accept = insert `requests` + `outbox` + first events) is composed by `delivery`/`edge` passing a `pgx.Tx` into each owner's `WithTx` method.
 

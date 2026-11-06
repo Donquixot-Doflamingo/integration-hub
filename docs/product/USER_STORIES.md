@@ -475,6 +475,11 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** an async request with a sampled caller `traceparent`, **when** the worker delivers it and the callback is sent, **then** the edge span continues the caller's trace, the worker attempt links to the accepting trace, the upstream span is the attempt's child, and the callback span links to the attempt; every span carries `hub.request_id`.
 - **Given** a vendor listed in `HUB_TRACE_FORWARD_VENDORS`, **when** the Hub calls it, **then** the request carries the Hub's `traceparent` and no `tracestate`; other vendors get neither.
 - **Given** any span, **then** its attributes are on the allowlist and none contains a body, a header credential or a secret.
+### US-1805 — Erase a data subject's stored payloads
+**As a** compliance officer, **I want** to purge every stored payload that holds a data subject's identifier while keeping hashes, sizes and timelines, **so that** we can honour an erasure request without losing the proof of what happened. · **Must**
+- **Given** a tenant's requests whose stored bodies hold an identifier (full, masked, sealed, envelopes, results, callbacks, sessions), **when** the erasure runs, **then** no stored body holds it in any stored form, and event sha256, bytes, times and the final records remain.
+- **Given** an erasure, **when** it finishes, **then** `change_log` has one row with actor, reason, counts and a subject reference, never the identifier.
+- **Given** a request still queued or with a callback to deliver, **when** the erasure runs, **then** it is deferred and reported, and a re-run after it is terminal erases it.
 
 ## F-19 Admin console
 

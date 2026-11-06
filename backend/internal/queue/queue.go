@@ -400,12 +400,14 @@ func (o *Outbox) PruneDeadLetters(ctx context.Context, db DB, retention time.Dur
 }
 
 // Replay puts a dead letter back as accepted, due now (dead_lettered → accepted; operator
-// replay, DESIGN §10.6). The worker re-resolves and re-transforms.
+// replay, DESIGN §10.6). The worker re-resolves and re-transforms. A dead letter whose body was
+// erased (EraseDeadLetters) has nothing to deliver: ErrLost.
 func (o *Outbox) Replay(ctx context.Context, db DB, id string, expiresAt time.Time) error {
 	now := o.now()
 	tag, err := db.Exec(ctx, `
 		WITH dl AS (
 			UPDATE hub.dead_letters SET replayed_at = $2 WHERE request_id = $1 AND replayed_at IS NULL
+				AND envelope->'canonical' IS DISTINCT FROM 'null'::jsonb
 			RETURNING request_id, tenant_id, integration_id, envelope)
 		INSERT INTO hub.outbox (request_id, status, pool, tenant_id, integration_id, attempt, next_attempt_at, expires_at, envelope, created_at)
 		SELECT request_id, 'accepted', CASE WHEN envelope->>'capability' LIKE 'llm.%' THEN 'llm' ELSE 'messaging' END,
