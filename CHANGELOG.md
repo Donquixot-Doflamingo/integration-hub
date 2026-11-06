@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `docs(tickets)` · Track the transformer time-budget flake seen in the full itest run (HUB-238) · HUB-238 · F-04
+  - New ticket HUB-238: R2@1 goldens exceeded the 5 ms budget once under -race during make itest (8.08 ms); passes in isolation
 - 2026-11-06 · `feat(telemetry)` · Export the full DESIGN §16.2 metric set with a cardinality guard (HUB-230) · HUB-230 · F-18
   - hub_requests_total counts every finished request once by tenant, integration, served vendor and account, version, mode and final code (gateway for requests that end there, delivery for queued ones)
   - queue_depth, queue_oldest_age_s (due, unclaimed work only) and dlq_count are sampled by the scheduler leader every 10 s
