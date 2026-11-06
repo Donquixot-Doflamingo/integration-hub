@@ -3,7 +3,7 @@ import { env } from '$env/dynamic/private';
 import { DEFAULT_ADMIN_API_BASE, ETAG_HEADER, REQUEST_ID_HEADER } from '$lib/api/client';
 
 /**
- * Same-origin proxy for the admin API (HUB-286, ADR-0019).
+ * Same-origin proxy for the admin API (HUB-286, ADR-0022).
  *
  * The console calls `/admin/v1/...` on its own origin, from SSR loads, form actions and client
  * navigations alike. When `HUB_ADMIN_UPSTREAM` (e.g. `http://127.0.0.1:8081`) is set, this hook

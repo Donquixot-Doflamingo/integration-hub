@@ -120,7 +120,7 @@ npm run dev
 ```
 
 - `HUB_ADMIN_UPSTREAM`: the console server proxies `/admin/v1/**` there and adds the session's bearer token, so the
-  token never reaches browser JavaScript ([ADR-0019](../docs/tech/adr/0019-console-same-origin-admin-proxy.md),
+  token never reaches browser JavaScript ([ADR-0022](../docs/tech/adr/0022-console-same-origin-admin-proxy.md),
   `src/lib/server/admin-proxy.ts`). Only contract headers pass each way; cross-origin mutations are refused. Unset,
   `/admin/v1` must be routed to the admin server by whatever is in front of the console.
 - `HUB_DEV_OIDC_ISSUER`: dev sign-in asks the admin's dev OIDC issuer (`hub admin -admin-dev-oidc`) for a token with the

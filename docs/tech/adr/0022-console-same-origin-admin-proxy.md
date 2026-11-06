@@ -1,4 +1,4 @@
-# ADR-0019: Console proxies `/admin/v1` on its own origin and signs in through the dev issuer locally
+# ADR-0022: Console proxies `/admin/v1` on its own origin and signs in through the dev issuer locally
 
 | | |
 | --- | --- |

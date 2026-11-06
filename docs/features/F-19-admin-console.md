@@ -60,7 +60,7 @@ None.
 ## Config impact
 `PUBLIC_ADMIN_API_BASE` (runtime, default `/admin/v1` on the console origin).
 Auth (HUB-253): `PUBLIC_AUTH_MODE` (`dev` selects the role-picker provider; anything else OIDC), `HUB_SESSION_SECRET` (session cookie HMAC key, 32+ chars, required for OIDC), `HUB_OIDC_ISSUER`, `HUB_OIDC_CLIENT_ID`, `HUB_OIDC_REDIRECT_URI` (OIDC placeholder; wiring in HUB-282).
-Against a running Hub (HUB-286, [ADR-0019](../tech/adr/0019-console-same-origin-admin-proxy.md)): `HUB_ADMIN_UPSTREAM` (the console server proxies `/admin/v1/**` there with the session's token; unset = routed in front) and `HUB_DEV_OIDC_ISSUER` (dev sign-in mints the token at the admin's dev OIDC issuer). `make dev-up` sets both.
+Against a running Hub (HUB-286, [ADR-0022](../tech/adr/0022-console-same-origin-admin-proxy.md)): `HUB_ADMIN_UPSTREAM` (the console server proxies `/admin/v1/**` there with the session's token; unset = routed in front) and `HUB_DEV_OIDC_ISSUER` (dev sign-in mints the token at the admin's dev OIDC issuer). `make dev-up` sets both.
 Build-time `HUB_API_MOCKING=true` (`npm run dev:mock` / `build:mock`) runs the console on MSW contract mocks with client-side rendering; normal builds contain no mock code.
 
 ## Observability
@@ -90,7 +90,7 @@ Screens ship as their admin endpoints freeze; behind OIDC from the first deploy.
 
 ## Open questions
 - `runTransformerGoldens` diffs: the contract does not say which side of a `DiffOp` is the golden. The console shows `before` as Expected and `after` as Actual (the publish diff's old/new convention); to be confirmed by the steward (description-only change).
-- Hosting (same origin as admin API or separate)? For now: the console server proxies `/admin/v1` on its own origin (ADR-0019, HUB-286).
+- Hosting (same origin as admin API or separate)? For now: the console server proxies `/admin/v1` on its own origin (ADR-0022, HUB-286).
 - Does the health board need live streaming (SSE) in v1?
 
 ## Tickets
