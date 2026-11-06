@@ -164,10 +164,17 @@ func NewGuard(opts GuardOptions) *Guard {
 		opts.Resolver = net.DefaultResolver
 	}
 	g := &Guard{opts: opts}
+	// TLS 1.2+ with verification (DESIGN §16.5), explicit rather than Go's default client floor;
+	// the test seam may add roots but can never lower the floor.
+	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
+	if opts.tlsConfig != nil {
+		tlsCfg = opts.tlsConfig.Clone()
+		tlsCfg.MinVersion = max(tlsCfg.MinVersion, tls.VersionTLS12)
+	}
 	tr := &http.Transport{
 		Proxy:                  nil, // never via HTTP(S)_PROXY: the proxy would dial unchecked
 		DialContext:            g.dialContext,
-		TLSClientConfig:        opts.tlsConfig,
+		TLSClientConfig:        tlsCfg,
 		TLSHandshakeTimeout:    opts.Timeout,
 		ResponseHeaderTimeout:  opts.Timeout,
 		MaxIdleConns:           64,

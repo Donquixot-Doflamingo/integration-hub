@@ -43,7 +43,7 @@ func (Ledger) Insert(ctx context.Context, db DB, r Record) error {
 			capability, operation, mode, status, payload_policy, snapshot_version, idempotency_key, trace_id, attempts, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, $2)`,
 		r.RequestID, r.CreatedAt, r.TenantID, r.IntegrationID, nullable(r.IntegrationVersion), r.Capability, r.Operation, r.Mode,
-		r.Status, r.PayloadPolicy, nullable(int64(r.SnapshotVersion)), nullable(r.IdempotencyKey), nullable(r.TraceID)) //nolint:gosec // snapshot versions stay far below 2^63
+		r.Status, r.PayloadPolicy, nullable(int64(r.SnapshotVersion)), nullable(r.IdempotencyKey), nullable(r.TraceID)) // #nosec G115 -- snapshot versions stay far below 2^63
 	if err != nil {
 		return fmt.Errorf("audit: insert request %s: %w", r.RequestID, err)
 	}

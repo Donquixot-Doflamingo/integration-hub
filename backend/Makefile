@@ -9,7 +9,7 @@ COMPOSE := docker compose -f ../deploy/docker-compose.yml
 export HUB_PG_DSN ?= postgres://hub:hub@localhost:5432/hub?sslmode=disable
 export HUB_REDIS_ADDR ?= localhost:6379
 
-.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check goldens monitoring
+.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check goldens monitoring gosec vuln security
 
 all: lint test build
 
@@ -30,6 +30,18 @@ lint: ## golangci-lint (pinned) + gofmt check
 	  [ "$$v" = "$(GOLANGCI_LINT_VERSION)" ] || echo "warning: golangci-lint $$v, pinned $(GOLANGCI_LINT_VERSION)"
 	golangci-lint run ./...
 	@test -z "$$(gofmt -l .)" || (gofmt -l .; echo "gofmt: files need formatting"; exit 1)
+
+# Security scanners (HUB-234, SECURITY.md §8). Versions are pinned; bump them deliberately.
+GOSEC_VERSION := 2.30.0
+GOVULNCHECK_VERSION := 1.9.0
+
+gosec: ## gosec over non-test code; fails on any medium- or high-severity finding not triaged with #nosec
+	$(GO) run github.com/securego/gosec/v2/cmd/gosec@v$(GOSEC_VERSION) -quiet -severity medium -fmt text ./...
+
+vuln: ## govulncheck: fails when reachable code calls a known-vulnerable symbol (stdlib or module)
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@v$(GOVULNCHECK_VERSION) ./...
+
+security: gosec vuln ## Both security scanners (CI jobs gosec + govulncheck)
 
 fmt: ## Format code
 	golangci-lint fmt ./...

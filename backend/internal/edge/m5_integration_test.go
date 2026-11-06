@@ -436,14 +436,43 @@ func TestChaos2RecoveryAndRampedDrain(t *testing.T) {
 	if firstRelease.Sub(recovered) > 60*time.Second {
 		t.Fatal("drain started more than 60 s after recovery")
 	}
-	want := []float64{10, 20, 40, 50} // 20 %, 40 %, 80 %, 100 % of 50/s, one ramp step (1 s) each
-	for i, w := range want {
-		got := releasedBetween(*samples, closedAt.Add(time.Duration(i)*time.Second), closedAt.Add(time.Duration(i+1)*time.Second))
-		t.Logf("ramp step %d: %v released (want %v)", i+1, got, w)
-		if got < w*0.9-1 || got > w*1.1+1 {
-			t.Fatalf("ramp step %d released %v, want %v ± 10 %%", i+1, got, w)
+	// The ramp: 20 %, 40 %, 80 %, 100 % of 50/s, one ramp step (1 s) each, so by the end of
+	// step k the drain owes owed[k] releases. A scheduler pass delayed by the machine (a slow
+	// Postgres commit on a CI runner) delays releases but must not lose them: the drain makes up
+	// to maxCatchUp (1 s) of quota on its next pass (HUB-155, HUB-156). So the test checks the two
+	// properties DESIGN §10.5 needs, per step boundary, instead of exact 1 s windows:
+	//   - never ahead of the ramp: released by the boundary <= owed (+10 %), so a recovering
+	//     vendor never sees more than the ramped rate;
+	//   - nothing lost: by one catch-up horizon after the boundary, at least owed (-10 %) was released.
+	step := []float64{10, 20, 40, 50}
+	owed := 0.0
+	for i, w := range step {
+		owed += w
+		boundary := closedAt.Add(time.Duration(i+1) * time.Second)
+		inStep := releasedBetween(*samples, boundary.Add(-time.Second), boundary)
+		byBoundary := releasedBetween(*samples, closedAt, boundary)
+		byCatchUp := releasedBetween(*samples, closedAt, boundary.Add(time.Second))
+		t.Logf("ramp step %d: %v released in the step (ramp %v); %v by its end, %v one second later (owed %v)", i+1, inStep, w, byBoundary, byCatchUp, owed)
+		if byBoundary > owed*1.1+1 {
+			t.Fatalf("ramp step %d: %v released by its end, ahead of the ramp (owed %v + 10 %%)", i+1, byBoundary, owed)
+		}
+		if want := min(owed*0.9-1, float64(len(ids))); byCatchUp < want {
+			t.Fatalf("ramp step %d: only %v released one catch-up horizon after its end, want >= %v (quota lost)", i+1, byCatchUp, want)
 		}
 	}
+	// The ramp releases 120 in 4 s, then the last 40 at the full 50/s by 4.8 s. All of them must
+	// be out by then plus one catch-up horizon; a drain that loses a quarter of its quota misses it.
+	var allOut time.Time
+	for _, x := range *samples {
+		if x.n >= float64(len(ids)) {
+			allOut = x.at
+			break
+		}
+	}
+	if allOut.IsZero() || allOut.Sub(closedAt) > 5800*time.Millisecond {
+		t.Fatalf("all %d released %s after the close, want <= 5.8 s (4.8 s of ramp + 1 s catch-up)", len(ids), allOut.Sub(closedAt).Round(10*time.Millisecond))
+	}
+	t.Logf("all %d released %s after the close", len(ids), allOut.Sub(closedAt).Round(10*time.Millisecond))
 }
 
 // TestChaos3ReopenMidDrain (HUB-152): the vendor fails again during the drain: the breaker

@@ -89,5 +89,5 @@ func RequestIDTime(id string) (time.Time, bool) {
 		}
 		ms = ms<<5 | uint64(c)
 	}
-	return time.UnixMilli(int64(ms)).UTC(), true //nolint:gosec // 48-bit value
+	return time.UnixMilli(int64(ms)).UTC(), true // #nosec G115 -- 48-bit value
 }

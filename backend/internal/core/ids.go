@@ -17,7 +17,7 @@ var RequestIDPattern = regexp.MustCompile(`^req_[0-9A-HJKMNP-TV-Z]{26}$`)
 // Crockford base32 characters, so ids sort by creation time.
 func NewULID(t time.Time) string {
 	var b [16]byte
-	binary.BigEndian.PutUint64(b[:8], uint64(t.UnixMilli())<<16) //nolint:gosec // UnixMilli is positive for any real clock
+	binary.BigEndian.PutUint64(b[:8], uint64(t.UnixMilli())<<16) // #nosec G115 -- UnixMilli is positive for any real clock
 	_, _ = rand.Read(b[6:])                                      // crypto/rand.Read never fails (Go 1.24+)
 	var out [26]byte
 	// 128 bits → 26 chars of 5 bits; the first char carries the top 3 bits.
