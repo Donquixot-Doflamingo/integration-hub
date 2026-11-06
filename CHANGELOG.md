@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-06 · `docs(tickets)` · Close HUB-230 and track HUB-238/HUB-239 for review (HUB-239) · HUB-239 · F-18
+  - HUB-230 done (PR #16 merged); HUB-238 in review; new ticket HUB-239 for the registry watch flake
 - 2026-11-06 · `test(registry)` · Write config edits atomically in the watch test (HUB-239) · HUB-239 · F-03
   - TestWatchSwapsValidEditsAndKeepsLastGoodOnInvalid no longer reads a half-written file and fails with EOF
 - 2026-11-06 · `fix(transform)` · Re-run a golden case once when it only overran the time budget (HUB-238) · HUB-238 · F-04
