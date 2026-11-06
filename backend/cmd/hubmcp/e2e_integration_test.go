@@ -175,9 +175,21 @@ func TestMCPEndToEnd(t *testing.T) {
 		if s.res.IsError || !strings.Contains(string(s.json), asyncID) {
 			t.Fatalf("search: %s", s.json)
 		}
-		tl := call(toolAdminTimeline, map[string]any{"request_id": asyncID})
-		if tl.res.IsError || len(tl.field(t, "events").([]any)) == 0 || len(tl.field(t, "attempts").([]any)) == 0 {
-			t.Fatalf("timeline: %s", tl.json)
+		// The audit trail is written asynchronously (non-blocking audit, DESIGN §18.5), so the
+		// worker's attempt events can land a moment after the request reads "succeeded": poll.
+		deadline := time.Now().Add(15 * time.Second)
+		for {
+			tl := call(toolAdminTimeline, map[string]any{"request_id": asyncID})
+			if tl.res.IsError {
+				t.Fatalf("timeline: %s", tl.json)
+			}
+			if len(tl.field(t, "events").([]any)) > 0 && len(tl.field(t, "attempts").([]any)) > 0 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("timeline still has no attempts 15 s after success: %s", tl.json)
+			}
+			waitFor(t, 300*time.Millisecond)
 		}
 		b := call(toolAdminBreakerStates, map[string]any{})
 		if b.res.IsError {

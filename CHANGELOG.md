@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(hubmcp)` · Wait for the asynchronous audit trail in the hubmcp e2e test (HUB-315) · HUB-315 · F-20
+  - TestMCPEndToEnd polls the request timeline until the worker's attempt events land, instead of reading it once right after the request succeeds
 - 2026-11-07 · `docs(hubmcp)` · Document the hubmcp admin write tools and ADR-0020 (HUB-315) · HUB-315 · F-20
   - ADR-0020 amends ADR-0006 and ADR-0018: admin tools act as the signed-in user, writes exist on stdio only, the Hub's RBAC decides, and no MCP path can delete
   - SECURITY §2.5 has rows for the no-delete path, the confirm guard, secret inputs and minted secrets; TECH_SPEC §18, TESTING_STRATEGY §13, OBSERVABILITY §4.6 (`mutating`, `change_id`, minted-secret redaction), F-20 and the PRD scope lines (DV-4, FR-48, NFR-13) match
