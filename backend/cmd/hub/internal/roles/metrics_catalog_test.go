@@ -70,6 +70,7 @@ func catalogRegistry(t *testing.T) *prometheus.Registry {
 	(&delivery.Resilience{}).RegisterMetrics(m.Registry)
 	(&delivery.QueueSampler{}).RegisterMetrics(m.Registry)
 	(&delivery.Scheduler{}).RegisterMetrics(m.Registry)
+	(&delivery.Worker{}).RegisterMetrics(m.Registry)
 	delivery.NewShadower(nil, nil, log, m.Registry)
 	audit.NewWriter(noStore{}, m, audit.WriterOptions{})
 	if _, err := creds.NewCache(noLoader{}, telemetry.NewSecretSet(), m, creds.CacheOptions{}); err != nil {

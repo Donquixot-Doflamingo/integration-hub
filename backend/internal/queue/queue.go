@@ -110,26 +110,63 @@ func (o *Outbox) enqueue(ctx context.Context, db DB, env core.Envelope, claimBy 
 	return nil
 }
 
+// Target is a breaker key, (account, endpoint): the unit the worker isolates (DESIGN §10.4,
+// HUB-412). Endpoint is the full ref (vendor.endpoint@version).
+type Target struct {
+	Account, Endpoint string
+}
+
 // Claim takes up to n due envelopes of pool for worker: accepted or retry_scheduled with
 // next_attempt_at ≤ now, plus in_flight ones whose claim expired (a crashed worker; their
 // crash count goes up). Rows are locked with SKIP LOCKED, so concurrent claimers never get the
 // same envelope; each claim is exclusive for Visibility.
 func (o *Outbox) Claim(ctx context.Context, db DB, worker, pool string, n int) ([]Claimed, error) {
+	return o.ClaimWithin(ctx, db, worker, pool, n, 0, nil)
+}
+
+// TargetRoom is how many more attempts a worker will start for one target right now.
+type TargetRoom struct {
+	Target
+	Slots int // 0: the target is at its cap
+}
+
+// ClaimWithin is Claim that takes no more of one target's backlog than the worker can start
+// (HUB-412). An envelope's target is its account_id / endpoint_id hint, written by Park and
+// DeferTarget (the target it was last seen on). Envelopes hinted with a target in rooms are taken
+// at most Slots at a time (a target at its cap: none, they are not even locked), envelopes of any
+// other hinted target at most perTarget (0: no limit), envelopes without a hint as usual. A target
+// at its cap is left out before the LIMIT, so its backlog never fills a claim ahead of other
+// targets' envelopes; one with free slots may fill the rest of a claim's window only that once
+// (then it is at its cap). Nothing over the room is claimed only to be put back. The hint is only
+// a filter: a claimed envelope is still resolved at send time (D10).
+func (o *Outbox) ClaimWithin(ctx context.Context, db DB, worker, pool string, n, perTarget int, rooms []TargetRoom) ([]Claimed, error) {
 	now := o.now()
+	accounts, endpoints, slots := make([]string, 0, len(rooms)), make([]string, 0, len(rooms)), make([]int, 0, len(rooms))
+	for _, r := range rooms {
+		accounts, endpoints, slots = append(accounts, r.Account), append(endpoints, r.Endpoint), append(slots, max(r.Slots, 0))
+	}
 	rows, err := db.Query(ctx, `
-		WITH due AS MATERIALIZED (
-			SELECT request_id, status AS prev FROM hub.outbox
-			WHERE pool = $2 AND (
-				(status IN ('accepted', 'retry_scheduled') AND next_attempt_at <= $4)
-				OR (status = 'in_flight' AND claimed_until < $4))
-			ORDER BY next_attempt_at
+		WITH room AS (SELECT * FROM unnest($6::text[], $7::text[], $8::int[]) AS r(account, endpoint, slots)),
+		due AS MATERIALIZED (
+			SELECT q.request_id, q.status AS prev, q.next_attempt_at, q.account_id, q.endpoint_id FROM hub.outbox q
+			WHERE q.pool = $2 AND (
+				(q.status IN ('accepted', 'retry_scheduled') AND q.next_attempt_at <= $4)
+				OR (q.status = 'in_flight' AND q.claimed_until < $4))
+			AND NOT EXISTS (SELECT 1 FROM room WHERE room.slots <= 0 AND room.account = q.account_id AND room.endpoint = q.endpoint_id)
+			ORDER BY q.next_attempt_at
 			LIMIT $3
-			FOR UPDATE SKIP LOCKED)
+			FOR UPDATE OF q SKIP LOCKED),
+		ranked AS (
+			SELECT d.request_id, d.prev, d.account_id,
+				row_number() OVER (PARTITION BY d.account_id, d.endpoint_id ORDER BY d.next_attempt_at) AS rn,
+				COALESCE((SELECT room.slots FROM room WHERE room.account = d.account_id AND room.endpoint = d.endpoint_id), NULLIF($9::int, 0)) AS slots
+			FROM due d),
+		pick AS (SELECT request_id, prev FROM ranked WHERE account_id IS NULL OR slots IS NULL OR rn <= slots)
 		UPDATE hub.outbox o SET status = 'in_flight', claimed_by = $1, claimed_until = $5,
-			attempt = o.attempt + 1, crashes = o.crashes + CASE WHEN due.prev = 'in_flight' THEN 1 ELSE 0 END, updated_at = $4
-		FROM due WHERE o.request_id = due.request_id
-		RETURNING o.request_id, due.prev, o.attempt, o.claimed_until, o.crashes, o.envelope`,
-		worker, pool, n, now, now.Add(o.visibility()))
+			attempt = o.attempt + 1, crashes = o.crashes + CASE WHEN pick.prev = 'in_flight' THEN 1 ELSE 0 END, updated_at = $4
+		FROM pick WHERE o.request_id = pick.request_id
+		RETURNING o.request_id, pick.prev, o.attempt, o.claimed_until, o.crashes, o.envelope`,
+		worker, pool, n, now, now.Add(o.visibility()), accounts, endpoints, slots, max(perTarget, 0))
 	if err != nil {
 		return nil, fmt.Errorf("queue: claim: %w", err)
 	}
@@ -182,6 +219,18 @@ func (o *Outbox) Defer(ctx context.Context, db DB, id, worker string, retryAt ti
 	tag, err := db.Exec(ctx, `UPDATE hub.outbox SET status = CASE WHEN attempt <= 1 THEN 'accepted' ELSE 'retry_scheduled' END,
 			attempt = GREATEST(attempt - 1, 0), next_attempt_at = $3, last_error = $4, claimed_by = NULL, claimed_until = NULL, updated_at = $5
 		WHERE request_id = $1 AND status = 'in_flight' AND claimed_by = $2`, id, worker, retryAt, reason, o.now())
+	return guarded(tag, err, "defer", id)
+}
+
+// DeferTarget is Defer for an envelope its worker would not attempt because the worker's
+// in-flight cap for target was reached (HUB-412): nothing was sent, so the claim is not an
+// attempt, and the row keeps target as its account_id / endpoint_id hint so ClaimWithin takes it
+// only when that target has room again.
+func (o *Outbox) DeferTarget(ctx context.Context, db DB, id, worker string, retryAt time.Time, reason string, target Target) error {
+	tag, err := db.Exec(ctx, `UPDATE hub.outbox SET status = CASE WHEN attempt <= 1 THEN 'accepted' ELSE 'retry_scheduled' END,
+			attempt = GREATEST(attempt - 1, 0), next_attempt_at = $3, last_error = $4, claimed_by = NULL, claimed_until = NULL, updated_at = $5,
+			account_id = $6, endpoint_id = $7
+		WHERE request_id = $1 AND status = 'in_flight' AND claimed_by = $2`, id, worker, retryAt, reason, o.now(), target.Account, target.Endpoint)
 	return guarded(tag, err, "defer", id)
 }
 

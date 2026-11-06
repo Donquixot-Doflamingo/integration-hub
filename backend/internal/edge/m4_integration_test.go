@@ -134,10 +134,9 @@ func TestWorkerCrashDeliveredOnceToTheCaller(t *testing.T) {
 		t.Fatalf("doomed claim %+v %v", claimed, err)
 	}
 	// The doomed worker sends to the vendor, then crashes before any transition.
-	doomed := *q.worker
-	doomed.Name = "doomed"
-	res := doomed.Attempter.Run(t.Context(), delivery.Job{RequestID: id, Snap: doomed.Snapshots.Snapshot(),
-		Res: mustResolve(t, doomed.Snapshots.Snapshot(), "int_evt_brandB"), Body: map[string]any{"user": map[string]any{"id": "u_1"}, "event": map[string]any{"name": "e"}},
+	snap := q.worker.Snapshots.Snapshot()
+	res := q.worker.Attempter.Run(t.Context(), delivery.Job{RequestID: id, Snap: snap,
+		Res: mustResolve(t, snap, "int_evt_brandB"), Body: map[string]any{"user": map[string]any{"id": "u_1"}, "event": map[string]any{"name": "e"}},
 		Trail: audit.NewTrail(audit.TrailOptions{RequestID: id}), Timings: &telemetry.Timings{}, FirstAttempt: 1})
 	if res.Err != nil {
 		t.Fatal(res.Err)

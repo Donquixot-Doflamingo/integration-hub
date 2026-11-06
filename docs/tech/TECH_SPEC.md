@@ -499,7 +499,8 @@ Flags override env. Env names: `HUB_*`. Loaded once at start into an immutable s
 | `HUB_CONFIG_WATCH` | `false` (rebuild and swap on file changes, HUB-045) | dev only |
 | `HUB_DATA_DIR` | `.data` (local cache `snapshot.json.gz` of the last good snapshot, HUB-048) | all |
 | `HUB_CONTRACTS_DIR` | `../contracts` | admin, dev loader |
-| `HUB_WORKER_POOL`, `HUB_WORKER_CLAIM_BATCH`, `HUB_WORKER_CONCURRENCY` | `messaging`, 32, 256 | worker |
+| `HUB_WORKER_POOL`, `HUB_WORKER_CLAIM_BATCH`, `HUB_WORKER_CONCURRENCY` | `messaging`, 32, 256 (64 for `llm`); `0` = default | worker |
+| `HUB_WORKER_TARGET_CAP` | `0` = a quarter of the concurrency, at most 64 (the per-account bulkhead): the most attempts one `(account, endpoint)` may have in flight in one worker (HUB-412, ADR-0019) | worker |
 | `HUB_SHUTDOWN_GRACE` | `25s` | all |
 | `HUB_OTLP_ENDPOINT`, `HUB_TRACE_SAMPLE_RATIO` | empty (off), `0.05` | all |
 | `HUB_TRACE_FORWARD_VENDORS` | empty (no vendor receives `traceparent`; comma-separated vendor names, ADR-0013) | gateway, worker |
@@ -622,7 +623,7 @@ Hot-path implementation rules (DESIGN §18.5): one JSON parse in (into `any` tre
 | --- | --- | --- |
 | all | signal handler; ops HTTP server; snapshot watcher (Redis subscriber + long-poll loop); breaker sync (Redis pub/sub `hub:breaker` + 1 s reconcile); credential cache refresher; audit writer(s) | fixed count |
 | gateway | `net/http` per-connection goroutines; detached wait-mode attempts | `http.Server` `MaxHeaderBytes`, read/write timeouts; per-account bulkhead semaphore (default 64, DESIGN §10.8); global in-flight limit `HUB_GATEWAY_MAX_INFLIGHT` → 503 when exceeded |
-| worker | `HUB_WORKER_CLAIMERS` claim loops (default 2) → bounded work channel (cap = 2 × claim batch) → `HUB_WORKER_CONCURRENCY` executors (default 256 messaging, 64 llm) | executor count; per-account bulkhead; account limiter tokens |
+| worker | one claim loop that claims `min(HUB_WORKER_CLAIM_BATCH, free slots)` as soon as a slot frees (no in-memory work queue) → up to `HUB_WORKER_CONCURRENCY` attempts (default 256 messaging, 64 llm), at most `HUB_WORKER_TARGET_CAP` per `(account, endpoint)`; a claim takes no more of a target's backlog than its free slots, and an envelope that still finds its target full is put back unattempted (ADR-0019) | slot count; per-target cap; per-account bulkhead; account limiter tokens |
 | worker | callback dispatcher: 1 claimer + 32 senders | fixed |
 | scheduler (leader only) | drain ramp, TTL expiry, visibility reclaim, health probes (one per open breaker), session expiry, partition maintenance, reconciler — each a ticker loop | one per job; jobs are idempotent so a leader change mid-run is safe |
 | admin | `net/http`; snapshot long-poll waiters (park on a `sync.Cond`-style broadcast, capped at 1,000 waiters) | waiter cap |
@@ -649,7 +650,7 @@ rootCtx (cancelled on SIGTERM/SIGINT)
 4. Wait for in-flight work until `grace − 5 s`:
    - sync requests finish normally;
    - wait-mode attempts finish or, at the deadline, are left `in_flight` with `claimed_until` reset to `now()` so a worker reclaims them immediately;
-   - worker executors finish their attempt; unstarted envelopes in the work channel are `Nack`ed with `retryAt=now()` (not counted as an attempt);
+   - the worker stops claiming and its attempts in flight finish (it claims only what it can start at once, so nothing waits in memory; ADR-0019);
    - LLM streams: send a terminal error event (DESIGN §15) and close.
 5. Cancel `workCtx` (hard stop for stragglers; their claims expire via visibility timeout — at-least-once is preserved).
 6. Flush callbacks dispatcher state (claims released), close the audit channel and drain the writer (max 3 s).

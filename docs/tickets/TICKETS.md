@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **249** · done: **177** · todo: **59** · other (in-progress/in-review/blocked): **13**
+Total tickets: **250** · done: **177** · todo: **57** · other (in-progress/in-review/blocked): **16**
 
 ## Epics
 
@@ -21,7 +21,7 @@ Total tickets: **249** · done: **177** · todo: **59** · other (in-progress/in
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 40 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 17 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 4 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 15 | 0 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 16 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3080,27 +3080,27 @@ Found by the HUB-235 load test. `edge.(*Server).invoke` does `defer s.metrics.Re
 
 ### HUB-406 — Worker claims before its snapshot is loaded and panics after a restart
 - **Epic:** EP-13 · **Type:** fix · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** in-review · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `fix/HUB-406-worker-snapshot-gate`
 
 Found by the HUB-236 soak harness. A worker restarted (SIGTERM or SIGKILL) while the outbox has due envelopes panics with a nil pointer dereference in `delivery.(*Worker).trail` (`worker.go:266`, `snap.Integrations` with `snap == nil`). `roles.Run` calls `dp.start` (which starts the claim loop) before `reg.load`, so the first claim can run before any snapshot exists. Each crash also leaves its claims to expire and bumps their `crashes` count: after `PoisonCrashes` (2) the envelopes would be dead-lettered as poison although they are fine. Without a supervisor restart the backlog just waits. The soak therefore runs without worker restarts (`SOAK_RESTARTS=0`).
 
 **Acceptance criteria**
-- [ ] The worker (and the scheduler's snapshot users) do not claim or tick until a snapshot is loaded; `/readyz` is already false until then
-- [ ] Integration test: envelopes due in the outbox, worker started, all of them delivered, no panic, `crashes` unchanged
-- [ ] `make soak` with `SOAK_RESTARTS=2` (one SIGTERM, one SIGKILL) reconciles with zero lost and zero duplicate callbacks; the default goes back to 2
+- [x] The worker (and the scheduler's snapshot users) do not claim or tick until a snapshot is loaded; `/readyz` is already false until then. The worker waits in `Run` and `ProcessOnce` and logs `worker.waiting_for_snapshot` once; an envelope claimed without a snapshot is put back (no attempt, no crash). The scheduler's drain releases nothing without a snapshot (its probes already skipped). Done on branch `fix/HUB-412-worker-isolation`
+- [x] Integration test: envelopes due in the outbox, worker started, all of them delivered, no panic, `crashes` unchanged (`TestWorkerWaitsForSnapshot`; plus `TestWorkerReleasesClaimWithoutSnapshot` and `TestDrainWaitsForSnapshot`, `worker_snapshot_integration_test.go`. The first two panicked at `worker.go:284` before the fix, the drain test released at a 10/s guess)
+- [ ] `make soak` with `SOAK_RESTARTS=2` (one SIGTERM, one SIGKILL) reconciles with zero lost and zero duplicate callbacks; the default goes back to 2 (not run: the brief forbids load generators on the shared machine; `SOAK_RESTARTS` default left as is)
 
 ### HUB-407 — Worker throughput is capped by 16 attempts in flight and a batch barrier
 - **Epic:** EP-13 · **Type:** perf · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-112, HUB-403 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** in-review · **Depends on:** HUB-112, HUB-403 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `perf/HUB-407-worker-concurrency`
 
 Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md`). One worker finishes about 340 envelopes/s at mockvendor 20 ms while using 0.25 CPU cores: it is waiting, not working. `Worker.ProcessOnce` claims 32, runs them 16 at a time and waits for the whole batch before claiming again. Throughput is therefore at most 16 / (vendor latency + about 25 ms of Hub time) per process, and one slow envelope holds up the next claim. DESIGN §18.4 and the go-system-design skill say workers claim `n = free bulkhead slots` (64 per account). At 2,000 msg/s and 20 ms that takes about 6 worker processes today. HUB-403 makes the 16 and 32 configurable; this ticket changes the claim model itself.
 
 **Acceptance criteria**
-- [ ] Claiming is continuous: a new claim as soon as slots free up, up to a configurable in-flight limit (default sized to the bulkhead)
-- [ ] `hubload` async step on the same machine: one worker sustains at least 2× today's rate at mockvendor 20 ms, or the report shows the new limit (CPU or Postgres)
-- [ ] Shutdown still finishes in-flight attempts; goleak and the worker itests stay green
+- [x] Claiming is continuous: a new claim as soon as slots free up, up to a configurable in-flight limit (default sized to the bulkhead). `HUB_WORKER_CONCURRENCY` (default 256 messaging / 64 llm per TECH_SPEC §8.1), `HUB_WORKER_CLAIM_BATCH` (32) and `HUB_WORKER_TARGET_CAP` (concurrency / 4, at most the 64 bulkhead) are read from env or flags (`TestLoadPrecedence`, `TestLoadRejectsInvalidConfig`). Done with HUB-412 on `fix/HUB-412-worker-isolation`, ADR-0019
+- [ ] `hubload` async step on the same machine: one worker sustains at least 2× today's rate at mockvendor 20 ms, or the report shows the new limit (CPU or Postgres) (not run: the brief forbids load generators on the shared machine)
+- [x] Shutdown still finishes in-flight attempts; goleak and the worker itests stay green (`TestWorkerShutdownFinishesInFlight`; goleak `TestMain` added to `internal/delivery`)
 
 ### HUB-408 — Account limiter: a Redis round trip on every sync vendor call
 - **Epic:** EP-13 · **Type:** perf · **Area:** backend
@@ -3149,6 +3149,20 @@ Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md` §3.3). At abou
 - [ ] Batched `COPY` (or multi-row insert) and a configurable number of writer goroutines; buffer size configurable (with HUB-403)
 - [ ] `hubload` async step at the gateway's accept limit shows no `buffer_full` drops on the same machine, or the report names the new limit
 - [ ] Benchmark of events/s per writer vs `main` (benchstat)
+
+### HUB-412 — Per-vendor isolation in the async worker
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-112, HUB-146 · **Feature:** F-13, F-12, F-09 · **Stories:** US-1303
+- **Branch:** `fix/HUB-412-worker-isolation`
+
+Asked for by the manager: "if one vendor goes down or gets slow while callers keep calling it, what happens to the other vendors?" The sync path was isolated per account, but the async worker was not. `ProcessOnce` claimed 32 envelopes, ran 16 at a time and waited for the whole batch (one slow envelope held the next claim for every vendor), and the 16 slots were shared, so a slow or hanging vendor could fill all of them. The breaker never parks a vendor that is slow but answering, and parks a hanging one only after 5 timeouts. ADR-0019.
+
+**Acceptance criteria**
+- [x] Continuous claiming: `min(batch, free slots)` as soon as a slot frees; visibility timeout, guarded transitions and graceful shutdown unchanged (`TestWorkerClaimsContinuously`, `TestWorkerShutdownFinishesInFlight`)
+- [x] Per-(account, endpoint) in-flight cap `HUB_WORKER_TARGET_CAP` (default concurrency / 4, at most 64). Claims take no more of a target's backlog than its free slots; an envelope that still finds its target full is put back without counting an attempt, a breaker outcome or a retry token (`TestWorkerTargetCap`, `TestClaimWithinTargetRoom`, `TestDeferTarget`, `TestWorkerLimits`, `TestWorkerTargetSlots*`)
+- [x] Noisy-neighbour chaos tests (real Postgres and Redis, two mockvendors): A slow, hanging, refusing, 503. B's async p99 ≤ baseline (capped at 200 ms) + 300 ms, B's sync p99 ≤ baseline (capped at 100 ms) + 100 ms, nothing of A or B lost (`TestNoisyNeighbour`). On `main` (a) and (b) fail (B async p99 3.83 s and 2.33 s); (c) passes there too (fast failures barely hold slots and the breaker parks A), so it is a regression guard. With the fix B's p99 is 51–129 ms against a 48–89 ms baseline
+- [x] Metrics `worker_inflight{pool}`, `worker_target_inflight{account, endpoint}`, `worker_target_cap_deferred_total{account, endpoint}` (bounded by breaker keys) in OBSERVABILITY §3.3 and the metric catalogue test
+- [x] `docs/tech/ISOLATION.md`: sync path, async path, breaker, parking, drain, rate limits, bulkheads and the worker cap, each with the tests that prove it; F-09, F-12 and F-13 updated
 
 ### HUB-416 — Breaker force test checks node B before its subscription message can arrive
 - **Epic:** EP-13 · **Type:** test · **Area:** backend

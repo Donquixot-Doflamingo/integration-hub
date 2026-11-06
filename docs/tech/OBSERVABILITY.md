@@ -104,7 +104,9 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `drain_release_rate` | gauge | envelopes/s | `account, endpoint` | `delivery` | observe 20 % → 100 % ramp (M5 #2) |
 | `outbox_claim_duration_seconds` | histogram | s | `pool` | `queue` | Postgres contention |
 | `outbox_reclaimed_total` | counter | envelopes | `pool` | `delivery` | visibility-timeout reclaims (crashed workers / gateways) |
-| `worker_inflight` | gauge | attempts | `pool` | `delivery` | saturation |
+| `worker_inflight` | gauge | attempts | `pool` | `delivery` (Worker, HUB-412) | saturation: compare with `HUB_WORKER_CONCURRENCY` |
+| `worker_target_inflight` | gauge | attempts | `account, endpoint` (breaker key; `endpoint` = full ref) | `delivery` (Worker, HUB-412) | which vendor holds the worker's slots; never above `HUB_WORKER_TARGET_CAP` per process. ≤ 1,000 series, like `parked_count` |
+| `worker_target_cap_deferred_total` | counter | envelopes | `account, endpoint` | `delivery` (Worker, HUB-412) | claimed envelopes put back unattempted because their target had its cap in flight (no attempt counted, no breaker outcome). A steady rate means that target is slow or hanging and is being contained; `docs/tech/ISOLATION.md` |
 | `bulkhead_inflight` | gauge | calls | `account` | `upstream` | DESIGN §10.8 |
 | `upstream_egress_denied_total` | counter | calls | `vendor` | `upstream` | calls refused before dialing: host not declared in the vendor's regions (HUB-086); any increase is a config or security problem |
 | `callback_deliveries_total` | counter | attempts | `tenant, outcome` (`delivered`, `retry_scheduled`, `dead_lettered`; one per recorded attempt, HUB-120) | `callbacks` | outbound webhook health |
@@ -189,6 +191,8 @@ Vendor sessions (HUB-175, F-14): session data is never logged either. The edge l
 
 Subject erasure (HUB-233, `hub erase-subject`, ADR-0012) writes one INFO line, `erase-subject finished`, with `tenant`, `change_id`, `dry_run` and the counts (`erased`, `deferred`, `events`, `results`, `dead_letters`, `callbacks`, `sessions`). On failure it writes one ERROR line, `erase-subject failed, nothing changed`, with `tenant` and `error`. The line never carries the identifier or its `subject_ref`. The identifier, the mask key and the DSN password are registered with the redacting handler as defence in depth. It records no metric: the command is one-shot and never scraped. `change_log` (`action = eraseSubjectPayloads`) is the system of record for deletions, and the JSON result on stdout is the operator's report.
 
+Worker isolation and startup (HUB-412, HUB-406, ADR-0019): the worker logs `worker.waiting_for_snapshot` (INFO, once, `pool`) when it starts before the first registry snapshot; it claims nothing until one is loaded, and an envelope claimed without a snapshot is put back (no attempt, no crash). An envelope put back over its target's cap logs `worker.target_at_cap` at DEBUG only (`account`, `endpoint`, request-scoped fields), since the counter above carries the rate. Its `hub.worker.attempt` span ends with `hub.outcome` = `target_at_cap` (or `no_snapshot`).
+
 ### 4.5 Sampling
 - Hot-path WARN events that can storm (Redis timeout, limiter rejection) are rate-limited per `(msg, account)` key: first 10 per 10 s, then 1 in 100, with `sampled_out` count on the next emitted line.
 - ERROR is never sampled.
@@ -225,7 +229,7 @@ Subject erasure (HUB-233, `hub erase-subject`, ADR-0012) writes one INFO line, `
 | `hub.transform.request` / `hub.transform.response` | internal | `delivery` (Attempter) | `hub.transformer`, `hub.transformer_version`; status `transform_failed` / `time_budget` | HUB-231 |
 | `upstream {vendor}.{endpoint}` | client | `upstream` | `hub.vendor`, `hub.account`, `hub.endpoint`, `server.address`, `http.request.method`, `http.response.status_code`, `hub.transport_error` | HUB-088, forwarding HUB-231 |
 | `hub.queue.enqueue` | producer | `edge` (async, wait, park) | `hub.pool`; status `persist_failed` | HUB-231 |
-| `hub.worker.attempt` | consumer (new root, linked) | `delivery` (Worker) | `hub.request_id`, `hub.tenant`, `hub.integration_id`, `hub.pool`, `hub.attempt`, `hub.queue_wait_ms`, `hub.outcome` (final state or short reason); status `transition_failed` | HUB-231 |
+| `hub.worker.attempt` | consumer (new root, linked) | `delivery` (Worker) | `hub.request_id`, `hub.tenant`, `hub.integration_id`, `hub.pool`, `hub.attempt`, `hub.queue_wait_ms`, `hub.outcome` (final state or short reason, e.g. `target_at_cap`, `no_snapshot`, `paused`); status `transition_failed` | HUB-231, HUB-412 |
 | `hub.callback.deliver` | client (new root, linked) | `callbacks` | `hub.endpoint_id`, `hub.callback.attempt`, `hub.callback.event`, `hub.request_id`, `http.response.status_code`, `hub.outcome` | HUB-120, link HUB-231 |
 | `hub.validate`, `hub.resolve`, `hub.idempotency` | internal / client | `edge` | `hub.capability`; `hub.snapshot_version`, `hub.target_index`, `hub.failover`; `hub.idempotency.result` | planned (HUB-240) |
 | upstream `hub.attempt`, `hub.breaker_state`, `hub.wait.limiter_ms`, `hub.wait.bulkhead_ms` | — | `upstream` | — | planned (HUB-240) |
@@ -303,7 +307,7 @@ Each alert's `runbook_url` points at `docs/runbooks/<AlertName>.md`; the index i
 
 ### 9.2 Stuck queue (`QueueOldestAgeHigh`)
 1. `queue_depth{status}`: growing `accepted` with flat `in_flight` → workers not claiming (check `worker_inflight`, pod count, `outbox_claim_duration_seconds`).
-2. Workers saturated? `worker_inflight == HUB_WORKER_CONCURRENCY` → scale or check slow vendor (`vendor_latency_ms`).
+2. Workers saturated? `worker_inflight == HUB_WORKER_CONCURRENCY` → scale or check slow vendor (`vendor_latency_ms`). One vendor at its cap (`worker_target_inflight` at `HUB_WORKER_TARGET_CAP`, `worker_target_cap_deferred_total` rising) only slows that vendor's own queue; other vendors keep their slots (ADR-0019).
 3. Throttled by account limiter? `hub_wait_ms{kind="account_limiter"}` high → expected; vendor quota is the bottleneck.
 4. Postgres: `pg_stat_activity` for long transactions; `outbox` bloat (`n_dead_tup`), autovacuum running?
 5. Reclaims rising (`outbox_reclaimed_total`) → workers crashing; check restarts and poison detector logs (`envelope.poisoned`).
