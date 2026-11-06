@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(frontend)` · Render destructive actions only for roles that may run them (HUB-288) · HUB-288 · F-19
+  - Delete, purge, revoke, rotate, rollback, pause, force and tenant controls are not shown at all to a role the contract does not allow (`x-required-role`), instead of being shown and failing
+  - The minimum role per admin operation is generated from the contract (`npm run gen:api` -> `roles.gen.ts`); CI fails when it is stale
 - 2026-11-07 · `feat(frontend)` · Run the console against a real Hub with one command (HUB-286) · HUB-286 · F-19
   - `make dev-up` (or `scripts/dev-up.sh`) starts Postgres and Redis (docker compose with Docker/Colima, else the services in `HUB_PG_DSN` / `HUB_REDIS_ADDR`), migrations, the dev seed, mockvendor, the hub admin (dev OIDC issuer), gateway, worker, scheduler and the console, then prints the URLs, how to sign in and a tenant API key; `make dev-down` stops it
   - Dev sign-in against a running Hub mints a real admin token through the admin's dev issuer; the token stays in the httpOnly session

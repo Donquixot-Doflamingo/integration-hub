@@ -19,7 +19,7 @@ npm ci
 | `npm run check` | `svelte-kit sync` + `svelte-check` (TypeScript strict, warnings fail) |
 | `npm run lint` | Prettier check + ESLint (flat config) + `scripts/check-api-types.mjs` (no hand-written API types, no raw `fetch` to `/admin/v1` outside `src/lib/api/`) |
 | `npm run format` | Prettier write |
-| `npm run gen:api` | Regenerates `src/lib/api/schema.d.ts` (openapi-typescript) and `src/lib/api/mocks/contract.gen.ts` (contract examples) from `../contracts/openapi/hub-admin.v1.yaml`. Commit both; CI fails if either is stale |
+| `npm run gen:api` | Regenerates `src/lib/api/schema.d.ts` (openapi-typescript), `src/lib/api/mocks/contract.gen.ts` (contract examples) and `src/lib/api/roles.gen.ts` (`x-required-role` per operation) from `../contracts/openapi/hub-admin.v1.yaml`. Commit all three; CI fails if any is stale |
 | `npm run dev:mock` | Dev server on MSW mocks in the browser, no backend needed (client-side rendering in this mode) |
 | `npm run build:mock` | Production build with mocks on (used by `test:e2e`) |
 | `npm test` | Vitest unit and component tests (jsdom, Testing Library) |
@@ -125,7 +125,9 @@ npm run dev
   `/admin/v1` must be routed to the admin server by whatever is in front of the console.
 - `HUB_DEV_OIDC_ISSUER`: dev sign-in asks the admin's dev OIDC issuer (`hub admin -admin-dev-oidc`) for a token with the
   picked role and tenants. Never set in production; real OIDC is HUB-282.
-
+- Which controls render follows the contract: `RoleGate op="purgeDeadLetters"` / `can(access, op)` read the minimum
+  role from `src/lib/api/roles.gen.ts`, generated from each operation's `x-required-role` (HUB-288). A role that cannot
+  call an operation does not see its control at all.
 
 Runes mode is enforced in `svelte.config.js` for every project component; Svelte 4 syntax fails to compile.
 CI: [`.github/workflows/frontend.yml`](../.github/workflows/frontend.yml), runs on `frontend/**` changes: job `console`

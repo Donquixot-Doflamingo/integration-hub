@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Role } from '$lib/api/types';
-import { accessFromMe, accessFromRoles, hasRole, highestRole, NO_ACCESS } from './roles';
+import {
+	accessFromMe,
+	accessFromRoles,
+	can,
+	hasRole,
+	highestRole,
+	NO_ACCESS,
+	requiredRole,
+	type OperationId
+} from './roles';
 import { HubApiError } from '$lib/api/errors';
 
 // HUB-253: role guard per role. Hierarchy from hub-admin.v1.yaml: admin ⊃ editor ⊃ viewer ⊃ tenant_viewer.
@@ -57,5 +66,57 @@ describe('accessFromMe', () => {
 			data: { subject: 's', roles: ['tenant_viewer'], tenants: ['orders-service'], permissions: [] }
 		});
 		expect(a).toMatchObject({ known: true, tenants: ['orders-service'], tenantScoped: true });
+	});
+});
+
+// HUB-288: whether a control renders follows the operation's x-required-role.
+describe('can', () => {
+	it.each<[Role, Record<string, boolean>]>([
+		[
+			'admin',
+			{
+				purgeDeadLetters: true,
+				replayDeadLetters: true,
+				deleteRegistrarEndpoint: true,
+				listDeadLetters: true
+			}
+		],
+		[
+			'editor',
+			{
+				purgeDeadLetters: false,
+				replayDeadLetters: true,
+				deleteRegistrarEndpoint: false,
+				listDeadLetters: true
+			}
+		],
+		[
+			'viewer',
+			{
+				purgeDeadLetters: false,
+				replayDeadLetters: false,
+				deleteRegistrarEndpoint: false,
+				listDeadLetters: true
+			}
+		],
+		[
+			'tenant_viewer',
+			{
+				purgeDeadLetters: false,
+				replayDeadLetters: false,
+				deleteRegistrarEndpoint: false,
+				listDeadLetters: true
+			}
+		]
+	])('%s', (role, want) => {
+		const a = accessFromRoles([role]);
+		for (const [op, allowed] of Object.entries(want)) {
+			expect([op, can(a, op as OperationId)]).toEqual([op, allowed]);
+		}
+	});
+
+	it('fails closed when /me failed', () => {
+		expect(can(NO_ACCESS, 'getMe')).toBe(false);
+		expect(requiredRole('purgeDeadLetters')).toBe('admin');
 	});
 });

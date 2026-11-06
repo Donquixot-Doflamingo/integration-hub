@@ -106,7 +106,7 @@
 			<a class="clear" href={hrefFor(undefined)}>Clear search</a>
 		{/if}
 	</form>
-	<RoleGate access={data.access} min="admin">
+	<RoleGate access={data.access} op="createTenant">
 		<button type="button" class="primary" onclick={() => (createOpen = true)}>
 			Create tenant
 		</button>

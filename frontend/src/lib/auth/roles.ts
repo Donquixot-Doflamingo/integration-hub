@@ -1,10 +1,14 @@
 import type { ApiResult } from '$lib/api/client';
+import { requiredRoles, type OperationId } from '$lib/api/roles.gen';
 import type { Me, Role } from '$lib/api/types';
+
+export type { OperationId };
 
 /**
  * Role model from hub-admin.v1.yaml: `admin` ⊃ `editor` ⊃ `viewer`; `tenant_viewer` is a viewer
  * restricted to the tenants in its token. Each operation declares its minimum role in
- * `x-required-role`. The UI hides or disables what a role cannot do; the API's 403 stays the truth.
+ * `x-required-role` (generated into `roles.gen.ts`). The UI does not render what a role cannot do
+ * (`can`, `RoleGate op=`); the API's 403 stays the truth.
  */
 export const ROLES: readonly Role[] = ['admin', 'editor', 'viewer', 'tenant_viewer'];
 
@@ -84,4 +88,18 @@ export const NO_ACCESS: Access = {
 
 export function accessFromMe(me: ApiResult<Me>): Access {
 	return me.ok ? accessFromRoles(me.data.roles, me.data.tenants) : NO_ACCESS;
+}
+
+/** Minimum role of an admin operation, from the contract's `x-required-role` (HUB-288). */
+export function requiredRole(op: OperationId): Role {
+	return requiredRoles[op];
+}
+
+/**
+ * True when the signed-in user may call `op` (contract `x-required-role`). Use it to decide whether
+ * a control is rendered at all: a control for an operation the role cannot call is not shown, not
+ * merely disabled (HUB-288). Fails closed when `/me` failed. The API's 403 stays the truth.
+ */
+export function can(access: Access, op: OperationId): boolean {
+	return access.known && hasRole(access.roles, requiredRoles[op]);
 }

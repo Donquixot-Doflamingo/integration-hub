@@ -11,7 +11,7 @@
 		ApiKeySecretChange,
 		ApiKeyState
 	} from '$lib/api/types';
-	import type { Access } from '$lib/auth/roles';
+	import { can, type Access } from '$lib/auth/roles';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import ListView from '$lib/components/ListView.svelte';
@@ -54,6 +54,9 @@
 	} = $props();
 
 	const id = $props.id();
+	// HUB-288: row actions only for roles that may call them (contract x-required-role).
+	const canRotate = $derived(can(access, 'rotateApiKey'));
+	const canRevoke = $derived(can(access, 'revokeApiKey'));
 	const here = $derived(resolve('/(app)/tenants/[tenant_id]', { tenant_id: tenantId }));
 
 	function onFilter(e: Event) {
@@ -151,7 +154,7 @@
 <section class="block" aria-labelledby="{id}-heading">
 	<div class="title-row">
 		<h2 id="{id}-heading">API keys</h2>
-		<RoleGate {access} min="admin">
+		<RoleGate {access} op="createApiKey">
 			<button type="button" class="primary" onclick={() => (createOpen = true)}>
 				Create API key
 			</button>
@@ -178,7 +181,7 @@
 		columns={[
 			{ label: 'Prefix' },
 			{ label: 'State' },
-			...(access.isAdmin ? [{ label: 'Actions' }] : []),
+			...(canRotate || canRevoke ? [{ label: 'Actions' }] : []),
 			{ label: 'Description' },
 			{ label: 'Scopes' },
 			{ label: 'Created' },
@@ -192,18 +195,18 @@
 			{@const b = badge(k.state)}
 			<th scope="row"><code class="id">{k.prefix}</code></th>
 			<td><StatusBadge tone={b.tone} icon={b.icon} label={stateLabels[k.state]} /></td>
-			{#if access.isAdmin}
+			{#if canRotate || canRevoke}
 				<td class="row-actions">
-					{#if k.state === 'active'}
+					{#if k.state === 'active' && canRotate}
 						<button type="button" class="row-action" onclick={() => openRotate(k)}>
 							Rotate {k.prefix}
 						</button>
 					{/if}
-					{#if isLive(k)}
+					{#if isLive(k) && canRevoke}
 						<button type="button" class="row-action stop" onclick={() => openRevoke(k)}>
 							Revoke {k.prefix}
 						</button>
-					{:else}<span class="muted">-</span>{/if}
+					{:else if !isLive(k)}<span class="muted">-</span>{/if}
 				</td>
 			{/if}
 			<td>{k.description ?? '-'}</td>

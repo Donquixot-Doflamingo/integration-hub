@@ -41,7 +41,7 @@ jobs:
       - name: Generated API types and mocks are fresh (gen:api)
         run: |
           npm run gen:api
-          git diff --exit-code -- src/lib/api/schema.d.ts src/lib/api/mocks/contract.gen.ts || {
+          git diff --exit-code -- src/lib/api/schema.d.ts src/lib/api/mocks/contract.gen.ts src/lib/api/roles.gen.ts || {
             echo "::error::Generated API files are stale. Run 'npm run gen:api' in frontend/ and commit the result."
             exit 1
           }

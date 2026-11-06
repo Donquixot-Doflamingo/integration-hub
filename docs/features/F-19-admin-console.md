@@ -41,7 +41,7 @@ On-call and integration admins cannot run incidents or cutovers efficiently from
 
 ## UX / API surface
 - Typed client generated from `contracts/openapi/hub-admin.v1.yaml` (`npm run gen:api`); no hand-written API types (AGENTS.md §4.6).
-- Auth: OIDC authorization code + PKCE (HUB-282, pending the Hub issuer); until then a dev provider (role picker) in mock builds or with `PUBLIC_AUTH_MODE=dev`. `getMe` drives which actions render (`RoleGate`, fails closed when `/me` fails).
+- Auth: OIDC authorization code + PKCE (HUB-282, pending the Hub issuer); until then a dev provider (role picker) in mock builds or with `PUBLIC_AUTH_MODE=dev`. `getMe` drives which actions render (`RoleGate op=` / `can(access, op)` against each operation's `x-required-role`, HUB-288; fails closed when `/me` fails). A role that cannot call an operation does not see its control at all.
 - Mutations always show a confirmation dialog with required **reason** and a preview (diff or match count).
 
 ## Behaviour & rules
@@ -142,6 +142,7 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-274 | Change log `/change-log` (`listChangeLog`: actor, action, object type, object id, UTC range, page size in the URL; chips; paging; reversed range refused) and `/change-log/{change_id}` (`getChangeLogEntry`: what, reason, when, actor, snapshot; before / after as `DiffPaths` from `$lib/utils/json-diff.ts`, both objects in full). Objects link to their console page (integration, transformer, tenant, request). `ChangeNotice` links the entry itself |
 | HUB-280 | CI job `e2e` in `.github/workflows/frontend.yml` beside `console`: `npm ci`, browser cache keyed by OS + pinned `@playwright/test` version, `playwright install --with-deps --only-shell chromium` on a miss (`install-deps` on a hit), `npm run test:e2e` (build:mock + preview), `timeout-minutes: 8`, report + traces uploaded `if: failure()`; HTML reporter under `CI`. Verified locally only (99 tests, about 60 s, 3 runs green); the axe helper waits for `aria-busy` to clear first |
 | HUB-279 | SvelteKit 3 evaluated; stays on 2.70.3 (ADR-0009) with a `//` path guard in `hooks.server.ts`; upgrade filed as HUB-281 |
+| HUB-288 | Destructive and mutating controls render only for roles that satisfy the operation's `x-required-role`: `scripts/extract-roles.mjs` (part of `gen:api`, CI freshness check) writes `src/lib/api/roles.gen.ts`; `can(access, op)` and `RoleGate op= / ops=` read it. Covered per role and screen in `routes/(app)/destructive-controls.test.ts` (DLQ, health, integration detail, tenants, tenant detail, transformer version). The 403 handling in dialogs stays |
 | HUB-286 | One-command local stack (`scripts/dev-up.sh`, `make dev-up`): Postgres/Redis (compose or env), migrations, seed, mockvendor, hub admin (dev OIDC), gateway, worker, scheduler, console. Console: same-origin `/admin/v1` proxy with the session token (`admin-proxy.ts`), dev sign-in through the admin's dev issuer, SSR serialization of `x-hub-request-id` / `etag` |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
@@ -187,3 +188,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-11-01 | HUB-273: snapshots view | frontend-engineer |
 | 2026-11-01 | HUB-280: e2e in CI | frontend-engineer |
 | 2026-11-07 | HUB-286: console against a running Hub (proxy, dev issuer sign-in, dev stack scripts) | frontend-engineer |
+| 2026-11-07 | HUB-288: controls gated by the contract's x-required-role | frontend-engineer |

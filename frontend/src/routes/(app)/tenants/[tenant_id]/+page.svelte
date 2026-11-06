@@ -142,7 +142,7 @@
 				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- built on resolve() -->
 				<a href={integrationsHref}>Integrations owned by {t.tenant_id}</a>
 			</p>
-			<RoleGate access={data.access} min="admin">
+			<RoleGate access={data.access} op="updateTenant">
 				<div class="actions">
 					<div class="group" role="group" aria-label="Change this tenant">
 						<button type="button" class="primary" onclick={() => (editOpen = true)}>

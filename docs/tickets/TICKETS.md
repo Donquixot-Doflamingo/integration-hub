@@ -2505,16 +2505,16 @@ Walk every route with Playwright against the real stack (desktop and 390 px mobi
 
 ### HUB-288 — Destructive actions only for roles that may do them
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** in-progress · **Depends on:** HUB-253 · **Feature:** F-19 · **Stories:** US-1902, US-1904, US-1906
+- **Status:** in-review · **Depends on:** HUB-253 · **Feature:** F-19 · **Stories:** US-1902, US-1904, US-1906
 - **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-287, HUB-289)
 
 "If a user doesn't have access there should be no delete option at all." Delete, purge, retire, revoke, unseal, rollback and force controls are not rendered unless the signed-in role satisfies the operation's `x-required-role` in `hub-admin.v1.yaml`. The minimum role per operation is generated from the contract (`npm run gen:api` -> `src/lib/api/roles.gen.ts`) so the UI cannot drift from the API. The 403 handling stays.
 
 **Acceptance criteria**
-- [ ] `roles.gen.ts` generated from `x-required-role` for every operation; CI fails when it is stale
-- [ ] `RoleGate op=` / `can(access, op)` gate every destructive control; nothing is rendered disabled instead
-- [ ] Tests per role (admin, editor, viewer, tenant_viewer) for every destructive control
-- [ ] A 403 from the API is still shown in the dialog
+- [x] `roles.gen.ts` generated from `x-required-role` for every operation; CI fails when it is stale (`scripts/extract-roles.test.ts`, `gen:api` freshness step in `frontend.yml`)
+- [x] `RoleGate op=` / `can(access, op)` gate every destructive control; nothing is rendered disabled instead (`RoleGate.test.ts`, `roles.test.ts`)
+- [x] Tests per role (admin, editor, viewer, tenant_viewer) for every destructive control (`routes/(app)/destructive-controls.test.ts`: 6 screens x 4 roles)
+- [x] A 403 from the API is still shown in the dialog (existing `api-keys.test.ts`, `replay-purge.test.ts`, `force.test.ts` 403 cases unchanged and green)
 
 ### HUB-289 — Console bug bash against the real stack
 - **Epic:** EP-10 · **Type:** fix · **Area:** frontend

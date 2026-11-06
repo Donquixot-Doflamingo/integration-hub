@@ -1,33 +1,55 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { Role } from '$lib/api/types';
-	import { hasRole, roleLabels, type Access } from '$lib/auth/roles';
+	import {
+		hasRole,
+		highestRole,
+		requiredRole,
+		roleLabels,
+		type Access,
+		type OperationId
+	} from '$lib/auth/roles';
 
 	/**
-	 * Shows `children` only when the user holds `min` (default `editor`, the minimum role of every
-	 * mutating admin operation except tenants, API keys and breaker force, which need `admin`).
-	 * Otherwise renders `denied` (e.g. a disabled control or a read-only note), or nothing.
-	 * The API's 403 is still the truth; this only keeps the UI honest about what a role can do.
+	 * Renders `children` only when the user may call the gated operation(s); otherwise renders the
+	 * `denied` snippet (a read-only note), or nothing. Gated controls are never rendered disabled:
+	 * a role that cannot do something does not see the control at all (HUB-288).
+	 *
+	 * Prefer `op` (or `ops`): the minimum role then comes from the contract's `x-required-role` of
+	 * that operation (`roles.gen.ts`), so the UI cannot drift from the API. With `ops`, every listed
+	 * operation must be allowed (e.g. a count-then-purge flow). `min` remains for gates that are not
+	 * about one operation. The API's 403 is still the truth.
 	 */
 	let {
 		access,
-		min = 'editor',
+		op,
+		ops,
+		min,
 		children,
 		denied
 	}: {
 		access: Access;
+		/** The admin operation the gated control calls, e.g. `purgeDeadLetters`. */
+		op?: OperationId;
+		/** Several operations the gated controls call; all must be allowed. */
+		ops?: readonly OperationId[];
+		/** Explicit minimum role; defaults to `editor` when neither `op` nor `ops` is given. */
 		min?: Role;
-		/** Optional: a gate can carry only the `denied` note (e.g. before a screen's controls exist). */
+		/** Optional: a gate can carry only the `denied` note. */
 		children?: Snippet;
-		/** Receives the role that would be needed, e.g. to say "Needs the Editor role". */
+		/** Receives the label of the role that would be needed, e.g. "Admin". */
 		denied?: Snippet<[string]>;
 	} = $props();
 
-	const allowed = $derived(access.known && hasRole(access.roles, min));
+	const needed = $derived<Role>(
+		highestRole([...(op ? [op] : []), ...(ops ?? [])].map(requiredRole).concat(min ?? [])) ??
+			'editor'
+	);
+	const allowed = $derived(access.known && hasRole(access.roles, needed));
 </script>
 
 {#if allowed}
 	{@render children?.()}
 {:else}
-	{@render denied?.(roleLabels[min])}
+	{@render denied?.(roleLabels[needed])}
 {/if}
