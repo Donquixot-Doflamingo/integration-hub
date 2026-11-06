@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **226** · done: **158** · todo: **55** · other (in-progress/in-review/blocked): **13**
+Total tickets: **229** · done: **158** · todo: **50** · other (in-progress/in-review/blocked): **21**
 
 ## Epics
 
@@ -19,7 +19,7 @@ Total tickets: **226** · done: **158** · todo: **55** · other (in-progress/in
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 1 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
-| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
+| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 14 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 19 | 0 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 5 | 0 |
 
@@ -2476,92 +2476,98 @@ Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits
 
 ### HUB-300 — hubmcp scaffold with official MCP Go SDK (stdio)
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-020, HUB-006, HUB-094 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-300-hubmcp-scaffold`
+- **Status:** in-review · **Depends on:** HUB-020, HUB-006, HUB-094 · **Feature:** F-20 · **Stories:** US-2006
+- **Branch:** `feat/HUB-300-hubmcp-scaffold` (delivered on `feat/HUB-300-hubmcp` with HUB-301–307)
 
 Create `cmd/hubmcp` using the official MCP Go SDK with stdio transport, config (Hub URL, tenant key from env, optional admin token) and tool registration from the frozen MCP tool definitions.
 
 **Acceptance criteria**
-- [ ] `hubmcp` starts over stdio and lists tools matching the contract
-- [ ] Tenant key read from env only and redacted in logs
-- [ ] Calls go through `pkg/hubclient`
+- [x] `hubmcp` starts over stdio and lists tools matching the contract (`TestStdioServesContractTools`, `TestToolListEqualsFrozenContract`)
+- [x] Tenant key read from env only and redacted in logs (`TestLoadConfig`, `TestSecretsAreRedactedInLogsAndOutput`)
+- [x] Calls go through `pkg/hubclient` (the app holds only a `hubclient.Client` for the caller API; archtest forbids `internal/`; User-Agent asserted in the HUB-302 tests)
 
 ### HUB-301 — Streamable HTTP transport
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-301-hubmcp-http`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2006
+- **Branch:** `feat/HUB-301-hubmcp-http` (delivered on `feat/HUB-300-hubmcp`)
 
 Add streamable HTTP transport with bearer auth for shared deployments.
 
 **Acceptance criteria**
-- [ ] Same tool list over HTTP and stdio
-- [ ] Unauthenticated HTTP clients rejected
+- [x] Same tool list over HTTP and stdio (`TestHTTPTransportServesSameToolsAsStdio`, `TestRunServesHTTPUntilCancelled`)
+- [x] Unauthenticated HTTP clients rejected (`TestHTTPTransportRejectsUnauthenticated`, `TestHTTPKeyVerificationIsCachedAndFailsClosed`; the bearer is the client's tenant key, ADR-0018)
 
 ### HUB-302 — Discovery tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-302-mcp-discovery-tools`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2001
+- **Branch:** `feat/HUB-302-mcp-discovery-tools` (delivered on `feat/HUB-300-hubmcp`)
 
 Tools to list integrations, describe one, and fetch a capability's schemas, backed by the discovery endpoints (HUB-090 contract).
 
 **Acceptance criteria**
-- [ ] Tool outputs never contain vendor, account or version
-- [ ] Tested against a contract-validated fake Hub
+- [x] Tool outputs never contain vendor, account or version (`TestDiscoveryNeverLeaksVendorIdentity` plants vendor/account/version fields and debug headers in every Hub response; outputs are built field by field)
+- [x] Tested against a contract-validated fake Hub (`TestListIntegrations`, `TestDescribeIntegration`: every exchange validated against hub-public.v1.yaml, every output against the tool's outputSchema)
 
 ### HUB-303 — Invoke, request status and dry-run tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-303-mcp-invoke-tools`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2002, US-2003, US-2004
+- **Branch:** `feat/HUB-303-mcp-invoke-tools` (delivered on `feat/HUB-300-hubmcp`)
 
 Tools to invoke an integration (returning Result vs Queued explicitly), get request status, and dry-run.
 
 **Acceptance criteria**
-- [ ] A 202 is reported as queued with the poll id, never as success
-- [ ] Error envelope surfaced with code, retryable, retry_after_ms
+- [x] A 202 is reported as queued with the poll id, never as success (`TestInvoke/202_queued_is_not_success`, `/202_in_flight`: `outcome: queued`, `accepted.poll`, `request_id`, `result: null`, text tells the model it is pending)
+- [x] Error envelope surfaced with code, retryable, retry_after_ms (`TestInvoke` error cases incl. circuit, reason, upstream and details; `TestGetRequest`, `TestDryRun` error cases; auto-retry at most once, retryable only, only with an idempotency key)
 
 ### HUB-304 — Confirm guard for money/quota integrations
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-303 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-304-mcp-confirm-guard`
+- **Status:** in-review · **Depends on:** HUB-303 · **Feature:** F-20 · **Stories:** US-2003
+- **Branch:** `feat/HUB-304-mcp-confirm-guard` (delivered on `feat/HUB-300-hubmcp`)
 
 For integrations with `moves_money_or_quota: true` (read via `getIntegration`), the invoke tool requires an explicit `confirm: true` and an idempotency key, and echoes a summary before calling.
 
 **Acceptance criteria**
-- [ ] Invoke without confirm returns a confirmation request and makes no Hub call
-- [ ] Missing idempotency key rejected client-side
+- [x] Invoke without confirm returns a confirmation request and makes no Hub call (`TestConfirmGuard`: `outcome: refused`, `CONFIRMATION_REQUIRED`, zero invoke calls, summary of the held-back call in the text; only the `getIntegration` read happens)
+- [x] Missing idempotency key rejected client-side (`TestConfirmGuard/confirm_but_no_key`: `IDEMPOTENCY_KEY_REQUIRED`, zero invoke calls; `TestConfirmGuardFailsClosed`: an unreadable flag invokes nothing)
 
 ### HUB-305 — Admin read-only tools
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `feat/HUB-305-mcp-admin-readonly`
+- **Status:** in-review · **Depends on:** HUB-300 · **Feature:** F-20 · **Stories:** US-2005
+- **Branch:** `feat/HUB-305-mcp-admin-readonly` (delivered on `feat/HUB-300-hubmcp`)
 
 Read-only admin tools (request search/timeline, breaker states, DLQ list, integration versions) using a viewer token against `contracts/openapi/hub-admin.v1.yaml`; no mutating tools.
 
+Delivered: the three admin tools of the frozen tool contract (`hub_admin_search_requests`, `hub_admin_request_timeline`, `hub_admin_breaker_states`). DLQ list and integration versions are not in `contracts/mcp/hubmcp-tools.json` 1.0.0; they need a CCR first (tracked in HUB-312).
+
 **Acceptance criteria**
-- [ ] Tool set contains no mutating operation (test)
-- [ ] Fails clearly when no admin token is configured
+- [x] Tool set contains no mutating operation (test) (`TestAdminToolsAreReadOnly`: every admin `maps_to` is a hub-admin GET and exercising every tool sends only those GETs; the admin client has only a GET method)
+- [x] Fails clearly when no admin token is configured (`TestAdminToolsWithoutToken`: tools not registered, a call fails with an unknown-tool error naming the tool, server instructions and the start-up log say HUB_ADMIN_TOKEN is not set)
 
 ### HUB-306 — MCP tests
 - **Epic:** EP-11 · **Type:** test · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-301, HUB-302, HUB-303, HUB-304, HUB-305 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `test/HUB-306-mcp-tests`
+- **Status:** in-review · **Depends on:** HUB-301, HUB-302, HUB-303, HUB-304, HUB-305 · **Feature:** F-20 · **Stories:** US-2001–US-2006
+- **Branch:** `test/HUB-306-mcp-tests` (delivered on `feat/HUB-300-hubmcp`)
 
 Tool schema snapshot tests against the MCP contract, handler tests against a fake Hub, and an MCP Inspector smoke run.
 
+The protocol smoke run is `TestSpawnedBinaryOverStdio` (the binary spawned over real stdio by the go-sdk client). Running the MCP Inspector itself needs the npm package, which could not be fetched in this environment; it stays a manual step (HUB-313).
+
 **Acceptance criteria**
-- [ ] Tool schemas equal the frozen definitions
-- [ ] Every tool has success and error tests
+- [x] Tool schemas equal the frozen definitions (`TestToolListEqualsFrozenContract`, `TestEmbeddedContractIsTheFrozenOne`)
+- [x] Every tool has success and error tests (`TestEveryToolSuccessAndError`, driven by the contract's tool list, plus the per-tool tables)
 
 ### HUB-307 — MCP e2e against a running Hub
 - **Epic:** EP-11 · **Type:** test · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-306, HUB-097, HUB-123 · **Feature:** F-20 · **Stories:** US-20xx
-- **Branch:** `test/HUB-307-mcp-e2e`
+- **Status:** in-review · **Depends on:** HUB-306, HUB-097, HUB-123 · **Feature:** F-20 · **Stories:** US-2001–US-2005
+- **Branch:** `test/HUB-307-mcp-e2e` (delivered on `feat/HUB-300-hubmcp`)
 
 Run hubmcp against a compose Hub + mockvendor and exercise discovery, sync invoke, async invoke + status, dry-run.
 
+`TestMCPEndToEnd` (`backend/cmd/hubmcp/e2e_integration_test.go`, tag `integration`) builds `hub`, `hubctl` and `mockvendor`, runs admin + gateway + worker + mockvendor as processes on `HUB_PG_DSN`/`HUB_REDIS_ADDR` (the compose services; no Docker needed), with a copy of `backend/config` pointed at mockvendor and dev credentials from `hubctl creds`.
+
 **Acceptance criteria**
-- [ ] All flows pass end to end
-- [ ] No vendor identity in any tool output except `hub_dry_run`, the documented exception (grep)
+- [x] All flows pass end to end (discovery, dry-run, sync invoke + status, async invoke → queued → succeeded via `hub_get_request`, money/quota refusal then confirmed invoke, the three admin tools)
+- [x] No vendor identity in any tool output except `hub_dry_run`, the documented exception (grep) (subtest `no_vendor_identity_outside_hub_dry_run_(grep)` over every tenant tool output, with the gateway sending debug version headers; the dry-run subtest proves the exception shows the mockvendor URL with secrets `***`)
 
 ### HUB-308 — hubclient polish: retries, polling, callback verifier
 - **Epic:** EP-11 · **Type:** feat · **Area:** backend
@@ -2597,6 +2603,38 @@ Add an SSE reader to `pkg/hubclient` mapping canonical chunks (`delta.text`, `fi
 **Acceptance criteria**
 - [ ] Reader yields chunks in order and surfaces a terminal error event as an error
 - [ ] Context cancellation closes the stream
+
+### HUB-311 — hubmcp metrics and traces (OBSERVABILITY §14)
+- **Epic:** EP-11 · **Type:** feat · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-306 · **Feature:** F-20 · **Stories:** US-2005
+- **Branch:** `feat/HUB-311-hubmcp-telemetry`
+
+OBSERVABILITY §14 plans `hubmcp_tool_calls_total`, `hubmcp_tool_duration_seconds`, `hubmcp_sessions_active`, `hubmcp_hub_http_requests_total`, a `hubmcp.tool` span with `traceparent` propagation to the Hub and the `MCPInvokeErrorsHigh` alert. HUB-300–307 ship the `tool_called` log and the User-Agent only. Decide where metrics are exposed (stdio has no listener: ops port in HTTP mode only, or OTLP push) and implement.
+
+**Acceptance criteria**
+- [ ] Metrics and span exist as listed in §14, with the exposure decision recorded
+- [ ] `traceparent` from the tool span reaches the Hub (hubclient `WithTraceparent`)
+
+### HUB-312 — CCR + hub_admin DLQ and integration-version tools
+- **Epic:** EP-11 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-305 · **Feature:** F-20 · **Stories:** US-2005
+- **Branch:** `contract/HUB-312-mcp-admin-dlq-versions`
+
+HUB-305's description lists a DLQ list and integration versions, but `contracts/mcp/hubmcp-tools.json` 1.0.0 has only three admin tools. Ask `contract-steward` for read-only `hub_admin_dlq_list` (`hub-admin#listDlq`) and `hub_admin_integration_versions` tools (minor bump), then implement them GET-only like HUB-305.
+
+**Acceptance criteria**
+- [ ] Contract change merged first (own commit, version bump)
+- [ ] Tools implemented with success/error and read-only tests
+
+### HUB-313 — MCP Inspector smoke run
+- **Epic:** EP-11 · **Type:** test · **Area:** mcp
+- **Status:** todo · **Depends on:** HUB-306 · **Feature:** F-20 · **Stories:** US-2006
+- **Branch:** `test/HUB-313-mcp-inspector`
+
+Run `@modelcontextprotocol/inspector` (CLI mode) against `bin/hubmcp` in CI or as a scripted manual check (list tools, call `hub_list_integrations` against mockvendor). HUB-306 covers the protocol with a spawned-binary go-sdk test; the Inspector package could not be fetched in the build environment.
+
+**Acceptance criteria**
+- [ ] Scripted Inspector run lists the contract tools and calls one tool successfully
 
 ## EP-12 — Release 2 (DESIGN §19 Phase 2)
 

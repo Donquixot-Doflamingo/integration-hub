@@ -193,6 +193,20 @@ Subject erasure (HUB-233, `hub erase-subject`, ADR-0012) writes one INFO line, `
 - Hot-path WARN events that can storm (Redis timeout, limiter rejection) are rate-limited per `(msg, account)` key: first 10 per 10 s, then 1 in 100, with `sampled_out` count on the next emitted line.
 - ERROR is never sampled.
 
+### 4.6 `hubmcp` (F-20)
+`hubmcp` (the MCP server, `backend/cmd/hubmcp`) writes JSON logs to **stderr** (stdout carries the MCP stdio stream) with `role: hubmcp` and `version`. It has no metrics endpoint: it is a client process, and the Hub's own metrics count its traffic.
+
+| Event (`msg`) | Level | Attributes | When |
+| --- | --- | --- | --- |
+| `hubmcp started` | INFO | `transport`, `hub_base_url`, `admin_tools` (bool), `contract_version`, `version` | start-up |
+| `admin tools disabled: HUB_ADMIN_TOKEN is not set` | INFO | — | start-up without an admin token |
+| `hubmcp listening` | INFO | `addr`, `path` (`/mcp`) | HTTP transport ready |
+| `tool_called` | INFO | `tool`, `is_error`, `duration_ms`, and when known `integration_id`, `request_id`, `outcome` (`completed`/`queued`/`error`/`refused`) | every tool call |
+| `hubmcp stopped` | INFO | — | clean shutdown |
+
+- Every outbound call carries `User-Agent: hubclient-go/<sdk version> hubmcp/<version>` (admin calls: `hubmcp/<version>`), so the Hub's logs attribute MCP traffic.
+- Redaction: `HUB_API_KEY`, `HUB_ADMIN_TOKEN` and, over HTTP, each client's own key are redacted by value from every string attribute and from every tool result (`***`). Bodies are never logged; `tool_called` carries ids only.
+
 ---
 
 ## 5. Tracing
@@ -414,6 +428,8 @@ Accepted request ids are recorded by the k6 script and reconciled against `reque
 ---
 
 ## 14. MCP server observability (`hubmcp`)
+> **Status (2026-11-07):** HUB-300–307 ship the logs of §4.6 and the `User-Agent`; the metrics, span and alert below are planned in HUB-311.
+
 - **Metrics** (on its own ops port in HTTP mode; stdio mode exports via OTLP push or not at all):
   `hubmcp_tool_calls_total{tool, outcome}` (outcome = `ok`, `queued`, `hub_error:<code>`, `invalid_input`, `transport_error`), `hubmcp_tool_duration_seconds{tool}`, `hubmcp_sessions_active{transport}`, `hubmcp_hub_http_requests_total{operation, status}`.
 - **Logs**: §4.1 schema with `role=hubmcp`, `component=tool`, plus `mcp_tool`, `mcp_session` (random id, not user identity). Tool arguments and results are **never logged** (they contain canonical bodies); log `request_id` from Hub responses instead. In stdio mode logs go to **stderr** only (stdout is the protocol channel).

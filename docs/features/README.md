@@ -27,7 +27,7 @@ For a cross-feature, example-driven view (what a caller sends and gets back, and
 | F-17 | hubctl & config-as-code | M7 · EP-08 | shipped | [F-17](F-17-hubctl-config-as-code.md) | US-1701–1704 | HUB-200–229 |
 | F-18 | Observability: metrics, traces, alerts, dashboards, load tests | M8 · EP-09 | proposed | [F-18](F-18-observability.md) | US-1801–1804 | HUB-230–249 |
 | F-19 | Admin console (SvelteKit frontend) | Parallel · EP-10 | proposed | [F-19](F-19-admin-console.md) | US-1901–1906 | HUB-250–299 |
-| F-20 | Hub MCP server (`hubmcp`) | After M3 · EP-11 | proposed | [F-20](F-20-hub-mcp-server.md) | US-2001–2006 | HUB-300–329 |
+| F-20 | Hub MCP server (`hubmcp`) | After M3 · EP-11 | in-progress | [F-20](F-20-hub-mcp-server.md) | US-2001–2006 | HUB-300–329 |
 | F-21 | Consumer Claude skill & Go SDK (`hubclient`) | After M3 · EP-11 | in-progress | [F-21](F-21-claude-skill-sdk.md) | US-2101–2104 | HUB-300–329 |
 | F-22 | Release-2 capabilities | Release 2 · EP-12 | proposed | [F-22](F-22-release-2.md) | US-2201–2208 | HUB-330–399 |
 

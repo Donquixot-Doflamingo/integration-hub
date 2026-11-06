@@ -6,6 +6,42 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(hubmcp)` · Triage the hubmcp context keys for gosec with #nosec (HUB-300) · HUB-300 · F-20
+  - The gosec CI gate (HUB-234) passes on hubmcp: the two context map key names flagged as G101 carry reviewed `#nosec` annotations and are listed in SECURITY.md §8.1
+- 2026-11-07 · `fix(hubmcp)` · Refuse idempotency keys the Idempotency-Key header cannot carry (HUB-303) · HUB-303 · F-20
+  - hub_invoke answers VALIDATION_FAILED for an idempotency_key with spaces or non-ASCII characters instead of a misleading "could not reach the Hub"
+  - The HUB_BASE_URL hint now appears only for real connection failures
+- 2026-11-07 · `test(hubmcp)` · Run hubmcp end to end against a running Hub and mockvendor (HUB-307) · HUB-307 · F-20
+  - The integration suite builds and runs admin, gateway, worker and mockvendor and drives every hubmcp flow: discovery, dry-run, sync invoke, async invoke until succeeded, money/quota refusal and confirmed invoke, admin tools
+  - A grep over every tenant tool output proves no vendor, account or version appears outside hub_dry_run
+  - US-2003 and US-2006 now match the contract (no generated idempotency key; HTTP clients send their tenant key)
+- 2026-11-07 · `test(hubmcp)` · Cover every MCP tool's success and error path and spawn the binary (HUB-306) · HUB-306 · F-20
+  - A contract-driven test runs a success and an error scenario for every tool and checks each tool only calls the Hub operations in its `maps_to`
+  - A protocol smoke test spawns hubmcp over stdio (initialize, tools/list, tools/call)
+  - TESTING_STRATEGY §13 describes the hubmcp suite; follow-ups HUB-311 (metrics/traces), HUB-312 (admin DLQ/versions CCR), HUB-313 (Inspector)
+- 2026-11-07 · `feat(hubmcp)` · Add the read-only hub_admin_* tools for on-call (HUB-305) · HUB-305 · F-20
+  - With HUB_ADMIN_TOKEN set, an assistant can search requests (default: last hour), read a request's timeline and attempts (payloads only on request) and list breaker states
+  - Admin tools only send GETs; they never unseal, replay, purge, pause or force; without a token they are not registered and the server says why
+- 2026-11-07 · `feat(hubmcp)` · Refuse money/quota invokes without confirm and idempotency key (HUB-304) · HUB-304 · F-20
+  - hub_invoke on an integration with `moves_money_or_quota` returns `outcome: refused` (`CONFIRMATION_REQUIRED` or `IDEMPOTENCY_KEY_REQUIRED`) and does not call the Hub until the input has `confirm: true` and an `idempotency_key`
+  - The refusal echoes a summary of the held-back call so the assistant can show the user what would be sent
+- 2026-11-07 · `feat(hubmcp)` · Add the hub_invoke, hub_get_request and hub_dry_run tools (HUB-303) · HUB-303 · F-20
+  - hub_invoke reports 200 as `completed`, 202 as `queued` with the poll URL (never as success) and Hub errors as `error` with the canonical envelope (code, retryable, retry_after_ms, ...)
+  - hub_invoke checks the integration first (cached ≤ 60 s) and does not call a paused one; it retries at most once, only retryable errors, only with an idempotency key
+  - hub_get_request returns a request's status, result or error; hub_dry_run shows the upstream request with every redacted header forced to `***`
+- 2026-11-07 · `feat(hubmcp)` · Add the hub_list_integrations and hub_describe_integration tools (HUB-302) · HUB-302 · F-20
+  - An assistant can list the integrations its tenant may invoke and get each operation's canonical request and response schemas
+  - Outputs carry only caller-API fields; vendor, account and version never appear, even if a Hub response carried them
+  - Hub errors come back as tool results with the canonical error object
+- 2026-11-07 · `feat(hubmcp)` · Serve hubmcp over Streamable HTTP with per-client key auth (HUB-301) · HUB-301 · F-20
+  - `hubmcp -transport http` serves the same tools at `/mcp` (default `127.0.0.1:8090`; `-allow-remote` needed for other addresses)
+  - Each HTTP client authenticates with its own tenant API key as bearer token; hubmcp checks it with the Hub and uses it for that client's calls; requests without a valid key get 401
+  - Cross-origin browser requests are refused; HUB_ADMIN_TOKEN is refused on a remote-reachable listener
+  - ADR-0018 records the HTTP auth, idempotency-key and layout choices
+- 2026-11-07 · `feat(hubmcp)` · Scaffold hubmcp on the official MCP Go SDK over stdio (HUB-300) · HUB-300 · F-20
+  - `hubmcp` starts over stdio and advertises exactly the tools of contracts/mcp/hubmcp-tools.json (admin tools only when HUB_ADMIN_TOKEN is set)
+  - HUB_API_KEY and HUB_ADMIN_TOKEN come from the environment only and are redacted (`***`) in logs and tool output
+  - Tool arguments are validated against the contract input schemas before any Hub call
 - 2026-11-07 · `chore(frontend)` · Regenerate the admin client for contract 1.2.0 (HUB-344) · HUB-344 · F-19
   - The console's generated types and contract mocks include per-operation transformers on integration targets
 - 2026-11-07 · `test(edge)` · Move the OTP example to send_otp and verify_otp (HUB-343) · HUB-343 · F-14

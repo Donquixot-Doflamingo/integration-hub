@@ -6,6 +6,7 @@ package contract
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -253,4 +254,51 @@ func (s *Spec) Operations() []Operation {
 		return strings.Compare(a.Method, b.Method)
 	})
 	return out
+}
+
+// OperationID returns the operationId of the contract operation matching req's method and path.
+func (s *Spec) OperationID(req *http.Request) (string, error) {
+	route, _, err := s.router.FindRoute(req)
+	if err != nil {
+		return "", fmt.Errorf("%s: %s %s is not an operation in the contract: %w", s.name, req.Method, req.URL.Path, err)
+	}
+	return route.Operation.OperationID, nil
+}
+
+// Example returns, as JSON, the application/json response example of operationID for status:
+// the single `example` when name is "", else the entry `name` of `examples`. Response $refs
+// (components.responses) are followed. It fails tb when there is no such example.
+func (s *Spec) Example(tb testing.TB, operationID string, status int, name string) []byte {
+	tb.Helper()
+	for _, path := range s.doc.Paths.InMatchingOrder() {
+		for _, op := range s.doc.Paths.Value(path).Operations() {
+			if op.OperationID != operationID {
+				continue
+			}
+			ref := op.Responses.Status(status)
+			if ref == nil || ref.Value == nil {
+				tb.Fatalf("%s: %s has no %d response", s.name, operationID, status)
+			}
+			mt := ref.Value.Content.Get("application/json")
+			if mt == nil {
+				tb.Fatalf("%s: %s %d has no application/json content", s.name, operationID, status)
+			}
+			var v any
+			switch {
+			case name == "" && mt.Example != nil:
+				v = mt.Example
+			case name != "" && mt.Examples[name] != nil && mt.Examples[name].Value != nil:
+				v = mt.Examples[name].Value.Value
+			default:
+				tb.Fatalf("%s: %s %d has no example %q", s.name, operationID, status, name)
+			}
+			b, err := json.Marshal(v)
+			if err != nil {
+				tb.Fatalf("%s: encode example: %v", s.name, err)
+			}
+			return b
+		}
+	}
+	tb.Fatalf("%s: no operation %s", s.name, operationID)
+	return nil
 }

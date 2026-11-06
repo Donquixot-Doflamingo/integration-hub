@@ -91,7 +91,7 @@ flowchart LR
 | Prompt injection via vendor response causes unwanted `hub_invoke` | E/T | `hub_invoke` annotated destructive so clients ask for confirmation; idempotency key on every invoke; scoped tenant key (grants limit blast radius); recommend `hub_dry_run` first; results are returned as data |
 | Leakage of vendor/account/version to the LLM | I | tools built on discovery endpoints only (ADR-0007); leak test (TESTING §13) |
 | PII to an LLM context | I | admin tools are metadata-only, never unseal, never return payloads; tenant tools return what the tenant already receives |
-| Token handling | S | stdio: key from env; HTTP: per-session `Authorization` forwarded, never stored or logged; bind `127.0.0.1` by default; `Origin` validation (DNS rebinding); TLS required when exposed |
+| Token handling | S | stdio: key from env; HTTP: the client's `Authorization` bearer is its tenant key, checked with the Hub on first use (fingerprint cached 60 s, fail closed when the Hub is unreachable), never stored or logged; bind `127.0.0.1` by default, `-allow-remote` required otherwise; cross-origin and DNS-rebinding requests refused; TLS (terminating proxy) required when exposed; `HUB_ADMIN_TOKEN` refused on a remote-reachable listener (ADR-0018) |
 | Admin token misuse | E | admin tools exist only when `HUB_ADMIN_TOKEN` is set; token should be a `viewer` or `tenant_viewer` role; GET-only client enforced in code |
 
 ## 3. Secrets handling
@@ -209,7 +209,7 @@ Both tools run with `go run <module>@<version>` (pinned in the Makefile; bump de
 | G705 (XSS via `Write`) | `control/adminapi/snapshots.go` (`getSnapshot`) | archived registry JSON served with `Content-Type: application/json`, never HTML; `nosniff` hardening tracked in HUB-248 |
 | G107 / G704 (request to variable URL) | `testkit/contract/contract.go` | test helper calling the test's own server |
 | G404 (math/rand) | `delivery/backoff.go`, `testkit/mockvendor/server.go` | retry jitter and a deterministic test double, not security |
-| G101 (hardcoded credentials) | `cmd/hubctl/creds.go` | usage text that mentions `signing_secret=`; no credential |
+| G101 (hardcoded credentials) | `cmd/hubctl/creds.go`, `cmd/hubmcp/httpserve.go` (`tokenExtra*`) | usage text that mentions `signing_secret=`; context map key names; no credential |
 
 ## 9. Security testing
 SSRF, signature, redaction and secret-grep tests (TESTING_STRATEGY §2, §3, §5); the role-log secret grep (HUB-234, below); fuzzing of parsers (§8); RBAC table test generated from §7 (every role × action → expected 2xx/403); dependency and image scans (§8); a pre-production review of the threat model before the first real vendor account is created.

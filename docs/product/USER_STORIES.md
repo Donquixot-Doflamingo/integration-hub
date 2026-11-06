@@ -529,7 +529,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-2003 — Guarded invoke
 **As an** AI-assisted developer, **I want** `hub_invoke` to require `confirm: true` for integrations with `moves_money_or_quota: true`, **so that** an assistant cannot trigger real side effects by accident. · **Must**
 - **Given** a `moves_money_or_quota` integration and no `confirm: true` or no `idempotency_key`, **when** Claude calls `hub_invoke`, **then** the tool returns `outcome: refused` and explains it needs explicit confirmation, without calling the Hub.
-- **Given** `confirm: true`, **when** called, **then** it sends with an auto-generated `Idempotency-Key` (unless one is provided) and returns `Result` or `Queued` distinctly.
+- **Given** `confirm: true` and an `idempotency_key`, **when** called, **then** it sends that `Idempotency-Key` and returns `outcome: completed` or `outcome: queued` distinctly. No key is generated: the frozen tool contract requires the caller's key for these integrations (ADR-0018).
 
 ### US-2004 — Check a request
 **As an** AI-assisted developer, **I want** `hub_get_request`, **so that** Claude can poll a 202. · **Must**
@@ -542,7 +542,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 
 ### US-2006 — Transports
 **As an** AI-assisted developer, **I want** stdio and streamable HTTP transports, **so that** I can run it locally or share it. · **Should**
-- **Given** `hubmcp --transport stdio`, **when** started by Claude Code, **then** tools list within 1 s; given `--transport http --addr :8090`, the same tools are served.
+- **Given** `hubmcp --transport stdio`, **when** started by Claude Code, **then** tools list within 1 s; given `--transport http --addr 127.0.0.1:8090` (a non-loopback address also needs `--allow-remote`), the same tools are served at `/mcp` to clients that send their tenant API key as bearer token (ADR-0018).
 
 ## F-21 Consumer Claude skill & Go SDK (`hubclient`)
 
