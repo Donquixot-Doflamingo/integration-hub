@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · Mark the tickets merged in #17 to #26 done (HUB-237) · HUB-237 · F-18
+  - 20 tickets set to done with their merge commit subjects: HUB-156, HUB-231 to HUB-234, HUB-238, HUB-239, HUB-300 to HUB-307, HUB-342 to HUB-345
+  - Open criteria stay visible: the Grafana import check (HUB-243) and the 10-run itest soak (checked in HUB-236)
 - 2026-11-07 · `fix(hubmcp)` · Triage the hubmcp context keys for gosec with #nosec (HUB-300) · HUB-300 · F-20
   - The gosec CI gate (HUB-234) passes on hubmcp: the two context map key names flagged as G101 carry reviewed `#nosec` annotations and are listed in SECURITY.md §8.1
 - 2026-11-07 · `fix(hubmcp)` · Refuse idempotency keys the Idempotency-Key header cannot carry (HUB-303) · HUB-303 · F-20
