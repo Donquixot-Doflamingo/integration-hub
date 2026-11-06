@@ -1,0 +1,138 @@
+# promtool unit tests for the hub-platform group (HUB-232). Run: promtool test rules deploy/alerts/*_test.yml
+rule_files:
+  - hub.rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # SnapshotBehind: version 8 is published at 4m. gw-2 catches up within a minute, wk-1 is stuck.
+  - name: a node still behind the newest snapshot after 60 s warns
+    interval: 1m
+    input_series:
+      - series: 'snapshot_version{instance="gw-1"}'
+        values: '7x3 8x10'
+      - series: 'snapshot_version{instance="gw-2"}'
+        values: '7x4 8x9'
+      - series: 'snapshot_version{instance="wk-1"}'
+        values: '7x14'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: SnapshotBehind
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: SnapshotBehind
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+              instance: wk-1
+            exp_annotations:
+              summary: "wk-1 serves an old config snapshot for more than 60 s"
+              description: "wk-1 is 1 snapshot version(s) behind the newest one served in the fleet."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/SnapshotBehind.md"
+
+  # CredentialExpiringSoon: crosses 7 days at 20m, warns after an hour below.
+  - name: credential slot below 7 days for an hour warns
+    interval: 1m
+    input_series:
+      - series: 'credential_expiry_days{account="acc_ct_1",slot="active",instance="gw-1"}'
+        values: '7.5x19 6.4x70'
+      - series: 'credential_expiry_days{account="acc_ct_1",slot="active",instance="gw-2"}'
+        values: '7.5x19 6.4x70'
+      - series: 'credential_expiry_days{account="acc_ct_1",slot="next",instance="gw-1"}'
+        values: '30x89'
+    alert_rule_test:
+      - eval_time: 79m
+        alertname: CredentialExpiringSoon
+        exp_alerts: []
+      - eval_time: 80m
+        alertname: CredentialExpiringSoon
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+              account: acc_ct_1
+              slot: active
+            exp_annotations:
+              summary: "The active credential of account acc_ct_1 expires in less than 7 days"
+              description: "The active credential slot of account acc_ct_1 expires in 6.4 day(s). Rotate it."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/CredentialExpiringSoon.md"
+
+  # HubOverheadP99High: 5 % of sync requests take 5-10 ms -> p99 = 9 ms.
+  - name: sync overhead p99 above 5 ms for 10 minutes warns
+    interval: 1m
+    input_series:
+      - series: 'hub_overhead_ms_bucket{integration="int_bureau",mode="sync",le="5",instance="gw-1"}'
+        values: '0+950x20'
+      - series: 'hub_overhead_ms_bucket{integration="int_bureau",mode="sync",le="10",instance="gw-1"}'
+        values: '0+1000x20'
+      - series: 'hub_overhead_ms_bucket{integration="int_bureau",mode="sync",le="+Inf",instance="gw-1"}'
+        values: '0+1000x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HubOverheadP99High
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: HubOverheadP99High
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+            exp_annotations:
+              summary: "Hub overhead p99 above 5 ms for 10 minutes"
+              description: "p99 of hub_overhead_ms on sync and wait requests is 9.00 ms (SLO S1: 5 ms)."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/HubOverheadP99High.md"
+
+  # 0.5 % of sync requests above 5 ms is within S1; slow async accepts are not part of S1.
+  - name: sync overhead within budget does not warn, whatever async accepts take
+    interval: 1m
+    input_series:
+      - series: 'hub_overhead_ms_bucket{integration="int_bureau",mode="sync",le="5",instance="gw-1"}'
+        values: '0+995x20'
+      - series: 'hub_overhead_ms_bucket{integration="int_bureau",mode="sync",le="10",instance="gw-1"}'
+        values: '0+1000x20'
+      - series: 'hub_overhead_ms_bucket{integration="int_bureau",mode="sync",le="+Inf",instance="gw-1"}'
+        values: '0+1000x20'
+      - series: 'hub_overhead_ms_bucket{integration="int_events",mode="async",le="5",instance="gw-1"}'
+        values: '0x20'
+      - series: 'hub_overhead_ms_bucket{integration="int_events",mode="async",le="10",instance="gw-1"}'
+        values: '0+500x20'
+      - series: 'hub_overhead_ms_bucket{integration="int_events",mode="async",le="+Inf",instance="gw-1"}'
+        values: '0+1000x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: HubOverheadP99High
+        exp_alerts: []
+
+  # AuditEventsDropped: a first dropped batch (new series) and a later drop on an existing series.
+  - name: audit drops warn, including the first drop of a reason
+    interval: 1m
+    input_series:
+      - series: 'audit_events_dropped_total{reason="buffer_full",instance="gw-1"}'
+        values: '_x11 37x29'
+      - series: 'audit_events_dropped_total{reason="write_error",instance="gw-1"}'
+        values: '5x20 9x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AuditEventsDropped
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: AuditEventsDropped
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+              reason: buffer_full
+            exp_annotations:
+              summary: "Audit events dropped (buffer_full)"
+              description: "37 audit event(s) were dropped with reason buffer_full in the last 5 minutes; their requests have an incomplete audit trail."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/AuditEventsDropped.md"
+      - eval_time: 21m
+        alertname: AuditEventsDropped
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+              reason: write_error
+            exp_annotations:
+              summary: "Audit events dropped (write_error)"
+              description: "5 audit event(s) were dropped with reason write_error in the last 5 minutes; their requests have an incomplete audit trail."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/AuditEventsDropped.md"
+      - eval_time: 30m
+        alertname: AuditEventsDropped
+        exp_alerts: []

@@ -1,0 +1,166 @@
+# Integration Hub alert rules (DESIGN §16.3, docs/tech/OBSERVABILITY.md §11, HUB-232).
+#
+# Every expression uses only metric and label names the backend exports today; the Go test
+# TestDeployQueriesUseExportedMetrics (backend/cmd/hub/internal/roles) fails CI otherwise.
+# Unit tests: deploy/alerts/*_test.yml (promtool test rules). Severity is page or warn.
+# Runbooks: docs/runbooks/<alertname>.md (HUB-237).
+#
+# Two counters the design planned (vendor_attempts_total, dlq_entries_total) do not exist yet, so
+# the auth/transform alerts read the final-outcome counter hub_requests_total and the DLQ alert
+# reads the dlq_count gauge (ADR-0014; HUB-241 adds the counters).
+#
+# "Any X" on a counter: hub_requests_total and audit_events_dropped_total create a series on its
+# first increment, and increase() needs two samples of a series, so a plain increase() never sees
+# the first failure of a new label set. Each "any" alert therefore has a second branch: a series
+# that exists now and had no sample in the hour before the last 5 minutes is a new series, whose
+# value is all new events.
+groups:
+  - name: hub-resilience
+    rules:
+      - alert: BreakerOpenTooLong
+        # 0 closed, 1 half_open, 2 open. An open breaker turns half_open for its probe and back to
+        # open while the vendor is still down, so "not closed" is what must last 5 minutes. Every
+        # node reports its own view; max is the most pessimistic.
+        expr: max by (vendor, account, endpoint) (breaker_state) >= 1
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Circuit for {{ $labels.account }} / {{ $labels.endpoint }} has not closed for 5 minutes"
+          description: "The breaker of vendor {{ $labels.vendor }}, account {{ $labels.account }}, endpoint {{ $labels.endpoint }} has been open or half-open for more than 5 minutes. Sync calls fail fast and async work is parking."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/BreakerOpenTooLong.md"
+
+      - alert: ParkedOldestAgeHigh
+        # Only the scheduler leader samples the parked backlog. A former leader keeps its last values
+        # (HUB-242), so only series of the process that currently leads count.
+        expr: max by (account, endpoint) (parked_oldest_age_s and on (instance) (scheduler_leader == 1)) > 600
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "Parked backlog of {{ $labels.account }} / {{ $labels.endpoint }} is older than 10 minutes"
+          description: "The oldest parked envelope for account {{ $labels.account }}, endpoint {{ $labels.endpoint }} is {{ $value | humanizeDuration }} old."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/ParkedOldestAgeHigh.md"
+
+  - name: hub-delivery
+    rules:
+      - alert: QueueOldestAgeHigh
+        # Age of the oldest due, unclaimed envelope; backoff waits do not count (OBSERVABILITY §3.2).
+        expr: max by (pool) (queue_oldest_age_s) > 120
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "Workers of pool {{ $labels.pool }} are more than 2 minutes behind"
+          description: "The oldest due envelope of pool {{ $labels.pool }} has waited {{ $value | humanizeDuration }} for a worker."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/QueueOldestAgeHigh.md"
+
+      - alert: DLQSurge
+        # Net growth of unreplayed dead letters per account over 10 minutes (dlq_count is a gauge,
+        # sampled by the scheduler leader every 10 s). First branch: the account had dead letters
+        # 10 minutes ago. Second branch: it had none in the 10 minutes before that, so all of its
+        # current dead letters are new. A gap in the samples at exactly t-10m (leader change) makes
+        # the first branch absent and the second one suppressed, never a false page.
+        expr: |
+          (
+              sum by (account) (dlq_count) - sum by (account) (dlq_count offset 10m)
+            or
+              sum by (account) (dlq_count) unless sum by (account) (max_over_time(dlq_count[10m] offset 10m))
+          ) > 50
+        labels:
+          severity: page
+        annotations:
+          summary: "More than 50 new dead letters in 10 minutes for account {{ $labels.account }}"
+          description: "Unreplayed dead letters of account {{ $labels.account }} grew by {{ $value | humanize }} in the last 10 minutes."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/DLQSurge.md"
+
+  - name: hub-errors
+    rules:
+      - alert: UpstreamAuthFailed
+        # Auth failures are never retried (sync: returned; async: dead-lettered at once), so the
+        # final-outcome counter sees every one.
+        expr: |
+          sum by (vendor, account) (increase(hub_requests_total{code="UPSTREAM_AUTH_FAILED"}[5m])) > 0
+          or
+          sum by (vendor, account) (
+              hub_requests_total{code="UPSTREAM_AUTH_FAILED"}
+            unless
+              max_over_time(hub_requests_total{code="UPSTREAM_AUTH_FAILED"}[1h] offset 5m)
+          ) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "Vendor rejected the Hub's credentials for account {{ $labels.account }}"
+          description: "{{ $value | humanize }} request(s) to vendor {{ $labels.vendor }}, account {{ $labels.account }} ended in UPSTREAM_AUTH_FAILED in the last 5 minutes."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/UpstreamAuthFailed.md"
+
+      - alert: TransformFailed
+        # Always a Hub bug (DESIGN §4.4). Counted when the request ends; a transformer time-budget
+        # overrun on an async attempt retries and is only counted if the request finally fails.
+        expr: |
+          sum by (integration) (increase(hub_requests_total{code="TRANSFORM_FAILED"}[5m])) > 0
+          or
+          sum by (integration) (
+              hub_requests_total{code="TRANSFORM_FAILED"}
+            unless
+              max_over_time(hub_requests_total{code="TRANSFORM_FAILED"}[1h] offset 5m)
+          ) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "Transformer failures on integration {{ $labels.integration }}"
+          description: "{{ $value | humanize }} request(s) of integration {{ $labels.integration }} ended in TRANSFORM_FAILED in the last 5 minutes."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/TransformFailed.md"
+
+  - name: hub-platform
+    rules:
+      - alert: SnapshotBehind
+        # Every node reports the snapshot version it serves; a publish reaches all nodes within
+        # 10 s (S5), so a node still behind the newest version after 60 s is stuck.
+        expr: (scalar(max(snapshot_version)) - snapshot_version) > 0
+        for: 1m
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $labels.instance }} serves an old config snapshot for more than 60 s"
+          description: "{{ $labels.instance }} is {{ $value }} snapshot version(s) behind the newest one served in the fleet."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/SnapshotBehind.md"
+
+      - alert: CredentialExpiringSoon
+        # Computed at scrape time from each slot's expiry; negative once expired.
+        expr: min by (account, slot) (credential_expiry_days) < 7
+        for: 1h
+        labels:
+          severity: warn
+        annotations:
+          summary: "The {{ $labels.slot }} credential of account {{ $labels.account }} expires in less than 7 days"
+          description: "The {{ $labels.slot }} credential slot of account {{ $labels.account }} expires in {{ $value | printf \"%.1f\" }} day(s). Rotate it."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/CredentialExpiringSoon.md"
+
+      - alert: HubOverheadP99High
+        # S1 covers sync and wait-mode requests; async accepts have their own 10 ms target. 5 ms is
+        # a bucket boundary, so the quantile crosses it exactly when > 1 % of requests exceed 5 ms.
+        expr: histogram_quantile(0.99, sum by (le) (rate(hub_overhead_ms_bucket{mode=~"sync|wait"}[5m]))) > 5
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Hub overhead p99 above 5 ms for 10 minutes"
+          description: "p99 of hub_overhead_ms on sync and wait requests is {{ $value | printf \"%.2f\" }} ms (SLO S1: 5 ms)."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/HubOverheadP99High.md"
+
+      - alert: AuditEventsDropped
+        expr: |
+          sum by (reason) (increase(audit_events_dropped_total[5m])) > 0
+          or
+          sum by (reason) (
+              audit_events_dropped_total
+            unless
+              max_over_time(audit_events_dropped_total[1h] offset 5m)
+          ) > 0
+        labels:
+          severity: warn
+        annotations:
+          summary: "Audit events dropped ({{ $labels.reason }})"
+          description: "{{ $value | humanize }} audit event(s) were dropped with reason {{ $labels.reason }} in the last 5 minutes; their requests have an incomplete audit trail."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/AuditEventsDropped.md"

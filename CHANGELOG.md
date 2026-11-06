@@ -40,6 +40,38 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - New ticket HUB-342 (use-case catalogue and runnable OTP example), in progress
   - Gaps found while scoping it: per-operation transformers (HUB-343) and their admin contract change (HUB-344), refusing multi-operation configs that would misroute today (HUB-345), a canonical reason on error rules (HUB-346), the lookup result cache (HUB-347) and the upload + job pattern (HUB-348)
   - Ticket counters recomputed (they were one ticket behind for EP-09)
+- 2026-11-07 · `fix(delivery)` · Base the drain quota on elapsed time so late ticks don't slow the ramp (HUB-155) · HUB-155 · F-12
+  - The ramped drain keeps its DESIGN §10.5 rate on a busy scheduler: a late or dropped tick is made up (at most 2 ticks' worth, so no burst)
+  - Fixes the intermittent TestChaos2RecoveryAndRampedDrain failure on CI
+- 2026-11-06 · `feat(control)` · Erase a data subject's stored payloads by identifier (HUB-233) · HUB-233 · F-18
+  - New `hub erase-subject -tenant -actor -reason [-since] [-until] [-dry-run]` reads the identifier from stdin and purges every stored body of the tenant's requests that hold it in any stored form: raw, JSON-escaped, masked HMAC, or inside sealed payloads
+  - Event payloads become `omitted` with `meta.pii_erased`; kept results, dead-letter canonical bodies and last vendor exchanges, delivered callback payloads and matching vendor sessions are removed. Hashes, sizes, timelines and metadata stay
+  - Requests still queued or with callbacks to deliver are deferred (exit 3) for a re-run; erased dead letters can no longer be replayed
+  - Every run appends one `change_log` row (`eraseSubjectPayloads`) with a subject reference, never the identifier; a missing seal key with sealed rows present fails without changing anything
+
+- 2026-11-06 · `docs(tickets)` · Track subject index, replay records and erasure CCR (HUB-233) · HUB-233 · F-18
+  - HUB-233 in progress; new todo tickets HUB-245 (hashed subject index), HUB-246 (idempotency replay records of erased requests) and HUB-247 (CCR: admin operation eraseSubjectPayloads)
+  - Ticket totals corrected to the actual count (202)
+
+- 2026-11-06 · `docs(adr)` · Renumber the alerting ADRs to 0014/0015 and follow-up tickets to HUB-241–244 (HUB-232) · HUB-232 · F-18
+  - ADR-0012/0013 and HUB-245–247 are taken by the erasure and tracing work merging alongside; references updated
+- 2026-11-06 · `docs(tickets)` · Set HUB-232 in review and file its follow-ups (HUB-232) · HUB-232 · F-18
+  - HUB-232 in review: §16.3 rules with promtool tests done; Grafana import check left open (HUB-243)
+  - New todo tickets: HUB-241 attempt and DLQ counters, HUB-242 parked gauges kept by a former scheduler leader, HUB-243 Grafana import check, HUB-244 OBSERVABILITY §11.2 alert rules
+  - HUB-237 lists the ten runbook files the alert rules link
+- 2026-11-06 · `ci(backend)` · Check alert rules and dashboards in CI (HUB-232) · HUB-232 · F-18
+  - New backend CI job monitoring: installs promtool 3.4.2 from the release tarball (SHA-256 verified) and runs make monitoring
+  - deploy/README.md documents the rule file, dashboard import and the checks
+- 2026-11-06 · `test(roles)` · Check deploy queries against exported metrics (HUB-232) · HUB-232 · F-18
+  - Every alert rule and dashboard query is parsed with the PromQL parser; an unknown metric, label matcher, by() or on() label fails the backend tests with the alert or panel name
+  - Dashboards are linted: stable uid, unique panel ids, data source only through ${datasource}, every variable defined
+  - Every DESIGN §16.3 alert must have one rule with its runbook link and a firing and a non-firing promtool case
+  - make monitoring runs promtool check/test and these tests (ADR-0015; github.com/prometheus/prometheus is a test-only dependency)
+- 2026-11-06 · `chore(deploy)` · Add DESIGN §16.3 alert rules and dashboards (HUB-232) · HUB-232 · F-18
+  - deploy/alerts/hub.rules.yaml: the ten §16.3 alerts (six page, four warn), each with summary, description and a docs/runbooks/<AlertName>.md link; promtool unit tests with a firing and a non-firing case per alert
+  - "Any" alerts (UPSTREAM_AUTH_FAILED, TRANSFORM_FAILED, audit drops) also fire on the first event of a new label set, which a plain increase() misses
+  - Auth, transform and DLQ alerts read hub_requests_total and dlq_count until attempt and DLQ counters exist (ADR-0014, HUB-241)
+  - deploy/dashboards: tenant, vendor/account and platform Grafana dashboards, data source chosen through a variable
 - 2026-11-06 · `docs(tickets)` · Close HUB-230 and track HUB-238/HUB-239 for review (HUB-239) · HUB-239 · F-18
   - HUB-230 done (PR #16 merged); HUB-238 in review; new ticket HUB-239 for the registry watch flake
 - 2026-11-06 · `test(registry)` · Write config edits atomically in the watch test (HUB-239) · HUB-239 · F-03

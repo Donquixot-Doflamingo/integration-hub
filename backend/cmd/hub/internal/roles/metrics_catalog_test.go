@@ -8,11 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/callbacks"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/delivery"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/idempotency"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
 )
@@ -41,6 +45,19 @@ func (noStore) EnsurePartitions(context.Context, time.Time, int) error { return 
 // (dataplane.go, registry.go) on one registry and checks the registry describes each §16.2 name.
 // Describe lists vector metrics before their first observation, so nothing has to be emitted.
 func TestDesignMetricsAreRegistered(t *testing.T) {
+	got := describedNames(catalogRegistry(t))
+	for _, name := range designMetrics {
+		if !slices.Contains(got, name) {
+			t.Errorf("DESIGN §16.2 metric %q is not registered", name)
+		}
+	}
+}
+
+// catalogRegistry registers every metric owner the roles wire (dataplane.go, registry.go) on one
+// registry, the way the data plane, scheduler and callback dispatcher do, without starting
+// anything. It is the source of truth for the names alert rules and dashboards may use.
+func catalogRegistry(t *testing.T) *prometheus.Registry {
+	t.Helper()
 	log := slog.New(slog.DiscardHandler)
 	m := telemetry.NewMetrics("test", "dev")
 
@@ -53,21 +70,38 @@ func TestDesignMetricsAreRegistered(t *testing.T) {
 	(&delivery.Resilience{}).RegisterMetrics(m.Registry)
 	(&delivery.QueueSampler{}).RegisterMetrics(m.Registry)
 	(&delivery.Scheduler{}).RegisterMetrics(m.Registry)
+	delivery.NewShadower(nil, nil, log, m.Registry)
 	audit.NewWriter(noStore{}, m, audit.WriterOptions{})
 	if _, err := creds.NewCache(noLoader{}, telemetry.NewSecretSet(), m, creds.CacheOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	idempotency.New(nil, m, idempotency.Options{})
+	if _, err := callbacks.NewEnqueuer(noSnapshots{}, m, callbacks.EnqueueOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	// The dispatcher only stores the pool; nothing is queried before Run.
+	if _, err := callbacks.NewDispatcher(callbacks.DispatcherDeps{
+		Pool: new(pgxpool.Pool), Snapshots: noSnapshots{}, Secrets: noSecrets{}, Audit: noSink{}, Metrics: m, Log: log,
+	}, callbacks.DispatcherOptions{ID: "catalog"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := newRegistry(Config{BlobURL: "file://" + t.TempDir()}, m, log, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-
-	got := describedNames(m.Registry)
-	for _, name := range designMetrics {
-		if !slices.Contains(got, name) {
-			t.Errorf("DESIGN §16.2 metric %q is not registered", name)
-		}
-	}
+	return m.Registry
 }
+
+type noSnapshots struct{}
+
+func (noSnapshots) Snapshot() *registry.Snapshot { return nil }
+
+type noSecrets struct{}
+
+func (noSecrets) SigningSecrets(context.Context, string) ([][]byte, error) { return nil, nil }
+
+type noSink struct{}
+
+func (noSink) Emit(audit.Batch) {}
 
 // describedNames returns the fqName of every descriptor the registry's collectors describe.
 func describedNames(reg *prometheus.Registry) []string {
