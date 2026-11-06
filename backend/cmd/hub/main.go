@@ -1,5 +1,6 @@
 // Command hub runs one Hub role: gateway, worker, scheduler or admin (DESIGN §17).
-// `hub migrate` applies the embedded database migrations.
+// `hub migrate` applies the embedded database migrations; `hub erase-subject` purges a data
+// subject's stored payloads (DESIGN §16.5).
 package main
 
 import (
@@ -32,6 +33,7 @@ roles:
   scheduler   retries, drain, TTL expiry, health probes (leader-elected)
   admin       control plane (/admin/v1)
   migrate     apply database migrations and exit
+  erase-subject  purge a subject's stored payloads by identifier (stdin) and exit
 
 Run "hub <role> -h" for flags. Configuration: flags > HUB_* env > defaults (TECH_SPEC §8.1).`
 
@@ -53,6 +55,10 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 			return 1
 		}
 		return 0
+	}
+
+	if args[0] == "erase-subject" {
+		return eraseSubjectCmd(ctx, args[1:], getenv, os.Stdin, stdout, stderr)
 	}
 
 	role, err := roles.ParseRole(args[0])

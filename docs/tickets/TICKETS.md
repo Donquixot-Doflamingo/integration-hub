@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **198** · done: **156** · todo: **41** · other (in-progress/in-review/blocked): **1**
+Total tickets: **209** · done: **157** · todo: **46** · other (in-progress/in-review/blocked): **6**
 
 ## Epics
 
@@ -17,7 +17,7 @@ Total tickets: **198** · done: **156** · todo: **41** · other (in-progress/in
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 15 | 15 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 16 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
-| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 12 | 1 |
+| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 19 | 1 |
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 36 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 11 | 0 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 11 | 0 |
@@ -1683,26 +1683,30 @@ OTel spans for edge, transform, upstream and callback; accept caller `traceparen
 
 ### HUB-232 — Alert rules and dashboards as code
 - **Epic:** EP-09 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-230 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-review · **Depends on:** HUB-230 · **Feature:** F-18 · **Stories:** US-1801, US-1804
 - **Branch:** `chore/HUB-232-alerts-dashboards`
 
 Prometheus alert rules for every §16.3 alert with `promtool` unit tests, and dashboards JSON for tenant, vendor and platform views in `deploy/`.
 
+Shipped: `deploy/alerts/hub.rules.yaml` + `*_test.yml`, `deploy/dashboards/{tenant,vendor,platform}.json`, `make monitoring` and CI job `monitoring` (promtool 3.4.2 check + test; Go tests that parse every rule and panel query and fail on names the registry does not export). Rules use only exported metrics: ADR-0014 (auth/transform/DLQ sources until HUB-241), ADR-0015 (query check).
+
 **Acceptance criteria**
-- [ ] Each §16.3 alert has a rule and a passing promtool test
-- [ ] Dashboards load in Grafana (CI JSON lint + import check)
+- [x] Each §16.3 alert has a rule and a passing promtool test
+- [ ] Dashboards load in Grafana (CI JSON lint + import check) — JSON lint, structure and exported-metrics check run in CI (`TestDashboardsAreValidAndUseExportedMetrics`); the Grafana import check is not done (no Grafana in CI or the dev container): HUB-243
 
 ### HUB-233 — PII deletion job by subject identifier
 - **Epic:** EP-09 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-093, HUB-208 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** in-review · **Depends on:** HUB-093, HUB-208 · **Feature:** F-18 · **Stories:** US-1805
 - **Branch:** `feat/HUB-233-pii-deletion`
 
 Job that purges stored payloads by subject identifier using `x-pii` tags while keeping hashes and metadata (DESIGN §16.5).
 
+Shipped as the `hub erase-subject` maintenance command, because the admin contract has no erasure operation (CCR: HUB-247). See ADR-0012 and SECURITY §4.1. Follow-ups: HUB-245 (subject index) and HUB-246 (Redis idempotency replay records).
+
 **Acceptance criteria**
-- [ ] After deletion, no stored body contains the subject identifier (grep test)
-- [ ] Hashes, sizes and timelines remain
-- [ ] Deletion recorded in change_log
+- [x] After deletion, no stored body contains the subject identifier (grep test): `TestEraseSubjectPurgesEveryStoredBody` greps every bytea/json/jsonb/text column of every `hub` table and opens the sealed payloads
+- [x] Hashes, sizes and timelines remain: same test, before/after comparison of events (sha256, bytes, type, time, meta), requests, attempts, dead-letter and callback metadata
+- [x] Deletion recorded in change_log: same test, one `eraseSubjectPayloads` row per run with actor, reason, counts and `subject_ref`; the dry run writes none
 
 ### HUB-234 — Security hardening checks
 - **Epic:** EP-09 · **Type:** chore · **Area:** backend
@@ -1746,7 +1750,7 @@ Multi-hour soak with randomised mockvendor outages and worker restarts; reconcil
 - **Status:** todo · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-18xx
 - **Branch:** `docs/HUB-237-runbooks-m8`
 
-Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`, credential rotation, snapshot lag; post the M8 wrap-up.
+Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`, credential rotation, snapshot lag; post the M8 wrap-up. The alert rules (HUB-232) link `docs/runbooks/<AlertName>.md` for all ten alerts in `deploy/alerts/hub.rules.yaml` (six page, four warn).
 
 **Acceptance criteria**
 - [ ] Each paging alert links a runbook
@@ -1785,6 +1789,168 @@ Found in HUB-234: SECURITY.md §2.1 lists `ReadHeaderTimeout` 5 s, a read timeou
 **Acceptance criteria**
 - [ ] A body sent slower than the read deadline is cut off (test with a dripping client)
 - [ ] Oversized headers are refused with 431; documented values in SECURITY.md §2.1
+### HUB-245 — Hashed subject index for the erasure job
+- **Epic:** EP-09 · **Type:** perf · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-233 · **Feature:** F-18 · **Stories:** US-1805
+- **Branch:** `perf/HUB-245-subject-index`
+
+`hub erase-subject` (HUB-233, ADR-0012) finds a subject's requests by scanning every event of the tenant in the window and opening every sealed payload, which is linear in the tenant's history. Record a keyed hash of each `x-pii` identifier value (HMAC with the erase-ref domain label, per tenant) per request, off the hot path: in the audit writer batch, not in the request goroutine. Store it in a day-partitioned `request_subjects` table owned by `audit`, so the job reads only the subject's request ids. The full scan stays as a `-scan` fallback for rows written before the index existed.
+
+**Acceptance criteria**
+- [ ] The erasure reads only the subject's rows when the index covers the window (EXPLAIN in an integration test)
+- [ ] No per-request work on the sync path beyond the existing audit batch (benchmark unchanged within noise)
+- [ ] HUB-233 grep test still passes with the index
+
+### HUB-246 — Purge idempotency replay records of erased requests
+- **Epic:** EP-09 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-233 · **Feature:** F-18 · **Stories:** US-1805
+- **Branch:** `feat/HUB-246-erase-idempotency-records`
+
+Redis idempotency records keep the replayable 200/202 body for 24 h (F-10). `hub erase-subject` (HUB-233) does not touch them: `Release` would let a retry with the same key run fresh, and for `moves_money_or_quota` integrations that can double-charge. Replace the stored body of an erased request's record with a tombstone that still answers the key, for example a 409 or a body-less replay. Keep the key reserved until its TTL, and make the change through an idempotency port that the erasure command calls after its transaction commits.
+
+**Acceptance criteria**
+- [ ] After erasure, the Redis record of an erased request holds no body, and a retry with the same key does not reach the vendor
+- [ ] Decision on the replay answer recorded (ADR or F-10 update) and, if it changes the caller response, a CCR first
+
+### HUB-247 — CCR: admin operation for subject erasure
+- **Epic:** EP-09 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** HUB-233 · **Feature:** F-18 · **Stories:** US-1805
+- **Branch:** `contract/HUB-247-erase-subject`
+
+HUB-233 shipped the erasure as the `hub erase-subject` maintenance command because `hub-admin.v1.yaml` has no such operation (ADR-0012). An admin operation gives it RBAC, a console screen and the same `change_log` row.
+
+### CCR: Subject erasure operation
+- **Requested by**: backend-engineer (ticket HUB-233)
+- **Why**: US-1805, F-18, DESIGN §16.5. Compliance must purge a data subject's stored payloads without shell access to a node, under admin RBAC.
+- **Document**: hub-admin.v1.yaml
+- **Operation / schema**: `eraseSubjectPayloads`, `POST /subjects/erase` (role `admin`; the identifier travels in the body, never in the URL or query, so access logs never see it)
+- **Before**:
+  ```yaml
+  # does not exist
+  ```
+- **After**:
+  ```yaml
+  /subjects/erase:
+    post:
+      operationId: eraseSubjectPayloads
+      tags: [requests]
+      summary: Purge a data subject's stored payloads (audited)
+      description: |
+        admin only. Purges every stored body of the tenant's requests that hold the identifier
+        (any stored form: raw, masked HMAC, inside sealed payloads), keeping hashes, sizes,
+        timelines and metadata (DESIGN §13.3, §16.5). Requests still queued or with callbacks to
+        deliver are deferred and listed; call again once they are terminal. One change_log row
+        (action eraseSubjectPayloads) unless dry_run. The identifier is never stored or logged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubjectErasureRequest' }
+            example: { tenant_id: lending-app, subject: ABCDE1234F, reason: "Erasure request PRIV-42", dry_run: false }
+      responses:
+        '200':
+          description: Erasure done (possibly with deferred requests).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubjectErasureResult' }
+              example:
+                change_id: chg_01JC0000000000000000000000
+                subject_ref: subject:8c4dd35326648b733a76c00b7a83bf38
+                tenant_id: lending-app
+                dry_run: false
+                erased_request_ids: [req_01JC0000000000000000000001]
+                deferred_request_ids: []
+                counts: { events: 6, results: 1, dead_letters: 0, callbacks: 1, sessions: 0 }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: 'CONFLICT: sealed payloads exist but no seal key is configured; nothing changed.' }
+  components:
+    schemas:
+      SubjectErasureRequest:
+        type: object
+        required: [tenant_id, subject, reason]
+        properties:
+          tenant_id: { type: string }
+          subject: { type: string, minLength: 3, maxLength: 256, description: 'The identifier. Never echoed back.' }
+          reason: { type: string, minLength: 10, maxLength: 1024 }
+          since: { type: [string, 'null'], format: date-time }
+          until: { type: [string, 'null'], format: date-time }
+          dry_run: { type: boolean, default: false }
+      SubjectErasureResult:
+        type: object
+        required: [change_id, subject_ref, tenant_id, dry_run, erased_request_ids, deferred_request_ids, counts]
+        properties:
+          change_id: { type: [string, 'null'], description: 'null for a dry run' }
+          subject_ref: { type: string, description: 'HMAC reference recorded in change_log; not a stored form of the identifier.' }
+          tenant_id: { type: string }
+          dry_run: { type: boolean }
+          erased_request_ids: { type: array, items: { $ref: '#/components/schemas/RequestIdValue' } }
+          deferred_request_ids: { type: array, items: { $ref: '#/components/schemas/RequestIdValue' } }
+          counts:
+            type: object
+            required: [events, results, dead_letters, callbacks, sessions]
+            properties:
+              events: { type: integer, minimum: 0 }
+              results: { type: integer, minimum: 0 }
+              dead_letters: { type: integer, minimum: 0 }
+              callbacks: { type: integer, minimum: 0 }
+              sessions: { type: integer, minimum: 0 }
+  # Optional, additive: add `subject` to ObjectType if change_log rows should name the subject
+  # reference as their object (today: object_type request, object_id = id | bulk | none).
+  ```
+- **Breaking?**: no (additive). `info.version` 1.1.0 → 1.2.0
+- **Consumers affected**: backend (`internal/control/adminapi` handler over `control.Erasure`), frontend (optional compliance screen), hubmcp (none: admin tools stay metadata-only, SECURITY §2.5)
+- **Error codes**: VALIDATION_FAILED, UNAUTHORIZED, FORBIDDEN, CONFLICT (no seal key), INTERNAL_ERROR; no new code
+- **Rollout**: contract PR first; the handler reuses `control.Erasure` unchanged
+
+**Acceptance criteria**
+- [ ] Steward reviewed and merged the contract change (or rejected with reasons)
+- [ ] Backend handler + contract test; RBAC table row added (SECURITY §7)
+### HUB-241 — Attempt-level and DLQ counters for the auth, transform and DLQ alerts
+- **Epic:** EP-09 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-232 · **Feature:** F-18 · **Stories:** US-1801
+- **Branch:** `feat/HUB-241-attempt-dlq-counters`
+
+OBSERVABILITY §3.3 plans `vendor_attempts_total{vendor,account,endpoint,code}` (delivery, one per attempt) and `dlq_entries_total{account,reason}` (queue, one per dead-letter write); neither is exported, so HUB-232 reads `hub_requests_total` and the `dlq_count` gauge (ADR-0014). Add both counters, then switch `UpstreamAuthFailed`, `TransformFailed` and `DLQSurge` to them and supersede ADR-0014.
+
+**Acceptance criteria**
+- [ ] Both counters registered and pinned in the metrics catalogue test; incremented exactly once per attempt / dead-letter write (tests)
+- [ ] The three rules and their promtool tests use the counters; the catalogue check passes
+- [ ] OBSERVABILITY §3.3 and §11.1 updated; ADR-0014 superseded
+
+### HUB-242 — Clear the parked gauges when the scheduler loses leadership
+- **Epic:** EP-09 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-13 · **Stories:** US-1801
+- **Branch:** `fix/HUB-242-parked-gauges-leadership`
+
+`delivery.Resilience` sets `parked_count` and `parked_oldest_age_s` on each leader tick but nothing resets them when leadership is lost (`Scheduler.lead` clears only the `QueueSampler`), so a former leader keeps exporting its last values. HUB-232 works around it in `ParkedOldestAgeHigh` and the dashboards with `and on (instance) (scheduler_leader == 1)`.
+
+**Acceptance criteria**
+- [ ] A scheduler that stops leading exports no `parked_*` series (test)
+- [ ] The leader filter can be dropped from the rule and dashboards (promtool test for the former-leader case still passes)
+
+### HUB-243 — Grafana import check for the dashboards in CI
+- **Epic:** EP-09 · **Type:** chore · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-232 · **Feature:** F-18 · **Stories:** US-1804
+- **Branch:** `chore/HUB-243-grafana-import-check`
+
+HUB-232 lints the dashboards and checks their queries against the exported metrics, but does not import them into Grafana (not available where HUB-232 was built). Start a pinned Grafana image as a CI service, provision a Prometheus data source, import each `deploy/dashboards/*.json` through the HTTP API and fail on any error.
+
+**Acceptance criteria**
+- [ ] CI job imports all three dashboards into a pinned Grafana and fails on a non-200 or a dashboard with panel errors
+- [ ] HUB-232's second acceptance criterion can be ticked
+
+### HUB-244 — Additional alert rules (OBSERVABILITY §11.2)
+- **Epic:** EP-09 · **Type:** chore · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-232 · **Feature:** F-18 · **Stories:** US-1801
+- **Branch:** `chore/HUB-244-extra-alerts`
+
+Rules beyond DESIGN §16.3 planned in OBSERVABILITY §11.2 (`SchedulerLeaderMissing`, `SnapshotApplyFailing`, `CredsCacheMiss`, `HeapNearLimit`, `GoroutinesGrowing`, `AuditBufferFilling`, `CallbackFailuresHigh`, availability burn rates). Rules whose metric is not exported (`ZeroLossViolation` → `hub_accepted_unaccounted`, `AcceptP99High` → `hub_accept_ms`) wait for those metrics.
+
+**Acceptance criteria**
+- [ ] Each rule whose metrics exist has a promtool test with a firing and a non-firing case and passes the catalogue check
+- [ ] OBSERVABILITY §11.2 marks which rules shipped and which wait for a metric
 
 ## EP-10 — Admin console (SvelteKit)
 

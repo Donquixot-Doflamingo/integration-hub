@@ -4,7 +4,7 @@
 Completes the metrics catalogue (DESIGN §16.2), alert rules as code (§16.3), OTel tracing (§16.4), tenant/vendor/platform dashboards, and the M8 load and soak tests that prove the latency and durability targets (§1, §18.6, §19 M8).
 
 ## Status
-`in-progress` — 2026-11-07 (HUB-230 metrics done; HUB-234 security checks in review; tracing, alerts, PII deletion, load and soak tests to come).
+`in-progress` — 2026-11-07 (HUB-230 metrics, HUB-232 alerts/dashboards and HUB-233 PII deletion done; HUB-234 security checks in review; tracing, load and soak tests to come).
 
 ## Owner
 `backend-engineer`.
@@ -22,6 +22,7 @@ Without consistent metrics, labels and alerts, outages are found by callers and 
 - Alert rules in `deploy/alerts/` (Prometheus format); dashboards JSON in `deploy/dashboards/`.
 - OTel spans `edge`, `transform`, `upstream`, `callback`, `worker.claim`; accept `traceparent`, forward to vendors that accept it.
 - Load test (k6 or vegeta) at 500 sync RPS + 2,000 async msg/s; soak with random mockvendor outages.
+- Subject erasure (DESIGN §16.5): purge a data subject's stored bodies by identifier, keeping hashes, sizes and timelines (HUB-233, ADR-0012).
 
 **Non-goals**
 - LLM cost dashboards (Release 3), SLO burn-rate tooling beyond basic alerts.
@@ -31,12 +32,14 @@ Without consistent metrics, labels and alerts, outages are found by callers and 
 - [US-1802](../product/USER_STORIES.md) — Overhead breakdown
 - [US-1803](../product/USER_STORIES.md) — Load and soak tests
 - [US-1804](../product/USER_STORIES.md) — Dashboards
+- [US-1805](../product/USER_STORIES.md) — Erase a data subject's stored payloads
 
 ## UX / API surface
 | Surface | Item | Contract ref |
 | --- | --- | --- |
 | Metrics | `GET /metrics` (Prometheus) on every role | Ops endpoint, not in caller contract |
-| Files | `deploy/alerts/*.yaml`, `deploy/dashboards/{tenant,vendor,platform}.json`, `backend/loadtest/` | — |
+| CLI | `hub erase-subject -tenant -actor -reason [-since] [-until] [-dry-run] < identifier` (one-shot; JSON result; exit 0 / 3 deferred / 1 failed / 2 usage) | No admin operation yet: CCR in HUB-247 |
+| Files | `deploy/alerts/hub.rules.yaml` + `deploy/alerts/*_test.yml`, `deploy/dashboards/{tenant,vendor,platform}.json`, `backend/loadtest/` | — |
 
 ## Behaviour & rules
 Alerts (DESIGN §16.3):
@@ -58,35 +61,42 @@ Alerts (DESIGN §16.3):
 2. `tenant` and `integration` labels allowed; `request_id` never a label.
 3. Logs are structured `slog` JSON via the redacting handler; every log line carries `request_id` and trace ids when present.
 4. **Metrics (HUB-230, done):** every §16.2 metric is registered; `TestDesignMetricsAreRegistered` (roles) enumerates the names from one registry wired like the data plane. `hub_requests_total` is counted once per request: in the gateway for requests that end there (dry-runs excluded) and in delivery for each committed terminal transition of a queued request. The outbox gauges (`queue_depth`, `queue_oldest_age_s`, `dlq_count`) come from `delivery.QueueSampler` on the scheduler leader every 10 s. `credential_expiry_days` is computed at scrape time. Capped metrics fold excess label combinations into `__overflow__` (OBSERVABILITY §3.1). `hub_overhead_ms` is broken down by stage in `hub_stage_duration_ms` (since HUB-027).
-5. **Security checks (HUB-234, in review):** CI jobs `gosec` (`make gosec`, gosec v2.30.0, fails on medium/high findings not triaged with `#nosec`) and `govulncheck` (`make vuln`, v1.9.0, fails on reachable known vulnerabilities, stdlib included; toolchain pinned to go1.26.10). Both egress clients enforce an explicit TLS 1.2 floor (`TestTLS`, `TestGuardRefusesTLSBelow12`). Body limits are proven through the gateway handler (`TestBodyLimitsAtTheEdge`). Every role's logs from the `roles` integration run are grepped for every secret the tests used (`TestRoleLogsCarryNoSecrets` + package `TestMain`). The redaction set also holds the DSN password and audit mask key. Details and the triage table: `docs/tech/SECURITY.md` §5, §8.1, §9.
+5. **Alerts and dashboards (HUB-232, in review):** `deploy/alerts/hub.rules.yaml` has one rule per alert above (names and expressions: OBSERVABILITY §11.1), each with `severity`, `summary`, `description` and `runbook_url` → `docs/runbooks/<AlertName>.md` (HUB-237). Rules query only exported metrics: auth and transform alerts read `hub_requests_total{code}` and the DLQ alert the growth of `dlq_count` until `vendor_attempts_total` / `dlq_entries_total` exist (ADR-0014, HUB-241). "Any X" rules also catch the first event of a new label set. The breaker alert fires when the circuit has not closed for 5 min (open or half-open), the parked alert reads the current scheduler leader only (HUB-242), the overhead alert covers sync and wait (S1). Dashboards `tenant.json`, `vendor.json`, `platform.json` (OBSERVABILITY §10) use the `${datasource}` variable; panels whose metric does not exist yet are left out and listed there.
+6. **Subject erasure (HUB-233, in review; ADR-0012, SECURITY §4.1):** `hub erase-subject` reads the identifier from stdin only and computes its stored forms with the gateway's masker. The forms are the raw value, its JSON-escaped forms, the `identifier`/`ip_address`/`device_id` HMAC and the `email` local-part HMAC@domain. The tenant's rows are searched in `request_events` (sealed payloads opened with the seal key), `request_results`, `outbox`, `dead_letters`, `callback_deliveries` and `vendor_sessions`. Then, in one transaction, every body of every matched request is purged: event payload → NULL, `payload_state = omitted`, `meta.pii_erased = change_id`; result/error → NULL; DLQ canonical → null and last vendor exchange dropped (replay refused); terminal callback payload emptied; matching sessions deleted. One `change_log` row is appended (`eraseSubjectPayloads`, `subject_ref`, counts, ids). Requests still queued or with callbacks to deliver are deferred (exit 3) for a re-run. Missing seal key with sealed rows present → fail, nothing changed.
+7. **Security checks (HUB-234, in review):** CI jobs `gosec` (`make gosec`, gosec v2.30.0, fails on medium/high findings not triaged with `#nosec`) and `govulncheck` (`make vuln`, v1.9.0, fails on reachable known vulnerabilities, stdlib included; toolchain pinned to go1.26.10). Both egress clients enforce an explicit TLS 1.2 floor (`TestTLS`, `TestGuardRefusesTLSBelow12`). Body limits are proven through the gateway handler (`TestBodyLimitsAtTheEdge`). Every role's logs from the `roles` integration run are grepped for every secret the tests used (`TestRoleLogsCarryNoSecrets` + package `TestMain`). The redaction set also holds the DSN password and audit mask key. Details and the triage table: `docs/tech/SECURITY.md` §5, §8.1, §9.
 6. Load-test acceptance: overhead p99 ≤ 5 ms at target load; async accept p99 ≤ 10 ms; soak: zero lost accepted requests (ledger reconciliation of accepted vs terminal).
 
 ## Data model impact
-None.
+No migration. The erasure reuses `payload_state = 'omitted'` and adds `meta.pii_erased` on purged events. A hashed subject index is HUB-245.
 
 ## Config impact
 `HUB_OTEL_ENDPOINT`, sampling ratio; alert thresholds as rule parameters.
 
 ## Observability
+Alerts: the ten rules in OBSERVABILITY §11.1. Dashboards: OBSERVABILITY §10. No new metrics, logs or spans in HUB-232.
+
 This feature *is* the observability layer; see table above and DESIGN §16.2 list: `hub_requests_total{mode,code}`, `hub_overhead_ms`, `vendor_latency_ms`, `breaker_state`, `breaker_transitions_total`, `queue_depth`, `queue_oldest_age_s`, `parked_count`, `parked_oldest_age_s`, `dlq_count`, `ratelimit_rejections_total{layer}`, `retry_budget_exhausted_total`, `snapshot_version`, `credential_expiry_days`, `llm_tokens_total`, `llm_cost_usd_total`, `audit_events_dropped_total`.
 
 ## Security & PII
-No PII or secrets in labels, span attributes or logs; span attributes allowlisted.
+No PII or secrets in labels, span attributes or logs; span attributes allowlisted. Subject erasure: SECURITY §4.1 (input from stdin only, redacted from logs, fail closed without the seal key, `change_log` keeps a domain-separated `subject_ref`, never a stored form).
 
 ## Failure modes
 | Failure | Behaviour | Caller sees |
 | --- | --- | --- |
 | OTel collector down | Exporter drops spans, never blocks | Nothing |
 | Metric cardinality spike | Label allowlist prevents unbounded labels | — |
+| Erasure while a request is in flight | Request deferred, listed, exit 3; re-run after it is terminal | Its delivery completes normally |
+| Erasure without the seal key, sealed rows present | Fails, transaction never opened, nothing changed | — |
 
 ## Testing
-- **Unit**: alert rules tested with `promtool test rules`.
+- **Unit**: alert rules tested with `promtool test rules` (`deploy/alerts/*_test.yml`, a firing and a non-firing case per alert; `TestAlertRulesCoverDesign` enforces coverage of every §16.3 alert). `TestAlertRulesUseExportedMetrics` and `TestDashboardsAreValidAndUseExportedMetrics` parse every rule and panel query and fail on any metric or label name the registry does not export (ADR-0015). `make monitoring` runs all of it; CI job `monitoring`. Grafana import is not run in CI yet (HUB-243).
 - **Load**: k6/vegeta scenarios in CI-optional job; results recorded in the M8 summary.
 - **Soak**: random mockvendor outages over ≥ 1 h; reconciliation script.
 - **Security (HUB-234)**: `make security` (gosec + govulncheck); `TestTLS`, `TestTLSFloorIsExplicit`, `TestGuardRefusesTLSBelow12`, `TestBodyLimitsAtTheEdge`, `TestRoleLogsCarryNoSecrets`, `TestRunRegistersConfigSecrets`; egress `TestUndeclaredHostRefusedBeforeDial`, `TestDialerChecksEgress`.
+- **Erasure**: `TestEraseSubjectPurgesEveryStoredBody` (control, integration) greps every bytea/json/jsonb/text column of every `hub` table, partitions included, for the subject's stored forms before (present in 8 columns) and after erasure (only the deferred outbox envelope and undelivered callback, then nothing after the re-run), also opens the sealed payloads, and compares hashes/sizes/timelines/metadata before and after. It also checks the `change_log` row, the dry run and the DLQ replay refusal. `TestEraseSubjectScope` covers tenant and subject isolation, fail-closed without the seal key, the window and validation. `TestSubjectFormsFindMaskedPayloads` (audit, unit) proves the forms match what `masked` stores per x-pii kind.
 
 ## Rollout & migration
-Dashboards imported into the target Grafana once hosting is decided (PRD Q8).
+Dashboards imported into the target Grafana once hosting is decided (PRD Q8): pick the Prometheus data source in the `datasource` variable. Load `deploy/alerts/hub.rules.yaml` as a Prometheus rule file. With native histograms enabled, set `always_scrape_classic_histograms: true` (rules and panels use `_bucket`).
 
 ## Open questions
 - "Laptop-scale setup" target hardware for the load test is unspecified.
@@ -101,3 +111,5 @@ HUB-230 – HUB-249.
 | 2026-10-31 | Created | docs agent |
 | 2026-11-06 | HUB-230 shipped: full §16.2 metric set, cardinality guard, status in-progress | backend-engineer |
 | 2026-11-07 | HUB-234: security gates (gosec, govulncheck), TLS floor, body-limit and role-log secret-grep tests | backend-engineer |
+| 2026-11-06 | HUB-233: subject erasure job (`hub erase-subject`, ADR-0012), US-1805 | backend-engineer |
+| 2026-11-06 | HUB-232: alert rules with promtool tests, tenant/vendor/platform dashboards, exported-metrics check; ADR-0014, ADR-0015 | backend-engineer |

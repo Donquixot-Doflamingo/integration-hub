@@ -1,0 +1,120 @@
+# promtool unit tests for the hub-delivery group (HUB-232). Run: promtool test rules deploy/alerts/*_test.yml
+rule_files:
+  - hub.rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # QueueOldestAgeHigh
+  - name: due work waiting more than 2 minutes pages per pool
+    interval: 1m
+    input_series:
+      - series: 'queue_oldest_age_s{pool="messaging",instance="sched-1"}'
+        values: '0 30 90 150 210 270 0 0'
+      - series: 'queue_oldest_age_s{pool="llm",instance="sched-1"}'
+        values: '0 60 110 115 100 0 0 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: QueueOldestAgeHigh
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: QueueOldestAgeHigh
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              pool: messaging
+            exp_annotations:
+              summary: "Workers of pool messaging are more than 2 minutes behind"
+              description: "The oldest due envelope of pool messaging has waited 3m 30s for a worker."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/QueueOldestAgeHigh.md"
+      - eval_time: 6m
+        alertname: QueueOldestAgeHigh
+        exp_alerts: []
+
+  # DLQSurge: an account that already had dead letters grows by 60 in 10 minutes.
+  - name: dlq growth above 50 in 10 minutes pages; growth of 30 does not
+    interval: 1m
+    input_series:
+      - series: 'dlq_count{tenant="t_lending",integration="int_bureau",account="acc_a",reason="UPSTREAM_REJECTED",instance="sched-1"}'
+        values: '10x15 70x10'
+      - series: 'dlq_count{tenant="t_lending",integration="int_bureau",account="acc_b",reason="UPSTREAM_REJECTED",instance="sched-1"}'
+        values: '10x15 40x10'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: DLQSurge
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: DLQSurge
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              account: acc_a
+            exp_annotations:
+              summary: "More than 50 new dead letters in 10 minutes for account acc_a"
+              description: "Unreplayed dead letters of account acc_a grew by 60 in the last 10 minutes."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/DLQSurge.md"
+      # Ten minutes after the burst the backlog is flat: resolved.
+      - eval_time: 26m
+        alertname: DLQSurge
+        exp_alerts: []
+
+  # DLQSurge: a new reason on an account that already had dead letters adds to the account total.
+  - name: dlq growth in a new series of an existing account pages
+    interval: 1m
+    input_series:
+      - series: 'dlq_count{tenant="t_lending",integration="int_bureau",account="acc_a",reason="UPSTREAM_REJECTED",instance="sched-1"}'
+        values: '10x25'
+      - series: 'dlq_count{tenant="t_lending",integration="int_pan",account="acc_a",reason="UPSTREAM_AUTH_FAILED",instance="sched-1"}'
+        values: '_x16 55x9'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: DLQSurge
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              account: acc_a
+            exp_annotations:
+              summary: "More than 50 new dead letters in 10 minutes for account acc_a"
+              description: "Unreplayed dead letters of account acc_a grew by 55 in the last 10 minutes."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/DLQSurge.md"
+
+  # DLQSurge: an account with no dead letters before gets 60 at once.
+  - name: dlq burst on an account without earlier dead letters pages
+    interval: 1m
+    input_series:
+      - series: 'dlq_count{tenant="t_lending",integration="int_bureau",account="acc_c",reason="UPSTREAM_REJECTED",instance="sched-1"}'
+        values: '_x13 60x11'
+    alert_rule_test:
+      - eval_time: 13m
+        alertname: DLQSurge
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              account: acc_c
+            exp_annotations:
+              summary: "More than 50 new dead letters in 10 minutes for account acc_c"
+              description: "Unreplayed dead letters of account acc_c grew by 60 in the last 10 minutes."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/DLQSurge.md"
+      - eval_time: 24m
+        alertname: DLQSurge
+        exp_alerts: []
+
+  # DLQSurge: scheduler leader change. sched-1 clears its gauges (stale), sched-2 reports the same
+  # backlog a minute later. Ten minutes on, the baseline sample is missing: no false page.
+  - name: dlq backlog across a leader change does not page
+    interval: 1m
+    input_series:
+      - series: 'dlq_count{tenant="t_lending",integration="int_bureau",account="acc_d",reason="UPSTREAM_REJECTED",instance="sched-1"}'
+        values: '100x9 stale'
+      - series: 'dlq_count{tenant="t_lending",integration="int_bureau",account="acc_d",reason="UPSTREAM_REJECTED",instance="sched-2"}'
+        values: '_x11 100x14'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: DLQSurge
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: DLQSurge
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: DLQSurge
+        exp_alerts: []

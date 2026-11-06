@@ -77,10 +77,10 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `breaker_transitions_total` | counter | transitions | `vendor, account, endpoint, from, to` | ≤ 4,000 | `upstream` |
 | `queue_depth` | gauge | envelopes | `pool, status` (`accepted`, `retry_scheduled`, `in_flight`; every pair reported, 0 when empty) | ≤ 6 | `delivery` (`QueueSampler`, scheduler leader, every 10 s; cleared when leadership is lost) |
 | `queue_oldest_age_s` | gauge | s | `pool` | 2 | `delivery` (`QueueSampler`): age of the oldest **due, unclaimed** envelope (`now − min(next_attempt_at)` over accepted/retry_scheduled with `next_attempt_at ≤ now`); envelopes waiting out a backoff do not count, so the alert fires only when workers fall behind (HUB-230) |
-| `parked_count` | gauge | envelopes | `vendor, account, endpoint` | ≤ 1,000 | `delivery` (scheduler) |
-| `parked_oldest_age_s` | gauge | s | `vendor, account, endpoint` | ≤ 1,000 | `delivery` (scheduler) |
+| `parked_count` | gauge | envelopes | `account, endpoint` (`endpoint` = full ref `vendor.endpoint@v`) | ≤ 1,000 | `delivery` (scheduler leader, each tick) |
+| `parked_oldest_age_s` | gauge | s | `account, endpoint` | ≤ 1,000 | `delivery` (scheduler leader, each tick). A former leader keeps its last values until HUB-242; alerts and dashboards keep only the current leader's series (`and on (instance) (scheduler_leader == 1)`) |
 | `dlq_count` | gauge | entries | `tenant, integration, account, reason` (unreplayed only) | ≤ 5,000 (capped; the rest fold into one `__overflow__` series) | `delivery` (`QueueSampler`, every 10 s) |
-| `ratelimit_rejections_total` | counter | rejections | `layer` (`tenant`, `account`, `budget`), `tenant, integration` | ≤ 1,500 | `edge` (tenant), `upstream` (account), `edge` (LLM budget) |
+| `ratelimit_rejections_total` | counter | rejections | `layer` (`tenant`, `account`, `budget`); no `tenant`/`integration` labels in code today | ≤ 3 | `edge` (tenant), `upstream` (account), `edge` (LLM budget) |
 | `retry_budget_exhausted_total` | counter | events | `account` | 200 | `delivery` |
 | `snapshot_version` | gauge | version | — (per pod via scrape labels) | 1 per pod | `registry` |
 | `credential_expiry_days` | gauge | days | `account, slot` (`active`, `next`; only slots with an expiry; negative once expired) | 400 | `creds` (computed at scrape time from the cache generation, so it counts down between reloads) |
@@ -95,8 +95,8 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `hub_stage_duration_ms` | histogram | ms | `stage` | `edge`, `delivery` | per-stage breakdown required by DESIGN §18.4/§18.5; low-cardinality on purpose |
 | `hub_accept_ms` | histogram | ms | `mode` | `edge` | S2 |
 | `hub_wait_ms` | histogram | ms | `kind` (`account_limiter`, `bulkhead`) | `upstream` | waits excluded from overhead |
-| `vendor_attempts_total` | counter | attempts | `vendor, account, endpoint, code` | `delivery` | attempt-level codes for auth/transform alerts (final `hub_requests_total` misses async retries) |
-| `dlq_entries_total` | counter | entries | `account, reason` | `queue` | rate alert "> 50 / 10 min / account" (a gauge cannot express a rate after replays/purges) |
+| `vendor_attempts_total` | counter | attempts | `vendor, account, endpoint, code` | `delivery` | **planned (HUB-241), not exported yet.** Attempt-level codes for auth/transform alerts; until then they read `hub_requests_total` (ADR-0014) |
+| `dlq_entries_total` | counter | entries | `account, reason` | `queue` | **planned (HUB-241), not exported yet.** Rate alert "> 50 / 10 min / account"; until then `DLQSurge` reads the net growth of `dlq_count` (ADR-0014) |
 | `hub_accepted_unaccounted` | gauge | requests | — | `delivery` (scheduler reconciler, every 5 min) | S4 |
 | `snapshot_apply_delay_seconds` | histogram | s | — | `registry` | S5 |
 | `snapshot_apply_failures_total` | counter | failures | `reason` (`invalid_config`, `build_error`; later `fetch_error`) | `registry` (roles) | keep-last-good visibility (HUB-045) |
@@ -185,6 +185,8 @@ Logs **never** contain request or response bodies, canonical or vendor (backend/
 
 Vendor sessions (HUB-175, F-14): session data is never logged either. The edge logs `session lookup failed` / `session create failed` (ERROR, Postgres errors), `session target gone` (WARN, the session's version or account left the snapshot) and `session data refused` (WARN, the store refused an Aadhaar-like number or oversize data) with the integration and the error only; the worker logs `session lookup failed`. Session open/use is in the audit trail as `session` meta (id, event, version, account) on `response.transformed` / `integration.resolved`. No new metrics: the lookup is timed in the `resolve` stage of `hub_overhead_ms`.
 
+Subject erasure (HUB-233, `hub erase-subject`, ADR-0012) writes one INFO line, `erase-subject finished`, with `tenant`, `change_id`, `dry_run` and the counts (`erased`, `deferred`, `events`, `results`, `dead_letters`, `callbacks`, `sessions`). On failure it writes one ERROR line, `erase-subject failed, nothing changed`, with `tenant` and `error`. The line never carries the identifier or its `subject_ref`. The identifier, the mask key and the DSN password are registered with the redacting handler as defence in depth. It records no metric: the command is one-shot and never scraped. `change_log` (`action = eraseSubjectPayloads`) is the system of record for deletions, and the JSON result on stdout is the operator's report.
+
 ### 4.5 Sampling
 - Hot-path WARN events that can storm (Redis timeout, limiter rejection) are rate-limited per `(msg, account)` key: first 10 per 10 s, then 1 in 100, with `sampled_out` count on the next emitted line.
 - ERROR is never sampled.
@@ -271,7 +273,7 @@ Pools exist only for: request body buffers, response serialisation buffers, audi
 
 ## 9. Debugging runbook
 
-Each alert links to the matching section (`docs/tech/OBSERVABILITY.md#9x-…`).
+Each alert's `runbook_url` points at `docs/runbooks/<AlertName>.md` (written in HUB-237); the sections below are the debugging guide those runbooks build on.
 
 ### 9.1 High Hub overhead (`HubOverheadP99High`)
 1. Platform dashboard → "Overhead by stage": which `hub_stage_duration_ms{stage}` moved?
@@ -320,34 +322,45 @@ Always a Hub bug (DESIGN §4.4).
 
 ## 10. Dashboards (`deploy/dashboards/*.json`)
 
+Shipped in HUB-232: `tenant.json` (uid `hub-tenant`), `vendor.json` (`hub-vendor`), `platform.json` (`hub-platform`). Grafana JSON model, schemaVersion 39, `id: null`, datasource only through the `${datasource}` variable, tag `integration-hub` (dashboards link to each other). `TestDashboardsAreValidAndUseExportedMetrics` lints them and checks every query against the exported metrics (ADR-0015); Grafana import is not checked in CI yet (HUB-243). Panels below that need a metric the code does not export are left out until it exists: they are marked *(not built: …)*.
+
+Prometheus must ingest classic histogram buckets (`_bucket`): with native histograms enabled, set `always_scrape_classic_histograms: true` on the Hub scrape job.
+
 ### 10.1 Tenant dashboard (variable: `tenant`, `integration`)
-Requests by code (stacked) · success ratio · p50/p99 end-to-end latency and overhead · mode mix · 202 vs 200 for wait mode · rate-limit rejections (`layer=tenant`) · DLQ count by reason · callback delivery success and latency · LLM tokens and cost (if any). *No vendor/account panels on the tenant dashboard by default* (tenant_viewer may see it in the console).
+Requests by code (stacked) · success ratio · requests by integration · mode mix · overhead p50/p99 by integration · DLQ count by reason · error codes · callback delivery outcome and latency · LLM tokens and cost (if any). *No vendor/account panels on the tenant dashboard* (tenant_viewer may see it in the console). *(not built: end-to-end latency — no per-tenant latency histogram; 202 vs 200 for wait mode — not distinguished by any metric; tenant rate-limit rejections — `ratelimit_rejections_total` has no `tenant` label, see the platform dashboard; the tenant limiter's refusals show in "Requests by code")*.
 
 ### 10.2 Vendor / account dashboard (variables: `vendor`, `account`, `endpoint`)
-Breaker state timeline · breaker transitions · vendor latency p50/p99 by code · attempts by code · 429 rate and `Retry-After` · account limiter wait · bulkhead in-flight vs limit · parked count / oldest age · drain release rate · health probe results · credential expiry days · retry budget exhaustions.
+Breaker state timeline · breaker transitions · health probe results · vendor latency p50/p99 by outcome (status class or transport failure) · vendor calls by outcome (`vendor_latency_ms_count`) · finished requests by code · egress refused · deliberate waits (all accounts; `hub_wait_ms` has only `kind`) · parked count / oldest age (current scheduler leader) · drain release rate · DLQ by account and reason · retry budget exhaustions · credential expiry days · credential cache misses. Parked, drain and DLQ panels filter by account only: their `endpoint` label is the full ref `vendor.endpoint@v`, while `breaker_state` and `vendor_latency_ms` use `endpoint@v`. *(not built: attempts by canonical code — `vendor_attempts_total`, HUB-241; 429 rate and `Retry-After`; bulkhead in-flight vs limit — `bulkhead_inflight` not exported)*.
 
 ### 10.3 Platform dashboard
-SLO tiles S1–S6 with error budget remaining · overhead by stage · accept latency · availability burn rate · queue depth / oldest age per pool · outbox claim latency · reclaims · audit buffer fill and drops · snapshot version per pod and apply delay · scheduler leader · Postgres pool usage, acquire latency · Redis op latency · Go runtime (goroutines, heap in-use vs GOMEMLIMIT, GC duration, sched latency) · pod restarts.
+SLO tiles S1 (overhead p99, sync + wait) and S3 (availability, Hub-caused failures) · breakers not closed · scheduler leaders · requests by mode and code · overhead p50/p99 and by stage · rate-limit rejections by layer · idempotency results · Redis op latency · shadow copies · queue depth / oldest age per pool · DLQ by reason · parked total · callback queue, DLQ, outcomes, SSRF refusals, skipped subscriptions · audit buffer fill, drops and write failures · snapshot version per pod and apply failures · credential decrypts and cache misses · metric series overflow · Go runtime (goroutines, heap in-use vs GOMEMLIMIT, GC pause, sched latency, CPU) · process restarts. *(not built: S2, S4, S5, S6 tiles and burn rates — `hub_accept_ms`, `hub_accepted_unaccounted`, `snapshot_apply_delay_seconds`, `drain_start_delay_seconds` not exported; outbox claim latency and reclaims — `outbox_*` not exported; Postgres pool — `pg_pool_*` not exported)*.
 
 ---
 
 ## 11. Alerts as code (`deploy/alerts/hub.rules.yaml`)
 
-### 11.1 DESIGN §16.3 rules
-| Alert | Expression (PromQL) | For | Severity | Runbook |
-| --- | --- | --- | --- | --- |
-| `BreakerOpenTooLong` | `max by (vendor, account, endpoint) (breaker_state) == 2` | 5m | page | §9.3 |
-| `ParkedOldestAgeHigh` | `max by (vendor, account, endpoint) (parked_oldest_age_s) > 600` | 1m | page | §9.3 |
-| `QueueOldestAgeHigh` | `max by (pool) (queue_oldest_age_s) > 120` | 1m | page | §9.2 |
-| `DLQSurge` | `sum by (account) (increase(dlq_entries_total[10m])) > 50` | 0m | page | §9.2 / §9.4 |
-| `UpstreamAuthFailed` | `sum by (vendor, account) (increase(vendor_attempts_total{code="UPSTREAM_AUTH_FAILED"}[5m])) > 0` | 0m | page | §9.4 |
-| `TransformFailed` | `sum by (integration) (increase(vendor_attempts_total{code="TRANSFORM_FAILED"}[5m]) + increase(hub_requests_total{code="TRANSFORM_FAILED"}[5m])) > 0` | 0m | page | §9.5 |
-| `SnapshotBehind` | `(scalar(max(snapshot_version)) - snapshot_version) > 0` | 60s | warn | §9 (snapshot) / TECH_SPEC §7 |
-| `CredentialExpiringSoon` | `min by (account, slot) (credential_expiry_days) < 7` | 1h | warn | §9.4 |
-| `HubOverheadP99High` | `histogram_quantile(0.99, sum by (le) (rate(hub_overhead_ms_bucket[5m]))) > 5` | 10m | warn | §9.1 |
-| `AuditEventsDropped` | `increase(audit_events_dropped_total[5m]) > 0` | 0m | warn | §9.1 step 2 |
+### 11.1 DESIGN §16.3 rules (shipped, HUB-232)
+Groups `hub-resilience`, `hub-delivery`, `hub-errors`, `hub-platform`. Every alert has `severity` (`page`/`warn`), `summary`, `description` and `runbook_url` = `https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/<AlertName>.md` (runbooks: HUB-237). Unit tests: `deploy/alerts/{resilience,delivery,errors,platform}_test.yml`, a firing and a non-firing case per alert. The file is the source of truth; the table is a summary.
 
-Note: `TransformFailed` sums attempt-level and final counters; to avoid double counting choose one source once implemented (attempt-level is preferred because it also covers async). `breaker_state` is reported by every node; `max` gives the most pessimistic view.
+| Alert | Expression (PromQL, abridged) | For | Severity | Debugging |
+| --- | --- | --- | --- | --- |
+| `BreakerOpenTooLong` | `max by (vendor, account, endpoint) (breaker_state) >= 1` (not closed: a failing half-open probe re-opens, so `== 2` would reset the timer) | 5m | page | §9.3 |
+| `ParkedOldestAgeHigh` | `max by (account, endpoint) (parked_oldest_age_s and on (instance) (scheduler_leader == 1)) > 600` | 1m | page | §9.3 |
+| `QueueOldestAgeHigh` | `max by (pool) (queue_oldest_age_s) > 120` | 1m | page | §9.2 |
+| `DLQSurge` | `(sum by (account) (dlq_count) - sum by (account) (dlq_count offset 10m) or sum by (account) (dlq_count) unless sum by (account) (max_over_time(dlq_count[10m] offset 10m))) > 50` | 0m | page | §9.2 / §9.4 |
+| `UpstreamAuthFailed` | `sum by (vendor, account) (increase(hub_requests_total{code="UPSTREAM_AUTH_FAILED"}[5m])) > 0` **or** new series (below) | 0m | page | §9.4 |
+| `TransformFailed` | `sum by (integration) (increase(hub_requests_total{code="TRANSFORM_FAILED"}[5m])) > 0` **or** new series | 0m | page | §9.5 |
+| `SnapshotBehind` | `(scalar(max(snapshot_version)) - snapshot_version) > 0` | 1m | warn | TECH_SPEC §7 |
+| `CredentialExpiringSoon` | `min by (account, slot) (credential_expiry_days) < 7` | 1h | warn | §9.4 |
+| `HubOverheadP99High` | `histogram_quantile(0.99, sum by (le) (rate(hub_overhead_ms_bucket{mode=~"sync\|wait"}[5m]))) > 5` (S1 scope; async accepts have their own target) | 10m | warn | §9.1 |
+| `AuditEventsDropped` | `sum by (reason) (increase(audit_events_dropped_total[5m])) > 0` **or** new series | 0m | warn | §9.1 step 2 |
+
+Notes:
+- **New series.** `hub_requests_total` and `audit_events_dropped_total` create a series on its first increment, and `increase()` needs two samples, so a plain `increase() > 0` misses the first failure of a new label set. The "any" rules add `sum by (…) (X unless max_over_time(X[1h] offset 5m)) > 0`: a series with no sample in the hour before the last 5 minutes is new and its value is all new events.
+- **Metric sources (ADR-0014).** `vendor_attempts_total` and `dlq_entries_total` are not exported yet (HUB-241). Auth and transform failures are dead-lettered at once on async paths, so the final counter sees them (except a transformer time-budget overrun that retries and later succeeds). `DLQSurge` is the net growth of unreplayed dead letters per account; replays inside the window hide as many new entries, and a missing baseline sample at t−10m (leader change) suppresses rather than pages.
+- **Scheduler-leader gauges.** `queue_oldest_age_s` and `dlq_count` are cleared when leadership moves; `parked_*` are not yet (HUB-242), hence the leader filter.
+- `breaker_state` is reported by every node; `max` gives the most pessimistic view.
+- All names and labels are checked against the registry by `TestAlertRulesUseExportedMetrics` (ADR-0015).
 
 ### 11.2 Additional rules
 | Alert | Expression | For | Severity |
@@ -365,7 +378,7 @@ Note: `TransformFailed` sums attempt-level and final counters; to avoid double c
 | `CallbackFailuresHigh` | `sum by (tenant) (rate(callback_deliveries_total{outcome!="delivered"}[10m])) / sum by (tenant) (rate(callback_deliveries_total[10m])) > 0.2` | 10m | warn |
 | `MCPInvokeErrorsHigh` | see §14 | 10m | warn |
 
-Rules are unit-tested with `promtool test rules` in CI (TESTING_STRATEGY §11).
+Not shipped yet (HUB-244); several need metrics that are not exported (`hub_accepted_unaccounted`, `hub_accept_ms`). Rules are unit-tested with `promtool test rules` in CI (TESTING_STRATEGY §11, CI job `monitoring`).
 
 ---
 

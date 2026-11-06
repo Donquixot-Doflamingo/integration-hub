@@ -90,6 +90,7 @@ Contract change → `contracts/` commit → backend contract tests fail until im
   - Idempotency: duplicate submissions with the same key → one vendor call; concurrent duplicates (in-progress marker).
   - Wait mode: 200 within window; 202 + worker completion; gateway crash during wait → reclaimed.
   - Audit: full §13.1 timeline for sync and async; sha256/bytes present; masked policy via `x-pii`; **grep test: no registered secret anywhere in `request_events`**.
+  - Subject erasure (HUB-233): **schema-wide grep**. Every bytea/json/jsonb/text column of every `hub` table (catalog-driven, so new tables are covered automatically), plus the opened sealed payloads, holds no stored form of the subject after erasure. The same grep before erasure must hit, so the test cannot pass vacuously. Hashes, sizes, timelines and metadata compare equal before and after; deferral of in-flight requests; `change_log` row (`TestEraseSubjectPurgesEveryStoredBody`, `TestEraseSubjectScope`).
   - Partitions: point lookup by ULID hits one partition (`EXPLAIN`); partition maintenance job idempotent.
   - Migrations: `goose up` from empty, `goose down` one step, and up again.
   - Cutover (§6.3): the six request situations × (account, vendor, transformer) change; retire refused while pinned requests or sessions exist; rollback = new version, history linear.
@@ -151,8 +152,8 @@ p99 is computed by a helper that records per-iteration durations into an HDR his
 Defined in `OBSERVABILITY.md` §12 (L1–L6): 500 sync RPS + 2,000 async msg/s (M8), zero lost async requests in a soak with random outages. Also a **metrics cardinality check**: run the dev config expanded to 500 integrations synthetic, scrape `/metrics`, fail if series exceed the budget in OBSERVABILITY §3.1.
 
 ## 11. Other checks
-- `promtool check rules` + `promtool test rules` for `deploy/alerts/`.
-- Dashboard JSON lint (valid JSON, every panel query references an existing metric name from the catalogue).
+- `promtool check rules` + `promtool test rules` for `deploy/alerts/` (one test per alert with a firing and a non-firing case; `TestAlertRulesCoverDesign` enforces it and that every DESIGN §16.3 alert has a rule).
+- Dashboard JSON lint and query check (`TestDashboardsAreValidAndUseExportedMetrics`, ADR-0015): valid JSON, stable uid, unique panel ids, datasource through `${datasource}`, every variable defined; every rule and panel query parses and uses only metric and label names the registry exports (`TestAlertRulesUseExportedMetrics`). Run all of it with `make monitoring` (CI job `monitoring`).
 - Migration lint (no destructive change without a two-step expand/contract).
 - Arch test: package dependency rules (TECH_SPEC §4.4).
 
