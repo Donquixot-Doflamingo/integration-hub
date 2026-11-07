@@ -95,7 +95,8 @@ func TestWatchSwapsValidEditsAndKeepsLastGoodOnInvalid(t *testing.T) {
 		if took := time.Since(start); took > 2*time.Second {
 			t.Fatalf("swap took %s, want < 2s", took)
 		}
-		if s.Version != 2 || s.Accounts["ct-brandA-in"].Quota.RPS != 75 || store.Snapshot() != s && store.Snapshot().Version != 2 {
+		// A dev watcher builds unarchived content: version 0 until it is archived (HUB-401).
+		if s.Version != 0 || s.Accounts["ct-brandA-in"].Quota.RPS != 75 || store.Snapshot().Checksum != s.Checksum {
 			t.Fatalf("swapped snapshot v%d rps %d", s.Version, s.Accounts["ct-brandA-in"].Quota.RPS)
 		}
 	case err := <-failed:
@@ -112,12 +113,12 @@ func TestWatchSwapsValidEditsAndKeepsLastGoodOnInvalid(t *testing.T) {
 			t.Fatalf("error %v", err)
 		}
 	case s := <-swapped:
-		t.Fatalf("invalid config was swapped in (v%d)", s.Version)
+		t.Fatalf("invalid config was swapped in (%s)", s.Checksum)
 	case <-time.After(3 * time.Second):
 		t.Fatal("invalid edit not reported")
 	}
-	if cur := store.Snapshot(); cur.Version != 2 || cur.Accounts["ct-brandA-in"].Vendor != "clevertap" {
-		t.Fatalf("last good snapshot not kept: v%d", cur.Version)
+	if cur := store.Snapshot(); cur.Accounts["ct-brandA-in"].Quota.RPS != 75 || cur.Accounts["ct-brandA-in"].Vendor != "clevertap" {
+		t.Fatalf("last good snapshot not kept: %s", cur.Checksum)
 	}
 
 	// 3. Fixing it with new content swaps again. (Restoring exactly the content already served
@@ -127,8 +128,8 @@ func TestWatchSwapsValidEditsAndKeepsLastGoodOnInvalid(t *testing.T) {
 	writeAtomic(t, account, []byte(fixed))
 	select {
 	case s := <-swapped:
-		if s.Version != 3 || s.Accounts["ct-brandA-in"].Quota.RPS != 80 {
-			t.Fatalf("version %d rps %d, want 3 / 80", s.Version, s.Accounts["ct-brandA-in"].Quota.RPS)
+		if s.Accounts["ct-brandA-in"].Quota.RPS != 80 || store.Snapshot().Checksum != s.Checksum {
+			t.Fatalf("rps %d, want 80", s.Accounts["ct-brandA-in"].Quota.RPS)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("no swap after fixing the config")

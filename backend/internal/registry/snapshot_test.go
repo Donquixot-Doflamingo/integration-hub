@@ -56,19 +56,47 @@ func TestBuildRejectsDuplicateKeyHash(t *testing.T) {
 	}
 }
 
-func TestStoreVersionsIncrease(t *testing.T) {
+// TestStoreCarriesTheArchiveVersion is HUB-401: the store never counts versions itself, so two
+// processes serving the same publish report the same version however often each swapped.
+func TestStoreCarriesTheArchiveVersion(t *testing.T) {
 	var st Store
 	if st.Snapshot() != nil {
 		t.Fatal("empty store returned a snapshot")
 	}
 	base := build(t, validFiles)
-	for want := uint64(1); want <= 3; want++ {
-		if got := st.Swap(base).Version; got != want {
-			t.Fatalf("version %d, want %d", got, want)
+	var restarted Store // a node started later: one swap only
+	for range 3 {
+		if got := st.Swap(base).Version; got != 0 {
+			t.Fatalf("unarchived content has version %d, want 0", got)
 		}
 	}
+	steps := []struct {
+		name     string
+		apply    func() (*Snapshot, bool)
+		want     uint64
+		changed  bool
+		checksum string
+	}{
+		{"archived as 7", func() (*Snapshot, bool) { return st.Label(base.Checksum, 7) }, 7, true, base.Checksum},
+		{"same label again", func() (*Snapshot, bool) { return st.Label(base.Checksum, 7) }, 7, false, base.Checksum},
+		{"other content's label ignored", func() (*Snapshot, bool) { return st.Label("sha256:other", 9) }, 7, false, base.Checksum},
+		{"republished as 8 (rollback to the same content)", func() (*Snapshot, bool) { return st.Label(base.Checksum, 8) }, 8, true, base.Checksum},
+	}
+	for _, s := range steps {
+		got, changed := s.apply()
+		if got.Version != s.want || changed != s.changed || st.Snapshot().Version != s.want {
+			t.Fatalf("%s: version %d changed %v, want %d %v", s.name, got.Version, changed, s.want, s.changed)
+		}
+	}
+	if v := restarted.SwapVersion(base, 8).Version; v != st.Snapshot().Version {
+		t.Fatalf("restarted node reports %d, peer %d", v, st.Snapshot().Version)
+	}
 	if base.Version != 0 {
-		t.Fatal("Swap modified the caller's snapshot")
+		t.Fatal("Swap or SwapVersion modified the caller's snapshot")
+	}
+	var empty Store
+	if got, changed := empty.Label(base.Checksum, 1); got != nil || changed {
+		t.Fatal("Label on an empty store published something")
 	}
 }
 

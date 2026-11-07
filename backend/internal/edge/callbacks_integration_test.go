@@ -38,10 +38,32 @@ type receiver struct {
 	raw    [][]byte
 	sigs   []string
 	bad    int
+	// hold, when set, makes every delivery wait until it is closed; entered gets one value per
+	// delivery that started waiting (HUB-413: a receiver that is slow or hanging).
+	hold, entered chan struct{}
+}
+
+// holdDeliveries makes the receiver hang every callback until release is closed and returns
+// the channel that reports each delivery as it starts waiting.
+func (rc *receiver) holdDeliveries(release chan struct{}) <-chan struct{} {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	rc.hold, rc.entered = release, make(chan struct{}, 16)
+	return rc.entered
 }
 
 func (rc *receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
+	rc.mu.Lock()
+	hold, entered := rc.hold, rc.entered
+	rc.mu.Unlock()
+	if hold != nil {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-hold
+	}
 	sig := r.Header.Get(callbacks.SignatureHeader)
 	rc.mu.Lock()
 	defer rc.mu.Unlock()

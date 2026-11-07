@@ -23,5 +23,5 @@ func devSnapshot(t testing.TB) *registry.Snapshot {
 		t.Fatal(err)
 	}
 	var st registry.Store
-	return st.Swap(snap)
+	return st.SwapVersion(snap, 1) // as if archived as version 1 (HUB-401)
 }

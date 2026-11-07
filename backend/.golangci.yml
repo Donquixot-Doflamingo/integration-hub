@@ -2,7 +2,7 @@
 version: "2"
 run:
   timeout: 5m
-  build-tags: [integration]
+  build-tags: [integration, latency]
 linters:
   default: standard # errcheck, govet, ineffassign, staticcheck, unused
   enable:

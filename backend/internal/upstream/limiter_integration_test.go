@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
@@ -30,6 +32,7 @@ func TestAccountRateAcrossWorkers(t *testing.T) {
 	var counted atomic.Int64
 	for range 3 {
 		l := NewAccountLimiter(redisClient(t, redisAddr()), telemetry.NewMetrics("itest", "limiter"), nil)
+		defer l.Close()
 		wg.Go(func() {
 			for ctx.Err() == nil {
 				if ok, _ := l.Wait(ctx, account, rps, true, time.Second); ok {
@@ -55,6 +58,7 @@ func TestAccountRateAcrossWorkers(t *testing.T) {
 func TestLiveTrafficFirst(t *testing.T) {
 	account := "acct-prio-" + core.NewULID(time.Now())
 	l := NewAccountLimiter(redisClient(t, redisAddr()), telemetry.NewMetrics("itest", "limiter"), nil)
+	defer l.Close()
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 	var live, drain atomic.Int64
@@ -62,12 +66,14 @@ func TestLiveTrafficFirst(t *testing.T) {
 	for _, isLive := range []bool{true, false} {
 		wg.Go(func() {
 			for ctx.Err() == nil {
-				if ok, _ := l.Wait(ctx, account, 20, isLive, 200*time.Millisecond); ok {
-					if isLive {
-						live.Add(1)
-					} else {
-						drain.Add(1)
-					}
+				ok, _ := l.Wait(ctx, account, 20, isLive, 200*time.Millisecond)
+				switch {
+				case !ok: // a refusal returns at once; a worker would nack and come back later
+					time.Sleep(10 * time.Millisecond)
+				case isLive:
+					live.Add(1)
+				default:
+					drain.Add(1)
 				}
 			}
 		})
@@ -76,6 +82,67 @@ func TestLiveTrafficFirst(t *testing.T) {
 	t.Logf("live %d, drain %d", live.Load(), drain.Load())
 	if live.Load() <= drain.Load() {
 		t.Fatalf("live traffic got %d tokens, drain %d: live must come first", live.Load(), drain.Load())
+	}
+}
+
+// countingHook counts Redis commands and can delay each one.
+type countingHook struct {
+	n     atomic.Int64
+	delay time.Duration
+}
+
+func (h *countingHook) DialHook(next redis.DialHook) redis.DialHook { return next }
+
+func (h *countingHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		h.n.Add(1)
+		if h.delay > 0 {
+			time.Sleep(h.delay)
+		}
+		return next(ctx, cmd)
+	}
+}
+
+func (h *countingHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []redis.Cmder) error {
+		h.n.Add(int64(len(cmds)))
+		return next(ctx, cmds)
+	}
+}
+
+// TestLeasedTokensOnRealRedis is HUB-408 on the real script: 1,000 calls at about 500/s on a
+// 2,000 rps account make a few dozen Redis calls, not one per call, and with every Redis call
+// slowed to 10 ms no call waits for it once the lease is warm.
+func TestLeasedTokensOnRealRedis(t *testing.T) {
+	account := "acct-lease-" + core.NewULID(time.Now())
+	rdb := redisClient(t, redisAddr())
+	hook := &countingHook{delay: 10 * time.Millisecond}
+	rdb.AddHook(hook)
+	l := NewAccountLimiter(rdb, telemetry.NewMetrics("itest", "lease"), nil)
+	defer l.Close()
+	const calls, warmup = 1000, 100
+	slow := 0
+	var worst time.Duration
+	for i := range calls {
+		start := time.Now()
+		if ok, _ := l.Wait(t.Context(), account, 2000, true, 250*time.Millisecond); !ok {
+			t.Fatalf("call %d refused", i)
+		}
+		if d := time.Since(start); i >= warmup {
+			worst = max(worst, d)
+			if d > 5*time.Millisecond {
+				slow++
+			}
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	n := hook.n.Load()
+	t.Logf("%d calls, %d Redis commands, slowest warm call %s", calls, n, worst)
+	if n > calls/10 {
+		t.Fatalf("%d Redis commands for %d calls: tokens are not leased", n, calls)
+	}
+	if slow > 0 {
+		t.Fatalf("%d warm calls took over 5 ms with a 10 ms Redis: they waited for Redis", slow)
 	}
 }
 

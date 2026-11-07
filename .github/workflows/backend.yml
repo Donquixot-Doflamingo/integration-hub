@@ -98,6 +98,23 @@ jobs:
       - if: always()
         run: docker compose -f ../deploy/docker-compose.yml down -v
 
+  latency-budget:
+    # HUB-413 (docs/tech/LATENCY.md): a 100 ms mockvendor stays at p50 <= 102 ms and p99 <= 110 ms
+    # through the gateway stack, and the Hub adds <= 2 ms p50 / <= 10 ms p99 over direct calls.
+    # Its own job, without -race (the race detector would be what it measures).
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: make up # compose Postgres 16 + Redis 7
+      - run: make latency-budget
+      - if: always()
+        run: docker compose -f ../deploy/docker-compose.yml down -v
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10

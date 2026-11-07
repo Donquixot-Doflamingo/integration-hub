@@ -9,7 +9,7 @@ COMPOSE := docker compose -f ../deploy/docker-compose.yml
 export HUB_PG_DSN ?= postgres://hub:hub@localhost:5432/hub?sslmode=disable
 export HUB_REDIS_ADDR ?= localhost:6379
 
-.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check goldens monitoring gosec vuln security load soak
+.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check goldens monitoring gosec vuln security load soak latency-budget
 
 all: lint test build
 
@@ -24,6 +24,13 @@ test: ## Unit tests with the race detector, plus timing-sensitive budget tests w
 
 itest: up ## Integration tests (tag integration) against compose Postgres + Redis; -p 1: packages share tables
 	$(GO) test -race -count=1 -p 1 -tags integration ./...
+
+# HUB-413 gate (docs/tech/LATENCY.md): a 100 ms vendor stays at p50 ≤ 102 ms and p99 ≤ 110 ms
+# through the gateway stack, against real Postgres + Redis (HUB_PG_DSN, HUB_REDIS_ADDR; CI
+# starts compose). Never with -race: the race detector would be what it measures. Other vendor
+# latencies: LATENCY_VENDOR_MS=0,50,100,200 make latency-budget.
+latency-budget: ## Sync latency budget gate (no -race; needs Postgres + Redis)
+	$(GO) test -count=1 -p 1 -timeout 15m -tags 'integration latency' -run '^TestLatencyBudget$$' -v ./internal/edge/ | grep -E '^(=== RUN|--- |PASS|FAIL|ok)|LATENCY|DIAG|load average|GOMAXPROCS|_test.go'; exit $${PIPESTATUS[0]}
 
 lint: ## golangci-lint (pinned) + gofmt check
 	@v=$$(golangci-lint version --short 2>/dev/null || golangci-lint --version | sed -E 's/.*version ([0-9.]+).*/\1/'); \
