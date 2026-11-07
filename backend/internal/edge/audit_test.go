@@ -48,7 +48,7 @@ func TestDryRunIsAudited(t *testing.T) {
 	}
 	r := b.Records[0]
 	if !r.DryRun || r.Status != "succeeded" || r.HTTPStatus != 200 || r.PayloadPolicy != "masked" ||
-		r.RequestID != rec.Header().Get("X-Hub-Request-Id") || r.IntegrationVersion != 2 || r.SnapshotVersion == 0 {
+		r.RequestID != rec.Header().Get("X-Hub-Request-Id") || r.IntegrationVersion != 2 || r.SnapshotVersion != 1 { // the snapshot's archive version (HUB-401)
 		t.Fatalf("record %+v", r)
 	}
 	for i, e := range b.Events {

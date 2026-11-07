@@ -63,7 +63,7 @@ func newRegistry(cfg Config, m *telemetry.Metrics, log *slog.Logger, pool *pgxpo
 		src: registry.Sources{Config: os.DirFS(cfg.ConfigDir), Contracts: os.DirFS(cfg.ContractsDir)},
 		cfg: cfg, log: log, archive: control.NewArchive(pool, blobs), rdb: rdb,
 		version: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "snapshot_version", Help: "Version of the config snapshot this node serves (DESIGN §16.2).",
+			Name: "snapshot_version", Help: "Archive version (hub.config_snapshots) of the config snapshot this node serves; 0 until the node knows its content is archived (DESIGN §16.2, HUB-401).",
 		}),
 		failures: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "snapshot_apply_failures_total", Help: "Snapshots that could not be applied; the last good snapshot kept serving (OBSERVABILITY §3.3).",
@@ -95,6 +95,7 @@ func (r *roleRegistry) load(ctx context.Context) {
 	defer cancel()
 	if snap, src, v, err := r.archive.Latest(actx, timeNow()); err == nil {
 		r.log.WarnContext(ctx, "booted from the archived snapshot", slog.Int64("archive_version", v))
+		snap.Version = archiveVersion(v)
 		r.adopt(ctx, src, snap, "archive")
 		return
 	} else if !errors.Is(err, control.ErrNoSnapshot) {
@@ -142,9 +143,28 @@ func (r *roleRegistry) adopt(ctx context.Context, src registry.Sources, snap *re
 		case err != nil:
 			r.failures.WithLabelValues("archive_error").Inc()
 			r.log.ErrorContext(ctx, "snapshot not archived", slog.String("error", err.Error()))
-		case published:
-			r.log.InfoContext(ctx, "snapshot archived", slog.Int64("archive_version", v))
+		default:
+			if published {
+				r.log.InfoContext(ctx, "snapshot archived", slog.Int64("archive_version", v))
+			}
+			r.label(ctx, snap.Checksum, v)
 		}
+	}
+}
+
+// archiveVersion converts an archive version (a positive BIGSERIAL-like number) for Snapshot.
+func archiveVersion(v int64) uint64 {
+	if v < 0 {
+		return 0
+	}
+	return uint64(v)
+}
+
+// label marks the served snapshot as archive version v when it has checksum (HUB-401): the
+// node built or cached the same content its peers serve as v, so it reports v too.
+func (r *roleRegistry) label(ctx context.Context, checksum string, v int64) {
+	if pub, changed := r.store.Label(checksum, archiveVersion(v)); changed {
+		r.published(ctx, pub)
 	}
 }
 
@@ -194,9 +214,11 @@ func (r *roleRegistry) watch(ctx context.Context) {
 			if r.cfg.Role == Admin && r.mayArchiveConfig(ctx) {
 				actx, cancel := context.WithTimeout(ctx, archiveTimeout)
 				defer cancel()
-				if _, _, err := r.archive.Publish(actx, r.src, s, control.ConfigAuthorPrefix+r.cfg.ConfigDir, "config directory changed"); err != nil {
+				if v, _, err := r.archive.Publish(actx, r.src, s, control.ConfigAuthorPrefix+r.cfg.ConfigDir, "config directory changed"); err != nil {
 					r.failures.WithLabelValues("archive_error").Inc()
 					r.log.ErrorContext(ctx, "snapshot not archived", slog.String("error", err.Error()))
+				} else {
+					r.label(ctx, s.Checksum, v)
 				}
 			}
 		},
@@ -267,6 +289,7 @@ func (r *roleRegistry) syncArchive(ctx context.Context) {
 	}
 	if cur := r.store.Snapshot(); cur != nil && cur.Checksum == meta.Checksum {
 		r.archiveSeen.Store(meta.Version)
+		r.label(ctx, meta.Checksum, meta.Version) // same content: report the archive's version
 		return
 	}
 	snap, src, v, err := r.archive.Latest(actx, timeNow())
@@ -277,6 +300,7 @@ func (r *roleRegistry) syncArchive(ctx context.Context) {
 	}
 	r.archiveSeen.Store(v)
 	r.log.InfoContext(ctx, "snapshot.applied from the archive", slog.Int64("archive_version", v), slog.String("checksum", snap.Checksum))
+	snap.Version = archiveVersion(v)
 	r.adopt(ctx, src, snap, "archive")
 }
 

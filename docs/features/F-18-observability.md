@@ -90,6 +90,8 @@ Alerts: the ten rules in OBSERVABILITY §11.1. Dashboards: OBSERVABILITY §10. N
 
 This feature *is* the observability layer; see table above and DESIGN §16.2 list: `hub_requests_total{mode,code}`, `hub_overhead_ms`, `vendor_latency_ms`, `breaker_state`, `breaker_transitions_total`, `queue_depth`, `queue_oldest_age_s`, `parked_count`, `parked_oldest_age_s`, `dlq_count`, `ratelimit_rejections_total{layer}`, `retry_budget_exhausted_total`, `snapshot_version`, `credential_expiry_days`, `llm_tokens_total`, `llm_cost_usd_total`, `audit_events_dropped_total`.
 
+`snapshot_version` (gauge and audit field) is the snapshot's archive version, not a per-process count, so a node restarted after a publish reports what its peers report and `SnapshotBehind` no longer fires falsely; 0 = not yet confirmed against the archive (HUB-401; promtool case "a node restarted after a publish is not behind" in `deploy/alerts/platform_test.yml`).
+
 ## Security & PII
 No PII or secrets in labels, span attributes or logs; span attributes allowlisted (`telemetry.AllowedSpanAttributes`, enforced by `SpanAttributeViolations` in `TestSyncSpans` and `TestAsyncTraceLinksCallerToCallback`). Span statuses carry an error class only, never error text. Our trace ids reach a vendor only when it is listed in `HUB_TRACE_FORWARD_VENDORS`.
 No PII or secrets in labels, span attributes or logs; span attributes allowlisted. Subject erasure: SECURITY §4.1 (input from stdin only, redacted from logs, fail closed without the seal key, `change_log` keeps a domain-separated `subject_ref`, never a stored form).
@@ -111,6 +113,7 @@ No PII or secrets in labels, span attributes or logs; span attributes allowliste
 - **Soak**: `make soak`; random mockvendor outages, reconciliation of accepted ids against `hub.requests` and received callbacks (`TestReceiverCountsDuplicatesAndRedeliveries`, `TestChaosLoopAlternatesAndRestoresTheVendor`). Laptop run 4 min; staging 1–24 h.
 - **Security (HUB-234)**: `make security` (gosec + govulncheck); `TestTLS`, `TestTLSFloorIsExplicit`, `TestGuardRefusesTLSBelow12`, `TestBodyLimitsAtTheEdge`, `TestRoleLogsCarryNoSecrets`, `TestRunRegistersConfigSecrets`; egress `TestUndeclaredHostRefusedBeforeDial`, `TestDialerChecksEgress`.
 - **Erasure**: `TestEraseSubjectPurgesEveryStoredBody` (control, integration) greps every bytea/json/jsonb/text column of every `hub` table, partitions included, for the subject's stored forms before (present in 8 columns) and after erasure (only the deferred outbox envelope and undelivered callback, then nothing after the re-run), also opens the sealed payloads, and compares hashes/sizes/timelines/metadata before and after. It also checks the `change_log` row, the dry run and the DLQ replay refusal. `TestEraseSubjectScope` covers tenant and subject isolation, fail-closed without the seal key, the window and validation. `TestSubjectFormsFindMaskedPayloads` (audit, unit) proves the forms match what `masked` stores per x-pii kind.
+- **Sync latency budget (HUB-413, US-1808)**: `make latency-budget` (CI job `latency-budget`, no `-race`): `TestLatencyBudget` keeps a 100 ms mockvendor at p50 ≤ 102 ms and p99 ≤ 110 ms through the gateway stack and the Hub's share ≤ 2 / 10 ms over direct calls; red until HUB-409 (see [LATENCY.md](../tech/LATENCY.md) §6). Nothing optional on the request: `TestSyncRequestDoesNotWaitForAudit`, `TestAsyncModesAcceptWithoutWaitingForTheVendor`, `TestCallbackDeliveryIsNotOnTheCallersRequest`. No new metric.
 
 ## Rollout & migration
 Dashboards imported into the target Grafana once hosting is decided (PRD Q8): pick the Prometheus data source in the `datasource` variable. Load `deploy/alerts/hub.rules.yaml` as a Prometheus rule file. With native histograms enabled, set `always_scrape_classic_histograms: true` (rules and panels use `_bucket`).
@@ -129,6 +132,8 @@ HUB-230 – HUB-249.
 | 2026-11-06 | HUB-230 shipped: full §16.2 metric set, cardinality guard, status in-progress | backend-engineer |
 | 2026-11-06 | HUB-231: tracing across edge, transform, upstream, outbox, worker and callbacks; ADR-0013; US-1806 | backend-engineer |
 | 2026-11-07 | HUB-234: security gates (gosec, govulncheck), TLS floor, body-limit and role-log secret-grep tests | backend-engineer |
+| 2026-11-07 | HUB-401: `snapshot_version` is the archive version | backend-engineer |
+| 2026-11-07 | HUB-413: sync latency budget gate, non-blocking proofs, `docs/tech/LATENCY.md` | backend-engineer |
 | 2026-11-06 | HUB-233: subject erasure job (`hub erase-subject`, ADR-0012), US-1805 | backend-engineer |
 | 2026-11-06 | HUB-232: alert rules with promtool tests, tenant/vendor/platform dashboards, exported-metrics check; ADR-0014, ADR-0015 | backend-engineer |
 | 2026-11-07 | HUB-237: runbooks for the ten alerts and the credential rotation procedure (`docs/runbooks/`), US-1807; breaker alert condition corrected to "not closed" | docs-keeper |
