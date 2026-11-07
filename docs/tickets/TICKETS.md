@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **282** · done: **204** · todo: **68** · other (in-progress/in-review/blocked): **10**
+Total tickets: **283** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **10**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **282** · done: **204** · todo: **68** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 31 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 8 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 9 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3587,6 +3587,18 @@ Sweep: `grep -ri capabilit` returns only ADR history and changelog entries.
 
 **Acceptance criteria**
 - [ ] Repo-wide grep clean apart from history
+
+### HUB-439 — Explicit integration setting for the LLM body limit and worker pool
+- **Epic:** EP-14 · **Type:** feat · **Area:** backend
+- **Status:** todo · **Depends on:** HUB-433 · **Feature:** F-23 · **Stories:** US-23xx
+- **Branch:** `feat/HUB-439-integration-llm-setting`
+
+The 4 MB body limit and the `llm` worker pool were chosen from `llm.*` capability names (DESIGN §16.5, §17). With capabilities gone every integration gets 1 MB and the `messaging` pool ([ADR-0024](../tech/adr/0024-llm-body-limit-and-pool-without-capability-names.md)). Ask the contract steward for an explicit integration setting (for example `workload: llm`) and wire it to the edge body limit and the gateway's pool choice.
+
+**Acceptance criteria**
+- [ ] Contract change request filed and merged (admin API integration create/update/get)
+- [ ] An integration with the setting accepts bodies up to 4 MB and queues async work in the `llm` pool; others keep 1 MB and `messaging`
+- [ ] ADR-0024 superseded or closed
 
 ## Parallel tracks
 

@@ -60,7 +60,7 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-10 | Admin console (SvelteKit) | F-19 | HUB-250–HUB-299 | 44 | 37 |
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 22 | 7 |
-| **Total** | | | | **282** | **204** |
+| **Total** | | | | **283** | **204** |
 
 ## Sizing
 

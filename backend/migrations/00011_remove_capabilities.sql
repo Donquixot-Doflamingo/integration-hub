@@ -11,7 +11,8 @@
 --   * hub.integrations gains interactive (from the capability) and loses capability;
 --   * hub.vendor_endpoints gains request_schema ({} = nothing checked) and response_schema;
 --   * hub.transformers and hub.requests lose capability; queued and dead-lettered envelopes lose
---     their capability key (the worker pool no longer derives from it);
+--     their capability key (the worker pool no longer derives from it; llm.* envelopes get
+--     pool llm, ADR-0024);
 --   * hub.capabilities is dropped.
 -- Schema-qualified (00001_baseline.sql).
 
@@ -57,8 +58,14 @@ ALTER TABLE hub.vendor_endpoints
 
 ALTER TABLE hub.requests DROP COLUMN capability;
 
-UPDATE hub.outbox SET envelope = envelope - 'capability' WHERE envelope ? 'capability';
-UPDATE hub.dead_letters SET envelope = envelope - 'capability' WHERE envelope ? 'capability';
+-- An llm.* envelope keeps its pool as the explicit pool key (ADR-0024), so a replay still lands
+-- in the llm pool.
+UPDATE hub.outbox SET envelope = (envelope - 'capability')
+    || CASE WHEN envelope->>'capability' LIKE 'llm.%' THEN '{"pool":"llm"}'::jsonb ELSE '{}'::jsonb END
+WHERE envelope ? 'capability';
+UPDATE hub.dead_letters SET envelope = (envelope - 'capability')
+    || CASE WHEN envelope->>'capability' LIKE 'llm.%' THEN '{"pool":"llm"}'::jsonb ELSE '{}'::jsonb END
+WHERE envelope ? 'capability';
 
 DROP TABLE hub.capabilities;
 

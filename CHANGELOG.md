@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(migrations)` · Test migration 00011 up and down over pre-ADR-0023 data · HUB-434 · F-23
+  - Migration 00011 is proven on a scratch database holding capabilities, integrations, versions, transformers, endpoints and queued envelopes from before ADR-0023: operations come from the latest capability minor, `interactive` from the capability, down restores the old columns and up runs again
+  - Queued and dead-lettered `llm.*` envelopes keep the `llm` pool after the migration (ADR-0024); HUB-439 brings back the 4 MB body limit and pool choice as an explicit integration setting
+  - The `hubctl` binary committed by mistake is removed and ignored
 - 2026-11-07 · `refactor(registry)` · Replace capabilities by operation schemas · HUB-433 · F-23
   - Each integration version declares its operations with the caller's request schema (body, optional headers, `validate_input`); live calls are checked against it only when `validate_input` is on, and only declared caller headers reach the transformer as `hdr.*`
   - Vendor endpoints declare the request they accept; transformer samples must fit it (`endpoint_schema`), and integration publish checks that each transformer's fields and samples fit the operation (`schemas_compile`, `input_schema`)
