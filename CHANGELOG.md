@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · Put HUB-437 in review with the real F-23 story ids (HUB-437) · HUB-437 · F-23
+  - EP-14 tickets HUB-431 to HUB-439 name their stories (US-2301 to US-2313) instead of `US-23xx`; HUB-437 is in review with its criteria checked and what other owners still have to do
+  - The tickets README lists EP-13, EP-14 and F-23; counters recounted
 - 2026-11-07 · `docs(skills)` · Describe operations_have_transformers as it works after ADR-0023 (HUB-437) · HUB-437 · F-23
   - hub-operator says what the check refuses today (a target `operations` key the version does not declare); per-operation correctness comes from `schemas_compile` and `input_schema`
 - 2026-11-07 · `docs(tech)` · Describe the schema registry in TECH_SPEC and the tech docs (HUB-437) · HUB-437 · F-23

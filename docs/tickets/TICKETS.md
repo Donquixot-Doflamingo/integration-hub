@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **284** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **11**
+Total tickets: **284** · done: **204** · todo: **68** · other (in-progress/in-review/blocked): **12**
 
 ## Epics
 
@@ -3507,7 +3507,7 @@ Range HUB-431–HUB-459. The product owner rejected capabilities (2026-11-07): o
 
 ### HUB-431 — ADR-0023 and the EP-14 backlog
 - **Epic:** EP-14 · **Type:** docs · **Area:** docs
-- **Status:** in-review · **Depends on:** — · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** — · **Feature:** F-23 · **Stories:** US-2301, US-2310
 - **Branch:** `docs/HUB-431-remove-capabilities-adr`
 
 Record the decision ([ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md)) and break the work into tickets.
@@ -3518,7 +3518,7 @@ Record the decision ([ADR-0023](../tech/adr/0023-remove-capabilities-integration
 
 ### HUB-432 — Contracts without capabilities: operations and schemas on the integration, request schema on the endpoint
 - **Epic:** EP-14 · **Type:** contract · **Area:** contracts
-- **Status:** in-review · **Depends on:** HUB-431 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-431 · **Feature:** F-23 · **Stories:** US-2302, US-2303, US-2305, US-2306, US-2307, US-2308, US-2309
 - **Branch:** `contract/HUB-432-remove-capabilities`
 
 Contract-first change per [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md): remove `/capabilities*` and every `capability` field and filter from the admin and public APIs and the MCP tool contract; add `operations` with `request_schema {body, headers}` and `validate_input` to integration versions, `request_schema {path, query, headers, body}` (required) and optional `response_schema` to vendor endpoints, auth scheme `none`, optional response transformer in targets, samples (headers in fixture input). Major version bump (owner-approved breaking change).
@@ -3531,7 +3531,7 @@ Contract-first change per [ADR-0023](../tech/adr/0023-remove-capabilities-integr
 
 ### HUB-433 — Backend: registry, transform, edge and delivery without capabilities
 - **Epic:** EP-14 · **Type:** refactor · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-2303, US-2304, US-2305, US-2306, US-2307
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Per [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md): registry loads operations from integration versions and request schemas from endpoints; transformer compile drops capability binding, field checks run at integration validate against the operation schema; sample checks validate produced vendor requests against the endpoint schema (publish time only); edge validates the caller input when `validate_input`; response transformer optional with header-filtered pass-through; audit PII tags from the operation schema.
@@ -3548,7 +3548,7 @@ Per [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request
 
 ### HUB-434 — Backend: admin API, migration and auth scheme none
 - **Epic:** EP-14 · **Type:** refactor · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-2308, US-2311
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Admin API handlers follow the new contract; append-only migration drops `hub.capabilities` and capability columns and copies existing capability schemas into integration versions' operations; vendor auth scheme `none` with credential-less accounts ([ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md)).
@@ -3562,7 +3562,7 @@ Admin API handlers follow the new contract; append-only migration drops `hub.cap
 
 ### HUB-435 — hubctl, hubmcp, seed config and examples without capabilities
 - **Epic:** EP-14 · **Type:** refactor · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-433 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-433 · **Feature:** F-23 · **Stories:** US-2301, US-2309
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Update hubctl (apply, plan, export, dry-run, transform test), hubmcp tools, `backend/config` seed and all examples (Aadhaar OKYC, PAN, latency demo) to [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md); add the agify age example (firstName + lastName to `?name=`, only `age` back).
@@ -3576,7 +3576,7 @@ Update hubctl (apply, plan, export, dry-run, transform test), hubmcp tools, `bac
 
 ### HUB-436 — Console: schema registry editors, samples and no capabilities
 - **Epic:** EP-14 · **Type:** feat · **Area:** frontend
-- **Status:** in-review · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-2301, US-2302, US-2303, US-2308
 - **Branch:** `feat/HUB-436-console-schema-registry`
 
 Remove capability columns, filters and fields. Integration draft form gets per-operation input schema (body and headers) built from a pasted sample, each field required or optional, and the `validate_input` switch; vendor endpoint form gets its request schema (query, headers, body, path) the same way; transformer authoring takes samples (input and expected output) and shows the field-level reason when a sample fails; response transformer optional ([ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md)).
@@ -3590,18 +3590,21 @@ Shipped (frontend-engineer, branch `feat/HUB-436-console-schema-registry`): no c
 
 ### HUB-437 — Skills, MCP docs, product docs and examples docs without capabilities
 - **Epic:** EP-14 · **Type:** docs · **Area:** docs
-- **Status:** in-progress · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-2310, US-2312
 - **Branch:** `docs/HUB-437-docs-no-capabilities`
 
 Rewrite hub-operator, hub-transformers, consumer skill and MCP setup docs, PRD, user stories, feature docs (new F-23), TECH_SPEC, DESIGN pointer and example READMEs per [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md).
 
 **Acceptance criteria**
-- [ ] No capability concept left in skills or docs except the ADR history
-- [ ] F-23 feature doc and US-23xx stories exist
+- [x] No capability concept left in skills or docs except the ADR history
+  - Skills (hub-operator with the agify walk-through, hub-transformers, other backend skills, consumer skill, MCP setup), PRD (DV-7), user stories, feature docs, TECH_SPEC, SECURITY, TESTING_STRATEGY, ISOLATION, OBSERVABILITY, runbooks, use cases, process docs, READMEs. Remaining `capabilit` hits are history (CHANGELOGs, ADRs, milestone summaries, F-19's ticket ledger, ticket history), links to ADR-0023/0024, explicit "no `capability` key" guidance, the legacy-upgrade code and its tests, vendored third-party skills and `frontend/CCR-NOTES.md` (CCR history). DESIGN.md is unchanged and points to ADR-0023; ADR-0004 is marked superseded
+  - Not done here (other owners): `examples/` READMEs and files and `frontend/e2e-real/` (converted on another branch, which also adds `examples/agify-age/`); `AGENTS.md` and `CLAUDE.md` still say "canonical body → canonical response" and that `contracts/` holds capability schemas (project instructions: lead or user to edit)
+- [x] F-23 feature doc and US-23NN stories exist
+  - `docs/features/F-23-schema-registry.md` (shipped), US-2301 to US-2313; EP-14 tickets carry the real story ids
 
 ### HUB-438 — Remove leftover capability tests, fixtures and references across the repo
 - **Epic:** EP-14 · **Type:** chore · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-2301, US-2308
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Sweep: `grep -ri capabilit` returns only ADR history and changelog entries.
@@ -3612,7 +3615,7 @@ Sweep: `grep -ri capabilit` returns only ADR history and changelog entries.
 
 ### HUB-439 — Explicit integration setting for the LLM body limit and worker pool
 - **Epic:** EP-14 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-433 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** todo · **Depends on:** HUB-433 · **Feature:** F-23 · **Stories:** US-2313
 - **Branch:** `feat/HUB-439-integration-llm-setting`
 
 The 4 MB body limit and the `llm` worker pool were chosen from `llm.*` capability names (DESIGN §16.5, §17). With capabilities gone every integration gets 1 MB and the `messaging` pool ([ADR-0024](../tech/adr/0024-llm-body-limit-and-pool-without-capability-names.md)). Ask the contract steward for an explicit integration setting (for example `workload: llm`) and wire it to the edge body limit and the gateway's pool choice.
