@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(roles)` · Make the ADR-0023 integration tests lint-clean (HUB-438) · HUB-438 · F-23
+  - The agify and migration tests close every response and pass their context; `make lint` is back to 0 issues
 - 2026-11-07 · `fix(adminapi)` · Create auth none accounts without a credential store (HUB-438) · HUB-438 · F-23
   - An account of an auth `none` vendor can be created, and its connection tested, on an admin that has no credential store (it used to answer 500)
   - Credential operations on such an account answer 409 before anything asks for the store

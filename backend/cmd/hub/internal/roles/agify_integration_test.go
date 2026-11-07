@@ -145,7 +145,7 @@ func TestAgifyOnboardedWithoutCapabilities(t *testing.T) {
 	// Refusals store nothing: version 1 is the transformer below. A later version 2 reads lastName
 	// with ?? so that the pass-through run can show validate_input off.
 	call(http.MethodPost, "/transformers/AGE-REQ/versions", map[string]any{"kind": "request", "vendor_endpoint": ageVendor + ".estimate@1",
-		"yaml": strings.Replace(ageRequestYAML("name"), ` + (req.lastName ?? "")`, ` + req.lastName`, 1),
+		"yaml":     strings.Replace(ageRequestYAML("name"), ` + (req.lastName ?? "")`, ` + req.lastName`, 1),
 		"fixtures": []any{sample("harsh", map[string]any{"name": "harsh"})}, "docs_url": ageDocsURL, "reason": "First mapping"}, 201)
 	call(http.MethodPost, "/transformers/AGE-REQ/versions", map[string]any{"kind": "request", "vendor_endpoint": ageVendor + ".estimate@1",
 		"expected_latest_version": 1, "yaml": ageRequestYAML("name"),
@@ -163,7 +163,7 @@ func TestAgifyOnboardedWithoutCapabilities(t *testing.T) {
 	call(http.MethodPost, "/integrations/"+ageIntegration+"/versions", map[string]any{"spec": ageSpec(true, "AGE-RES@1"), "reason": "First version"}, 201)
 	call(http.MethodPost, "/integrations/"+ageIntegration+"/versions/1/publish", map[string]any{"expected_active_version": nil, "reason": "Go live"}, 200)
 
-	invoke := func(body string) (*http.Response, string) {
+	invoke := func(body string) (answer, string) {
 		t.Helper()
 		req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, gateway+"/v1/integrations/"+ageIntegration+"/invoke", strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+devAPIKey)
@@ -174,10 +174,10 @@ func TestAgifyOnboardedWithoutCapabilities(t *testing.T) {
 		}
 		defer func() { _ = resp.Body.Close() }()
 		b, _ := io.ReadAll(resp.Body)
-		return resp, string(b)
+		return answer{StatusCode: resp.StatusCode, Header: resp.Header}, string(b)
 	}
 	// until polls the gateway (it follows the archive asynchronously) until ok accepts the answer.
-	until := func(what, body string, ok func(*http.Response, string) bool) (*http.Response, string) {
+	until := func(what, body string, ok func(answer, string) bool) (answer, string) {
 		t.Helper()
 		deadline := time.Now().Add(15 * time.Second)
 		for {
@@ -192,7 +192,7 @@ func TestAgifyOnboardedWithoutCapabilities(t *testing.T) {
 		}
 	}
 	full := `{"firstName":"har","lastName":"sh"}`
-	resp, got := until("v1 serves", full, func(r *http.Response, _ string) bool { return r.StatusCode == 200 })
+	resp, got := until("v1 serves", full, func(r answer, _ string) bool { return r.StatusCode == 200 })
 	if strings.TrimSpace(got) != `{"age":29}` || resp.Header.Get("X-Hub-Pass-Through") != "" {
 		t.Fatalf("response transformer output: %d %v %s", resp.StatusCode, resp.Header, got)
 	}
@@ -208,7 +208,7 @@ func TestAgifyOnboardedWithoutCapabilities(t *testing.T) {
 	// Integration v2: no response transformer (pass-through) and validate_input off.
 	call(http.MethodPost, "/integrations/"+ageIntegration+"/versions", map[string]any{"spec": ageSpec(false, ""), "reason": "Pass-through"}, 201)
 	call(http.MethodPost, "/integrations/"+ageIntegration+"/versions/2/publish", map[string]any{"expected_active_version": 1, "reason": "Raw answer"}, 200)
-	resp, got = until("v2 passes through", full, func(r *http.Response, _ string) bool { return r.Header.Get("X-Hub-Pass-Through") == "true" })
+	resp, got = until("v2 passes through", full, func(r answer, _ string) bool { return r.Header.Get("X-Hub-Pass-Through") == "true" })
 	if resp.StatusCode != 200 || strings.TrimSpace(got) != ageVendorBody {
 		t.Fatalf("pass-through body: %d %s", resp.StatusCode, got)
 	}
@@ -286,4 +286,10 @@ func tailOf(s string, n int) string {
 		return s
 	}
 	return s[len(s)-n:]
+}
+
+// answer is what a test keeps of a gateway response (status and headers; the body is read).
+type answer struct {
+	StatusCode int
+	Header     http.Header
 }
