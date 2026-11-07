@@ -190,3 +190,10 @@ code,
 .muted {
 	color: var(--ink-muted);
 }
+
+/* Example values in empty fields read as examples, not as filled-in filters (HUB-287). */
+::placeholder {
+	color: var(--ink-muted);
+	font-style: italic;
+	opacity: 1;
+}

@@ -46,7 +46,16 @@ export function urlProblem(raw: string): string | null {
 	return null;
 }
 
-export function endpointProblems(v: EndpointValues, mode: 'create' | 'edit'): FieldErrors {
+/**
+ * Field problems. In `edit` mode an unchanged URL is not re-checked (HUB-289): the stored URL was
+ * accepted by the Hub (e.g. a dev loopback receiver, `http://127.0.0.1:...`), and refusing it
+ * blocked every description-only edit with a disabled Save and no visible reason.
+ */
+export function endpointProblems(
+	v: EndpointValues,
+	mode: 'create' | 'edit',
+	before?: EndpointValues
+): FieldErrors {
 	const out: FieldErrors = {};
 	if (mode === 'create') {
 		const id = v.endpoint_id.trim();
@@ -55,7 +64,8 @@ export function endpointProblems(v: EndpointValues, mode: 'create' | 'edit'): Fi
 			out.endpoint_id =
 				'3 to 64 characters: letters, digits, "_" or "-", starting with a letter or digit.';
 	}
-	const url = urlProblem(v.url);
+	const unchanged = mode === 'edit' && before !== undefined && v.url.trim() === before.url.trim();
+	const url = unchanged ? null : urlProblem(v.url);
 	if (url) out.url = url;
 	return out;
 }
@@ -87,7 +97,7 @@ export function updateEndpointBody(
 	before: EndpointValues,
 	reason: string
 ): Built<RegistrarEndpointUpdate> {
-	const fields = endpointProblems(v, 'edit');
+	const fields = endpointProblems(v, 'edit', before);
 	if (Object.keys(fields).length) return { ok: false, fields };
 	const body: RegistrarEndpointUpdate = { reason };
 	if (v.url.trim() !== before.url.trim()) body.url = v.url.trim();

@@ -43,6 +43,18 @@ describe('request timeline', () => {
 		);
 	});
 
+	it('renders a replayed request whose events repeat seq numbers (HUB-289)', async () => {
+		const e = timelineExample.events;
+		const replayed = e.map((x) => ({ ...x, at: '2026-10-31T10:00:00.000Z' }));
+		server.use(
+			mockOperation('getRequestTimeline', { ...timelineExample, events: [...e, ...replayed] })
+		);
+		renderRequest();
+		const status = await screen.findByText(/10 events in sequence order/);
+		const list = status.parentElement!.querySelector('ol')!;
+		expect(within(list).getAllByRole('listitem')).toHaveLength(10);
+	});
+
 	it('lists the events in seq order with their durations, even when the API order is off', async () => {
 		server.use(
 			mockOperation('getRequestTimeline', {

@@ -3,7 +3,7 @@
 	import type { StatusView } from '$lib/status';
 	import type { ValidationReport } from '$lib/api/types';
 	import { pointerToPath } from '$lib/utils/diff';
-	import { checkLabels } from './draft';
+	import { checkLabel } from './draft';
 
 	/** The publish checks of DESIGN §6.4 (`ValidationReport`), each with its result in text + icon. */
 	let { report, heading = 'Publish checks' }: { report: ValidationReport; heading?: string } =
@@ -32,7 +32,7 @@
 			{@const s = status[c.status] ?? status.skipped!}
 			<li>
 				<StatusBadge tone={s.tone} icon={s.icon} label={s.label} />
-				<span class="name">{checkLabels[c.check] ?? c.check}</span>
+				<span class="name">{checkLabel(c.check)}</span>
 				{#if c.message}<span class="msg">{c.message}</span>{/if}
 				{#if c.pointer}<code title={c.pointer}>{pointerToPath(c.pointer)}</code>{/if}
 			</li>

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { contractMocks } from '$lib/api/mocks/contract.gen';
-import { mockError, mswPath } from '$lib/api/mocks/handlers';
+import { mockError, mockOperation, mswPath } from '$lib/api/mocks/handlers';
 import { server } from '$lib/api/mocks/server';
 import { accessFromRoles, type Access } from '$lib/auth/roles';
 import type { Role } from '$lib/api/types';
@@ -207,6 +207,34 @@ describe('rotate', () => {
 		expect(screen.getByText(/Rotated hk_live_7Qm2 to hk_live_Z9a1/)).toHaveTextContent(
 			'until 2026-11-01 10:00 UTC'
 		);
+	});
+});
+
+describe('keys without a prefix (HUB-289)', () => {
+	// Keys seeded from the config tree carry only a hash: the Hub answers prefix "". The table
+	// showed an empty cell, "Revoke " buttons and a revoke dialog whose confirmation text was empty.
+	const seeded = { ...contractMocks.listApiKeys.example.items[0]!, prefix: '' };
+
+	it('names the key by its id and asks for the id before a revoke', async () => {
+		let sent: unknown;
+		server.use(
+			mockOperation('listApiKeys', { items: [seeded], next_cursor: null }),
+			http.post(mswPath('/api-keys/:key_id/revoke'), async ({ params }) => {
+				sent = params.key_id;
+				return HttpResponse.json(contractMocks.revokeApiKey.example);
+			})
+		);
+		const user = userEvent.setup();
+		const table = await renderPage();
+		expect(within(table).getByRole('rowheader')).toHaveTextContent(seeded.key_id);
+		await user.click(within(table).getByRole('button', { name: `Revoke ${seeded.key_id}` }));
+		const dialog = await screen.findByRole('dialog', { name: `Revoke API key ${seeded.key_id}` });
+		await user.type(within(dialog).getByLabelText(/Reason/), 'Seeded key no longer used');
+		const confirm = within(dialog).getByRole('button', { name: 'Revoke' });
+		expect(confirm).toBeDisabled();
+		await user.type(within(dialog).getByLabelText(/to confirm/), seeded.key_id);
+		await user.click(confirm);
+		await waitFor(() => expect(sent).toBe(seeded.key_id));
 	});
 });
 

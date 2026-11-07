@@ -5,7 +5,7 @@
 	import StatusBadge from './StatusBadge.svelte';
 
 	/**
-	 * Upstream attempts in `attempt_no` order (request timeline HUB-264, DLQ entry HUB-266): the
+	 * Upstream attempts, oldest first (request timeline HUB-264, DLQ entry HUB-266): the
 	 * integration version each used, account and endpoint, timing, vendor status, error, breaker
 	 * state and credential version. Tenant viewers (`scoped`) see no account or credential (F-19
 	 * rule 5).
@@ -24,7 +24,13 @@
 		formatTime?: (iso: string) => string;
 	} = $props();
 
-	const sorted = $derived([...attempts].sort((x, y) => x.attempt_no - y.attempt_no));
+	// Oldest first. `attempt_no` is not unique: it starts again at 1 when a dead letter is replayed
+	// (seen against a real Hub, HUB-289), so order by start time and key rows by position.
+	const sorted = $derived(
+		[...attempts].sort(
+			(x, y) => Date.parse(x.started_at) - Date.parse(y.started_at) || x.attempt_no - y.attempt_no
+		)
+	);
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -49,7 +55,7 @@
 			</tr>
 		</thead>
 		<tbody>
-			{#each sorted as at (at.attempt_no)}
+			{#each sorted as at, i (i)}
 				<tr>
 					<th scope="row" class="numeric">{at.attempt_no}</th>
 					<td>v{at.integration_version}</td>

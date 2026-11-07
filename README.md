@@ -36,5 +36,17 @@ make -C backend goldens     # transformer golden fixtures
 ## Working here
 Read [`AGENTS.md`](AGENTS.md) first: contract-first workflow, tickets, branch and commit rules, the per-commit changelog, and how to document a feature. AI agents get the same rules through `CLAUDE.md` and the skills under `.claude/`, `backend/.claude/` and `frontend/.claude/`. A new contributor needs no personal setup.
 
+## Run the whole stack locally (manual testing)
+One command starts Postgres and Redis, applies migrations and the dev seed, and runs mockvendor, the four hub roles (admin with the dev OIDC issuer, gateway, worker, scheduler) and the admin console against the real admin API:
+
+```bash
+make dev-up      # or scripts/dev-up.sh
+make dev-down    # or scripts/dev-down.sh; --purge also deletes .dev-stack/ (logs, dev credentials, blobs)
+```
+
+- **Needs**: Go, Node 22 (`brew install go node@22` on macOS), curl. Postgres and Redis come from `deploy/docker-compose.yml` when Docker runs (on macOS: `colima start`); otherwise set `HUB_PG_DSN` and `HUB_REDIS_ADDR` to services you already run (default `postgres://hub:hub@localhost:5432/hub` and `localhost:6379`).
+- **It prints** the console URL (http://localhost:5173), the admin API, gateway, mockvendor and ops URLs, and the dev tenant API key for `orders-service`. Sign in to the console by picking a role (admin, editor, viewer, or tenant viewer with tenant `orders-service`); the admin's dev issuer signs the token, there is no password. A few sample requests (and one dead letter) are sent so every screen has data; `DEV_SEED_TRAFFIC=0` skips them.
+- **Ports** move with `DEV_CONSOLE_PORT`, `DEV_GATEWAY_PORT`, `DEV_ADMIN_PORT`, `DEV_MOCKVENDOR_PORT`, `DEV_MOCKVENDOR_CONTROL_PORT`, `DEV_OPS_PORT_BASE`; `DEV_SKIP_BUILD=1` reuses the last build. Logs: `.dev-stack/logs/<name>.log`. Details: header of [`scripts/dev-up.sh`](scripts/dev-up.sh) and [`frontend/README.md`](frontend/README.md#against-a-running-hub-hub-286).
+
 ## Using the Hub from your laptop
 Copy [`clients/claude-skill/integration-hub`](clients/claude-skill/) into `~/.claude/skills/` and add the `hubmcp` MCP server. See the skill's `references/mcp-setup.md`.

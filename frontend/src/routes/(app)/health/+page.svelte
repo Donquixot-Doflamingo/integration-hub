@@ -6,12 +6,12 @@
 	import type { HubApiError } from '$lib/api/errors';
 	import type { Breaker, BreakerChange } from '$lib/api/types';
 	import ChangeNotice from '$lib/components/ChangeNotice.svelte';
-	import RoleGate from '$lib/components/RoleGate.svelte';
 	import AsyncView from '$lib/components/AsyncView.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import { can } from '$lib/auth/roles';
 	import { sectionFor } from '$lib/nav';
 	import { breakerStatus } from '$lib/status';
 	import {
@@ -38,6 +38,12 @@
 	} from './board';
 
 	let { data }: { data: PageData } = $props();
+	// HUB-288: force controls only for roles that may call them (contract x-required-role).
+	const canForce = $derived(
+		can(data.access, 'forceOpenBreaker') ||
+			can(data.access, 'forceCloseBreaker') ||
+			can(data.access, 'clearBreakerForce')
+	);
 	const section = sectionFor('/health')!;
 
 	// Auto-refresh (HUB-261): configurable interval, pausable, skipped while the tab is hidden.
@@ -120,7 +126,7 @@
 		{ label: 'Account lifecycle' },
 		{ label: 'Dead letters', numeric: true },
 		{ label: 'Updated' },
-		...(data.access.isAdmin ? [{ label: 'Force' }] : [])
+		...(canForce ? [{ label: 'Force' }] : [])
 	]);
 </script>
 
@@ -270,31 +276,29 @@
 										<td title={formatUtc(x.updated_at)}
 											>{formatAgo(now - Date.parse(x.updated_at))}</td
 										>
-										{#if data.access.isAdmin}
+										{#if canForce}
 											<td>
-												<RoleGate access={data.access} min="admin">
-													<div
-														class="force"
-														role="group"
-														aria-label="Force {x.account_id} {x.endpoint_ref}"
-													>
-														{#if x.forced !== 'open'}
-															<button type="button" onclick={() => openForce('open', x)}
-																>Force open</button
-															>
-														{/if}
-														{#if x.forced !== 'closed'}
-															<button type="button" onclick={() => openForce('close', x)}
-																>Force closed</button
-															>
-														{/if}
-														{#if x.forced && x.forced !== 'none'}
-															<button type="button" onclick={() => openForce('clear', x)}
-																>Clear force</button
-															>
-														{/if}
-													</div>
-												</RoleGate>
+												<div
+													class="force"
+													role="group"
+													aria-label="Force {x.account_id} {x.endpoint_ref}"
+												>
+													{#if x.forced !== 'open' && can(data.access, 'forceOpenBreaker')}
+														<button type="button" onclick={() => openForce('open', x)}
+															>Force open</button
+														>
+													{/if}
+													{#if x.forced !== 'closed' && can(data.access, 'forceCloseBreaker')}
+														<button type="button" onclick={() => openForce('close', x)}
+															>Force closed</button
+														>
+													{/if}
+													{#if x.forced && x.forced !== 'none' && can(data.access, 'clearBreakerForce')}
+														<button type="button" onclick={() => openForce('clear', x)}
+															>Clear force</button
+														>
+													{/if}
+												</div>
 											</td>
 										{/if}
 									</tr>

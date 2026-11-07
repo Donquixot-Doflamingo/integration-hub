@@ -297,7 +297,8 @@
 {/if}
 
 {#if !data.state.problem}
-	<RoleGate access={data.access}>
+	<!-- Replay: replayDeadLetters (editor); purge: purgeDeadLetters (admin), both from the contract. -->
+	<RoleGate access={data.access} op="replayDeadLetters">
 		<section class="bulk" aria-labelledby="bulk-heading">
 			<h2 id="bulk-heading">Act on every match</h2>
 			<p class="hint">
@@ -315,7 +316,7 @@
 							: 'Replay matching...'}
 					</button>
 				</form>
-				<RoleGate access={data.access} min="admin">
+				<RoleGate access={data.access} op="purgeDeadLetters">
 					<form
 						method="POST"
 						action="?/countPurge"

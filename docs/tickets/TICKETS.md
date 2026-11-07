@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **253** · done: **177** · todo: **55** · other (in-progress/in-review/blocked): **21**
+Total tickets: **262** · done: **177** · todo: **60** · other (in-progress/in-review/blocked): **25**
 
 ## Epics
 
@@ -18,10 +18,10 @@ Total tickets: **253** · done: **177** · todo: **55** · other (in-progress/in
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 17 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
 | EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 40 | 29 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 44 | 29 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 19 | 8 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 4 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 17 | 0 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 22 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -2476,6 +2476,62 @@ Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits
 - [ ] After a failed submit, focus moves into the dialog (the error panel's heading or the reason field) and Escape closes it
 - [ ] Component test and one e2e keyboard check
 
+### HUB-286 — Console against a running Hub with one command
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** in-review · **Depends on:** HUB-253, HUB-207 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1906
+- **Branch:** `feat/HUB-286-console-real-backend`
+
+The console has only ever run on MSW contract mocks. Make it work end to end against the real admin API: dev sign-in through the admin's dev OIDC issuer (`hub admin -admin-dev-oidc`, M7), a same-origin `/admin/v1` proxy in the console server that adds the session token ([ADR-0022](../tech/adr/0022-console-same-origin-admin-proxy.md)), and SSR serialization of the admin response headers. Add `scripts/dev-up.sh` / `scripts/dev-down.sh` (and `make dev-up` / `make dev-down`) that start Postgres and Redis (docker compose when Docker or Colima runs, else the services the env names), migrations and the dev seed, mockvendor, the hub roles gateway, worker, scheduler and admin, and the console, then print the URLs, the dev login and a tenant API key.
+
+**Acceptance criteria**
+- [x] Dev sign-in mints a real admin token through the dev issuer; the token stays in the httpOnly session (`dev-issuer.test.ts`)
+- [x] `/admin/v1/**` is proxied with the session token, only contract headers pass each way, cross-origin mutations are refused (`admin-proxy.test.ts`)
+- [x] Every page loads real data with SSR (no "Failed to get response header") and create/update flows work against the running Hub (walked with Playwright as admin, editor, viewer and tenant viewer: tenant create/edit/disable, API key create/rotate/revoke, endpoint edit and delete-in-use, pause/resume, draft and publish, breaker force open/clear)
+- [x] `scripts/dev-up.sh` brings the whole stack up with one command on macOS arm64 (Colima) and Linux, prints URLs, login and a tenant key; `scripts/dev-down.sh` stops it (`--purge` also removes state). Run here on Linux against local Postgres and Redis (no Docker in the container); the Docker/Colima path and macOS are not exercised in this environment
+- [x] Documented in the root `README.md` and `frontend/README.md`
+
+### HUB-287 — Console visual polish against the real stack
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** in-review · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1903, US-1904, US-1905, US-1906
+- **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-288, HUB-289)
+
+Walk every route with Playwright against the real stack (desktop and 390 px mobile) and fix what looks wrong: spacing, typography, empty/loading/error states, tables, forms, status colours and mobile width, consistently across screens (frontend-design and admin-console-ux skills).
+
+**Acceptance criteria**
+- [x] No route scrolls sideways at 390 px; wide tables scroll inside their own container (`e2e/phone-and-roles.test.ts` "no page scrolls sideways", 14 routes)
+- [x] The mobile header keeps breadcrumbs readable (one back link; e2e "the breadcrumb is a single link back to the parent")
+- [x] Before/after screenshots of every route reviewed (kept outside the repo; admin, viewer and tenant viewer, desktop and 390 px)
+- [x] e2e green, axe clean (no serious/critical)
+
+### HUB-288 — Destructive actions only for roles that may do them
+- **Epic:** EP-10 · **Type:** feat · **Area:** frontend
+- **Status:** in-review · **Depends on:** HUB-253 · **Feature:** F-19 · **Stories:** US-1902, US-1904, US-1906
+- **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-287, HUB-289)
+
+"If a user doesn't have access there should be no delete option at all." Delete, purge, retire, revoke, unseal, rollback and force controls are not rendered unless the signed-in role satisfies the operation's `x-required-role` in `hub-admin.v1.yaml`. The minimum role per operation is generated from the contract (`npm run gen:api` -> `src/lib/api/roles.gen.ts`) so the UI cannot drift from the API. The 403 handling stays.
+
+**Acceptance criteria**
+- [x] `roles.gen.ts` generated from `x-required-role` for every operation; CI fails when it is stale (`scripts/extract-roles.test.ts`, `gen:api` freshness step in `frontend.yml`)
+- [x] `RoleGate op=` / `can(access, op)` gate every destructive control; nothing is rendered disabled instead (`RoleGate.test.ts`, `roles.test.ts`)
+- [x] Tests per role (admin, editor, viewer, tenant_viewer) for every destructive control (`routes/(app)/destructive-controls.test.ts`: 6 screens x 4 roles)
+- [x] A 403 from the API is still shown in the dialog (existing `api-keys.test.ts`, `replay-purge.test.ts`, `force.test.ts` 403 cases unchanged and green)
+
+### HUB-289 — Console bug bash against the real stack
+- **Epic:** EP-10 · **Type:** fix · **Area:** frontend
+- **Status:** in-review · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1902, US-1906
+- **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-287, HUB-288)
+
+Bugs found running the console against a real Hub, each fixed with a test. Backend bugs are reported, not fixed here.
+
+**Acceptance criteria**
+- [x] A 409 that means "in use" or "already exists" shows the API message, not "someone else changed it, reload" (`ConfirmDialog.test.ts` conflictIsStale cases, `callback-endpoints.test.ts` delete 409)
+- [x] Keys seeded without a prefix are named by key id (labels, revoke confirmation text is never empty) (`keys.test.ts` keyName, `api-keys.test.ts` "keys without a prefix")
+- [x] The publish button says "Publish draft" before a draft exists (was "Publish v?") (`publish/page.test.ts`)
+- [x] Editing a callback endpoint's description works when its stored URL is a dev `http://` one the Hub accepted (Save was disabled with no reason) (`endpoints.test.ts`, `callback-endpoints.test.ts`)
+- [x] Request and DLQ entry pages no longer crash on a replayed request: attempts restart at 1 and timeline `seq` values repeat (`AttemptsTable.test.ts`, `requests/[request_id]/page.test.ts`, `timeline.test.ts`)
+- [x] Publish check `operations_have_transformers` (hub-admin 1.2.0) has a label; unknown checks read as words (`publish/draft.test.ts`)
+- [x] Every other bug found is listed in the PR with its test (backend bugs found are reported, not fixed here)
+
 ### HUB-290 — Console: vendors and vendor endpoints pages
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
 - **Status:** todo · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-19xx
@@ -3192,6 +3248,58 @@ Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md` §3.3). At abou
 - [ ] Batched `COPY` (or multi-row insert) and a configurable number of writer goroutines; buffer size configurable (with HUB-403)
 - [ ] `hubload` async step at the gateway's accept limit shows no `buffer_full` drops on the same machine, or the report names the new limit
 - [ ] Benchmark of events/s per writer vs `main` (benchstat)
+
+### HUB-417 — listAccounts never fills dead_letter_count and dead_letter_oldest_at
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `fix/HUB-417-account-dlq-counts`
+
+Found by the console bug bash (HUB-289): `listAccounts` leaves `dead_letter_count` / `dead_letter_oldest_at` empty, so the health board shows "Unknown" for every account.
+
+**Acceptance criteria**
+- [ ] Both fields filled from the DLQ per account (indexed query); contract test with a dead letter present
+
+### HUB-418 — Versions seeded from the config tree report the request time as created_at and published_at
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `fix/HUB-418-seeded-version-times`
+
+Found by HUB-289: integration versions that came from the config tree (not published through the admin API) report `created_at` / `published_at` as the time of the request.
+
+**Acceptance criteria**
+- [ ] Seeded versions report the snapshot's publish time (or null where unknown, if the contract allows); test
+
+### HUB-419 — Timeline seq repeats and attempt numbers restart after a DLQ replay
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-08 · **Stories:** US-08xx
+- **Branch:** `fix/HUB-419-replay-timeline-seq`
+
+Found by HUB-289: after a DLQ replay, timeline `seq` values repeat and come back out of order (the contract says in seq order), attempt numbers restart at 1, and the dead-lettered attempt has `error_code: null`. Seen in the console's request page for a replayed request.
+
+**Acceptance criteria**
+- [ ] Replayed requests keep a strictly increasing seq and continue attempt numbering
+- [ ] The dead-lettered attempt carries its error code
+- [ ] Contract test on a replayed request's timeline
+
+### HUB-420 — DLQ replay by filter ignores filter.replayed: true
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `fix/HUB-420-dlq-replay-filter`
+
+Found by HUB-289: `adminapi/dlq.go` always adds `replayed_at IS NULL`, so replaying by filter with `filter.replayed: true` skips the entries it asked for, unlike the contract.
+
+**Acceptance criteria**
+- [ ] The filter honours `replayed` as the contract defines; table test for true/false/absent
+
+### HUB-421 — Seeded registrar endpoint has an http:// URL that breaks the contract's https pattern
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-11 · **Stories:** US-11xx
+- **Branch:** `fix/HUB-421-dev-registrar-https`
+
+Found by HUB-289: the dev seed's registrar endpoint returns an `http://` URL, which violates `^https://` in the contract, so contract validation of that response fails in dev.
+
+**Acceptance criteria**
+- [ ] Dev seed uses an https URL (or the contract documents the dev exception via the steward); contract test over the seeded data
 
 ### HUB-413 — Latency budget: a 100 ms vendor stays ≤ 110 ms through the Hub
 - **Epic:** EP-13 · **Type:** perf · **Area:** backend

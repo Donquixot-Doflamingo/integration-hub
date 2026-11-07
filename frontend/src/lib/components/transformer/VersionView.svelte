@@ -90,7 +90,7 @@
 
 	<section aria-labelledby="{uid}-goldens">
 		<h3 id="{uid}-goldens">Goldens</h3>
-		<RoleGate {access}>
+		<RoleGate {access} op="runTransformerGoldens">
 			{#key v.ref}<GoldensRunner transformerRef={v.ref} />{/key}
 			{#snippet denied(role)}
 				<p class="muted">Running goldens needs the {role} role. The stored result is above.</p>
@@ -100,7 +100,7 @@
 
 	<section aria-labelledby="{uid}-dry-run">
 		<h3 id="{uid}-dry-run">Dry run</h3>
-		<RoleGate {access}>
+		<RoleGate {access} op="dryRunTransformer">
 			{#key v.ref}<DryRun version={v} />{/key}
 			{#snippet denied(role)}
 				<p class="muted">A dry run needs the {role} role.</p>
@@ -145,6 +145,10 @@
 		display: grid;
 		gap: var(--space-5);
 		max-width: 72rem;
+	}
+	/* Grid items default to their content width; keep wide fact lists and code inside the page. */
+	.version > :global(*) {
+		min-width: 0;
 	}
 	.wide {
 		grid-column: 1 / -1;

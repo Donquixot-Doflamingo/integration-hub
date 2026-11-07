@@ -4,6 +4,7 @@ import {
 	createKeyBody,
 	isLive,
 	KEY_ID,
+	keyName,
 	keyProblems,
 	keyValuesFromForm,
 	overlapFromForm,
@@ -129,4 +130,15 @@ it('key ids and live states', () => {
 	expect(isLive({ ...k, state: 'expiring' })).toBe(true);
 	expect(isLive({ ...k, state: 'revoked' })).toBe(false);
 	expect(isLive({ ...k, state: 'expired' })).toBe(false);
+});
+
+// HUB-289: keys seeded from the config tree have no prefix (the Hub answers "").
+describe('keyName', () => {
+	it.each([
+		['hk_live_7Qm2', 'key_01J9Z7F6G7H8J9K0M1N2P3Q4RS', 'hk_live_7Qm2'],
+		['', 'key_01J9Z7F6G7H8J9K0M1N2P3Q4RS', 'key_01J9Z7F6G7H8J9K0M1N2P3Q4RS'],
+		['   ', 'key_01J9Z7F6G7H8J9K0M1N2P3Q4RS', 'key_01J9Z7F6G7H8J9K0M1N2P3Q4RS']
+	])('prefix %j -> %s', (prefix, key_id, want) => {
+		expect(keyName({ prefix, key_id })).toBe(want);
+	});
 });

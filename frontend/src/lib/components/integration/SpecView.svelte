@@ -34,7 +34,8 @@
 <div class="spec">
 	<section aria-labelledby="{uid}-targets">
 		<svelte:element this={h} id="{uid}-targets">Targets</svelte:element>
-		<div class="table-wrap">
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+		<div class="table-wrap" role="region" aria-label="Targets table" tabindex="0">
 			<table>
 				<thead>
 					<tr>
@@ -213,6 +214,11 @@
 	.spec {
 		display: grid;
 		gap: var(--space-5);
+	}
+	/* Grid items default to their content width; let the targets table scroll inside its wrapper
+	   instead of widening the page on a phone (HUB-287). */
+	.spec > section {
+		min-width: 0;
 	}
 	section > :global(:is(h3, h4)) {
 		margin-bottom: var(--space-2);

@@ -6,6 +6,30 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · File the backend bugs the console bug bash found (HUB-289) · HUB-289 · F-19
+  - New todo tickets HUB-417 to HUB-421: account DLQ counts, seeded version times, replayed request timelines, DLQ replay filter, dev registrar URL
+- 2026-11-07 · `docs(tickets)` · Mark the console real-backend tickets in review (HUB-286) · HUB-286 · F-19
+  - HUB-286 and HUB-289 are in review with their acceptance criteria mapped to tests; `make dev-up` names the console's "Create API key" button in its hint
+- 2026-11-07 · `feat(frontend)` · Polish the console layout on phones and desktop (HUB-287) · HUB-287 · F-19
+  - No console page scrolls sideways on a 390 px phone any more: wide tables scroll inside their frame and long request or change ids in titles wrap
+  - On phones the breadcrumb is a single link back to the parent page instead of a squeezed column next to the Sections button
+  - Lists that fit on one page no longer show inert Previous / Next buttons; example values in empty filter fields are italic so they do not look like active filters
+- 2026-11-07 · `fix(frontend)` · Fix console bugs found against a running Hub (HUB-289) · HUB-289 · F-19
+  - The request and DLQ entry pages of a replayed request no longer crash (repeated attempt numbers and timeline sequence numbers)
+  - Deleting a callback endpoint that is still subscribed, or creating a tenant or endpoint whose id is taken, shows the Hub's reason instead of "someone else changed it, reload"
+  - API keys seeded without a prefix are shown and confirmed by their key id instead of an empty name
+  - A callback endpoint with a dev `http://` URL can have its description edited (Save was disabled without a reason)
+  - The publish check "Every operation has a transformer" has a readable name; the publish button says "Publish draft" before a draft exists
+- 2026-11-07 · `docs(frontend)` · Renumber the console proxy ADR to 0022 (HUB-286) · HUB-286 · F-19
+  - The same-origin admin proxy decision is `docs/tech/adr/0022-console-same-origin-admin-proxy.md` (0019 to 0021 are taken by other branches); every reference points to it
+- 2026-11-07 · `feat(frontend)` · Render destructive actions only for roles that may run them (HUB-288) · HUB-288 · F-19
+  - Delete, purge, revoke, rotate, rollback, pause, force and tenant controls are not shown at all to a role the contract does not allow (`x-required-role`), instead of being shown and failing
+  - The minimum role per admin operation is generated from the contract (`npm run gen:api` -> `roles.gen.ts`); CI fails when it is stale
+- 2026-11-07 · `feat(frontend)` · Run the console against a real Hub with one command (HUB-286) · HUB-286 · F-19
+  - `make dev-up` (or `scripts/dev-up.sh`) starts Postgres and Redis (docker compose with Docker/Colima, else the services in `HUB_PG_DSN` / `HUB_REDIS_ADDR`), migrations, the dev seed, mockvendor, the hub admin (dev OIDC issuer), gateway, worker, scheduler and the console, then prints the URLs, how to sign in and a tenant API key; `make dev-down` stops it
+  - Dev sign-in against a running Hub mints a real admin token through the admin's dev issuer; the token stays in the httpOnly session
+  - The console server proxies `/admin/v1` to `HUB_ADMIN_UPSTREAM` with the session's token, passing only contract headers and refusing cross-origin mutations (ADR-0022)
+  - Server-rendered pages no longer fail on real admin responses ("Failed to get response header")
 - 2026-11-07 · `test(edge)` · Judge the latency gate on what the Hub adds over direct calls (HUB-413) · HUB-413 · F-18
   - The gate enforces the requirement (a 100 ms vendor stays at or under 110 ms at p99) and the Hub's added latency over direct calls in the same run (p50 ≤ 2 ms, ≤ 3 ms with an Idempotency-Key; p99 ≤ 10 ms); the absolute p50 ≤ 102 ms bound, which measured the mock vendor's own jitter, is gone
   - More samples per scenario (300 sync + 400 concurrent, 300 keyed, 200 wait mode), so p99 is a real percentile

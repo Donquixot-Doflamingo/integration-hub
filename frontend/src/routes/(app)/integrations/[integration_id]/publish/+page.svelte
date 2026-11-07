@@ -30,7 +30,10 @@
 	<ChangeNotice {...notice} ondismiss={() => (notice = null)} />
 {/if}
 
-<RoleGate access={data.access}>
+<RoleGate
+	access={data.access}
+	ops={['createIntegrationDraft', 'updateIntegrationDraft', 'publishIntegrationVersion']}
+>
 	<AsyncView result={data.base} noun="the draft of {id}" onretry={invalidateAll}>
 		{#snippet children(b)}
 			<DraftEditor

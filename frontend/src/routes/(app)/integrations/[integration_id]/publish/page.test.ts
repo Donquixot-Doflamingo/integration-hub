@@ -72,7 +72,8 @@ describe('publish page', () => {
 		expect(screen.getByRole('region', { name: 'Draft' })).toHaveTextContent('No draft yet');
 		expect(screen.getByRole('region', { name: 'Draft' })).toHaveTextContent('creates draft v8');
 		expect(editor.value).toContain('weight: 100');
-		expect(screen.getByRole('button', { name: 'Publish v?' })).toBeDisabled();
+		// HUB-289: no draft yet, so no version number to show (was "Publish v?").
+		expect(screen.getByRole('button', { name: 'Publish draft' })).toBeDisabled();
 		await user.type(screen.getByLabelText(/Why this version/), REASON);
 		await user.click(screen.getByRole('button', { name: 'Create draft' }));
 		expect(

@@ -142,7 +142,7 @@
 				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- built on resolve() -->
 				<a href={integrationsHref}>Integrations owned by {t.tenant_id}</a>
 			</p>
-			<RoleGate access={data.access} min="admin">
+			<RoleGate access={data.access} op="updateTenant">
 				<div class="actions">
 					<div class="group" role="group" aria-label="Change this tenant">
 						<button type="button" class="primary" onclick={() => (editOpen = true)}>
@@ -300,6 +300,13 @@
 	.group.danger {
 		padding-left: var(--space-3);
 		border-left: 1px solid var(--rule);
+	}
+	/* Narrow screens: the groups stack, so a divider on the left would dangle (HUB-287). */
+	@media (max-width: 640px) {
+		.group.danger {
+			padding-left: 0;
+			border-left: 0;
+		}
 	}
 	.actions button {
 		display: inline-flex;

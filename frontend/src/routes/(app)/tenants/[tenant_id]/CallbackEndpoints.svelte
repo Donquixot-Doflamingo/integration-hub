@@ -8,7 +8,7 @@
 		RegistrarEndpointChange,
 		RegistrarEndpointSecretChange
 	} from '$lib/api/types';
-	import type { Access } from '$lib/auth/roles';
+	import { can, type Access } from '$lib/auth/roles';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import ListView from '$lib/components/ListView.svelte';
@@ -49,6 +49,11 @@
 	} = $props();
 
 	const id = $props.id();
+	// HUB-288: each row action only for roles that may call its operation (contract x-required-role).
+	const canUpdate = $derived(can(access, 'updateRegistrarEndpoint'));
+	const canRotate = $derived(can(access, 'rotateRegistrarSecret'));
+	const canDelete = $derived(can(access, 'deleteRegistrarEndpoint'));
+	const anyRowAction = $derived(canUpdate || canRotate || canDelete);
 	const EMPTY: EndpointValues = { endpoint_id: '', url: '', description: '' };
 	// The one place a new signing secret lives, between the action answer and Done.
 	let reveal = $state.raw<{
@@ -90,7 +95,7 @@
 	let editValues = $state<EndpointValues>({ ...EMPTY });
 	let editTouched = $state(false);
 	let overlap = $state(DEFAULT_OVERLAP_MS);
-	const editProblems = $derived(endpointProblems(editValues, 'edit'));
+	const editProblems = $derived(endpointProblems(editValues, 'edit', editBefore));
 	const editChanged = $derived(updateEndpointBody(editValues, editBefore, 'x').ok);
 
 	function pick(e: RegistrarEndpoint, open: 'edit' | 'switch' | 'rotate' | 'delete') {
@@ -202,7 +207,7 @@
 <section class="block" aria-labelledby="{id}-heading">
 	<div class="title-row">
 		<h2 id="{id}-heading">Callback endpoints</h2>
-		<RoleGate {access} min="admin">
+		<RoleGate {access} op="createRegistrarEndpoint">
 			<button type="button" class="primary" onclick={() => (createOpen = true)}>
 				Register endpoint
 			</button>
@@ -221,7 +226,7 @@
 		columns={[
 			{ label: 'Endpoint' },
 			{ label: 'State' },
-			...(access.isAdmin ? [{ label: 'Actions' }] : []),
+			...(anyRowAction ? [{ label: 'Actions' }] : []),
 			{ label: 'URL' },
 			{ label: 'Signing secret' },
 			{ label: 'Subscribed versions', numeric: true },
@@ -238,21 +243,29 @@
 					<StatusBadge tone="ok" icon="closed" label="Enabled" />
 				{/if}
 			</td>
-			{#if access.isAdmin}
+			{#if anyRowAction}
 				<td class="row-actions">
-					<button type="button" class="row-action" onclick={() => pick(e, 'edit')}>
-						Edit {e.endpoint_id}
-					</button>
-					<button type="button" class="row-action" onclick={() => pick(e, 'rotate')}>
-						Rotate secret of {e.endpoint_id}
-					</button>
-					<button type="button" class="row-action" onclick={() => pick(e, 'switch')}>
-						{e.disabled ? 'Enable' : 'Disable'}
-						{e.endpoint_id}
-					</button>
-					<button type="button" class="row-action stop" onclick={() => pick(e, 'delete')}>
-						Delete {e.endpoint_id}
-					</button>
+					{#if canUpdate}
+						<button type="button" class="row-action" onclick={() => pick(e, 'edit')}>
+							Edit {e.endpoint_id}
+						</button>
+					{/if}
+					{#if canRotate}
+						<button type="button" class="row-action" onclick={() => pick(e, 'rotate')}>
+							Rotate secret of {e.endpoint_id}
+						</button>
+					{/if}
+					{#if canUpdate}
+						<button type="button" class="row-action" onclick={() => pick(e, 'switch')}>
+							{e.disabled ? 'Enable' : 'Disable'}
+							{e.endpoint_id}
+						</button>
+					{/if}
+					{#if canDelete}
+						<button type="button" class="row-action stop" onclick={() => pick(e, 'delete')}>
+							Delete {e.endpoint_id}
+						</button>
+					{/if}
 				</td>
 			{/if}
 			<td>
@@ -273,6 +286,7 @@
 	bind:open={createOpen}
 	title="Register a callback endpoint for {tenantId}"
 	verb="Register"
+	conflictIsStale={false}
 	busyVerb="Registering..."
 	action="?/createEndpoint"
 	tone="primary"
@@ -409,6 +423,7 @@
 		bind:open={deleteOpen}
 		title="Delete callback endpoint {e.endpoint_id}"
 		verb="Delete"
+		conflictIsStale={false}
 		busyVerb="Deleting..."
 		action="?/deleteEndpoint"
 		confirmText={e.endpoint_id}

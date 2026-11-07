@@ -84,6 +84,19 @@ describe('updateEndpointBody', () => {
 	it('refuses an edit without changes', () => {
 		expect(updateEndpointBody(before, before, 'r')).toMatchObject({ ok: false });
 	});
+	// HUB-289: a stored URL the Hub accepted (dev loopback receiver) must not block other edits.
+	it('does not re-check an unchanged URL, but checks a changed one', () => {
+		const dev = { ...before, url: 'http://127.0.0.1:8097/hub/callbacks' };
+		expect(endpointProblems({ ...dev, description: 'QA receiver' }, 'edit', dev)).toEqual({});
+		expect(updateEndpointBody({ ...dev, description: 'QA receiver' }, dev, 'r')).toEqual({
+			ok: true,
+			body: { description: 'QA receiver', reason: 'r' }
+		});
+		expect(endpointProblems({ ...dev, url: 'http://127.0.0.1:9000/x' }, 'edit', dev).url).toBe(
+			'Use an https:// URL.'
+		);
+		expect(endpointProblems(dev, 'create').url).toBe('Use an https:// URL.');
+	});
 });
 
 it('secretText: version, and the overlap while two secrets sign', () => {

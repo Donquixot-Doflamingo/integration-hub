@@ -31,24 +31,29 @@
 		Page {pageNumber(paging)}: {count}
 		{count === 1 ? noun.replace(/s$/, '') : noun}{next ? ', more after this page' : ''}.
 	</p>
-	<ul>
-		<li>
-			{#if prev}
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- href() builds on resolve() -->
-				<a class="back" href={href(prev)} rel="prev"><Icon name="chevron" size={14} />Previous</a>
-			{:else}
-				<span class="off back" aria-disabled="true"><Icon name="chevron" size={14} />Previous</span>
-			{/if}
-		</li>
-		<li>
-			{#if next}
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- href() builds on resolve() -->
-				<a href={href(next)} rel="next">Next<Icon name="chevron" size={14} /></a>
-			{:else}
-				<span class="off" aria-disabled="true">Next<Icon name="chevron" size={14} /></span>
-			{/if}
-		</li>
-	</ul>
+	<!-- A single page needs no Previous / Next (HUB-287: two inert buttons looked clickable). -->
+	{#if prev || next}
+		<ul>
+			<li>
+				{#if prev}
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- href() builds on resolve() -->
+					<a class="back" href={href(prev)} rel="prev"><Icon name="chevron" size={14} />Previous</a>
+				{:else}
+					<span class="off back" aria-disabled="true"
+						><Icon name="chevron" size={14} />Previous</span
+					>
+				{/if}
+			</li>
+			<li>
+				{#if next}
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- href() builds on resolve() -->
+					<a href={href(next)} rel="next">Next<Icon name="chevron" size={14} /></a>
+				{:else}
+					<span class="off" aria-disabled="true">Next<Icon name="chevron" size={14} /></span>
+				{/if}
+			</li>
+		</ul>
+	{/if}
 </nav>
 
 <style>
@@ -90,7 +95,10 @@
 	.off {
 		color: var(--ink-muted);
 		border-color: var(--rule);
+		border-style: dashed;
 		background: transparent;
+		cursor: default;
+		opacity: 0.7;
 	}
 	.back :global(.icon) {
 		transform: rotate(180deg);

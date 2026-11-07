@@ -12,7 +12,7 @@ test.describe('integration detail', () => {
 		await expect(page).toHaveURL('/integrations/int_evt_brandA');
 		await expect(page.getByRole('heading', { level: 1 })).toHaveText('int_evt_brandA');
 		await expect(page.getByRole('heading', { name: 'Active version v7' })).toBeVisible();
-		await expect(page.getByRole('region', { name: 'Targets' })).toContainText(
+		await expect(page.getByRole('region', { name: 'Targets', exact: true })).toContainText(
 			'clevertap/ct-brandA-in'
 		);
 

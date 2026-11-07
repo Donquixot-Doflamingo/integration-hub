@@ -286,7 +286,7 @@
 		class="primary"
 		disabled={!!blocked}
 		aria-describedby={blocked ? 'publish-blocked' : undefined}
-		onclick={() => (publishOpen = true)}>Publish v{version ?? '?'}</button
+		onclick={() => (publishOpen = true)}>{version ? `Publish v${version}` : 'Publish draft'}</button
 	>
 	{#if blocked}<p id="publish-blocked" class="meta">{blocked}</p>{/if}
 </section>

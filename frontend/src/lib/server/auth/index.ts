@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { env as privateEnv } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
-import { devProvider } from './dev';
+import { createDevProvider } from './dev';
 import { oidcProvider } from './oidc';
 import type { AuthProvider } from './provider';
 import type { AuthProviderId } from './session';
@@ -19,7 +19,12 @@ export function authMode(): AuthProviderId {
 }
 
 export function authProvider(): AuthProvider {
-	if (authMode() === 'dev') return devProvider;
+	if (authMode() === 'dev') {
+		// Against a running Hub (scripts/dev-up.sh) the admin's dev issuer mints the token (HUB-286).
+		return createDevProvider({
+			issuer: __API_MOCKING__ ? undefined : privateEnv.HUB_DEV_OIDC_ISSUER
+		});
+	}
 	return oidcProvider({
 		issuer: privateEnv.HUB_OIDC_ISSUER,
 		clientId: privateEnv.HUB_OIDC_CLIENT_ID,

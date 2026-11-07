@@ -12,12 +12,15 @@
 	import RoleGate from '$lib/components/RoleGate.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import SpecView from '$lib/components/integration/SpecView.svelte';
+	import { can } from '$lib/auth/roles';
 	import { integrationStatus } from '$lib/status';
 	import { formatUtc } from '$lib/utils/format';
 	import type { PageData } from './$types';
 	import WeightsDialog from './WeightsDialog.svelte';
 
 	let { data }: { data: PageData } = $props();
+	// HUB-288: rendered only for roles that may call rollbackIntegration (contract x-required-role).
+	const canRollback = $derived(can(data.access, 'rollbackIntegration'));
 
 	const id = $derived(data.integrationId);
 	const diffBase = $derived(
@@ -148,13 +151,16 @@
 					<dd>{formatUtc(i.updated_at)}</dd>
 				</div>
 			</dl>
-			<RoleGate access={data.access}>
+			<RoleGate
+				access={data.access}
+				ops={['createIntegrationDraft', 'pauseIntegration', 'resumeIntegration']}
+			>
 				<div class="actions">
 					<div class="group" role="group" aria-label="Change this integration">
 						<a class="primary" href={publishHref}>
 							{i.has_draft ? `Review draft v${i.latest_version} and publish` : 'Edit a new draft'}
 						</a>
-						{#if i.active && i.active.spec.targets.length > 1}
+						{#if i.active && i.active.spec.targets.length > 1 && can(data.access, 'updateIntegrationWeights')}
 							<button type="button" onclick={() => (weightsOpen = true)}>Set weights</button>
 						{/if}
 					</div>
@@ -210,7 +216,7 @@
 			columns={[
 				{ label: 'Version', numeric: true },
 				{ label: 'State' },
-				...(data.access.canMutate ? [{ label: 'Actions' }] : []),
+				...(canRollback ? [{ label: 'Actions' }] : []),
 				{ label: 'Author' },
 				{ label: 'Reason' },
 				{ label: 'Created' },
@@ -235,7 +241,7 @@
 						<span class="muted">Published</span>
 					{/if}
 				</td>
-				{#if data.access.canMutate}
+				{#if canRollback}
 					<td>
 						{#if v.state === 'published' && !v.is_active && current?.active_version != null}
 							<button type="button" class="row-action" onclick={() => openRollback(v.version)}>
@@ -387,6 +393,13 @@
 	.group.danger {
 		padding-left: var(--space-3);
 		border-left: 1px solid var(--rule);
+	}
+	/* Narrow screens: the groups stack, so a divider on the left would dangle (HUB-287). */
+	@media (max-width: 640px) {
+		.group.danger {
+			padding-left: 0;
+			border-left: 0;
+		}
 	}
 	.actions a,
 	.actions button {

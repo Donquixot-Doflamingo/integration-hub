@@ -45,5 +45,7 @@ backend/**/dev.key
 backend/**/.data/
 backend/.data/
 
+# local dev stack state (scripts/dev-up.sh): logs, pids, dev credentials, snapshot blobs
+.dev-stack/
 # Runnable examples: per-run state (merged config, encrypted demo credentials, logs)
 .demo/

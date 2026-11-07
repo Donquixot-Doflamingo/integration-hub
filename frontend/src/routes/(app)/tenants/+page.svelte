@@ -106,7 +106,7 @@
 			<a class="clear" href={hrefFor(undefined)}>Clear search</a>
 		{/if}
 	</form>
-	<RoleGate access={data.access} min="admin">
+	<RoleGate access={data.access} op="createTenant">
 		<button type="button" class="primary" onclick={() => (createOpen = true)}>
 			Create tenant
 		</button>
@@ -196,6 +196,7 @@
 	bind:open={createOpen}
 	title="Create a tenant"
 	verb="Create tenant"
+	conflictIsStale={false}
 	busyVerb="Creating..."
 	action="?/create"
 	tone="primary"
