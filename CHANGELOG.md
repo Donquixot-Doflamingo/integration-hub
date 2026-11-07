@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(frontend)` · Show operations and their input fields on integration pages · HUB-436 · F-23
+  - The integration and version pages list each operation: description, idempotent, whether live calls are checked, its request body and headers as fields with Required / Optional, PII tags and constraints, and the transformer pair each target uses for it
+  - A target without a response transformer reads "pass-through" everywhere (operations, targets, failover)
 - 2026-11-07 · `feat(frontend)` · Prove transformers with samples and show the field that broke · HUB-436 · F-23
   - Transformer authoring speaks of samples: request samples are the caller's input body, optional caller headers and the expected vendor request; response samples are a vendor response and the expected output or error
   - A failing sample says why on its own card, field by field: the produced request breaks the endpoint's request schema (`/query/name` must not be empty) or differs from the expected one, also when the Hub refuses the version (422 `endpoint_schema` / `goldens_pass`)

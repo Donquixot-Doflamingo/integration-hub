@@ -27,6 +27,40 @@ async function renderDetail(id = 'int_evt_brandA', access: Access = accessFromRo
 	return render(Page, { props: { data: { access, ...data } as never } });
 }
 
+describe('integration detail: operations (HUB-436)', () => {
+	it("lists each operation's input fields, required or optional, and its transformer pair", async () => {
+		await renderDetail();
+		const ops = await screen.findByRole('region', { name: 'Operations' });
+		expect(ops).toHaveTextContent('default');
+		expect(ops).toHaveTextContent('Track a single event for a user.');
+		expect(ops).toHaveTextContent('Yes: 400 VALIDATION_FAILED on a mismatch');
+		const body = within(ops).getByRole('region', { name: 'Request body of default' });
+		expect(within(body).getByRole('row', { name: /^user\.id/ })).toHaveTextContent(
+			/string\s*Required\s*PII: identifier/
+		);
+		expect(within(body).getByRole('row', { name: /^context /i })).toHaveTextContent('Optional');
+		expect(
+			within(ops).getByRole('region', { name: 'Request headers of default' })
+		).toHaveTextContent('X-Request-Source');
+		expect(ops).toHaveTextContent('clevertap/ct-brandA-in: request T1@7, response R1@2');
+	});
+
+	it('says "pass-through" when a target has no response transformer', async () => {
+		const draft = contractMocks.createIntegrationDraft.named!.request!.pass_through!;
+		server.use(
+			mockOperation('getIntegration', {
+				...integration,
+				active: { ...integration.active!, spec: draft.spec! }
+			})
+		);
+		await renderDetail();
+		const ops = await screen.findByRole('region', { name: 'Operations' });
+		expect(ops).toHaveTextContent('agify/agify-public: request AGE_REQ@1, response pass-through');
+		const targets = screen.getByRole('region', { name: 'Targets table' });
+		expect(targets).toHaveTextContent('pass-through');
+	});
+});
+
 describe('integration detail', () => {
 	it('shows the header and the active version spec', async () => {
 		await renderDetail();
