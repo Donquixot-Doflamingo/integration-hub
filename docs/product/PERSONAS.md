@@ -34,9 +34,9 @@ Personas used across [PRD](PRD.md), [USER_STORIES](USER_STORIES.md) and the feat
 
 | | |
 | --- | --- |
-| **Goals** | Add a vendor for an existing capability in ≤ 2 days; prove a transformer correct before it runs; keep Hub overhead ≤ 5 ms p99; operate one place for keys, limits and breakers. |
+| **Goals** | Onboard a new API or vendor from the console in ≤ 2 days, without code (ADR-0023); prove a transformer correct with samples before it runs; keep Hub overhead ≤ 5 ms p99; operate one place for keys, limits and breakers. |
 | **Pains today** | Vendor docs drift from what services actually send; no way to see what a team sent; every team reinvents throttling; key rotation means chasing N teams. |
-| **How they touch the Hub** | Edits YAML under `backend/config/` in Git; `hubctl transform test` (goldens), `hubctl dry-run`, `hubctl plan/apply`; admin API for accounts (test-connection, rotate, lifecycle); console transformer viewer with dry-run; benchmarks (`make bench`); mockvendor for every test. |
+| **How they touch the Hub** | Console: vendors and endpoints (request schema from a pasted sample), accounts, transformers with samples, integration operations; edits YAML under `backend/config/` in Git for local dev; `hubctl transform test` (samples), `hubctl dry-run`, `hubctl plan/apply`; admin API for accounts (test-connection, rotate, lifecycle); console transformer viewer with dry-run; benchmarks (`make bench`); mockvendor for every test. |
 | **Success looks like** | Transformer + goldens + publish in one PR; type errors caught at compile; no secret ever in a log line. |
 
 ## 3. On-call SRE
@@ -78,7 +78,7 @@ Personas used across [PRD](PRD.md), [USER_STORIES](USER_STORIES.md) and the feat
 
 | | |
 | --- | --- |
-| **Goals** | Ask "what can I call to send a WhatsApp message?" and get a real answer; generate a correct canonical body and client code; dry-run before writing code; check a request's status without leaving the editor. |
-| **Pains today** | Has to read the PRD, find the capability schema, and guess integration IDs; AI assistants hallucinate vendor APIs and suggest calling CleverTap directly. |
+| **Goals** | Ask "what can I call to send a WhatsApp message?" and get a real answer; generate a correct body from the operation's request schema and client code; dry-run before writing code; check a request's status without leaving the editor. |
+| **Pains today** | Has to read the PRD, find what each integration expects, and guess integration IDs; AI assistants hallucinate vendor APIs and suggest calling CleverTap directly. |
 | **How they touch the Hub** | Runs `hubmcp` locally (stdio) with `HUB_BASE_URL` + their tenant `HUB_API_KEY`; tools `hub_list_integrations`, `hub_describe_integration`, `hub_dry_run`, `hub_invoke` (with `confirm: true` for money/quota), `hub_get_request`; installs the consumer skill into `~/.claude/skills/integration-hub/` so Claude knows the rules (Idempotency-Key, `Queued` vs `Result`, signature verification). |
 | **Success looks like** | From question to a working, idempotent `hubclient` call in one session, with no vendor names in the code and no accidental real side effects. |

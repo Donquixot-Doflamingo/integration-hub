@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(product)` · Add F-23, US-2301 to US-2313 and PRD DV-7 for the schema registry (HUB-437) · HUB-437 · F-23
+  - PRD: DV-7 records the removal of capabilities (operations on the integration, request schemas on the endpoint, samples, optional response transformer, pass-through, auth `none`); new FR-54 to FR-60; goals, non-goals, discovery, error catalogue and body limit follow contracts 2.0.0
+  - USER_STORIES: thirteen F-23 stories with Given/When/Then (onboarding from the panel, schemas from a sample, samples, operation checks, `validate_input`, response output, pass-through, auth `none`, discovery, vendor switch, upgrade, skills, the planned LLM setting); older stories and journeys no longer mention capabilities
+  - New feature doc F-23 (status shipped) with contract references, observability, failure modes and the pass-through body caveat; feature index entry; personas updated
 - 2026-11-07 · `docs(skills)` · Update the consumer skill for request schemas and pass-through (HUB-437) · HUB-437 · F-23
   - Callers' assistants now discover each operation's request schema from `/v1/integrations` (required vs optional fields, declared headers) instead of `/v1/capabilities`, which no longer exists
   - New: how to recognise a pass-through answer (`X-Hub-Pass-Through: true`, the third party's own status and body, never the error envelope), in curl, Go, the SDK (`Result.PassThrough`, `PassThroughError`) and `hub_invoke` (`pass_through`)

@@ -5,7 +5,7 @@
 | Status | Draft (Phase 1, documentation only) |
 | Source of truth for behaviour | [`docs/DESIGN.md`](../DESIGN.md) |
 | Related | [PERSONAS](PERSONAS.md) · [USER_STORIES](USER_STORIES.md) · [Feature index](../features/README.md) · `docs/tech/TECH_SPEC.md` · `docs/tickets/TICKETS.md` · `contracts/` |
-| Last updated | 2026-10-31 |
+| Last updated | 2026-11-07 (DV-7: capabilities removed, ADR-0023) |
 
 > **Naming.** The repo uses *Phase 1* (foundation and docs, no code) and *Phase 2* (code, milestones M0–M8). DESIGN.md's own "Phase 2" and "Phase 3" (after M8) are called **Release 2** and **Release 3** in this document to avoid the clash.
 
@@ -23,7 +23,7 @@ Every internal service integrates third parties directly: CleverTap and other en
 
 ## 2. Product summary
 
-One vendor-agnostic API. Callers send a **stable integration ID** plus a **canonical request body** and receive a **canonical response**. The Hub resolves vendor, account and transformer, enforces delivery policy, rate limits and circuit breakers, transforms, calls the vendor now or later via a durable queue, maps the response back, and writes a lossless audit trail (DESIGN §1, §5).
+One vendor-agnostic API. Callers send a **stable integration ID**, an **operation** and a **body that matches the operation's request schema**, and receive the integration's output (what its response transformer produces, or, in pass-through, the vendor's own answer). The Hub resolves vendor, account and transformer, enforces delivery policy, rate limits and circuit breakers, transforms, calls the vendor now or later via a durable queue, maps the response back when configured, and writes a lossless audit trail (DESIGN §1, §5). Operators onboard a new API from the console without code: the integration owns the caller's input schema, the vendor endpoint owns its request schema, and samples prove the transformer between them (DV-7).
 
 **Caller invariant:** callers never see or select vendor names, account names or versions (DESIGN §0, D12). A vendor or account swap is a Hub-side config publish (DESIGN §6.1).
 
@@ -31,12 +31,12 @@ One vendor-agnostic API. Callers send a **stable integration ID** plus a **canon
 
 | # | Goal | Measured by |
 | --- | --- | --- |
-| G1 | Callers integrate once against a canonical contract and never redeploy for vendor/account/transformer changes | Swap ≤ 1 working day, zero caller deploys |
+| G1 | Callers integrate once against an integration's request schema and never redeploy for vendor/account/transformer changes (the output stays the same when the response transformer reproduces it, DV-7) | Swap ≤ 1 working day, zero caller deploys |
 | G2 | Accepted async work is never lost, including across vendor outages and worker crashes | 0 lost accepted requests in soak test |
 | G3 | The Hub adds negligible latency | Sync overhead p99 ≤ 5 ms; async accept p99 ≤ 10 ms |
 | G4 | Vendor outages are contained: fail fast, park, and drain automatically | Drain starts ≤ 60 s after recovery |
 | G5 | Every call is explainable after the fact | Complete per-request timeline (DESIGN §13) |
-| G6 | Adding a vendor for an existing capability is cheap and safe | ≤ 2 engineer-days, goldens enforced at publish |
+| G6 | Onboarding a new API or vendor is cheap and safe, from the console, without code | ≤ 2 engineer-days; samples enforced at transformer creation and publish |
 | G7 | Operators manage the Hub without SQL or redeploys | Admin API, `hubctl`, admin console |
 | G8 | Developers discover and try integrations from their own tools | MCP server + consumer Claude skill |
 
@@ -47,11 +47,12 @@ From DESIGN §1, plus scope boundaries agreed for this repo:
 - Not a multi-step workflow/orchestration engine across vendors (vendor sessions for one vendor's two-step flow are Release 2, F-22).
 - Not ETL or data sync.
 - Not a gateway for our own public APIs; callers are internal services (pending open question Q1).
-- Not a self-serve builder for business users; transformers are authored by the platform team and gated by goldens (D7).
+- Not a self-serve builder for business users; transformers are authored by the platform team (console roles `editor`/`admin`) and gated by samples (D7, DV-7).
 - No caller-side version, vendor or account selection, ever (D12).
 - No broker-backed queue in v1 (Postgres outbox only, D9); NATS/RabbitMQ is Release 3.
 - No multi-region active/active; one region (warm standby is Release 3, pending Q8).
-- The admin console has no in-browser transformer IDE in v1: it creates transformer versions from YAML plus golden fixtures with goldens and dry-run (HUB-293, US-1910); richer editing (completion, live preview) is Release 2.
+- The admin console has no in-browser transformer IDE in v1: it creates transformer versions from YAML plus samples, with sample runs and dry-run (HUB-293, US-1910, US-2303); richer editing (completion, live preview) is Release 2.
+- No canonical output shared across vendors and no enforced vendor response schema (DV-7).
 - The MCP server never deletes anything (no delete, purge, replay, unseal, retire, credential, breaker-force, pause or key revoke/rotate operation) and never accepts credentials. Admin writes exist only as the signed-in user, over stdio (ADR-0020).
 
 ## 5. Personas (summary)
@@ -60,8 +61,8 @@ Full detail in [PERSONAS.md](PERSONAS.md).
 
 | Persona | Primary need | Main surfaces |
 | --- | --- | --- |
-| Service developer (tenant/caller) | Call a vendor capability without knowing the vendor | Caller API, `hubclient` SDK |
-| Platform engineer (Hub owner) | Add vendors/transformers safely, run the Hub | `hubctl`, config-as-code, admin API |
+| Service developer (tenant/caller) | Call a third-party API without knowing the vendor | Caller API, `hubclient` SDK |
+| Platform engineer (Hub owner) | Onboard APIs and vendors safely, run the Hub | Admin console, `hubctl`, config-as-code, admin API |
 | On-call SRE | Detect and contain vendor outages, explain failures | Admin console health board, request explorer, alerts |
 | Integration admin / reviewer | Publish versions, run canary cutovers, roll back | Admin console, `hubctl plan/apply` |
 | Compliance / audit officer | Prove what was sent to regulated vendors; controlled unseal | Request explorer, change log, unseal (Release 2) |
@@ -101,16 +102,17 @@ flowchart LR
 
 ## 7. Agreed deviations from DESIGN.md (additive)
 
-These are agreed additions. None breaks a DESIGN §2 decision; each will be recorded as an ADR in `docs/tech/adr/`.
+These are agreed additions. DV-1 to DV-6 break no DESIGN §2 decision; DV-7 turns D11 into guidance (see its row). Each is recorded as an ADR in `docs/tech/adr/`.
 
 | # | Deviation | Why | Respects |
 | --- | --- | --- | --- |
 | DV-1 | **Monorepo layout**: Go backend under `backend/` (module `github.com/Donquixot-Doflamingo/integration-hub/backend`), SvelteKit console in `frontend/`, contracts in `contracts/`, consumer skill in `clients/claude-skill/`. DESIGN §18.1 paths are relative to `backend/`. | Frontend and backend built in parallel against frozen contracts | §18.1 layout unchanged inside `backend/` |
-| DV-2 | **Admin console pulled forward** from Release 2 (DESIGN §19 Phase 2 "admin UI") into v1, built in parallel with M1–M8 against frozen admin contracts. Screens: integrations list/detail (version history, diff, publish/rollback/weights/pause); vendor & account health board (breaker states); request explorer with timeline; DLQ console with replay by filter; transformer viewer with dry-run and goldens; tenants / API keys / registrar endpoints; change log. Creating transformer versions (YAML + goldens, HUB-293) is in v1; a richer transformer editor stays Release 2. Vendor, account (write-only credentials) and integration authoring pages were added with HUB-290 to HUB-292. | Operators need it from the first production pilot | RBAC from §16.1; UI changes go through the same publish pipeline |
-| DV-3 | **Caller discovery endpoints** (additive to DESIGN §4.1): `GET /v1/integrations` (integrations the calling tenant may invoke: id, capability, operations, delivery mode, paused flag, description), `GET /v1/integrations/{id}`, `GET /v1/capabilities/{capability}` (canonical request/response JSON Schemas per operation). They never return vendor, account or version. | MCP server and Claude skill need to discover what to call | §0 caller invariant, D12 |
-| DV-4 | **`hubmcp`** MCP server (Go; stdio + streamable HTTP), configured with `HUB_BASE_URL` + `HUB_API_KEY`. Tenant tools `hub_list_integrations`, `hub_describe_integration`, `hub_dry_run`, `hub_invoke`, `hub_get_request`; optional admin tools with `HUB_ADMIN_TOKEN` (the signed-in user's own token): read tools such as `hub_admin_search_requests`, `hub_admin_request_timeline`, `hub_admin_breaker_states`, and, on stdio only, write tools to create and change tenants, keys, vendors, transformers, integrations and callback endpoints, never delete (contract: `contracts/mcp/hubmcp-tools.json` 1.1.0, ADR-0020). `hub_invoke` requires `confirm: true` and an idempotency key for integrations flagged `moves_money_or_quota`. | AI-assisted development | Uses only contract endpoints |
+| DV-2 | **Admin console pulled forward** from Release 2 (DESIGN §19 Phase 2 "admin UI") into v1, built in parallel with M1–M8 against frozen admin contracts. Screens: integrations list/detail (version history, diff, publish/rollback/weights/pause); vendor & account health board (breaker states); request explorer with timeline; DLQ console with replay by filter; transformer viewer with dry-run and goldens; tenants / API keys / registrar endpoints; change log. Creating transformer versions (YAML + goldens, HUB-293) is in v1; a richer transformer editor stays Release 2. Vendor, account (write-only credentials) and integration authoring pages were added with HUB-290 to HUB-292; the schema editors (endpoint request schema, operation input schema from a pasted sample), samples and credential-less accounts with HUB-436 (DV-7). | Operators need it from the first production pilot | RBAC from §16.1; UI changes go through the same publish pipeline |
+| DV-3 | **Caller discovery endpoints** (additive to DESIGN §4.1): `GET /v1/integrations` (integrations the calling tenant may invoke: id, operations with their request schemas, delivery mode, paused flag, description) and `GET /v1/integrations/{id}`. Since 2.0.0 (DV-7) each operation carries its `request_schema`; `GET /v1/capabilities/{capability}` is gone. They never return vendor, account or version. | MCP server and Claude skill need to discover what to call | §0 caller invariant, D12 |
+| DV-4 | **`hubmcp`** MCP server (Go; stdio + streamable HTTP), configured with `HUB_BASE_URL` + `HUB_API_KEY`. Tenant tools `hub_list_integrations`, `hub_describe_integration`, `hub_dry_run`, `hub_invoke`, `hub_get_request`; optional admin tools with `HUB_ADMIN_TOKEN` (the signed-in user's own token): read tools such as `hub_admin_search_requests`, `hub_admin_request_timeline`, `hub_admin_breaker_states`, and, on stdio only, write tools to create and change tenants, keys, vendors, transformers, integrations and callback endpoints, never delete (contract: `contracts/mcp/hubmcp-tools.json` 2.0.0, ADR-0020). `hub_invoke` requires `confirm: true` and an idempotency key for integrations flagged `moves_money_or_quota`. | AI-assisted development | Uses only contract endpoints |
 | DV-5 | **Consumer Claude skill** (`clients/claude-skill/integration-hub/SKILL.md`), copied to `~/.claude/skills/integration-hub/`. | Teach correct Hub usage (idempotency, 202 handling, signature verification) | §4.5 SDK rule |
 | DV-6 | **Caller dry-run is a documented, scope-gated exception to the no-vendor-leak rule** (see OI-1): it returns the exact upstream request (method, URL, headers, body) with credentials and secret values replaced by `***`. It requires API-key scope `dry_run`, which is not granted by default and is meant for integration developers during onboarding and debugging; callers must never build logic on its output (it changes at every Hub-side cutover). Decided by the lead and frozen in `contracts/openapi/hub-public.v1.yaml` 1.0.0. | DESIGN §4.1 dry-run "returns the vendor request"; integration developers need the exact request to debug mappings | §0 and D12 hold for every other caller operation; the exception is explicit (`x-audience: integration-developers`), audited (`dry_run: true`) and opt-in per key |
+| DV-7 | **Capabilities removed; schema registry on the integration and the endpoint** ([ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md), owner decision 2026-11-07). No capability objects, files, APIs or fields. Each integration version declares its **operations**, each with a `request_schema` (caller body and optional headers, each field required or optional) and `validate_input` (default on: live input checked, 400 `VALIDATION_FAILED`). Each vendor endpoint version declares the `request_schema` it accepts (path, query, headers, body); its `response_schema` is optional and never enforced. The **request transformer** is always required and **proven by samples**: the Hub refuses one whose sample output differs from the expected request or breaks the endpoint's schema, naming the field (samples check the transformer, not callers; the vendor request is never re-checked live). The **response transformer** is optional; its output is returned unchanged; without one the call is **pass-through** (vendor status and body unchanged, only `Content-Type` and `Retry-After` vendor headers, `X-Hub-Pass-Through: true`; sync only, async failures keep `UPSTREAM_*`). Auth scheme `none` for public APIs. Contracts 2.0.0 (breaking, pre-1.0, owner-approved). The LLM body limit and pool wait for an explicit setting ([ADR-0024](../tech/adr/0024-llm-body-limit-and-pool-without-capability-names.md), HUB-439); old data is upgraded in code ([ADR-0025](../tech/adr/0025-pre-adr-0023-data-upgraded-in-code.md)). | Onboarding an API from the panel needed a code change first (a capability under `contracts/`); the capability added nothing the integration and the endpoint could not say themselves | §0 holds for the contract and headers (a pass-through body is the vendor's own, the owner's choice); D12 holds. Replaces DESIGN §3 (capability as the canonical contract), §4 (response validation), §7 (transformers bound to a capability); D11 becomes guidance |
 
 ## 8. Functional requirements
 
@@ -119,34 +121,41 @@ Priority: **M** = Must (v1), **S** = Should (v1), **C** = Could, **R2** = Releas
 ### 8.1 Caller API & edge (F-05, F-06)
 | ID | Requirement | Pri | Ref |
 | --- | --- | --- | --- |
-| FR-01 | `POST /v1/integrations/{id}/invoke` and `/invoke/{op}` accept a canonical body and return a canonical response | M | §4.1 |
+| FR-01 | `POST /v1/integrations/{id}/invoke` and `/invoke/{op}` accept a body that matches the operation's request schema and return the response transformer's output, or the vendor's answer in pass-through | M | §4.1, DV-7 |
 | FR-02 | Authenticate tenants by bearer key (hashed, in-memory lookup); reject with `UNAUTHORIZED`. Key scopes `invoke`, `dry_run`, `requests_read` (optionally `<scope>:<integration_id>`); missing scope → `FORBIDDEN` reason `missing_scope` | M | §4.2, §5.1, §16.5 |
 | FR-03 | Allow invocation only by the owning tenant or a grantee; else `FORBIDDEN` | M | §3.4, §4.4 |
-| FR-04 | Validate the body against the pre-compiled capability schema at the edge; `VALIDATION_FAILED` with JSON pointers; never fail validation later in a queue | M | §5.1 |
-| FR-05 | Enforce body limits (1 MB default, 4 MB LLM); oversized → 413 `PAYLOAD_TOO_LARGE` | M | §16.5 |
+| FR-04 | When the operation's `validate_input` is on (default), validate the body and declared headers against the operation's pre-compiled request schema at the edge; `VALIDATION_FAILED` with JSON pointers; never fail validation later in a queue | M | §5.1, DV-7 |
+| FR-05 | Enforce body limits (1 MB default; 4 MB for LLM integrations once HUB-439 adds an explicit setting, ADR-0024); oversized → 413 `PAYLOAD_TOO_LARGE` | M | §16.5 |
 | FR-06 | Every response (success or error) carries `X-Hub-Request-Id`; errors use the single envelope with `request_id` | M | §4.3 |
-| FR-07 | Map every vendor/Hub outcome to exactly one canonical code of the caller error catalogue (`contracts/README.md`: DESIGN §4.4 plus `IDEMPOTENCY_KEY_REQUIRED`, `OPERATION_NOT_FOUND`, `CAPABILITY_NOT_FOUND`, `REQUEST_NOT_FOUND`, `IDEMPOTENCY_CONFLICT`, `PAYLOAD_TOO_LARGE`, `INTERNAL_ERROR`, `NOT_READY`) | M | §4.4, §10.2 |
+| FR-07 | Map every vendor/Hub outcome to exactly one canonical code of the caller error catalogue (except a pass-through vendor answer, returned unchanged, DV-7) (`contracts/README.md`: DESIGN §4.4 plus `IDEMPOTENCY_KEY_REQUIRED`, `OPERATION_NOT_FOUND`, `REQUEST_NOT_FOUND`, `IDEMPOTENCY_CONFLICT`, `PAYLOAD_TOO_LARGE`, `INTERNAL_ERROR`, `NOT_READY`) | M | §4.4, §10.2 |
 | FR-08 | Honour `X-Request-Deadline` as a cap on sync timeout; accept and continue `traceparent` | M | §4.2 |
 | FR-09 | No header or field allows a caller to select vendor, account or version | M | D12 |
-| FR-10 | Discovery: `GET /v1/integrations`, `GET /v1/integrations/{id}`, `GET /v1/capabilities/{capability}` scoped to the calling tenant, no vendor/account/version in the payload | M | DV-3 |
-| FR-11 | `GET /v1/requests/{request_id}` returns status and final canonical result to the owning tenant | M | §4.1 |
+| FR-10 | Discovery: `GET /v1/integrations`, `GET /v1/integrations/{id}` scoped to the calling tenant, with each operation's request schema, no vendor/account/version in the payload | M | DV-3, DV-7 |
+| FR-11 | `GET /v1/requests/{request_id}` returns status and final result to the owning tenant | M | §4.1 |
 | FR-12 | Caller dry-run (`dryRunIntegration`) returns the exact upstream request the Hub would send (method, URL, headers, body), without sending it, with secrets replaced by `***`; requires key scope `dry_run` (not granted by default); documented as "never build logic on it" | M | §4.1, DV-6 |
 
 ### 8.2 Registry & transformation (F-03, F-04)
 | ID | Requirement | Pri | Ref |
 | --- | --- | --- | --- |
-| FR-13 | Load capability, vendor, account, transformer, integration, tenant and registrar YAML/JSON with path-qualified validation errors | M | §8.1, M1 |
+| FR-13 | Load vendor (endpoints with request schemas), account, transformer, integration (versions with operations), tenant and registrar YAML/JSON with path-qualified validation errors | M | §8.1, M1, DV-7 |
 | FR-14 | Build immutable snapshots; nodes swap atomically within 10 s; a node that cannot fetch keeps the last good snapshot; boot from object storage if control plane is down | M | §8.2, §17 |
 | FR-15 | Transformers are declarative YAML with `expr` expressions, compiled and type-checked at snapshot build, never per request | M | §7.1 |
 | FR-16 | Transform sandbox: no network/disk/loops; max depth, output size and time budget | M | §7.1 |
 | FR-17 | `creds.*` allowed only in header/query/auth targets unless `allow_creds_in_body: true` | M | §7.2 |
-| FR-18 | Golden fixtures are mandatory; publish and CI run them; publishing with failing goldens is impossible | M | §7.6 |
+| FR-18 | Samples (golden fixtures) are mandatory for every transformer; transformer creation, publish and CI run them; storing or publishing a transformer whose samples fail is impossible | M | §7.6, DV-7 |
+| FR-54 | Each integration version declares its operations, each with `request_schema.body` (required), optional `request_schema.headers` and `validate_input` (default `true`); fields in `required` are required, the rest optional; `x-pii` tags on them drive audit masking | M | DV-7 |
+| FR-55 | Each vendor endpoint version declares the `request_schema` it accepts (`path`, `query`, non-credential `headers`, `body`); `response_schema` is optional and never enforced | M | DV-7 |
+| FR-56 | Transformer creation refuses a request transformer whose sample output differs from the expected request (`goldens_pass`) or breaks the endpoint's request schema (`endpoint_schema`), naming the sample and the field; nothing is stored | M | DV-7 |
+| FR-57 | Integration validate/publish checks every `req.*` / `hdr.*` a transformer reads against the operation's schema (`schemas_compile`) and every request sample's input against it (`input_schema`) | M | DV-7 |
+| FR-58 | The response transformer is optional: with one, its output is returned unchanged; without one (pass-through), sync calls return the vendor's status and body with only `Content-Type` and `Retry-After` vendor headers and `X-Hub-Pass-Through: true`; requests completed after a 202 keep `UPSTREAM_*` codes | M | DV-7 |
+| FR-59 | Vendor auth scheme `none`: accounts without credentials; credentials sent for such a vendor are refused | M | DV-7 |
+| FR-60 | The console builds every request schema from a pasted sample (fields, types, required/optional) and runs a transformer draft's samples before it can be created | M | DV-2, DV-7 |
 
 ### 8.3 Credentials (F-07, F-15)
 | ID | Requirement | Pri | Ref |
 | --- | --- | --- | --- |
 | FR-19 | Credentials stored encrypted (local AES-GCM file in dev; KMS/Vault in Release 2); no decryption on the request path | M | §9 |
-| FR-20 | Auth schemes static headers, bearer, basic in v1; query param supported but never logged; OAuth2 CC, HMAC signing, mTLS in Release 2 | M / R2 | §9 |
+| FR-20 | Auth schemes none (public APIs), static headers, bearer, basic in v1; query param supported but never logged; OAuth2 CC, HMAC signing, mTLS in Release 2 | M / R2 | §9 |
 | FR-21 | Accounts hold `active` and `next` credentials; promote without a version; later attempts use `active` at send time | M | §6.6 |
 | FR-22 | Account lifecycle `active → draining → retired`; retire refused while pinned requests or open sessions exist; credentials deleted only at retire | M | §6.5 |
 
@@ -160,7 +169,7 @@ Priority: **M** = Must (v1), **S** = Should (v1), **C** = Could, **R2** = Releas
 | FR-27 | DLQ with 14-day retention and replay by filter that re-resolves and re-transforms; poison detector | M | §10.6 |
 | FR-28 | Idempotency: same key within 24 h returns the stored result with `X-Hub-Idempotent-Replay: true`; same key with a different body, or while the original is in progress, → 409 `IDEMPOTENCY_CONFLICT`; mandatory for integrations with `moves_money_or_quota: true` (else 400 `IDEMPOTENCY_KEY_REQUIRED`) | M | §4.2, §5.1 |
 | FR-29 | Registrar endpoints with SSRF guard; subscriptions per integration version; HMAC-signed callbacks with own retries and DLQ | M | §12.1 |
-| FR-30 | Interactive capabilities only in `sync` mode; publish rejects others | M | §5.4 |
+| FR-30 | Interactive integrations (flag set at creation) only in `sync` mode; publish rejects others | M | §5.4, DV-7 |
 
 ### 8.5 Resilience (F-12, F-13)
 | ID | Requirement | Pri | Ref |
@@ -201,7 +210,7 @@ Priority: **M** = Must (v1), **S** = Should (v1), **C** = Could, **R2** = Releas
 | FR-48 | `hubmcp` tenant tools and optional admin tools (read; write as the signed-in user over stdio, no delete) per DV-4 | M | DV-4 |
 | FR-49 | `hub_invoke` requires `confirm: true` and an idempotency key for integrations with `moves_money_or_quota: true`, and refuses without calling the Hub otherwise | M | DV-4 |
 | FR-50 | `hubclient` returns 202 as a distinct `Queued` type, never as success | M | §4.5 |
-| FR-51 | Consumer skill documents discovery, canonical bodies, Idempotency-Key, 202 vs 200, callback signature verification, MCP wiring | M | DV-5 |
+| FR-51 | Consumer skill documents discovery (operations and request schemas), building bodies, pass-through answers, Idempotency-Key, 202 vs 200, callback signature verification, MCP wiring | M | DV-5, DV-7 |
 
 ### 8.10 Observability (F-18)
 | ID | Requirement | Pri | Ref |
@@ -242,7 +251,7 @@ From DESIGN §1. Measured from M8 load/soak tests and production dashboards.
 | Async accept latency, p99 | ≤ 10 ms | Edge timing for 202 responses |
 | Accepted async requests lost | 0 | Soak test ledger reconciliation |
 | Vendor or account swap, config only, incl. canary | ≤ 1 working day | Change log timestamps (first draft → 100 % weight) |
-| New vendor for an existing capability | ≤ 2 engineer-days | Ticket cycle time |
+| New API or vendor onboarded from the console | ≤ 2 engineer-days | Ticket cycle time; change log (vendor created → first publish) |
 | Gateway availability | 99.9 % (v1), 99.95 % (Release 2) | SLO dashboard |
 | Config propagation to all nodes | ≤ 10 s | `snapshot_version` skew |
 | Parked backlog starts draining after recovery | ≤ 60 s | `parked_count` vs breaker transitions |
@@ -253,7 +262,7 @@ Adoption metrics (proposed, not in DESIGN): number of tenants live; share of ven
 
 | Release | Contents | Exit criteria |
 | --- | --- | --- |
-| **Phase 1 — Foundation** | Docs, contracts frozen (caller + admin OpenAPI, capability and event schemas), ticket backlog, agents and skills | Contracts reviewed; tickets HUB-001..399 drafted |
+| **Phase 1 — Foundation** | Docs, contracts frozen (caller + admin OpenAPI, event schemas; capability schemas until DV-7), ticket backlog, agents and skills | Contracts reviewed; tickets HUB-001..399 drafted |
 | **v1 alpha (M0–M3)** | Sync path end to end against mockvendor; discovery endpoints; audit | M3 accept tests (DESIGN §19) green |
 | **v1 beta (M4–M6)** | Async, callbacks, idempotency, resilience, cutover | Chaos scenarios M5.1–5 and §6.3 scenarios green |
 | **v1 GA (M7–M8 + EP-10 + EP-11)** | Control plane, `hubctl`, admin console, `hubmcp`, skill, observability | Overhead p99 ≤ 5 ms at target load; zero loss in soak; CleverTap pilot live |
@@ -273,7 +282,8 @@ Pilot: CleverTap `events.track@v1` for `orders-service` (integrations `int_evt_b
 | Callers build logic on dry-run output (the DV-6 exception) | Medium | Scope `dry_run` not granted by default and issued only to integration developers; contract and skill say "never build logic on it"; dry-runs audited with `dry_run: true`; secrets always `***` |
 | Secrets leak into logs or audit | High | Value-based redaction, `creds.*` target restriction, grep test on stored events (M3) |
 | Retry storms on vendor recovery | Medium | Ramped drain, retry budget, live traffic priority |
-| Idempotency misuse on money/quota capabilities | High | Mandatory key enforced at edge; MCP `confirm: true`; skill guidance |
+| Idempotency misuse on money/quota integrations | High | Mandatory key enforced at edge; MCP `confirm: true`; skill guidance |
+| A vendor switch changes what callers receive (no canonical output, DV-7), or a pass-through body names the vendor | Medium | Response transformers reproduce the old output (proved by samples); the operator skill warns before a switch or a pass-through publish; headers never carry vendor identity |
 | Frontend/backend drift | Medium | Frozen contracts, generated client, contract tests |
 | Redis outage (breaker, limits, idempotency) | Medium | Local breaker cache; degrade policy to be defined in TECH_SPEC (see gaps) |
 | Real vendor payload shapes differ from illustrative ones | Medium | Verify against vendor docs, cite URL in transformer file (§0) |
@@ -301,7 +311,7 @@ From DESIGN §20, plus questions raised while writing this PRD.
 | --- | --- | --- | --- |
 | Q1 | Callers: internal services only, or external customers too? | user | Auth model, discovery exposure |
 | Q2 | Expected volume at launch and in 12 months (sync RPS, async msg/s) | user | Queue choice timing, capacity |
-| Q3 | First production capabilities/vendors after the CleverTap pilot (bureau? PAN? AA? LLM?), and which second engagement vendor proves the swap | user | Release 2 ordering |
+| Q3 | First production integrations/vendors after the CleverTap pilot (bureau? PAN? AA? LLM?), and which second engagement vendor proves the swap | user | Release 2 ordering |
 | Q4 | How many CleverTap accounts exist today and what distinguishes them (brand, region, environment) | user | Dev/prod config |
 | Q5 | Do any callers need CleverTap's synchronous response, or can all engagement integrations default to async? | user | Default mode for pilot |
 | Q6 | PII/retention: confirm 30-day masked default and 90-day sealed for bureau/KYC | user | F-08, F-22 |
