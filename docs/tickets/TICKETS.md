@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **284** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **11**
+Total tickets: **285** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **12**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **284** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 9 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 10 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3621,6 +3621,18 @@ The 4 MB body limit and the `llm` worker pool were chosen from `llm.*` capabilit
 - [ ] Contract change request filed and merged (admin API integration create/update/get)
 - [ ] An integration with the setting accepts bodies up to 4 MB and queues async work in the `llm` pool; others keep 1 MB and `messaging`
 - [ ] ADR-0024 superseded or closed
+
+### HUB-441 — e2e-real suite on the ADR-0023 admin API and console
+- **Epic:** EP-14 · **Type:** test · **Area:** frontend
+- **Status:** in-progress · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
+- **Branch:** `refactor/HUB-435-examples-no-capabilities` (follow-up of HUB-435, with the examples it reads)
+
+`frontend/e2e-real/` (Playwright against a real stack from `scripts/dev-up.sh`, not in CI) still created capabilities and picked them in the console: `aadhaar-setup.ts` posted `/capabilities` and read the Aadhaar example's capability schemas, `aadhaar.test.ts`, `integrations.test.ts` and `transformers.test.ts` selected a capability, and the endpoint and sample screens changed with HUB-436. Move the suite to the admin API and console of [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md): operations with their request schemas on the integration draft, endpoint request schemas, transformers without a capability, samples instead of goldens.
+
+**Acceptance criteria**
+- [ ] No capability left in `frontend/e2e-real/`; it calls only admin API operations and fields of the current contract (generated types in `frontend/src/lib/api/`)
+- [ ] The Aadhaar e2e builds `int_aadhaar_okyc` with its two operations and their request schemas (from `examples/aadhaar-okyc`), endpoints with their request schemas, and per-operation pairs
+- [ ] `npm run check` green; the suite passes against a stack from `scripts/dev-up.sh`
 
 ## Parallel tracks
 

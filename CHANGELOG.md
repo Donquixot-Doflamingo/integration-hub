@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · File HUB-441 for the e2e-real suite without capabilities (HUB-441) · HUB-441 · F-23
+  - HUB-441 (EP-14): move `frontend/e2e-real/` (real-stack Playwright suite, not in CI) to the ADR-0023 admin API and console; it still created and selected capabilities
 - 2026-11-07 · `feat(examples)` · Add the agify age example on a public API (HUB-435) · HUB-435 · F-23
   - `examples/agify-age`: `int_age_by_name` takes `{firstName, lastName}` (both required) and returns only `{"age"}` from agify.io (`GET /?name=<first><last>`), vendor `agify` with auth `none` and an account without credentials, endpoint `estimate@1` requiring `query.name`
   - `AGIFY-REQ` and `AGIFY-RES` ship with samples (found, unknown name, 429, invalid name, vendor down, non-JSON); an unknown name returns `{}`, a used-up allowance 429 `UPSTREAM_RATE_LIMITED` with `retry_after_ms` from `X-Rate-Limit-Reset`
