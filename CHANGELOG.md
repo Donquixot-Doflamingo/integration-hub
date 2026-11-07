@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(skills)` · Update the consumer skill for request schemas and pass-through (HUB-437) · HUB-437 · F-23
+  - Callers' assistants now discover each operation's request schema from `/v1/integrations` (required vs optional fields, declared headers) instead of `/v1/capabilities`, which no longer exists
+  - New: how to recognise a pass-through answer (`X-Hub-Pass-Through: true`, the third party's own status and body, never the error envelope), in curl, Go, the SDK (`Result.PassThrough`, `PassThroughError`) and `hub_invoke` (`pass_through`)
+  - `hub_invoke` and `hub_dry_run` document the `headers` input; the MCP tool list drops `hub_admin_list_capabilities`; `CAPABILITY_NOT_FOUND` and the 4 MB LLM limit are gone from the error tables
+  - The paste-in rules and the "request a new integration" checklist ask for operations, example bodies and the wanted output
 - 2026-11-07 · `docs(skills)` · Update the backend skills for operations and endpoint schemas (HUB-437) · HUB-437 · F-23
   - hub-transformers: no `capability` key; `req.*` checked against the operation's body schema and `hdr.*` against its declared headers; samples with input headers; the `endpoint_schema` check on every request sample; response transformer optional, pass-through otherwise
   - dsl.md: the keys the registry really loads (`docs_url`, literal `path`, no `auth`/`stream`/`supports` yet), a table of what checks each reference, and the new refusal messages
