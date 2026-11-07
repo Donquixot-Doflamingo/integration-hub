@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(frontend)` · Wait for page data to settle before the axe check (HUB-436) · HUB-436 · F-19
+  - The accessibility check in the console e2e no longer measures a page that is still dimmed while it reloads after a change, which made it report false contrast failures at random
 - 2026-11-07 · `docs(tickets)` · Record the HUB-435 examples and agify work (HUB-435) · HUB-435 · F-23
   - HUB-435: every criterion checked, with the examples branch, the dropped no-session samples, the offline runs of every `run.sh` and the agify example; HUB-441 linked as the e2e-real follow-up
 - 2026-11-07 · `test(frontend)` · Move the e2e-real suite to the schema registry console (HUB-441) · HUB-441 · F-23
