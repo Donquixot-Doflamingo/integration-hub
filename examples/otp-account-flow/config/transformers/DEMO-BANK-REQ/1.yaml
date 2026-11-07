@@ -7,7 +7,6 @@
 transformer: DEMO-BANK-REQ
 version: 1
 kind: request
-capability: demo.bank_account_verify@v1
 vendor_endpoint: demo-kyc.bank_verify@1
 request:
   method: POST

@@ -4,8 +4,6 @@
 transformer: DEMO-OTP-VERIFY-RES
 version: 1
 kind: response
-capability: demo.mobile_otp@v1
-operation: verify_otp
 response:
   status:     '"verified"'
   vendor_ref: res.body.ref

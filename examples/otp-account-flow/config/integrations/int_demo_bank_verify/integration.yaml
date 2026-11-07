@@ -1,9 +1,10 @@
 # EXAMPLE ONLY (HUB-342). Bank account verification (penny-drop style): one sync lookup, no
-# session. A penny drop moves money, so every call needs an Idempotency-Key.
+# session. A penny drop moves money, so every call needs an Idempotency-Key. interactive: a person
+# is waiting on the bank details screen (sync only, never a 202).
 integration: int_demo_bank_verify
 owner_tenant: loan-onboarding
-capability: demo.bank_account_verify@v1
 grants: []
 active_version: 1
 description: Bank account verification (example)
 moves_money_or_quota: true
+interactive: true

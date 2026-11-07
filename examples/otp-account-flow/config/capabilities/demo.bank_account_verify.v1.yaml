@@ -1,4 +1,0 @@
-# EXAMPLE ONLY (HUB-342). The schema lives in the example contracts overlay.
-capability: demo.bank_account_verify@v1
-schema_ref: schemas/capabilities/demo.bank_account_verify.v1.request.json
-default_ttl: 10m

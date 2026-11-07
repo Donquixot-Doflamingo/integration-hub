@@ -1,6 +1,0 @@
-{
-  "method": "POST",
-  "path": "/v1/otp/verify",
-  "headers": {"Content-Type": "application/json", "X-Client-Id": "DEMO-CLIENT-A"},
-  "body": {"mobile": "+919812345678", "otp": "482913"}
-}

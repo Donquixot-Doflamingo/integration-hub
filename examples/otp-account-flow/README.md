@@ -2,24 +2,21 @@
 
 A runnable example of the UX flow "send an OTP, the user types it, then the user types a bank account", through the real Hub gateway, against `mockvendor`. It backs use case 6 of the [use-case catalogue](../../docs/use-cases/README.md#6-two-step-flows-otp-then-verify-then-bank-account). Tickets: HUB-342 (the example), HUB-343 (one operation per vendor endpoint).
 
-**Everything here is an example.** The vendor `demo-kyc` is fictional; mockvendor plays it. Nothing in this folder is production config (`backend/config/`) or a frozen contract (`contracts/`): the test merges this folder over both, in memory, and refuses to overwrite any existing file.
+**Everything here is an example.** The vendor `demo-kyc` is fictional; mockvendor plays it. Nothing in this folder is production config (`backend/config/`): the test merges this folder over it, in memory, and refuses to overwrite any existing file. Every schema lives inline in the config, as in `backend/config` (ADR-0023 in `docs/tech/adr/`): the caller's request schema per operation in the integration versions, the request the vendor accepts on each vendor endpoint.
 
 ## What is in this folder
 
 | Path | What |
 | --- | --- |
-| `contracts/schemas/capabilities/demo.mobile_otp.v1.*.json` | Example capability `demo.mobile_otp@v1` (interactive), two operations: `send_otp` (`mobile` → `otp_sent`) and `verify_otp` (`mobile`, `otp` → `verified`), a request and a response schema each |
-| `contracts/schemas/capabilities/demo.bank_account_verify.v1.*.json` | Example capability `demo.bank_account_verify@v1` (interactive): `account_number`, `ifsc`, `name` → `valid` / `invalid`, `name_at_bank`, `name_match` |
-| `config/capabilities/` | Registry entries pointing at those schemas |
-| `config/vendors/demo-kyc.yaml` | Fictional vendor, bearer auth, endpoints `otp_send@1` (`POST /v1/otp/send`), `otp_verify@1` (`POST /v1/otp/verify`) and `bank_verify@1` |
+| `config/vendors/demo-kyc.yaml` | Fictional vendor, bearer auth, endpoints `otp_send@1` (`POST /v1/otp/send`), `otp_verify@1` (`POST /v1/otp/verify`) and `bank_verify@1`, each with its `request_schema` (headers `Content-Type` and `X-Client-Id`, the JSON body; the bearer token is never part of it) |
 | `config/accounts/demo-kyc-a.yaml`, `demo-kyc-b.yaml` | Two accounts of that vendor (`client_id` DEMO-CLIENT-A / B) |
 | `config/tenants/loan-onboarding.yaml` | The calling service; local test key `hk_test_example_loan_onboarding_local_only` (stored as its sha256) |
-| `config/integrations/int_demo_otp/` | Step 1 + 2. `sync`, `fail_fast`, `moves_money_or_quota: true`. v1 → account A, v2 → account B. Each target maps `send_otp` to the default pair (`transformer`) and `verify_otp` to its own pair (`operations.verify_otp`) |
-| `config/integrations/int_demo_bank_verify/` | Step 3. `sync`, `fail_fast`, `moves_money_or_quota: true` (a penny drop moves money) |
-| `config/transformers/DEMO-OTP-SEND-REQ`, `DEMO-OTP-SEND-RES` | `send_otp` (`operation: send_otp`) → `/v1/otp/send`. The response transformer's `session:` section keeps only the vendor txn id |
-| `config/transformers/DEMO-OTP-VERIFY-REQ`, `DEMO-OTP-VERIFY-RES` | `verify_otp` (`operation: verify_otp`) → `/v1/otp/verify`, reading the txn id from the session; maps wrong and expired OTPs |
+| `config/integrations/int_demo_otp/` | Step 1 + 2. `interactive`, `sync`, `fail_fast`, `moves_money_or_quota: true`. Each version declares the operations `send_otp` (`mobile`) and `verify_otp` (`mobile`, `otp`) with their `request_schema.body` (`x-pii` tags drive audit masking). v1 → account A, v2 → account B. Each target maps `send_otp` to the default pair (`transformer`) and `verify_otp` to its own pair (`operations.verify_otp`) |
+| `config/integrations/int_demo_bank_verify/` | Step 3. `interactive`, `sync`, `fail_fast`, `moves_money_or_quota: true` (a penny drop moves money). Operation `default`: `account_number`, `ifsc`, optional `name` |
+| `config/transformers/DEMO-OTP-SEND-REQ`, `DEMO-OTP-SEND-RES` | `send_otp` → `/v1/otp/send`. The response transformer's `session:` section keeps only the vendor txn id |
+| `config/transformers/DEMO-OTP-VERIFY-REQ`, `DEMO-OTP-VERIFY-RES` | `verify_otp` → `/v1/otp/verify`, reading the txn id from the session; maps wrong and expired OTPs |
 | `config/transformers/DEMO-BANK-REQ`, `DEMO-BANK-RES` | Bank verification mapping; the caller's `Idempotency-Key` becomes the vendor reference |
-| `config/transformers/*/fixtures/` | Golden fixtures. The registry runs them while building the snapshot: a failing golden refuses the whole config |
+| `config/transformers/*/fixtures/` | Golden fixtures (samples). The registry runs them while building the snapshot: a failing golden, a request sample that breaks its endpoint's `request_schema` or a sample input that breaks the operation's `request_schema` refuses the whole config |
 
 ## Run it
 
@@ -136,12 +133,12 @@ Bad IFSC (refused before any vendor call):
 ```http
 HTTP/1.1 400 Bad Request
 
-{"error":{"code":"VALIDATION_FAILED","message":"Body does not match the capability schema","retryable":false,"reason":"schema","details":[{"pointer":"/ifsc","keyword":"pattern","message":"'demo123' does not match pattern '^[A-Z]{4}0[A-Z0-9]{6}$'"}],"request_id":"req_01M6S0SYK9WM441C67G649VT2W"}}
+{"error":{"code":"VALIDATION_FAILED","message":"Request does not match the operation's request_schema","retryable":false,"reason":"schema","details":[{"pointer":"/ifsc","keyword":"pattern","message":"'demo123' does not match pattern '^[A-Z]{4}0[A-Z0-9]{6}$'"}],"request_id":"req_01M6S0SYK9WM441C67G649VT2W"}}
 ```
 
 ## One operation per step, one vendor endpoint per operation
 
-`send_otp` and `verify_otp` are two operations of one integration, and each goes to its own vendor endpoint. An integration version target has a default transformer pair and, for a multi-operation capability, a pair per operation (HUB-343, admin contract `TargetRef.operations`, hub-admin 1.2.0):
+`send_otp` and `verify_otp` are two operations of one integration, and each goes to its own vendor endpoint. An integration version target has a default transformer pair and, for a multi-operation integration, a pair per operation (HUB-343, admin contract `TargetRef.operations`, hub-admin 1.2.0):
 
 ```yaml
 targets:
@@ -153,13 +150,13 @@ targets:
     weight: 100
 ```
 
-The invoked operation (`/invoke/{operation}`) picks the pair: its own when listed, else the default. The same holds for session steps, failover, wait, async (the worker re-resolves at send time) and dry-run (`?operation=verify_otp`). Each transformer declares the operation it is compiled for (`operation: verify_otp`), and the registry refuses a version where an operation would run a pair compiled for another one (check `operations_have_transformers`). Remove the `operations` entry above and the build fails with `integrations/int_demo_otp/versions/1.yaml: targets[0].transformer: operation verify_otp uses the default pair, but DEMO-OTP-SEND-REQ@1 is compiled for operation send_otp …` (`TestExampleOTPRefusesOnePairForBothOperations`, HUB-345), instead of misrouting step 2 at request time.
+The invoked operation (`/invoke/{operation}`) picks the pair: its own when listed, else the default. The same holds for session steps, failover, wait, async (the worker re-resolves at send time) and dry-run (`?operation=verify_otp`). A transformer names no operation: the registry checks each pair against the operation that uses it. The request transformer's samples must fit that operation's `request_schema`, and every `req.*` it reads must be declared there. Remove the `operations` entry above and `verify_otp` would run `DEMO-OTP-SEND-REQ@1`, whose samples do not fit `verify_otp`'s schema (no `otp`): the build fails with an `input_schema` problem on `targets[0].transformer.request` naming `operation verify_otp` (`TestExampleOTPRefusesOnePairForBothOperations`, HUB-345), instead of misrouting step 2 at request time.
 
 Two more limits worth knowing:
 
-- Capability schemas are read only from `contracts/` (ADR-0004). The example's schemas live in `contracts/` *inside this folder*, merged by the test. A real OTP or bank verification capability is added to the frozen contracts by the contract-steward.
+- `otp_verify@1` requires `txn_id`, so `DEMO-OTP-VERIFY-REQ@1` has no sample without a session: such a sample would produce a request the vendor refuses, and the Hub refuses the sample.
 - The OTP screen can tell "wrong" from "expired" only by the `message` text: transformer error rules cannot set the canonical `reason` yet (HUB-346).
 
 ## Running it against a live gateway
 
-The `hub` binary reads one config directory (`HUB_CONFIG_DIR`) and one contracts directory (`HUB_CONTRACTS_DIR`). To try the example by hand, copy `backend/config` and `config/` from this folder into one temporary directory, `contracts/` and this folder's `contracts/` into another, point the two variables at them, give the two `demo-kyc` accounts local credentials (a `token` value each), start `mockvendor` and program the `/v1/otp/send`, `/v1/otp/verify` and `/v1/bank-accounts/verify` routes through its control API (`contracts/openapi/mockvendor.v1.yaml`). The integration test does all of this in a few lines and is the supported way to run the example.
+The `hub` binary reads one config directory (`HUB_CONFIG_DIR`). To try the example by hand, copy `backend/config` and `config/` from this folder into one temporary directory, point the variable at it, give the two `demo-kyc` accounts local credentials (a `token` value each), start `mockvendor` and program the `/v1/otp/send`, `/v1/otp/verify` and `/v1/bank-accounts/verify` routes through its control API (`contracts/openapi/mockvendor.v1.yaml`). The integration test does all of this in a few lines and is the supported way to run the example.
