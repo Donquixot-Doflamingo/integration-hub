@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **262** · done: **177** · todo: **56** · other (in-progress/in-review/blocked): **29**
+Total tickets: **273** · done: **204** · todo: **66** · other (in-progress/in-review/blocked): **3**
 
 ## Epics
 
@@ -17,11 +17,11 @@ Total tickets: **262** · done: **177** · todo: **56** · other (in-progress/in
 | EP-06 | M5 Resilience | M5 | F-12, F-13 | HUB-140–HUB-169 | 17 | 17 |
 | EP-07 | M6 Versioning & cutover | M6 | F-14, F-15 | HUB-170–HUB-199 | 17 | 16 |
 | EP-08 | M7 Control plane & hubctl | M7 | F-16, F-17 | HUB-200–HUB-229 | 15 | 15 |
-| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 7 |
-| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 44 | 29 |
-| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 19 | 8 |
-| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 4 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 22 | 0 |
+| EP-09 | M8 Observability & hardening | M8 | F-18 | HUB-230–HUB-249 | 20 | 10 |
+| EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 44 | 37 |
+| EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
+| EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 30 | 8 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -1758,7 +1758,7 @@ Add `gosec` and `govulncheck` to CI, verify TLS 1.2+ and egress allowlist enforc
 
 ### HUB-235 — Load test: 500 sync RPS + 2 000 async msg/s
 - **Epic:** EP-09 · **Type:** perf · **Area:** infra
-- **Status:** in-review · **Depends on:** HUB-097, HUB-154 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** done · **Merged:** Merge pull request #28 from Donquixot-Doflamingo/perf/HUB-235-load-soak · **Depends on:** HUB-097, HUB-154 · **Feature:** F-18 · **Stories:** US-18xx
 - **Branch:** `perf/HUB-235-load-soak` (with HUB-236)
 
 k6 or vegeta scripts and a compose-based laptop-scale setup with mockvendor; profile and fix hotspots; report budgets vs §18.6 (DESIGN §19 M8).
@@ -1772,7 +1772,7 @@ Built as `backend/cmd/hubload` + `deploy/load/` (`make load`, ADR-0016: an open-
 
 ### HUB-236 — Soak test with random vendor outages
 - **Epic:** EP-09 · **Type:** test · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-235, HUB-152 · **Feature:** F-18 · **Stories:** US-18xx
+- **Status:** done · **Merged:** Merge pull request #28 from Donquixot-Doflamingo/perf/HUB-235-load-soak · **Depends on:** HUB-235, HUB-152 · **Feature:** F-18 · **Stories:** US-18xx
 - **Branch:** `perf/HUB-235-load-soak` (with HUB-235)
 
 Multi-hour soak with randomised mockvendor outages and worker restarts; reconcile accepted vs terminal requests (DESIGN §19 M8 Accept).
@@ -1786,7 +1786,7 @@ Built as `hubload soak` (`make soak`): chaos loop on the mockvendor control API 
 
 ### HUB-237 — Runbooks and M8 summary
 - **Epic:** EP-09 · **Type:** docs · **Area:** docs
-- **Status:** in-review · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-1807
+- **Status:** done · **Merged:** Merge pull request #29 from Donquixot-Doflamingo/docs/HUB-237-m8-summary · **Depends on:** HUB-232, HUB-236, HUB-184, HUB-214 · **Feature:** F-18 · **Stories:** US-1807
 - **Branch:** `docs/HUB-237-runbooks-m8`
 
 Runbooks for breaker open, DLQ spike, `UPSTREAM_AUTH_FAILED`, `TRANSFORM_FAILED`, credential rotation, snapshot lag; post the M8 wrap-up. The alert rules (HUB-232) link `docs/runbooks/<AlertName>.md` for all ten alerts in `deploy/alerts/hub.rules.yaml` (six page, four warn).
@@ -2478,7 +2478,7 @@ Filed by frontend-engineer during HUB-270 (e2e). While a `ConfirmDialog` submits
 
 ### HUB-286 — Console against a running Hub with one command
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** in-review · **Depends on:** HUB-253, HUB-207 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1906
+- **Status:** done · **Merged:** Merge pull request #37 from Donquixot-Doflamingo/feat/HUB-286-console-real-backend · **Depends on:** HUB-253, HUB-207 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1906
 - **Branch:** `feat/HUB-286-console-real-backend`
 
 The console has only ever run on MSW contract mocks. Make it work end to end against the real admin API: dev sign-in through the admin's dev OIDC issuer (`hub admin -admin-dev-oidc`, M7), a same-origin `/admin/v1` proxy in the console server that adds the session token ([ADR-0022](../tech/adr/0022-console-same-origin-admin-proxy.md)), and SSR serialization of the admin response headers. Add `scripts/dev-up.sh` / `scripts/dev-down.sh` (and `make dev-up` / `make dev-down`) that start Postgres and Redis (docker compose when Docker or Colima runs, else the services the env names), migrations and the dev seed, mockvendor, the hub roles gateway, worker, scheduler and admin, and the console, then print the URLs, the dev login and a tenant API key.
@@ -2492,7 +2492,7 @@ The console has only ever run on MSW contract mocks. Make it work end to end aga
 
 ### HUB-287 — Console visual polish against the real stack
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** in-review · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1903, US-1904, US-1905, US-1906
+- **Status:** done · **Merged:** Merge pull request #37 from Donquixot-Doflamingo/feat/HUB-286-console-real-backend · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1901, US-1902, US-1903, US-1904, US-1905, US-1906
 - **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-288, HUB-289)
 
 Walk every route with Playwright against the real stack (desktop and 390 px mobile) and fix what looks wrong: spacing, typography, empty/loading/error states, tables, forms, status colours and mobile width, consistently across screens (frontend-design and admin-console-ux skills).
@@ -2505,7 +2505,7 @@ Walk every route with Playwright against the real stack (desktop and 390 px mobi
 
 ### HUB-288 — Destructive actions only for roles that may do them
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** in-review · **Depends on:** HUB-253 · **Feature:** F-19 · **Stories:** US-1902, US-1904, US-1906
+- **Status:** done · **Merged:** Merge pull request #37 from Donquixot-Doflamingo/feat/HUB-286-console-real-backend · **Depends on:** HUB-253 · **Feature:** F-19 · **Stories:** US-1902, US-1904, US-1906
 - **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-287, HUB-289)
 
 "If a user doesn't have access there should be no delete option at all." Delete, purge, retire, revoke, unseal, rollback and force controls are not rendered unless the signed-in role satisfies the operation's `x-required-role` in `hub-admin.v1.yaml`. The minimum role per operation is generated from the contract (`npm run gen:api` -> `src/lib/api/roles.gen.ts`) so the UI cannot drift from the API. The 403 handling stays.
@@ -2518,7 +2518,7 @@ Walk every route with Playwright against the real stack (desktop and 390 px mobi
 
 ### HUB-289 — Console bug bash against the real stack
 - **Epic:** EP-10 · **Type:** fix · **Area:** frontend
-- **Status:** in-review · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1902, US-1906
+- **Status:** done · **Merged:** Merge pull request #37 from Donquixot-Doflamingo/feat/HUB-286-console-real-backend · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1902, US-1906
 - **Branch:** `feat/HUB-286-console-real-backend` (with HUB-286, HUB-287, HUB-288)
 
 Bugs found running the console against a real Hub, each fixed with a test. Backend bugs are reported, not fixed here.
@@ -2534,7 +2534,7 @@ Bugs found running the console against a real Hub, each fixed with a test. Backe
 
 ### HUB-290 — Console: vendors and vendor endpoints pages
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** in-review · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1907
+- **Status:** done · **Merged:** Merge pull request #39 from Donquixot-Doflamingo/feat/HUB-290-console-authoring-v2 · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1907
 - **Branch:** `feat/HUB-290-console-vendors` (delivered on `feat/HUB-290-console-authoring` with HUB-291, HUB-292, HUB-293)
 
 Found writing the operator skill (HUB-316): the console has no vendor pages, so onboarding a vendor ('client') needs the admin API or MCP. Add list, detail, create and update for vendors (`listVendors`, `getVendor`, `createVendor`, `updateVendor`) and endpoints (`listVendorEndpoints`, `getVendorEndpoint`, `createVendorEndpoint`; endpoint versions are immutable).
@@ -2546,7 +2546,7 @@ Found writing the operator skill (HUB-316): the console has no vendor pages, so 
 
 ### HUB-291 — Console: accounts page with write-only credentials and rotation
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** in-review · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1908
+- **Status:** done · **Merged:** Merge pull request #39 from Donquixot-Doflamingo/feat/HUB-290-console-authoring-v2 · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1908
 - **Branch:** `feat/HUB-291-console-accounts` (delivered on `feat/HUB-290-console-authoring`)
 
 Accounts (a vendor's credentials and quota) can only be created by calling the admin API today, yet the MCP contract and the operator skill send people to the console for anything with secrets. Add list, detail, create (`createAccount`), config and quota edit (`updateAccount`), test connection, and credential rotation (`addNextCredential`, `promoteNextCredential`; `deleteOldCredential` only for roles that have it). Secrets are write-only: never shown after submit.
@@ -2558,7 +2558,7 @@ Accounts (a vendor's credentials and quota) can only be created by calling the a
 
 ### HUB-292 — Console: create an integration, edit drafts, validate and publish
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** in-review · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1909
+- **Status:** done · **Merged:** Merge pull request #39 from Donquixot-Doflamingo/feat/HUB-290-console-authoring-v2 · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1909
 - **Branch:** `feat/HUB-292-console-integration-authoring` (delivered on `feat/HUB-290-console-authoring`)
 
 The console shows integrations and versions but cannot create one or edit a draft. Add create integration, a draft editor (targets, per-operation transformers, delivery, weights), validate with the report shown inline, a diff against the active version, and publish/rollback with a reason.
@@ -2570,7 +2570,7 @@ The console shows integrations and versions but cannot create one or edit a draf
 
 ### HUB-293 — Console: create transformer versions and run goldens
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** in-review · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1910
+- **Status:** done · **Merged:** Merge pull request #39 from Donquixot-Doflamingo/feat/HUB-290-console-authoring-v2 · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1910
 - **Branch:** `feat/HUB-293-console-transformer-authoring` (delivered on `feat/HUB-290-console-authoring`)
 
 Transformer pages are read-only. Add create transformer version (YAML editor plus golden fixtures), run goldens with diffs, and dry-run, using `createTransformerVersion`, `runTransformerGoldens` and `dryRunTransformer`.
@@ -2746,7 +2746,7 @@ Run `@modelcontextprotocol/inspector` (CLI mode) against `bin/hubmcp` in CI or a
 
 ### HUB-314 — CCR: hubmcp admin write tools with no delete path
 - **Epic:** EP-11 · **Type:** contract · **Area:** contracts
-- **Status:** in-review · **Depends on:** HUB-305 · **Feature:** F-20 · **Stories:** US-2005, US-20xx (new story for admin write tools, docs-keeper)
+- **Status:** done · **Merged:** Merge pull request #34 from Donquixot-Doflamingo/feat/HUB-314-mcp-write-tools · **Depends on:** HUB-305 · **Feature:** F-20 · **Stories:** US-2005, US-20xx (new story for admin write tools, docs-keeper)
 - **Branch:** `feat/HUB-314-mcp-write-tools`
 
 User requirement: a team's Claude can create whatever the team needs on the panel through hubmcp, using the user's own authentication and authorization. It must not be able to delete a tenant or anything else: no delete API through MCP. Deleting stays manual in the console, for people whose role allows it. Contract-only: `contracts/mcp/hubmcp-tools.json` 1.0.0 → 1.1.0. Each new tool maps to one existing hub-admin operation, so there is no new HTTP endpoint.
@@ -2767,7 +2767,7 @@ User requirement: a team's Claude can create whatever the team needs on the pane
 
 ### HUB-315 — hubmcp admin write tools (implement hubmcp-tools 1.1.0)
 - **Epic:** EP-11 · **Type:** feat · **Area:** mcp
-- **Status:** in-review · **Depends on:** HUB-314 · **Feature:** F-20 · **Stories:** US-2005, US-20xx (new story for admin write tools, docs-keeper)
+- **Status:** done · **Merged:** Merge pull request #34 from Donquixot-Doflamingo/feat/HUB-314-mcp-write-tools · **Depends on:** HUB-314 · **Feature:** F-20 · **Stories:** US-2005, US-20xx (new story for admin write tools, docs-keeper)
 - **Branch:** `feat/HUB-314-mcp-write-tools` (on top of the HUB-314 contract commits, merged together)
 
 Implement the 34 new admin tools of `contracts/mcp/hubmcp-tools.json` 1.1.0 (README "Admin write tools"). The admin client grows from GET-only to exactly the mapped methods, called with the user's own `HUB_ADMIN_TOKEN`. Refresh the embedded copy (`go generate ./cmd/hubmcp`).
@@ -2789,7 +2789,7 @@ Built (in review): `admintools.go` (contract-driven handlers), `guard.go` (`SECR
 
 ### HUB-316 — Operator skills in the repo
 - **Epic:** EP-11 · **Type:** docs · **Area:** docs
-- **Status:** in-review · **Depends on:** HUB-305, HUB-314 · **Feature:** F-21 · **Stories:** US-2105
+- **Status:** done · **Merged:** Merge pull request #31 from Donquixot-Doflamingo/docs/HUB-316-operator-skills · **Depends on:** HUB-305, HUB-314 · **Feature:** F-21 · **Stories:** US-2105
 - **Branch:** `docs/HUB-316-operator-skills`
 
 So nobody has to guess how to run the Hub, whatever AI they use: one repo-wide skill, `.claude/skills/hub-operator/` (SKILL.md + seven `references/`), also linked from `.agents/skills/hub-operator` for OpenAI Codex (Cursor reads `.claude/skills/` itself). Topics: tenants and API keys (scopes); vendors, endpoints and accounts with credentials; callback endpoints and signature verification; changing vendor/account config safely; switching an integration to another vendor or account (draft, validate, diff, publish, weights, shadow, rollback, re-resolve vs pinned); transformers (canonical → vendor → canonical walk-through, error mapping, goldens, dry-run); multi-step flows (operations, `X-Hub-Session`). Each task shows the console path, the `hubctl` command and the `hubmcp` tool call, with the admin API as the fallback, and says plainly where a way does not exist yet. One skill rather than several: one trigger surface ("operate the Hub"), shared access and safety rules in SKILL.md, topics loaded on demand.
@@ -2803,7 +2803,7 @@ So nobody has to guess how to run the Hub, whatever AI they use: one repo-wide s
 
 ### HUB-317 — Consumer skill for any AI agent
 - **Epic:** EP-11 · **Type:** docs · **Area:** docs
-- **Status:** in-review · **Depends on:** HUB-303, HUB-316 · **Feature:** F-21 · **Stories:** US-2106
+- **Status:** done · **Merged:** Merge pull request #31 from Donquixot-Doflamingo/docs/HUB-316-operator-skills · **Depends on:** HUB-303, HUB-316 · **Feature:** F-21 · **Stories:** US-2106
 - **Branch:** `docs/HUB-316-operator-skills`
 
 Make `clients/claude-skill/` usable from whatever assistant a calling team has. Research (2026-11-07) showed one `SKILL.md` folder serves Claude Code (`~/.claude/skills/`, `.claude/skills/`), claude.ai / Claude Desktop (ZIP upload), OpenAI Codex (`~/.agents/skills/`, `.agents/skills/`; needs `name` + `description`) and Cursor (`.cursor/skills/`, `.agents/skills/`, also reads `.claude/skills/`; `name` must equal the folder), so there is no per-tool copy. README with verified install steps and doc URLs per tool, a Cursor `.mdc` rule option, and `PASTE-INTO-ANY-ASSISTANT.md` for chat assistants and `AGENTS.md`. Skill content: two-step OTP flow (`send_otp` → `verify_otp` with `X-Hub-Session`) with its failure table, the real `hubclient` API (`Result` / `Queued`, `WithOperation`, `WithSession`, `GetRequest`), `hub_invoke` parameters, `send_otp`/`verify_otp` in the quick reference. The folder keeps its name: renaming would break 25 links across the repo and collide with the parallel hubmcp branch editing `references/mcp-setup.md`; the README says it is tool-neutral.
@@ -2816,7 +2816,7 @@ Make `clients/claude-skill/` usable from whatever assistant a calling team has. 
 
 ### HUB-318 — MCP setup for every client
 - **Epic:** EP-11 · **Type:** docs · **Area:** mcp
-- **Status:** in-review · **Depends on:** HUB-301, HUB-314 · **Feature:** F-20, F-21 · **Stories:** US-2107
+- **Status:** done · **Merged:** Merge pull request #31 from Donquixot-Doflamingo/docs/HUB-316-operator-skills · **Depends on:** HUB-301, HUB-314 · **Feature:** F-20, F-21 · **Stories:** US-2107
 - **Branch:** `docs/HUB-316-operator-skills`
 
 `clients/claude-skill/integration-hub/references/mcp-setup.md` covers Claude Code (`claude mcp add`, `.mcp.json` with `${VAR}`), Claude Desktop (`claude_desktop_config.json` per OS with a keychain wrapper, since its `env` values are literal), Codex CLI (`~/.codex/config.toml` `[mcp_servers.*]` with `env_vars` forwarding, `codex mcp add`) and Cursor (`.cursor/mcp.json` with `${env:NAME}`, `envFile`), each verified against the client's docs (URLs in the file). Two profiles: the tenant key, and separately the user's own admin token (stdio only, a separate `hubmcp-admin` entry, never in a committed or hosted config, `HUB_ADMIN_BASE_URL` with `/admin/v1`). Also the hosted Streamable HTTP option per client and the full tool list of hubmcp-tools 1.1.0, consistent with `contracts/mcp/README.md`. The hubmcp backend branch may edit the same file; the lead merges.
@@ -2826,6 +2826,37 @@ Make `clients/claude-skill/` usable from whatever assistant a calling team has. 
 - [x] Tenant key and admin token documented separately; admin write tools stdio only; no deletes; no secrets in committed files
 - [x] Every tool of hubmcp-tools 1.1.0 named, and the env vars and flags (`-transport`, `-addr`, `-allow-remote`) match `backend/cmd/hubmcp`
 - [ ] Each snippet run on a clean machine per client: not possible in this container (no desktop clients); left for HUB-309
+
+### HUB-319 — CCR: VendorFields.credential_keys
+- **Epic:** EP-11 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `contract/HUB-319-credential-keys`
+
+From the console authoring work (CCR-005 in `frontend/CCR-NOTES.md`): a vendor-declared list of credential keys, so the console and docs know which keys an account needs. Not blocking: key names are free text today.
+
+**Acceptance criteria**
+- [ ] Contract-steward decision; if accepted, admin contract minor bump and console uses it
+
+### HUB-320 — CCR: GoldenFixture.expected_session
+- **Epic:** EP-11 · **Type:** contract · **Area:** contracts
+- **Status:** todo · **Depends on:** — · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `contract/HUB-320-expected-session`
+
+From HUB-293 (CCR-007): response transformers that open a vendor session (e.g. the Aadhaar `CF-OKYC-OTP-RES`) can't keep their session goldens through the admin API, console or MCP, because `GoldenFixture` has no `expected_session`.
+
+**Acceptance criteria**
+- [ ] Field added (minor bump) and honoured by runTransformerGoldens; console and hubmcp round-trip it
+
+### HUB-321 — Verify MCP setup snippets in real clients; neutral consumer skill folder
+- **Epic:** EP-11 · **Type:** docs · **Area:** docs
+- **Status:** todo · **Depends on:** HUB-318 · **Feature:** F-21 · **Stories:** US-21xx
+- **Branch:** `docs/HUB-321-mcp-snippets-verified`
+
+HUB-318's snippets for Claude Code, Claude Desktop, Codex CLI and Cursor were checked against each client's docs but not run in the clients. HUB-317 kept `clients/claude-skill/` to avoid breaking links during parallel work.
+
+**Acceptance criteria**
+- [ ] Each snippet run once in its client; corrections committed
+- [ ] Folder renamed to a neutral name with a symlink from the old path
 
 ## EP-12 — Release 2 (DESIGN §19 Phase 2)
 
@@ -3056,7 +3087,7 @@ Found while building HUB-343. `hubctl dry-run <integration> <body.json>` dry-run
 
 ### HUB-351 — Aadhaar OTP e-KYC example (two steps, one integration ID)
 - **Epic:** EP-12 · **Type:** feat · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-343 · **Feature:** F-22 · **Stories:** US-2205, US-2207
+- **Status:** done · **Merged:** Merge pull request #32 from Donquixot-Doflamingo/feat/HUB-351-aadhaar-pan-examples · **Depends on:** HUB-343 · **Feature:** F-22 · **Stories:** US-2205, US-2207
 - **Branch:** `feat/HUB-351-aadhaar-pan-examples`
 
 The user asked how an API like Aadhaar is integrated (get OTP, the person receives it, call again with the OTP to get the Aadhaar data) against a provider that can really be called for testing. UIDAI's own authentication and e-KYC APIs need an AUA/KUA licence, so the example uses a licensed provider's OTP-based offline e-KYC with a public sandbox (Cashfree Secure ID test mode, chosen after comparing Setu, Sandbox.co.in, Surepass, Decentro, IDfy and Signzy on public docs). Build `examples/aadhaar-okyc/` as a registry overlay (like HUB-342): vendor with mock and sandbox base URLs, test account, tenant, example capability `demo.aadhaar_okyc@v1` (`send_otp`, `verify_otp`), integration `int_aadhaar_okyc` (sync, fail_fast, sealed 90 days per D6), four transformers verified against the provider's current docs with goldens for every documented error, mockvendor scenario files shared by the demo and the tests, a demo script that switches from mockvendor to the sandbox with one environment variable, a Go SDK client and an integration test through the gateway.
@@ -3073,7 +3104,7 @@ The user asked how an API like Aadhaar is integrated (get OTP, the person receiv
 
 ### HUB-352 — PAN verification example
 - **Epic:** EP-12 · **Type:** feat · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-351 · **Feature:** F-22 · **Stories:** US-2207
+- **Status:** done · **Merged:** Merge pull request #32 from Donquixot-Doflamingo/feat/HUB-351-aadhaar-pan-examples · **Depends on:** HUB-351 · **Feature:** F-22 · **Stories:** US-2207
 - **Branch:** `feat/HUB-351-aadhaar-pan-examples`
 
 The single-step sibling of HUB-351: PAN verification on the same provider and account (Cashfree Secure ID, mockvendor or its sandbox), as a sync lookup (DESIGN §14 pattern "sync lookup"). Vendor endpoint, example capability `demo.pan_verify@v1`, transformers verified against the provider's current docs with goldens, integration `int_pan_verify` (sync, fail_fast, idempotency key required, sealed 90 days), mockvendor scenario files, an integration test and `examples/pan-verify/` (README and demo script).
@@ -3088,7 +3119,7 @@ The single-step sibling of HUB-351: PAN verification on the same provider and ac
 
 ### HUB-353 — Live latency demo against an open public API
 - **Epic:** EP-12 · **Type:** feat · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-235 · **Feature:** F-18 · **Stories:** US-1802
+- **Status:** done · **Merged:** Merge pull request #32 from Donquixot-Doflamingo/feat/HUB-351-aadhaar-pan-examples · **Depends on:** HUB-235 · **Feature:** F-18 · **Stories:** US-1802
 - **Branch:** `feat/HUB-351-aadhaar-pan-examples`
 
 The user wants to measure, on their own machine, what the Hub adds to a real internet call. Pick a free, open, no-auth HTTP API that is up (Postman Echo `POST /post`, checked 2026-11-07; httpbin.org also answered), configure a vendor and integration for it as an example overlay, and write `examples/latency-demo/run.sh`: N calls directly and N through a local Hub, p50/p95/p99 for both and the difference, with sensible defaults, plus a README on reading the numbers (jitter dominates; compare deltas; controlled numbers in `docs/tech/LATENCY.md`).
@@ -3120,7 +3151,7 @@ The alert runbooks (HUB-237) fall back to curl for actions that have admin opera
 
 ### HUB-401 — SnapshotBehind fires falsely after a restart: snapshot_version is per process
 - **Epic:** EP-13 · **Type:** fix · **Area:** backend
-- **Status:** in-review · **Depends on:** — · **Feature:** F-18 · **Stories:** US-1807
+- **Status:** done · **Merged:** Merge pull request #36 from Donquixot-Doflamingo/perf/HUB-413-latency-budget · **Depends on:** — · **Feature:** F-18 · **Stories:** US-1807
 - **Branch:** `fix/HUB-401-snapshot-version`
 
 `registry.Store.Swap` counts versions per process from 1, so a node restarted after any publish reports a lower `snapshot_version` than its peers forever, and `SnapshotBehind` fires falsely. Audit rows store the same local number, so it cannot be compared across nodes. Use the published archive version (or checksum) for the gauge and the audit field.
@@ -3167,7 +3198,7 @@ OBSERVABILITY §9 cites things that do not exist: the metrics `drain_release_rat
 
 ### HUB-405 — `hub_overhead_ms` is computed before the vendor call
 - **Epic:** EP-13 · **Type:** fix · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-027 · **Feature:** F-18 · **Stories:** US-1802
+- **Status:** done · **Merged:** Merge pull request #30 from Donquixot-Doflamingo/fix/HUB-405-overhead-metric-time · **Depends on:** HUB-027 · **Feature:** F-18 · **Stories:** US-1802
 - **Branch:** `fix/HUB-405-overhead-metric-time`
 
 Found by the HUB-235 load test. `edge.(*Server).invoke` does `defer s.metrics.RecordTimings(&p.timings, s.deps.Now(), ...)`. Go evaluates `s.deps.Now()` when the `defer` statement runs, right after `prepare`, not when the handler returns. The exported histogram therefore records "prepare time minus vendor time minus wait". It is negative whenever the vendor is slower than auth + body + validate + resolve: 100 % of observations at mockvendor 20 ms in the load test. The stage histograms are fine (they read the pointer at return), and so is the audit ledger (`hub.requests.hub_overhead_ms`, computed in `record`). The S1 SLO, the `HubOverheadHigh` alert, the platform dashboard and the M3 "overhead p99 ≤ 5 ms" evidence all read the broken metric.
@@ -3179,7 +3210,7 @@ Found by the HUB-235 load test. `edge.(*Server).invoke` does `defer s.metrics.Re
 
 ### HUB-406 — Worker claims before its snapshot is loaded and panics after a restart
 - **Epic:** EP-13 · **Type:** fix · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Merged:** Merge pull request #35 from Donquixot-Doflamingo/fix/HUB-412-worker-isolation · **Depends on:** HUB-112 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `fix/HUB-406-worker-snapshot-gate`
 
 Found by the HUB-236 soak harness. A worker restarted (SIGTERM or SIGKILL) while the outbox has due envelopes panics with a nil pointer dereference in `delivery.(*Worker).trail` (`worker.go:266`, `snap.Integrations` with `snap == nil`). `roles.Run` calls `dp.start` (which starts the claim loop) before `reg.load`, so the first claim can run before any snapshot exists. Each crash also leaves its claims to expire and bumps their `crashes` count: after `PoisonCrashes` (2) the envelopes would be dead-lettered as poison although they are fine. Without a supervisor restart the backlog just waits. The soak therefore runs without worker restarts (`SOAK_RESTARTS=0`).
@@ -3191,7 +3222,7 @@ Found by the HUB-236 soak harness. A worker restarted (SIGTERM or SIGKILL) while
 
 ### HUB-407 — Worker throughput is capped by 16 attempts in flight and a batch barrier
 - **Epic:** EP-13 · **Type:** perf · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-112, HUB-403 · **Feature:** F-09 · **Stories:** US-09xx
+- **Status:** done · **Merged:** Merge pull request #35 from Donquixot-Doflamingo/fix/HUB-412-worker-isolation · **Depends on:** HUB-112, HUB-403 · **Feature:** F-09 · **Stories:** US-09xx
 - **Branch:** `perf/HUB-407-worker-concurrency`
 
 Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md`). One worker finishes about 340 envelopes/s at mockvendor 20 ms while using 0.25 CPU cores: it is waiting, not working. `Worker.ProcessOnce` claims 32, runs them 16 at a time and waits for the whole batch before claiming again. Throughput is therefore at most 16 / (vendor latency + about 25 ms of Hub time) per process, and one slow envelope holds up the next claim. DESIGN §18.4 and the go-system-design skill say workers claim `n = free bulkhead slots` (64 per account). At 2,000 msg/s and 20 ms that takes about 6 worker processes today. HUB-403 makes the 16 and 32 configurable; this ticket changes the claim model itself.
@@ -3203,7 +3234,7 @@ Found by the HUB-235 async ramp (`docs/tech/LOAD_TEST_REPORT.md`). One worker fi
 
 ### HUB-408 — Account limiter: a Redis round trip on every sync vendor call
 - **Epic:** EP-13 · **Type:** perf · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-147 · **Feature:** F-13 · **Stories:** US-13xx
+- **Status:** done · **Merged:** Merge pull request #36 from Donquixot-Doflamingo/perf/HUB-413-latency-budget · **Depends on:** HUB-147 · **Feature:** F-13 · **Stories:** US-13xx
 - **Branch:** `perf/HUB-408-limiter-lease`
 
 Found by the HUB-235 sync ramp. `upstream.(*AccountLimiter).Wait` runs a Redis script for every vendor call, including sync ones. At 500 RPS on 2 CPUs its own time (stage `admission` = `wait`) has a p99 of 3.8 ms, the largest stage on the path. DESIGN §18.5 rule 6 allows only the idempotency check as a non-vendor network call on the sync path; the go-system-design skill says to cache a local token lease. The whole call is also added to `StageWait`, which `hub_overhead_ms` excludes as a deliberate wait, even when the token was granted at once. So the overhead the Hub reports leaves out its biggest stage: at 500 RPS the ledger p99 is 3.4 ms without it and 6.2 ms with it. A Redis stall also puts the sync path at risk: the limiter's 50 ms timeout fired 15 times within one second during a quiet 100 RPS run, giving that step a 20 ms p99 "Hub adds" tail (report §3.1).
@@ -3303,7 +3334,7 @@ Found by HUB-289: the dev seed's registrar endpoint returns an `http://` URL, wh
 
 ### HUB-413 — Latency budget: a 100 ms vendor stays ≤ 110 ms through the Hub
 - **Epic:** EP-13 · **Type:** perf · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-408 · **Feature:** F-18 · **Stories:** US-1808, US-1802
+- **Status:** done · **Merged:** Merge pull request #36 from Donquixot-Doflamingo/perf/HUB-413-latency-budget · **Depends on:** HUB-408 · **Feature:** F-18 · **Stories:** US-1808, US-1802
 - **Branch:** `perf/HUB-413-latency-budget`
 
 The user's requirement: if the vendor answers in 100 ms, a sync call through the Hub must take at most 110 ms, never 200 ms; nothing that can be async may delay a sync call. Today's evidence is the M8 load report (the Hub adds about 1.3 ms p50 and 3.5 ms p99 at a 200 ms vendor) and a benchmark at a 0 ms vendor, neither of which is a CI gate. Add a gate that runs the real gateway stack against a 100 ms mockvendor and fails on a regression, prove that the optional work (audit, async accepts, callbacks) is off the caller's request, and document the I/O that remains on the sync path.
@@ -3316,7 +3347,7 @@ The user's requirement: if the vendor answers in 100 ms, a sync call through the
 
 ### HUB-412 — Per-vendor isolation in the async worker
 - **Epic:** EP-13 · **Type:** fix · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-112, HUB-146 · **Feature:** F-13, F-12, F-09 · **Stories:** US-1303
+- **Status:** done · **Merged:** Merge pull request #35 from Donquixot-Doflamingo/fix/HUB-412-worker-isolation · **Depends on:** HUB-112, HUB-146 · **Feature:** F-13, F-12, F-09 · **Stories:** US-1303
 - **Branch:** `fix/HUB-412-worker-isolation`
 
 Asked for by the manager: "if one vendor goes down or gets slow while callers keep calling it, what happens to the other vendors?" The sync path was isolated per account, but the async worker was not. `ProcessOnce` claimed 32 envelopes, ran 16 at a time and waited for the whole batch (one slow envelope held the next claim for every vendor), and the 16 slots were shared, so a slow or hanging vendor could fill all of them. The breaker never parks a vendor that is slow but answering, and parks a hanging one only after 5 timeouts. ADR-0019.
@@ -3330,7 +3361,7 @@ Asked for by the manager: "if one vendor goes down or gets slow while callers ke
 
 ### HUB-416 — Breaker force test checks node B before its subscription message can arrive
 - **Epic:** EP-13 · **Type:** test · **Area:** backend
-- **Status:** in-review · **Depends on:** HUB-209 · **Feature:** F-12 · **Stories:** US-12xx
+- **Status:** done · **Merged:** Merge pull request #33 from Donquixot-Doflamingo/test/HUB-416-breaker-force-race · **Depends on:** HUB-209 · **Feature:** F-12 · **Stories:** US-12xx
 - **Branch:** `test/HUB-416-breaker-force-race`
 
 `TestForceReachesEveryNodeWithinOneSecond` failed on #31, a docs-only PR. It waited until node A saw the forced-open hold, then checked node B once. B hears the hold on its own Redis subscription, which can land a few ms after A's, so the single check raced. The guarantee (HUB-209) is "in force on every node within 1 s of the write", so B now gets the same 1 s window.
@@ -3358,6 +3389,92 @@ Found writing HUB-316: API key scope `requests_read` is defined, but nothing on 
 
 **Acceptance criteria**
 - [ ] `getRequestStatus` requires `requests_read` (or the documented scope); table test per scope; docs updated
+
+### HUB-422 — Staging load and soak run: close the open load criteria
+- **Epic:** EP-13 · **Type:** test · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-235, HUB-412, HUB-413 · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `test/HUB-422-staging-load`
+
+The load criteria of HUB-235, HUB-405, HUB-406, HUB-407, HUB-408 and HUB-413 need dedicated hardware: the 2-CPU development container can't run load generators beside other builds. Run `deploy/load/run.sh` (hubload) and the soak on staging-sized machines and record the results in `docs/tech/LOAD_TEST_REPORT.md`.
+
+**Acceptance criteria**
+- [ ] 500 sync RPS: `hub_overhead_ms` p99 ≤ 5 ms and within 10 % of the audit ledger p99, 0 % negative (HUB-235, HUB-405)
+- [ ] Admission stage p99 < 0.1 ms at 500 RPS (HUB-408)
+- [ ] 2,000 async msg/s for 10 min with queue age < 2 min, or the measured limit and its cause (HUB-235, HUB-407)
+- [ ] Soak with `SOAK_RESTARTS=2` (SIGTERM and SIGKILL): zero lost, zero duplicate callbacks (HUB-406)
+- [ ] `latency-budget` CI job green on 3 consecutive runs (HUB-413)
+
+### HUB-423 — Account drain is refused while an active version targets the account
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-15 · **Stories:** US-15xx
+- **Branch:** `fix/HUB-423-drain-active-account`
+
+Found by the console authoring work (HUB-291): `transitionAccountLifecycle` answers 409 CONFLICT for active→draining while an active integration version targets the account. The contract allows that transition; only retire is guarded.
+
+**Acceptance criteria**
+- [ ] active→draining succeeds with an active version targeting the account; retire stays guarded; contract test
+
+### HUB-424 — Omitted quota fields read back as 0 instead of null
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-15 · **Stories:** US-15xx
+- **Branch:** `fix/HUB-424-quota-null`
+
+Found by HUB-291: an omitted `quota.daily` (and `per_account_rps`) comes back as `0`, which literally means a limit of zero calls.
+
+**Acceptance criteria**
+- [ ] Omitted quota fields round-trip as null (or absent); contract test
+
+### HUB-425 — getVendor ETag ignores endpoint changes
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `fix/HUB-425-vendor-etag`
+
+Found by HUB-290: the vendor's ETag follows only its own revision, so adding an endpoint leaves it unchanged although the response embeds the endpoints. Caches and If-Match see stale data.
+
+**Acceptance criteria**
+- [ ] The ETag changes when the vendor's endpoints change; test
+
+### HUB-426 — VALIDATION_FAILED reports only the first problem
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `fix/HUB-426-validation-all-errors`
+
+Found by HUB-292: admin validation stops at the first error, so a form with several bad fields needs one round trip per error.
+
+**Acceptance criteria**
+- [ ] All validation problems are returned with their JSON pointers; contract test
+
+### HUB-427 — Inbound transformers are refused although the contract lists them
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-04 · **Stories:** US-04xx
+- **Branch:** `fix/HUB-427-inbound-transformers`
+
+Found by HUB-293: creating a transformer with `kind: inbound` answers "not supported by this build", while the admin contract lists inbound. Either implement it (Release 2, inbound webhooks) or have the contract steward mark it as not yet supported.
+
+**Acceptance criteria**
+- [ ] Server and contract agree on inbound transformers; test
+
+### HUB-428 — createVendor accepts private-range base URLs
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-16 · **Stories:** US-16xx
+- **Branch:** `fix/HUB-428-vendor-url-ssrf`
+
+Found by HUB-290: `createVendor` accepts base URLs such as `http://10.0.0.1`. Fine for dev, but production should refuse private and loopback ranges like the callback SSRF guard does (SECURITY.md).
+
+**Acceptance criteria**
+- [ ] Production config refuses private/loopback base URLs; dev keeps an explicit allow; test
+
+### HUB-429 — Final sweep: tickets done, follow-ups filed, CI latency numbers
+- **Epic:** EP-13 · **Type:** docs · **Area:** docs
+- **Status:** in-review · **Depends on:** — · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `docs/HUB-429-final-sweep`
+
+Close out the work merged in #28 to #39: mark tickets done with their merge subjects, file the follow-ups the agents reported, and record the latency numbers from the dedicated CI runner.
+
+**Acceptance criteria**
+- [x] 31 tickets marked done with merge subjects
+- [x] Follow-ups HUB-319 to HUB-321 and HUB-422 to HUB-428 filed
+- [x] `docs/tech/LATENCY.md` carries the CI runner's numbers
 
 ## Parallel tracks
 

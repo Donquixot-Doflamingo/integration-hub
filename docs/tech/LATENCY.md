@@ -70,6 +70,20 @@ CPU work that is still on the request goroutine but could move: audit **masking*
 
 ## 5. Current numbers
 
+### 5.1 Reference: the dedicated CI runner (`latency-budget` job)
+
+2026-11-07, PR #36 head `5e2a491`, GitHub-hosted runner, no other workload. Vendor 100 ms, milliseconds, p50 / p95 / p99.
+
+| Scenario | Samples | Direct | Through the Hub | Hub adds |
+| --- | --- | --- | --- | --- |
+| sync | 700 | 100.6 / 101.1 / 101.6 | **101.3 / 102.9 / 103.6** | 0.7 / 1.7 / 2.0 |
+| sync + Idempotency-Key | 300 | 100.5 / 101.1 / 101.2 | **101.2 / 102.0 / 102.7** | 0.7 / 0.9 / 1.5 |
+| wait mode (D3 default, reported) | 200 | 101.0 / 101.1 / 101.2 | **102.7 / 104.0 / 105.4** | 1.7 / 2.9 / 4.2 |
+
+All three stay well inside the requirement (a 100 ms vendor never above 110 ms at p99), wait mode included.
+
+### 5.2 Development container (noisy, for context)
+
 2026-11-07, branch `perf/HUB-413-latency-budget` (HUB-408 limiter leases included), shared 2-CPU / 7 GB container that also ran other workstreams' builds and tests (load average 0.5 to 5 during the runs). Milliseconds, p50 / p95 / p99. "Clean" means the stall guard passed; rows marked *stalled* are the best attempt of a run in which every attempt saw the process frozen for more than 20 ms (value in brackets), shown for completeness.
 
 **Sync, no `Idempotency-Key`** (390 samples: 150 sequential + 8 × 30 concurrent)
@@ -109,4 +123,4 @@ What the numbers say:
 
 ## 6. Gate status
 
-The gate judges the requirement (caller p99 ≤ V + 10 ms) and what the Hub adds over direct calls in the same run (p50 ≤ 2 ms, ≤ 3 ms keyed; p99 ≤ 10 ms). The earlier absolute "p50 ≤ V + 2 ms" bound was removed: it charged the mock vendor's own ~0.9 ms jitter to the Hub. In clean runs on the shared development container the Hub added 1.2 ms (sync) and 2.0 ms (keyed) at p50, and p99 stayed at or below 110 ms. On that container, runs taken while other builds use both CPUs are noisy (load average above 3, p99 up to 111 ms), so the dedicated `latency-budget` CI job is the reference. Ways to add margin: HUB-409 (audit masking off the request goroutine, about half of the Hub's own CPU per request). **Wait mode** (D3 default) adds about 5.5 ms p50 and 10–15 ms p99 because it persists the request before the attempt. It is reported, not gated: an integration that must stay within V + 10 ms at p99 should use `sync` mode.
+The gate judges the requirement (caller p99 ≤ V + 10 ms) and what the Hub adds over direct calls in the same run (p50 ≤ 2 ms, ≤ 3 ms keyed; p99 ≤ 10 ms). The earlier absolute "p50 ≤ V + 2 ms" bound was removed: it charged the mock vendor's own ~0.9 ms jitter to the Hub. In clean runs on the shared development container the Hub added 1.2 ms (sync) and 2.0 ms (keyed) at p50, and p99 stayed at or below 110 ms. On that container, runs taken while other builds use both CPUs are noisy (load average above 3, p99 up to 111 ms), so the dedicated `latency-budget` CI job is the reference. Ways to add margin: HUB-409 (audit masking off the request goroutine, about half of the Hub's own CPU per request). **Wait mode** (D3 default) persists the request before the attempt. On the CI runner it adds 1.7 ms p50 and 4.2 ms p99 (5.1); on the loaded development container it measured about 5.5 ms p50 and 10–15 ms p99. It is reported, not gated.
