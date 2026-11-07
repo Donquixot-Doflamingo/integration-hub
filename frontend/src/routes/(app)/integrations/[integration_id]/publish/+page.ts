@@ -13,25 +13,17 @@ import { can } from '$lib/auth/roles';
 import type { PageLoad } from './$types';
 
 /**
- * What the structured editor offers (HUB-292): the capability's operations and whether it is
- * interactive, vendors, accounts and the capability's transformers. Each list may be empty when
- * its call fails; the fields then take typed values.
+ * What the structured editor offers (HUB-292): vendors, accounts and transformers. Each list may
+ * be empty when its call fails; the fields then take typed values. The operations come from the
+ * spec itself (ADR-0023: the integration version owns them).
  */
 export interface Lookups {
-	operations: string[];
-	interactive: boolean;
 	vendors: VendorSummary[];
 	accounts: AccountSummary[];
 	transformers: TransformerSummary[];
 }
 
-const NO_LOOKUPS: Lookups = {
-	operations: [],
-	interactive: false,
-	vendors: [],
-	accounts: [],
-	transformers: []
-};
+export const NO_LOOKUPS: Lookups = { vendors: [], accounts: [], transformers: [] };
 
 export interface PublishBase {
 	integration: Integration;
@@ -86,12 +78,8 @@ export const load: PageLoad = async (event) => {
 		? Promise.resolve(NO_LOOKUPS)
 		: integration.then(async (r) => {
 				if (!r.ok) return NO_LOOKUPS;
-				const capability = r.data.capability;
 				const all = { limit: 200 } as const;
-				const [cap, vendors, accounts, transformers] = await Promise.all([
-					api.call((c) =>
-						c.GET('/capabilities/{capability}', { params: { path: { capability } } })
-					),
+				const [vendors, accounts, transformers] = await Promise.all([
 					collectPages((cursor) =>
 						api.call((c) => c.GET('/vendors', { params: { query: { ...all, cursor } } }))
 					),
@@ -99,16 +87,10 @@ export const load: PageLoad = async (event) => {
 						api.call((c) => c.GET('/accounts', { params: { query: { ...all, cursor } } }))
 					),
 					collectPages((cursor) =>
-						api.call((c) =>
-							c.GET('/transformers', { params: { query: { ...all, capability, cursor } } })
-						)
+						api.call((c) => c.GET('/transformers', { params: { query: { ...all, cursor } } }))
 					)
 				]);
 				return {
-					// Empty when the capability could not be read: the form then shows the operations
-					// the spec itself lists.
-					operations: cap.ok ? Object.keys(cap.data.operations) : [],
-					interactive: cap.ok ? cap.data.interactive : false,
 					vendors: vendors.ok ? vendors.data.items : [],
 					accounts: accounts.ok ? accounts.data.items : [],
 					transformers: transformers.ok ? transformers.data.items : []

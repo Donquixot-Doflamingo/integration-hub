@@ -25,6 +25,7 @@ export const ENDPOINT_REF = /^[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$/;
 export const DISPLAY_NAME_MAX = 128;
 
 export const AUTH_SCHEMES: readonly AuthScheme[] = [
+	'none',
 	'static_headers',
 	'bearer',
 	'basic',
@@ -35,6 +36,7 @@ export const AUTH_SCHEMES: readonly AuthScheme[] = [
 ];
 
 export const authSchemeLabels: Record<AuthScheme, string> = {
+	none: 'None (public API, no credentials)',
 	static_headers: 'Static headers',
 	bearer: 'Bearer token',
 	basic: 'Basic auth',

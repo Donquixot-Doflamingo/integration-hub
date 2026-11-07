@@ -9,7 +9,8 @@ const spec = contractMocks.createIntegrationDraft.example.integration_version.sp
 describe('specToYaml / parseSpecYaml', () => {
 	it('round-trips a contract spec', () => {
 		const text = specToYaml(spec);
-		expect(text).toMatch(/^targets:\n {2}- vendor_id: clevertap/);
+		expect(text).toMatch(/^operations:\n {2}default:\n/);
+		expect(text).toMatch(/\ntargets:\n {2}- vendor_id: clevertap/);
 		const parsed = parseSpecYaml(text);
 		expect(parsed).toEqual({ ok: true, value: spec });
 	});

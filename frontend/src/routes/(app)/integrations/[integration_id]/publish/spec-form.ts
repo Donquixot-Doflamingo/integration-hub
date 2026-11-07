@@ -1,6 +1,7 @@
 import { claimingPointer } from '$lib/api/actions';
 import type {
 	DeliveryMode,
+	IntegrationOperation,
 	IntegrationSpec,
 	Target,
 	TransformerKind,
@@ -10,10 +11,11 @@ import type {
 import type { SpecProblem } from './draft';
 
 /**
- * The structured draft editor (HUB-292): the form edits the same `IntegrationSpec` the YAML editor
- * does. Targets (vendor, account, weight, default transformer pair and per-operation pairs,
- * `TargetRef.operations`), delivery and audit have fields; failover, breaker, webhooks, shadow and
- * target `params` are kept as they are and edited in YAML. Every field is named by its JSON
+ * The structured draft editor (HUB-292, HUB-436): the form edits the same `IntegrationSpec` the
+ * YAML editor does. Operations (ADR-0023: each with the caller's request schema), targets (vendor,
+ * account, weight, default transformer pair and per-operation pairs, `TargetRef.operations`; the
+ * response transformer is optional, none = pass-through), delivery and audit have fields;
+ * failover, breaker, webhooks, shadow and target `params` are kept as they are and edited in YAML. Every field is named by its JSON
  * pointer into the spec, so publish-check and validation pointers land on the field they name.
  */
 export const DELIVERY_MODES: readonly DeliveryMode[] = ['sync', 'wait', 'async', 'async_callback'];
@@ -30,11 +32,28 @@ export const PAYLOADS = ['full', 'masked', 'sealed', 'metadata_only'] as const;
 /** Contract `TransformerRef`: `<transformer_id>@<version>`. */
 export const TRANSFORMER_REF = /^[A-Za-z][A-Za-z0-9_-]{0,63}@[1-9][0-9]*$/;
 
+/** Contract `OperationName`. Single-operation integrations use `default`. */
+export const OPERATION_NAME = /^[a-z][a-z0-9_]{0,31}$/;
+export const DEFAULT_OPERATION = 'default';
+
+/** A new operation: no fields yet, live calls checked against the schema (the contract default). */
+export function newOperation(): IntegrationOperation {
+	return {
+		idempotent: false,
+		validate_input: true,
+		request_schema: { body: { type: 'object', properties: {} } }
+	};
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> =>
+	!!v && typeof v === 'object' && !Array.isArray(v);
+
 /** The spec as the form edits it: every section the form shows exists. */
 export function forForm(value: Record<string, unknown>): IntegrationSpec {
 	const spec = structuredClone(value) as Partial<IntegrationSpec>;
 	return {
 		...spec,
+		operations: isObject(spec.operations) ? spec.operations : {},
 		targets: Array.isArray(spec.targets) ? spec.targets : [],
 		delivery: spec.delivery && typeof spec.delivery === 'object' ? spec.delivery : { mode: 'wait' },
 		audit: spec.audit && typeof spec.audit === 'object' ? spec.audit : { payloads: 'masked' }
@@ -44,6 +63,7 @@ export function forForm(value: Record<string, unknown>): IntegrationSpec {
 /** A spec to start a first draft from (no active version yet). */
 export function starterSpec(interactive: boolean): IntegrationSpec {
 	return {
+		operations: { [DEFAULT_OPERATION]: newOperation() },
 		targets: [],
 		delivery: interactive
 			? { mode: 'sync', on_circuit_open: 'fail_fast' }
@@ -56,7 +76,7 @@ export function emptyTarget(weight: number): Target {
 	return {
 		vendor_id: '',
 		account_id: '',
-		transformer: { request: '', response: '' },
+		transformer: { request: '', response: null },
 		weight
 	};
 }
@@ -76,7 +96,12 @@ export function yamlOnlySections(spec: IntegrationSpec): string[] {
 	return out;
 }
 
-/** Operation names a target lists that the capability does not declare (to be removed). */
+/** Operation names of the spec, in the order it lists them. */
+export function operationNames(spec: IntegrationSpec): string[] {
+	return Object.keys(spec.operations ?? {});
+}
+
+/** Operation names a target lists that the spec does not declare (to be removed). */
 export function unknownOperations(target: Target, operations: readonly string[]): string[] {
 	return Object.keys(target.operations ?? {}).filter((op) => !operations.includes(op));
 }
@@ -92,9 +117,16 @@ export function setOwnPair(target: Target, op: string, own: boolean): void {
 	}
 }
 
-/** Every pointer a field of the form answers for, given the spec and the capability's operations. */
+/** Every pointer a field of the form answers for, given the spec and its operations. */
 export function fieldPointers(spec: IntegrationSpec, operations: readonly string[]): string[] {
-	const out = ['/targets', '/delivery', '/delivery/mode', '/delivery/wait_ms', '/delivery/ttl_ms'];
+	const out = [
+		'/operations',
+		'/targets',
+		'/delivery',
+		'/delivery/mode',
+		'/delivery/wait_ms',
+		'/delivery/ttl_ms'
+	];
 	out.push('/delivery/on_circuit_open', '/delivery/pending', '/delivery/retry');
 	out.push('/delivery/retry/max_attempts', '/delivery/retry/schedule_ms');
 	out.push('/audit', '/audit/payloads', '/audit/retention_ms');
@@ -138,6 +170,8 @@ export function problemsByField(
 /** Problems the console sees before saving (the API checks everything again). */
 export function formProblems(spec: IntegrationSpec, operations: readonly string[]): SpecProblem[] {
 	const out: SpecProblem[] = [];
+	if (!operations.length)
+		out.push({ pointer: '/operations', message: 'Add at least one operation.' });
 	if (!spec.targets.length) out.push({ pointer: '/targets', message: 'Add at least one target.' });
 	spec.targets.forEach((t, i) => {
 		const p = `/targets/${i}`;
@@ -148,8 +182,8 @@ export function formProblems(spec: IntegrationSpec, operations: readonly string[
 		pairProblems(t.transformer, `${p}/transformer`, out);
 		for (const [op, pair] of Object.entries(t.operations ?? {})) {
 			const o = `${p}/operations/${escapeToken(op)}`;
-			if (!operations.includes(op) && operations.length)
-				out.push({ pointer: o, message: `The capability has no operation "${op}". Remove it.` });
+			if (!operations.includes(op))
+				out.push({ pointer: o, message: `The spec has no operation "${op}". Remove it.` });
 			pairProblems(pair, o, out);
 		}
 	});
@@ -164,19 +198,25 @@ export function formProblems(spec: IntegrationSpec, operations: readonly string[
 	return out;
 }
 
+/** The request transformer is required; the response transformer is optional (pass-through). */
 function pairProblems(pair: TransformerPair | undefined, ptr: string, out: SpecProblem[]) {
-	for (const kind of ['request', 'response'] as const) {
-		const ref = pair?.[kind] ?? '';
-		if (!ref) out.push({ pointer: `${ptr}/${kind}`, message: `Pick the ${kind} transformer.` });
-		else if (!TRANSFORMER_REF.test(ref))
-			out.push({ pointer: `${ptr}/${kind}`, message: 'A transformer version such as T1@7.' });
-	}
+	const request = pair?.request ?? '';
+	if (!request) out.push({ pointer: `${ptr}/request`, message: 'Pick the request transformer.' });
+	else if (!TRANSFORMER_REF.test(request))
+		out.push({ pointer: `${ptr}/request`, message: 'A transformer version such as T1@7.' });
+	const response = pair?.response ?? '';
+	if (response && !TRANSFORMER_REF.test(response))
+		out.push({
+			pointer: `${ptr}/response`,
+			message: 'A transformer version such as R1@2, or empty to pass the vendor body through.'
+		});
 }
 
 /**
- * Transformer versions to offer for a target: transformers of the integration's capability and
- * the wanted kind, for the target's vendor (their `vendor_endpoint` starts with `<vendor>.`), each
- * at its latest version first and then older ones (`T1@7`, `T1@6`, ...; at most `depth`).
+ * Transformer versions to offer for a target, of the wanted kind, each at its latest version
+ * first and then older ones (`T1@7`, `T1@6`, ...; at most `depth`). Request transformers are those
+ * of the target's vendor (their `vendor_endpoint` starts with `<vendor>.`); response transformers
+ * stand alone (no endpoint), so all of them are offered.
  */
 export function transformerOptions(
 	transformers: readonly TransformerSummary[],
@@ -185,7 +225,11 @@ export function transformerOptions(
 	depth = 3
 ): string[] {
 	return transformers
-		.filter((t) => t.kind === kind && (!vendorId || t.vendor_endpoint.startsWith(`${vendorId}.`)))
+		.filter(
+			(t) =>
+				t.kind === kind &&
+				(kind !== 'request' || !vendorId || !!t.vendor_endpoint?.startsWith(`${vendorId}.`))
+		)
 		.flatMap((t) =>
 			Array.from(
 				{ length: Math.min(depth, t.latest_version) },

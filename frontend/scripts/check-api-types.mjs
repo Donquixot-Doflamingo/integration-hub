@@ -20,7 +20,6 @@ export const DOMAIN_NOUNS = [
 	'Vendor',
 	'Tenant',
 	'Transformer',
-	'Capability',
 	'Breaker',
 	'DeadLetter',
 	'ChangeLog',

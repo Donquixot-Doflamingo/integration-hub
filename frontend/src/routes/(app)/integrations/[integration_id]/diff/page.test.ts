@@ -57,7 +57,9 @@ describe('diff page', () => {
 		expect(table).toHaveTextContent('Added: weight: 90');
 		expect(table).toHaveTextContent('Added: account_id: ct-brandA-in-v2');
 		expect(
-			screen.getByText('2 paths differ (1 added, 1 changed): targets[0].weight, targets[1]')
+			screen.getByText(
+				'3 paths differ (2 added, 1 changed): targets[0].weight, targets[1], operations.default.request_schema.body.properties.context.properties.channel'
+			)
 		).toBeInTheDocument();
 		expect(
 			within(screen.getByRole('navigation', { name: 'Diff view' })).getByRole('link', {

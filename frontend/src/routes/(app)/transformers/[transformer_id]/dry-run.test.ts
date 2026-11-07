@@ -53,7 +53,7 @@ function neverCalled() {
 	);
 }
 
-const bodyField = () => screen.getByLabelText(/^Canonical input \(JSON\)/) as HTMLTextAreaElement;
+const bodyField = () => screen.getByLabelText(/^Caller input \(JSON body\)/) as HTMLTextAreaElement;
 const setBody = async (text: string) => {
 	await fireEvent.input(bodyField(), { target: { value: text } });
 };
@@ -98,7 +98,7 @@ describe('dry run', () => {
 			ref: 'T1@7',
 			account_id: 'ct-brandA-in',
 			input: fixtureInput,
-			headers: { 'X-Request-Source': 'checkout' }
+			input_headers: { 'X-Request-Source': 'checkout' }
 		});
 	});
 

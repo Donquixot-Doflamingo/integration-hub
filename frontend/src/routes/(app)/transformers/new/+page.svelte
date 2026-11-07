@@ -14,18 +14,13 @@
 
 <PageHeader
 	title="New transformer"
-	summary="Map a capability operation to one vendor endpoint version, with golden fixtures that prove it."
+	summary="A request transformer turns the caller's input into one vendor endpoint's request; a response transformer shapes what the caller gets back. Samples prove both."
 />
 
 <RoleGate access={data.access} ops={['createTransformerVersion', 'runTransformerGoldens']}>
-	<AsyncView result={data.lookups} noun="capabilities and vendor endpoints" onretry={invalidateAll}>
+	<AsyncView result={data.lookups} noun="the vendor endpoints" onretry={invalidateAll}>
 		{#snippet children(l)}
-			<TransformerAuthoring
-				mode="new"
-				initial={emptyValues()}
-				capabilities={l.capabilities}
-				endpointRefs={l.endpointRefs}
-			/>
+			<TransformerAuthoring mode="new" initial={emptyValues()} endpoints={l.endpoints} />
 		{/snippet}
 	</AsyncView>
 	{#snippet denied(role)}

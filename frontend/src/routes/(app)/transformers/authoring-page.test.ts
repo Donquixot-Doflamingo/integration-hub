@@ -94,7 +94,6 @@ describe('new version of a transformer', () => {
 		expect(bodies[0]).toMatchObject({
 			draft: {
 				kind: 'request',
-				capability: 'events.track@v1',
 				vendor_endpoint: 'clevertap.upload@1'
 			},
 			fixtures: [{ name: 'order_placed' }]
@@ -208,7 +207,9 @@ describe('new transformer and roles', () => {
 		await userEvent.click(await screen.findByRole('button', { name: 'Run goldens on this draft' }));
 		expect(screen.getByLabelText(/^Transformer id/)).toHaveAttribute('aria-invalid', 'true');
 		expect(
-			screen.getAllByRole('alert').some((a) => /Pick the capability/.test(a.textContent ?? ''))
+			screen
+				.getAllByRole('alert')
+				.some((a) => /Write the transformer source/.test(a.textContent ?? ''))
 		).toBe(true);
 		expect(bodies).toHaveLength(0);
 		expect(screen.getByRole('button', { name: 'Create new@1' })).toBeDisabled();

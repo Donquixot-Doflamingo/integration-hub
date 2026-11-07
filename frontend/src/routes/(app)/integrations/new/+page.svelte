@@ -14,8 +14,9 @@
 	import { DESCRIPTION_MAX, emptyValues, problems } from './integration-form';
 
 	/**
-	 * Create an integration (HUB-292, `createIntegration`, editor): id, owner tenant, capability,
-	 * grants and the money flag. It has no version yet: the next page is its first draft.
+	 * Create an integration (HUB-292, HUB-436, `createIntegration`, editor): id, owner tenant,
+	 * grants, whether it is interactive (fixed for good) and the money flag. It has no version
+	 * yet: the next page is its first draft, where the operations and their request schemas go.
 	 */
 	let { data }: { data: PageData } = $props();
 	const uid = $props.id();
@@ -29,7 +30,7 @@
 	async function onsuccess(d: ActionSuccessData) {
 		const i = (d.result as IntegrationChange).integration;
 		setFlash({
-			message: `Created integration ${i.integration_id} (${i.capability}, owned by ${i.owner_tenant}). It has no version yet: add its targets below, save the draft, then publish.`,
+			message: `Created integration ${i.integration_id} (owned by ${i.owner_tenant}${i.interactive ? ', interactive' : ''}). It has no version yet: describe its operations and targets below, save the draft, then publish.`,
 			changeId: d.changeId,
 			requestId: d.requestId
 		});
@@ -43,11 +44,11 @@
 
 <PageHeader
 	title="Create integration"
-	summary="Callers invoke an integration by its id with a canonical body; which vendor and account serve it stays behind the id."
+	summary="Callers invoke an integration by its id with a body that fits its request schema; which vendor and account serve it stays behind the id."
 />
 
 <RoleGate access={data.access} op="createIntegration">
-	<AsyncView result={data.lookups} noun="tenants and capabilities" onretry={invalidateAll}>
+	<AsyncView result={data.lookups} noun="the tenants" onretry={invalidateAll}>
 		{#snippet children(l)}
 			<AuthoringForm
 				action="?/create"
@@ -102,29 +103,6 @@
 									message={err(errors, attempted, '/owner_tenant')}
 								/>
 							</div>
-							<div class="fk-field">
-								<label for="{uid}-cap">Capability <span class="fk-req">(required)</span></label>
-								<select
-									id="{uid}-cap"
-									name="capability"
-									bind:value={values.capability}
-									aria-invalid={err(errors, attempted, '/capability') ? 'true' : undefined}
-									aria-describedby="{uid}-cap-hint {uid}-cap-error"
-								>
-									<option value="">Pick a capability</option>
-									{#each l.capabilities as c (c.capability)}
-										<option value={c.capability}
-											>{c.capability} ({c.operations.join(', ')}{c.interactive
-												? ', interactive'
-												: ''})</option
-										>
-									{/each}
-								</select>
-								<p id="{uid}-cap-hint" class="fk-hint">
-									The canonical request and response callers use. It cannot change later.
-								</p>
-								<FieldError id="{uid}-cap-error" message={err(errors, attempted, '/capability')} />
-							</div>
 							<div class="fk-field wide">
 								<label for="{uid}-desc">Description</label>
 								<textarea
@@ -160,6 +138,26 @@
 									Tenant ids, separated by commas. Optional.
 								</p>
 								<FieldError id="{uid}-grants-error" message={err(errors, attempted, '/grants')} />
+							</div>
+							<div class="fk-field wide">
+								<label class="fk-check">
+									<input
+										type="checkbox"
+										name="interactive"
+										bind:checked={values.interactive}
+										aria-describedby="{uid}-interactive-hint {uid}-interactive-error"
+									/>
+									Interactive: its operations are steps of one session a person is waiting on (for example
+									send OTP, then verify OTP)
+								</label>
+								<p id="{uid}-interactive-hint" class="fk-hint">
+									Callers carry the session in <code>X-Hub-Session</code> and only sync delivery is
+									allowed. <strong>Fixed at creation:</strong> it can never be changed later.
+								</p>
+								<FieldError
+									id="{uid}-interactive-error"
+									message={err(errors, attempted, '/interactive')}
+								/>
 							</div>
 							<div class="fk-field wide">
 								<label class="fk-check">

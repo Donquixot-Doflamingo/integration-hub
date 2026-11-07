@@ -15,7 +15,7 @@
 
 <PageHeader
 	title="New version of {id}"
-	summary="Starts from the latest version: change the source or the fixtures, run the goldens, then create it."
+	summary="Starts from the latest version: change the source or the samples, run them, then create it."
 />
 
 <RoleGate access={data.access} ops={['createTransformerVersion', 'runTransformerGoldens']}>
@@ -30,8 +30,7 @@
 					mode="version"
 					initial={valuesFromVersion(s.transformer.latest)}
 					latestVersion={s.transformer.latest_version}
-					capabilities={s.capabilities}
-					endpointRefs={s.endpointRefs}
+					endpoints={s.endpoints}
 				/>
 			{/key}
 		{/snippet}

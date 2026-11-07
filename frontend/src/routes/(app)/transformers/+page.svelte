@@ -78,17 +78,6 @@
 			</select>
 		</div>
 		<div class="field">
-			<label for="t-capability">Capability</label>
-			<input
-				id="t-capability"
-				name="capability"
-				value={filters.capability ?? ''}
-				maxlength="128"
-				placeholder="events.track@v1"
-				autocomplete="off"
-			/>
-		</div>
-		<div class="field">
 			<label for="t-vendor">Vendor</label>
 			<input
 				id="t-vendor"
@@ -143,7 +132,6 @@
 		columns={[
 			{ label: 'Transformer' },
 			{ label: 'Kind' },
-			{ label: 'Capability' },
 			{ label: 'Vendor endpoint' },
 			{ label: 'Latest version', numeric: true },
 			{ label: 'Used by active versions', numeric: true },
@@ -160,8 +148,11 @@
 				>
 			</th>
 			<td>{t.kind}</td>
-			<td><code>{t.capability}</code></td>
-			<td><code>{t.vendor_endpoint}</code></td>
+			<td>
+				{#if t.vendor_endpoint}<code>{t.vendor_endpoint}</code>{:else}<span class="muted"
+						>None (response transformers stand alone)</span
+					>{/if}
+			</td>
 			<td class="numeric">{t.latest_version == null ? 'None' : `v${t.latest_version}`}</td>
 			<td class="numeric">{formatNumber(t.used_by_active_versions)}</td>
 			<td>{formatUtc(t.updated_at)}</td>

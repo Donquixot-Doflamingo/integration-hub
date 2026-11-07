@@ -32,7 +32,7 @@ export const sections: readonly NavSection[] = [
 	{
 		href: '/integrations',
 		label: 'Integrations',
-		summary: 'Every integration with its owner, capability, active version and targets.',
+		summary: 'Every integration with its owner, operations, active version and targets.',
 		icon: 'integrations'
 	},
 	{

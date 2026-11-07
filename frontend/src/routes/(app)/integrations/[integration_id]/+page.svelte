@@ -119,8 +119,12 @@
 					<dd>{i.owner_tenant}</dd>
 				</div>
 				<div>
-					<dt>Capability</dt>
-					<dd><code>{i.capability}</code></dd>
+					<dt>Interactive</dt>
+					<dd>
+						{i.interactive
+							? 'Yes: operations are steps of one session (X-Hub-Session), sync only'
+							: 'No'}
+					</dd>
 				</div>
 				<div>
 					<dt>Active version</dt>

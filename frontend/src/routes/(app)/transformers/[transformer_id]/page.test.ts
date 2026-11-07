@@ -35,7 +35,6 @@ describe('transformer viewer', () => {
 	it('shows the header and the vendor doc as a link', async () => {
 		await renderPage();
 		const head = screen.getByRole('region', { name: 'Transformer summary' });
-		expect(head).toHaveTextContent('events.track@v1');
 		expect(head).toHaveTextContent('clevertap.upload@1');
 		const doc = screen.getByRole('link', { name: /developer\.clevertap\.com/ });
 		expect(doc).toHaveAttribute('href', example.latest.docs_url);
@@ -72,13 +71,16 @@ describe('transformer viewer', () => {
 		expect(source).toHaveTextContent('<b>bold</b>');
 	});
 
-	it('lists the fixtures with their parts', async () => {
+	it('lists the samples with their parts, caller headers included', async () => {
 		await renderPage();
 		const fixture = screen.getByText('order_placed', { selector: 'summary code' });
 		const details = fixture.closest('details')!;
-		expect(
-			within(details).getByLabelText('order_placed: Input (canonical request)')
-		).toHaveTextContent('u_48213');
+		expect(within(details).getByLabelText('order_placed: Sample input body')).toHaveTextContent(
+			'u_48213'
+		);
+		expect(within(details).getByLabelText('order_placed: Sample input headers')).toHaveTextContent(
+			'X-Request-Source'
+		);
 		expect(
 			within(details).getByLabelText('order_placed: Expected vendor request')
 		).toHaveTextContent('/1/upload');

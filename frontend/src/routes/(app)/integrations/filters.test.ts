@@ -15,17 +15,15 @@ describe('parseListState', () => {
 	it.each([
 		{ s: '', filters: {}, query: { limit: 50 } },
 		{
-			s: 'q=brand&tenant_id=orders-service&capability=events.track@v1&paused=true',
+			s: 'q=brand&tenant_id=orders-service&paused=true',
 			filters: {
 				q: 'brand',
 				tenant_id: 'orders-service',
-				capability: 'events.track@v1',
 				paused: 'true'
 			},
 			query: {
 				q: 'brand',
 				tenant_id: 'orders-service',
-				capability: 'events.track@v1',
 				paused: true,
 				limit: 50
 			}

@@ -29,11 +29,11 @@
 	import { formatUtc } from '$lib/utils/format';
 	import { parseSpecYaml, specToYaml } from '$lib/utils/spec-yaml';
 	import type { IntegrationSpec } from '$lib/api/types';
-	import type { Lookups } from './+page';
+	import { NO_LOOKUPS, type Lookups } from './+page';
 	import ChecksList from './ChecksList.svelte';
 	import SpecEditor from './SpecEditor.svelte';
 	import SpecForm from './SpecForm.svelte';
-	import { formProblems, forForm, starterSpec } from './spec-form';
+	import { formProblems, forForm, operationNames, starterSpec } from './spec-form';
 	import {
 		reportFromError,
 		reportProblems,
@@ -68,7 +68,7 @@
 	// The editor keeps its own text across data reloads (saving reloads the page data). A first
 	// draft (no version at all yet) starts from a skeleton spec.
 	const initial = untrack(() =>
-		specToYaml((draft ?? integration.active)?.spec ?? starterSpec(false))
+		specToYaml((draft ?? integration.active)?.spec ?? starterSpec(integration.interactive))
 	);
 	let text = $state(initial);
 	let saved = $state(initial);
@@ -83,13 +83,7 @@
 	let switchError = $state<string | null>(null);
 	const current = $derived(mode === 'form' ? specToYaml($state.snapshot(formSpec)) : text);
 	const dirty = $derived(current !== saved);
-	let looked = $state.raw<Lookups>({
-		operations: [],
-		interactive: false,
-		vendors: [],
-		accounts: [],
-		transformers: []
-	});
+	let looked = $state.raw<Lookups>(NO_LOOKUPS);
 	$effect(() => {
 		let live = true;
 		lookups.then((l) => {
@@ -101,7 +95,7 @@
 	});
 	let formAttempted = $state(false);
 	const consoleProblems = $derived(
-		mode === 'form' ? formProblems(formSpec, looked.operations) : []
+		mode === 'form' ? formProblems(formSpec, operationNames(formSpec)) : []
 	);
 
 	function showForm() {
@@ -258,7 +252,7 @@
 		{#if saveFields.spec}<p class="fk-error" role="alert">{saveFields.spec}</p>{/if}
 		<SpecForm
 			bind:spec={formSpec}
-			operations={looked.operations}
+			operations={operationNames(formSpec)}
 			vendors={looked.vendors}
 			accounts={looked.accounts}
 			transformers={looked.transformers}

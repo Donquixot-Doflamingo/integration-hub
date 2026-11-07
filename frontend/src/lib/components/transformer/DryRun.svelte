@@ -17,7 +17,7 @@
 	import DryRunResult from './DryRunResult.svelte';
 
 	/**
-	 * Dry-run one stored version (HUB-269, `dryRunTransformer`, editor): paste a canonical body (or,
+	 * Dry-run one stored version (HUB-269, `dryRunTransformer`, editor): paste a caller body (or,
 	 * for a response transformer, a vendor response) and see what the transformer would produce.
 	 * JSON is checked in the browser first, so invalid input is caught before anything is sent;
 	 * the form action checks it again. A fixture can be loaded as a starting point. The result shows
@@ -58,7 +58,9 @@
 
 	const bodyName = $derived(mode === 'response' ? 'vendor_response' : 'input');
 	const bodyLabel = $derived(
-		mode === 'response' ? 'Vendor response (JSON: status, headers, body)' : 'Canonical input (JSON)'
+		mode === 'response'
+			? 'Vendor response (JSON: status, headers, body)'
+			: 'Caller input (JSON body)'
 	);
 
 	// Checked on submit only: checking on blur inserts the error line and moves the submit button
@@ -173,16 +175,16 @@
 			>
 			<textarea
 				id="{uid}-headers"
-				name="headers"
+				name="input_headers"
 				rows="3"
 				spellcheck="false"
 				bind:value={headers}
 				placeholder={'{ "X-Request-Source": "checkout" }'}
-				aria-invalid={fields.headers ? 'true' : undefined}
-				aria-describedby={fields.headers ? `${uid}-headers-error` : undefined}></textarea>
-			{#if fields.headers}
+				aria-invalid={fields.input_headers ? 'true' : undefined}
+				aria-describedby={fields.input_headers ? `${uid}-headers-error` : undefined}></textarea>
+			{#if fields.input_headers}
 				<p id="{uid}-headers-error" class="field-error">
-					<Icon name="alert" size={14} />{fields.headers}
+					<Icon name="alert" size={14} />{fields.input_headers}
 				</p>
 			{/if}
 		</div>

@@ -4,7 +4,7 @@ import type { PayloadView } from '$lib/utils/payload';
 /** DESIGN §13.1 event types in the operator's words. */
 export const eventLabels: Record<TimelineEventType, string> = {
 	'request.received': 'Request received',
-	'request.validated': 'Validated against the capability schema',
+	'request.validated': "Validated against the operation's request schema",
 	'integration.resolved': 'Integration resolved',
 	'idempotency.checked': 'Idempotency key checked',
 	'request.transformed': 'Transformed to the vendor request',

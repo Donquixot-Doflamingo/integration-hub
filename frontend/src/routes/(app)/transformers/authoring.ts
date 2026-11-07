@@ -9,21 +9,25 @@ import type {
 import { parseJsonObject, prettyJson } from '$lib/utils/json-input';
 
 /**
- * Transformer authoring (HUB-293): a new transformer (version 1) or the next version of one, from
- * the YAML source and its golden fixtures, checked against `TransformerVersionCreate`. The Hub
- * refuses a version whose goldens fail (422 `PUBLISH_VALIDATION_FAILED`, AGENTS §3.4), so the
- * console asks for a passing goldens run of the exact draft before it offers "Create". Errors are
- * keyed by JSON pointer into the create body (`/yaml`, `/fixtures/0/input`).
+ * Transformer authoring (HUB-293, HUB-436): a new transformer (version 1) or the next version of
+ * one, from the YAML source and its samples (golden fixtures), checked against
+ * `TransformerVersionCreate`. A request transformer names its vendor endpoint and each sample is
+ * the caller's input (body, optional headers) and the vendor request it must produce; a response
+ * transformer stands alone (no endpoint) and each sample is a vendor response and the output (or
+ * error) it must produce (ADR-0023). The Hub refuses a version whose samples fail (422
+ * `PUBLISH_VALIDATION_FAILED`, checks `goldens_pass` and `endpoint_schema`, AGENTS §3.4), so the
+ * console asks for a passing run of the exact draft before it offers "Create". Errors are keyed by
+ * JSON pointer into the create body (`/yaml`, `/fixtures/0/input`).
  */
 export const TRANSFORMER_ID = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
-export const CAPABILITY = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$/;
 export const VENDOR_ENDPOINT = /^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$/;
 export const FIXTURE_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 export const KINDS: readonly TransformerKind[] = ['request', 'response', 'inbound'];
 
-/** Golden fixture fields that hold JSON objects. */
+/** Sample (golden fixture) fields that hold JSON objects. */
 export type FixtureField =
 	| 'input'
+	| 'input_headers'
 	| 'account_config'
 	| 'expected_request'
 	| 'vendor_response'
@@ -31,15 +35,19 @@ export type FixtureField =
 	| 'expected_error';
 
 export const fieldLabels: Record<FixtureField, string> = {
-	input: 'Canonical input',
+	input: 'Input body',
+	input_headers: 'Input headers (optional)',
 	account_config: 'Account config (optional)',
 	expected_request: 'Expected vendor request',
 	vendor_response: 'Vendor response',
-	expected_response: 'Expected canonical response',
-	expected_error: 'Expected canonical error'
+	expected_response: 'Expected output',
+	expected_error: 'Expected error'
 };
 
-/** The fields a fixture of `kind` uses (GoldenFixture description: request vs response). */
+/** Fields that may be left empty. */
+const OPTIONAL: readonly FixtureField[] = ['input_headers', 'account_config'];
+
+/** The fields a sample of `kind` uses (GoldenFixture description: request vs response). */
 export function fieldsFor(kind: string, outcome: 'response' | 'error'): FixtureField[] {
 	if (kind === 'response')
 		return [
@@ -47,7 +55,12 @@ export function fieldsFor(kind: string, outcome: 'response' | 'error'): FixtureF
 			outcome === 'error' ? 'expected_error' : 'expected_response',
 			'account_config'
 		];
-	return ['input', 'expected_request', 'account_config'];
+	return ['input', 'input_headers', 'expected_request', 'account_config'];
+}
+
+/** Request (and inbound) transformers target one vendor endpoint; response transformers none. */
+export function needsEndpoint(kind: string): boolean {
+	return kind !== 'response';
 }
 
 export interface FixtureRow {
@@ -61,7 +74,6 @@ export interface FixtureRow {
 export interface FormValues {
 	transformer_id: string;
 	kind: string;
-	capability: string;
 	vendor_endpoint: string;
 	docs_url: string;
 	yaml: string;
@@ -76,7 +88,6 @@ export function emptyValues(): FormValues {
 	return {
 		transformer_id: '',
 		kind: 'request',
-		capability: '',
 		vendor_endpoint: '',
 		docs_url: '',
 		yaml: '',
@@ -86,6 +97,7 @@ export function emptyValues(): FormValues {
 
 const FIELDS: FixtureField[] = [
 	'input',
+	'input_headers',
 	'account_config',
 	'expected_request',
 	'vendor_response',
@@ -93,13 +105,12 @@ const FIELDS: FixtureField[] = [
 	'expected_error'
 ];
 
-/** The next version starts from the latest one: same kind, capability, endpoint, source, fixtures. */
+/** The next version starts from the latest one: same kind, endpoint, source and samples. */
 export function valuesFromVersion(v: TransformerVersion): FormValues {
 	return {
 		transformer_id: v.transformer_id,
 		kind: v.kind,
-		capability: v.capability,
-		vendor_endpoint: v.vendor_endpoint,
+		vendor_endpoint: v.vendor_endpoint ?? '',
 		docs_url: v.docs_url ?? '',
 		yaml: v.yaml,
 		fixtures: v.fixtures.map((f) => ({
@@ -112,14 +123,14 @@ export function valuesFromVersion(v: TransformerVersion): FormValues {
 	};
 }
 
-/** The fixtures as the API takes them, or problems keyed by `/fixtures/<i>[/<field>]`. */
+/** The samples as the API takes them, or problems keyed by `/fixtures/<i>[/<field>]`. */
 export function buildFixtures(
 	rows: readonly FixtureRow[],
 	kind: string
 ): { ok: true; fixtures: GoldenFixture[] } | { ok: false; fields: FieldErrors } {
 	const fields: FieldErrors = {};
 	const out: GoldenFixture[] = [];
-	if (!rows.length) fields['/fixtures'] = 'Add at least one golden fixture.';
+	if (!rows.length) fields['/fixtures'] = 'Add at least one sample.';
 	const seen = new Set<string>();
 	rows.forEach((r, i) => {
 		const at = `/fixtures/${i}`;
@@ -131,11 +142,14 @@ export function buildFixtures(
 		const f: GoldenFixture = { name };
 		for (const key of fieldsFor(kind, r.outcome)) {
 			const parsed = parseJsonObject(r.json[key] ?? '', {
-				optional: key === 'account_config',
+				optional: OPTIONAL.includes(key),
+				stringValues: key === 'input_headers',
 				what: fieldLabels[key].replace(' (optional)', '')
 			});
 			if (!parsed.ok) fields[`${at}/${key}`] = parsed.message;
-			else if (parsed.value) f[key] = parsed.value;
+			else if (parsed.value && key === 'input_headers')
+				f.input_headers = parsed.value as Record<string, string>;
+			else if (parsed.value) f[key as Exclude<FixtureField, 'input_headers'>] = parsed.value;
 		}
 		out.push(f);
 	});
@@ -143,20 +157,16 @@ export function buildFixtures(
 }
 
 export function draftOf(v: FormValues): TransformerDraft {
-	return {
-		kind: v.kind as TransformerKind,
-		capability: v.capability.trim(),
-		vendor_endpoint: v.vendor_endpoint.trim(),
-		yaml: v.yaml
-	};
+	const draft: TransformerDraft = { kind: v.kind as TransformerKind, yaml: v.yaml };
+	if (needsEndpoint(v.kind)) draft.vendor_endpoint = v.vendor_endpoint.trim();
+	return draft;
 }
 
 /** Problems with the draft itself (what goldens and dry runs need). */
 export function draftProblems(v: FormValues): FieldErrors {
 	const out: FieldErrors = {};
 	if (!(KINDS as readonly string[]).includes(v.kind)) out['/kind'] = 'Pick request or response.';
-	if (!CAPABILITY.test(v.capability.trim())) out['/capability'] = 'Pick the capability.';
-	if (!VENDOR_ENDPOINT.test(v.vendor_endpoint.trim()))
+	if (needsEndpoint(v.kind) && !VENDOR_ENDPOINT.test(v.vendor_endpoint.trim()))
 		out['/vendor_endpoint'] = 'A vendor endpoint version such as clevertap.upload@1.';
 	if (!v.yaml.trim()) out['/yaml'] = 'Write the transformer source (YAML).';
 	return out;
@@ -180,8 +190,8 @@ export function problems(v: FormValues, mode: 'new' | 'version'): FieldErrors {
 }
 
 /**
- * Identity of what a goldens run checked: kind, capability, endpoint, source and fixtures. A
- * passing run unlocks "Create" only while the draft is still exactly this.
+ * Identity of what a samples run checked: kind, endpoint, source and samples. A passing run
+ * unlocks "Create" only while the draft is still exactly this.
  */
 export function draftKey(v: FormValues): string {
 	const fx = buildFixtures(v.fixtures, v.kind);
@@ -239,7 +249,6 @@ export function valuesFromForm(form: FormData): FormValues | null {
 	return {
 		transformer_id: get('transformer_id'),
 		kind: get('kind'),
-		capability: get('capability'),
 		vendor_endpoint: get('vendor_endpoint'),
 		docs_url: get('docs_url'),
 		// Form submission turns textarea line breaks into CRLF; the source is stored as typed.

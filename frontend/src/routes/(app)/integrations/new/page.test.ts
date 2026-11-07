@@ -39,33 +39,31 @@ beforeEach(() => {
 });
 
 describe('integration form', () => {
-	it('checks the id, owner, capability and grants', () => {
-		const v = { ...emptyValues(), integration_id: 'x', capability: 'events' };
+	it('checks the id, owner and grants', () => {
+		const v = { ...emptyValues(), integration_id: 'x' };
 		expect(problems(v)).toMatchObject({
 			'/integration_id': expect.stringMatching(/3 to 64/),
-			'/owner_tenant': expect.stringMatching(/Pick the tenant/),
-			'/capability': expect.stringMatching(/events.track@v1/)
+			'/owner_tenant': expect.stringMatching(/Pick the tenant/)
 		});
 		expect(
 			problems({
 				...v,
 				integration_id: 'int_c',
 				owner_tenant: 'orders-service',
-				capability: 'events.track@v1',
 				grants: 'orders-service'
 			})['/grants']
 		).toMatch(/owner can always call it/);
 		expect(grantList('a-svc, b-svc  a-svc')).toEqual(['a-svc', 'b-svc']);
 	});
 
-	it('builds IntegrationCreate', () => {
+	it('builds IntegrationCreate, interactive included (fixed at creation)', () => {
 		const r = createBody(
 			{
 				integration_id: 'int_evt_brandC',
 				owner_tenant: 'orders-service',
-				capability: 'events.track@v1',
 				description: ' Brand C ',
 				grants: 'billing-service',
+				interactive: true,
 				moves_money_or_quota: false
 			},
 			REASON
@@ -75,9 +73,9 @@ describe('integration form', () => {
 			body: {
 				integration_id: 'int_evt_brandC',
 				owner_tenant: 'orders-service',
-				capability: 'events.track@v1',
 				description: 'Brand C',
 				grants: ['billing-service'],
+				interactive: true,
 				moves_money_or_quota: false,
 				reason: REASON
 			}
@@ -97,7 +95,9 @@ describe('create integration page', () => {
 		await renderNew();
 		await userEvent.type(await screen.findByLabelText(/^Integration id/), 'int_evt_brandC');
 		await userEvent.selectOptions(screen.getByLabelText(/^Owner tenant/), 'orders-service');
-		await userEvent.selectOptions(screen.getByLabelText(/^Capability/), 'events.track@v1');
+		const interactive = screen.getByRole('checkbox', { name: /^Interactive/ });
+		expect(interactive).toHaveAccessibleDescription(/can never be changed later/);
+		await userEvent.click(interactive);
 		await userEvent.click(screen.getByRole('checkbox', { name: /Moves money/ }));
 		await userEvent.type(screen.getByLabelText(/^Reason/), REASON);
 		await userEvent.click(screen.getByRole('button', { name: 'Create integration' }));
@@ -106,7 +106,7 @@ describe('create integration page', () => {
 		expect(bodies[0]).toMatchObject({
 			integration_id: 'int_evt_brandC',
 			owner_tenant: 'orders-service',
-			capability: 'events.track@v1',
+			interactive: true,
 			moves_money_or_quota: true,
 			reason: REASON
 		});
@@ -122,7 +122,6 @@ describe('create integration page', () => {
 		await renderNew();
 		await userEvent.type(await screen.findByLabelText(/^Integration id/), 'int_evt_brandC');
 		await userEvent.selectOptions(screen.getByLabelText(/^Owner tenant/), 'orders-service');
-		await userEvent.selectOptions(screen.getByLabelText(/^Capability/), 'events.track@v1');
 		await userEvent.type(screen.getByLabelText(/^Reason/), REASON);
 		await userEvent.click(screen.getByRole('button', { name: 'Create integration' }));
 		expect(await screen.findByRole('alert')).toHaveTextContent('integration int_evt_brandC exists');

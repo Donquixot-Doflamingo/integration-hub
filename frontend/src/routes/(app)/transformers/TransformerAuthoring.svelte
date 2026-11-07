@@ -13,10 +13,10 @@
 	} from '$lib/api/actions';
 	import { HubApiError } from '$lib/api/errors';
 	import type {
-		CapabilitySummary,
 		GoldensRunResult,
 		TransformerDryRunResult,
-		TransformerVersionChange
+		TransformerVersionChange,
+		VendorEndpoint
 	} from '$lib/api/types';
 	import CodeEditor, { type CodeProblem } from '$lib/components/CodeEditor.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -35,6 +35,7 @@
 		fieldLabels,
 		fieldsFor,
 		KINDS,
+		needsEndpoint,
 		problems,
 		type FixtureRow,
 		type FormValues
@@ -51,17 +52,16 @@
 		mode,
 		initial,
 		latestVersion = null,
-		capabilities,
-		endpointRefs
+		endpoints
 	}: {
 		mode: 'new' | 'version';
 		initial: FormValues;
 		/** The version the new one follows (`expected_latest_version`); null for a new id. */
 		latestVersion?: number | null;
-		capabilities: CapabilitySummary[];
-		/** `vendor.endpoint@n` suggestions. */
-		endpointRefs: string[];
+		/** Endpoint versions by `vendor.endpoint@n` (suggestions; their request schemas). */
+		endpoints: Record<string, VendorEndpoint>;
 	} = $props();
+	const endpointRefs = $derived(Object.keys(endpoints));
 
 	const uid = $props.id();
 	let values = $state<FormValues>(structuredClone(untrack(() => initial)));
@@ -108,7 +108,6 @@
 		const pointers = [
 			'/transformer_id',
 			'/kind',
-			'/capability',
 			'/vendor_endpoint',
 			'/docs_url',
 			'/yaml',
@@ -230,7 +229,6 @@
 {#snippet draftFields()}
 	<input type="hidden" name="transformer_id" value={values.transformer_id} />
 	<input type="hidden" name="kind" value={values.kind} />
-	<input type="hidden" name="capability" value={values.capability} />
 	<input type="hidden" name="vendor_endpoint" value={values.vendor_endpoint} />
 	<input type="hidden" name="docs_url" value={values.docs_url} />
 	<!-- A textarea, not an input: input values may lose their line breaks. -->
@@ -274,41 +272,25 @@
 				</select>
 				<FieldError id="{fid('/kind')}-error" message={err('/kind')} />
 			</div>
-			<div class="fk-field">
-				<label for={fid('/capability')}>Capability</label>
-				<select
-					id={fid('/capability')}
-					bind:value={values.capability}
-					aria-invalid={err('/capability') ? 'true' : undefined}
-					aria-describedby="{fid('/capability')}-error"
-				>
-					<option value="">Pick a capability</option>
-					{#if values.capability && !capabilities.some((c) => c.capability === values.capability)}
-						<option value={values.capability}>{values.capability}</option>
-					{/if}
-					{#each capabilities as c (c.capability)}<option value={c.capability}
-							>{c.capability}</option
-						>{/each}
-				</select>
-				<FieldError id="{fid('/capability')}-error" message={err('/capability')} />
-			</div>
-			<div class="fk-field">
-				<label for={fid('/vendor_endpoint')}>Vendor endpoint</label>
-				<input
-					id={fid('/vendor_endpoint')}
-					list="{uid}-endpoints"
-					bind:value={values.vendor_endpoint}
-					autocomplete="off"
-					spellcheck="false"
-					placeholder="clevertap.upload@1"
-					aria-invalid={err('/vendor_endpoint') ? 'true' : undefined}
-					aria-describedby="{fid('/vendor_endpoint')}-error"
-				/>
-				<datalist id="{uid}-endpoints">
-					{#each endpointRefs as r (r)}<option value={r}></option>{/each}
-				</datalist>
-				<FieldError id="{fid('/vendor_endpoint')}-error" message={err('/vendor_endpoint')} />
-			</div>
+			{#if needsEndpoint(values.kind)}
+				<div class="fk-field">
+					<label for={fid('/vendor_endpoint')}>Vendor endpoint</label>
+					<input
+						id={fid('/vendor_endpoint')}
+						list="{uid}-endpoints"
+						bind:value={values.vendor_endpoint}
+						autocomplete="off"
+						spellcheck="false"
+						placeholder="clevertap.upload@1"
+						aria-invalid={err('/vendor_endpoint') ? 'true' : undefined}
+						aria-describedby="{fid('/vendor_endpoint')}-error"
+					/>
+					<datalist id="{uid}-endpoints">
+						{#each endpointRefs as r (r)}<option value={r}></option>{/each}
+					</datalist>
+					<FieldError id="{fid('/vendor_endpoint')}-error" message={err('/vendor_endpoint')} />
+				</div>
+			{/if}
 			<div class="fk-field wide">
 				<label for={fid('/docs_url')}>Vendor documentation the mapping was checked against</label>
 				<input
@@ -531,9 +513,10 @@
 	onfailure={onCreateFailed}
 >
 	<p>
-		The Hub compiles the source, type-checks it against {values.capability || 'the capability'} and runs
-		all {values.fixtures.length} goldens again; it refuses the version if any fails. The new version is
-		immutable.
+		The Hub compiles the source and runs all {values.fixtures.length}
+		{values.fixtures.length === 1 ? 'sample' : 'samples'} again{needsEndpoint(values.kind)
+			? `, checking each produced request against ${values.vendor_endpoint || 'the endpoint'}'s request schema`
+			: ''}; it refuses the version if any fails. The new version is immutable.
 	</p>
 	{#snippet fields()}
 		{@render draftFields()}

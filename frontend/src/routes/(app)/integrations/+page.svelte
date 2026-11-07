@@ -88,17 +88,6 @@
 		{/if}
 	</div>
 	<div class="field">
-		<label for="f-capability">Capability</label>
-		<input
-			id="f-capability"
-			name="capability"
-			value={filters.capability ?? ''}
-			maxlength="128"
-			placeholder="events.track@v1"
-			autocomplete="off"
-		/>
-	</div>
-	<div class="field">
 		<label for="f-paused">State</label>
 		<select id="f-paused" name="paused" value={filters.paused ?? ''}>
 			<option value="">Any</option>
@@ -196,7 +185,7 @@
 	columns={[
 		{ label: 'Integration' },
 		{ label: 'Owner tenant' },
-		{ label: 'Capability' },
+		{ label: 'Operations' },
 		{ label: 'State' },
 		{ label: 'Active version', numeric: true },
 		{ label: 'Latest version', numeric: true },
@@ -216,7 +205,11 @@
 			{#if i.description}<span class="desc">{i.description}</span>{/if}
 		</th>
 		<td>{i.owner_tenant}</td>
-		<td><code>{i.capability}</code></td>
+		<td>
+			{#each i.operations as op (op)}<code class="op">{op}</code>{:else}<span class="muted"
+					>None yet</span
+				>{/each}{#if i.interactive}<span class="draft">interactive</span>{/if}
+		</td>
 		<td><StatusBadge tone={s.tone} icon={s.icon} label={s.label} /></td>
 		<td class="numeric">{i.active_version == null ? 'None' : `v${i.active_version}`}</td>
 		<td class="numeric">

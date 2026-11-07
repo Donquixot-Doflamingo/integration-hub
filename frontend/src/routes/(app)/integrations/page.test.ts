@@ -46,14 +46,11 @@ beforeEach(() => {
 describe('integrations list', () => {
 	it('sends the URL filters to listIntegrations and shows them as removable chips', async () => {
 		const seen = recordQueries();
-		await renderAt(
-			'?q=brand&tenant_id=orders-service&capability=events.track@v1&paused=false&limit=25'
-		);
+		await renderAt('?q=brand&tenant_id=orders-service&paused=false&limit=25');
 		await screen.findByRole('table', { busy: false });
 		expect(Object.fromEntries(seen[0]!)).toEqual({
 			q: 'brand',
 			tenant_id: 'orders-service',
-			capability: 'events.track@v1',
 			paused: 'false',
 			limit: '25'
 		});
@@ -61,10 +58,7 @@ describe('integrations list', () => {
 		const remove = within(chips).getByRole('link', {
 			name: 'Remove filter Owner tenant: orders-service'
 		});
-		expect(remove).toHaveAttribute(
-			'href',
-			'/integrations?q=brand&capability=events.track%40v1&paused=false&limit=25'
-		);
+		expect(remove).toHaveAttribute('href', '/integrations?q=brand&paused=false&limit=25');
 		expect(
 			within(chips).getByRole('link', { name: 'Remove filter State: Live only' })
 		).toBeInTheDocument();
@@ -229,7 +223,7 @@ describe('integrations list', () => {
 							code: 'VALIDATION_FAILED',
 							message: 'Invalid query',
 							retryable: false,
-							details: [{ pointer: '/capability', message: 'does not match pattern' }],
+							details: [{ pointer: '/tenant_id', message: 'does not match pattern' }],
 							request_id: 'req_01J9Z3M1A5B7C9D1E3F5G7H9KC'
 						}
 					},
@@ -237,10 +231,10 @@ describe('integrations list', () => {
 				)
 			)
 		);
-		await renderAt('?capability=nope');
+		await renderAt('?tenant_id=n!');
 		const alert = await screen.findByRole('alert');
 		expect(alert).toHaveTextContent('VALIDATION_FAILED');
-		expect(alert).toHaveTextContent('/capability does not match pattern');
+		expect(alert).toHaveTextContent('/tenant_id does not match pattern');
 		expect(alert).toHaveTextContent('req_01J9Z3M1A5B7C9D1E3F5G7H9KC');
 	});
 });

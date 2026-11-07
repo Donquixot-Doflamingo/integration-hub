@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **282** · done: **204** · todo: **72** · other (in-progress/in-review/blocked): **6**
+Total tickets: **282** · done: **204** · todo: **71** · other (in-progress/in-review/blocked): **7**
 
 ## Epics
 
@@ -3557,7 +3557,7 @@ Update hubctl (apply, plan, export, dry-run, transform test), hubmcp tools, `bac
 
 ### HUB-436 — Console: schema registry editors, samples and no capabilities
 - **Epic:** EP-14 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-progress · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `feat/HUB-436-console-schema-registry`
 
 Remove capability columns, filters and fields. Integration draft form gets per-operation input schema (body and headers) built from a pasted sample, each field required or optional, and the `validate_input` switch; vendor endpoint form gets its request schema (query, headers, body, path) the same way; transformer authoring takes samples (input and expected output) and shows the field-level reason when a sample fails; response transformer optional ([ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md)).

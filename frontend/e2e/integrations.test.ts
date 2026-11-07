@@ -40,11 +40,11 @@ test.describe('integrations list', () => {
 
 	test('filters work by keyboard: Enter in a field applies them', async ({ page }) => {
 		await signIn(page, { next: '/integrations' });
-		await page.getByLabel('Capability', { exact: true }).focus();
-		await page.keyboard.type('events.track@v1');
+		await page.getByLabel('Vendor', { exact: true }).focus();
+		await page.keyboard.type('clevertap');
 		await page.keyboard.press('Enter');
-		await expect(page).toHaveURL('/integrations?capability=events.track%40v1');
-		await expect(page.getByLabel('Capability', { exact: true })).toBeFocused();
+		await expect(page).toHaveURL('/integrations?vendor_id=clevertap');
+		await expect(page.getByLabel('Vendor', { exact: true })).toBeFocused();
 		await expect(page.getByRole('navigation', { name: 'Pagination' })).toContainText('Page 1');
 	});
 

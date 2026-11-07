@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(frontend)` · Move the console to hub-admin 2.0.0 without capabilities · HUB-436 · F-23
+  - No capability column, filter, picker or field is left: the integrations list shows each integration's operations (and "interactive"), the request explorer shows the operation, transformers show their vendor endpoint or "none" for response transformers
+  - Creating an integration asks whether it is interactive and says that this can never change; its first draft starts with one operation, `default`
+  - The response transformer of a target is optional in the draft form: empty means the caller gets the vendor's status and body back unchanged
+  - Vendors can be created with auth scheme `none`; dry runs and samples send caller headers as `input_headers`; transformer authoring asks for a vendor endpoint only for request transformers
 - 2026-11-07 · `contract(contracts)` · Replace capabilities with request schemas · HUB-432 · F-23
   - hub-admin 2.0.0: the capability API and fields are gone; each integration version declares its operations with the caller's request schema (body and headers, required or optional fields, `validate_input`), each vendor endpoint declares the request it accepts, transformers are proven by samples checked against the endpoint schema, and the response transformer is optional
   - hub-public 2.0.0: discovery lists each operation with its request schema; an operation without a response transformer returns the vendor's status and body unchanged, marked `X-Hub-Pass-Through: true`, with only `Content-Type` and `Retry-After` vendor headers

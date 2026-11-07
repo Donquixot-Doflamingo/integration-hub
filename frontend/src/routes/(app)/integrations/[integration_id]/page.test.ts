@@ -35,7 +35,7 @@ describe('integration detail', () => {
 		expect(summary).toHaveTextContent('Live');
 		expect(summary).toHaveTextContent('Brand A product analytics events');
 		expect(summary).toHaveTextContent('orders-service');
-		expect(summary).toHaveTextContent('events.track@v1');
+		expect(summary).toHaveTextContent(/Interactive\s*No/);
 		expect(summary).toHaveTextContent('v8 (draft)');
 
 		expect(screen.getByRole('heading', { name: 'Active version v7' })).toBeInTheDocument();
