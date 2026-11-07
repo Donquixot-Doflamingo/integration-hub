@@ -151,12 +151,64 @@ describe('create account (write-only credentials)', () => {
 		expect(regions.map((o) => o.textContent)).toEqual(['Pick a region', 'in', 'us']);
 	});
 
+	it('an auth `none` vendor: no credential inputs, none sent (HUB-436)', async () => {
+		const list = contractMocks.listVendors.example;
+		server.use(
+			mockOperation('listVendors', {
+				...list,
+				items: [
+					...list.items,
+					{
+						...list.items[0]!,
+						vendor_id: 'agify',
+						display_name: 'Agify',
+						auth_scheme: 'none',
+						regions: ['global']
+					}
+				]
+			})
+		);
+		const bodies: Record<string, unknown>[] = [];
+		server.use(
+			http.post(mswPath('/accounts'), async ({ request }) => {
+				bodies.push((await request.json()) as never);
+				return HttpResponse.json(contractMocks.createAccount.example, { status: 201 });
+			})
+		);
+		await renderNew();
+		await userEvent.type(screen.getByLabelText(/^Account id/), 'agify-public');
+		await userEvent.selectOptions(screen.getByLabelText(/^Vendor/), 'agify');
+		await userEvent.selectOptions(screen.getByLabelText(/^Region/), 'global');
+		expect(screen.queryByLabelText('Secret value')).toBeNull();
+		expect(screen.queryByLabelText(/^Credential expires/)).toBeNull();
+		expect(screen.getByRole('note')).toHaveTextContent('agify is a public API (auth scheme none)');
+		await userEvent.type(screen.getByLabelText(/^Reason/), 'Public age estimate API');
+		await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+		await waitFor(() => expect(bodies).toHaveLength(1));
+		expect(bodies[0]).toMatchObject({
+			account_id: 'agify-public',
+			vendor_id: 'agify',
+			region: 'global'
+		});
+		expect('credentials' in bodies[0]!).toBe(false);
+	});
+
 	it('the action refuses a plain (no-JS) post: credentials only travel in the background', async () => {
 		const form = new FormData();
 		form.set('reason', 'Brand C India workspace');
 		const r = await runAction(newActions, 'create', form, { enhanced: false });
 		expect(r.type).toBe('failure');
 		expect(JSON.stringify(r)).toContain('needs JavaScript');
+	});
+});
+
+describe('account of an auth none vendor (HUB-436)', () => {
+	it('says there is nothing to store or rotate, and offers no rotation', async () => {
+		const vendor = contractMocks.getVendor.example;
+		server.use(mockOperation('getVendor', { ...vendor, auth_scheme: 'none' }));
+		await renderDetail(admin, { ...contractMocks.getAccount.example, credentials: [] });
+		expect(await screen.findByText(/public API \(auth scheme none\)/)).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Add next credential' })).toBeNull();
 	});
 });
 

@@ -1,10 +1,14 @@
 <script lang="ts">
-	import type { IntegrationSpec } from '$lib/api/types';
+	import type { IntegrationSpec, TargetRef } from '$lib/api/types';
 	import { formatDurationMs, formatRatio } from '$lib/utils/format';
+	import SchemaFields from '../schema/SchemaFields.svelte';
 
 	/**
-	 * Read-only view of one integration version's spec (HUB-257): targets and weights, failover,
-	 * delivery, breaker override, webhooks, audit and shadow. Shows only what the API returned
+	 * Read-only view of one integration version's spec (HUB-257, HUB-436): its operations (each
+	 * with the caller's request schema as a field list, whether live calls are checked, and the
+	 * transformer pair every target uses for it; "pass-through" when there is no response
+	 * transformer), targets and weights, failover, delivery, breaker override, webhooks, audit and
+	 * shadow. Shows only what the API returned
 	 * (a tenant viewer may get less); never secrets (specs hold none).
 	 */
 	let { spec, headingLevel = 3 }: { spec: IntegrationSpec; headingLevel?: 3 | 4 } = $props();
@@ -29,14 +33,81 @@
 		metadata_only: 'Metadata only (size and SHA-256)'
 	};
 	const json = (v: unknown) => JSON.stringify(v);
+	const operations = $derived(Object.entries(spec.operations ?? {}));
+	/** The pair a target uses for an operation: its own (`operations`) or the default one. */
+	const pairOf = (t: TargetRef, op: string) => t.operations?.[op] ?? t.transformer;
 </script>
 
+{#snippet response(ref: string | null | undefined)}
+	{#if ref}<code>{ref}</code>{:else}<span class="muted">pass-through</span>{/if}
+{/snippet}
+
 <div class="spec">
+	<section aria-labelledby="{uid}-operations">
+		<svelte:element this={h} id="{uid}-operations">Operations</svelte:element>
+		{#if operations.length === 0}
+			<p class="note">No operations declared.</p>
+		{/if}
+		{#each operations as [name, op] (name)}
+			<article class="operation" aria-labelledby="{uid}-op-{name}">
+				<p class="op-head" id="{uid}-op-{name}">
+					<code class="op-name">{name}</code>
+					{#if op.description}<span>{op.description}</span>{/if}
+				</p>
+				<dl class="facts">
+					<div>
+						<dt>Idempotent</dt>
+						<dd>{op.idempotent ? 'Yes' : 'No'}</dd>
+					</div>
+					<div>
+						<dt>Live calls checked</dt>
+						<dd>
+							{(op.validate_input ?? true)
+								? 'Yes: 400 VALIDATION_FAILED on a mismatch'
+								: 'No (samples still checked at publish)'}
+						</dd>
+					</div>
+					<div class="wide">
+						<dt>Transformers</dt>
+						<dd>
+							<ul class="pairs">
+								{#each spec.targets as t, i (i)}
+									{@const pair = pairOf(t, name)}
+									<li>
+										<code>{t.vendor_id}/{t.account_id}</code>: request <code>{pair.request}</code>,
+										response {@render response(pair.response)}
+									</li>
+								{/each}
+							</ul>
+						</dd>
+					</div>
+				</dl>
+				<p class="part">Request body</p>
+				<SchemaFields
+					schema={op.request_schema.body}
+					label="Request body of {name}"
+					empty="No fields: the body is any JSON object."
+				/>
+				<p class="part">Request headers</p>
+				{#if op.request_schema.headers}
+					<SchemaFields
+						schema={op.request_schema.headers}
+						label="Request headers of {name}"
+						empty="Declared, without headers."
+					/>
+				{:else}
+					<p class="note">None: the transformer sees no caller header.</p>
+				{/if}
+			</article>
+		{/each}
+	</section>
+
 	<section aria-labelledby="{uid}-targets">
 		<svelte:element this={h} id="{uid}-targets">Targets</svelte:element>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div class="table-wrap" role="region" aria-label="Targets table" tabindex="0">
 			<table>
+				<caption class="visually-hidden">Targets, their default transformers and weights</caption>
 				<thead>
 					<tr>
 						<th scope="col">Target (vendor/account)</th>
@@ -52,11 +123,16 @@
 							<th scope="row"><code>{t.vendor_id}/{t.account_id}</code></th>
 							{#each ['request', 'response'] as const as kind (kind)}
 								<td>
-									<code>{t.transformer[kind]}</code>
+									{#if kind === 'response'}{@render response(t.transformer.response)}{:else}<code
+											>{t.transformer.request}</code
+										>{/if}
 									<!-- Per-operation pairs (TargetRef.operations, hub-admin 1.2.0, HUB-292). -->
 									{#each Object.entries(t.operations ?? {}) as [op, pair] (op)}
 										<div class="op">
-											<span class="muted">{op}:</span> <code>{pair[kind]}</code>
+											<span class="muted">{op}:</span>
+											{#if kind === 'response'}{@render response(pair.response)}{:else}<code
+													>{pair.request}</code
+												>{/if}
 										</div>
 									{/each}
 								</td>
@@ -90,7 +166,7 @@
 						<code>{f.vendor_id}/{f.account_id}</code>
 						<span class="muted"
 							>request <code>{f.transformer.request}</code>, response
-							<code>{f.transformer.response}</code></span
+							{@render response(f.transformer.response)}</span
 						>
 					</li>
 				{/each}
@@ -222,6 +298,42 @@
 <style>
 	.op {
 		font-size: var(--text-xs);
+	}
+	.operation {
+		display: grid;
+		gap: var(--space-2);
+		margin-bottom: var(--space-3);
+		padding: var(--space-3);
+		border: 1px solid var(--rule);
+		border-left: 3px solid var(--signal);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		min-width: 0;
+	}
+	.op-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--space-2);
+		margin: 0;
+		font-size: var(--text-sm);
+	}
+	.op-name {
+		font-weight: 700;
+		font-size: var(--text-md);
+	}
+	.operation .wide {
+		grid-column: 1 / -1;
+	}
+	.pairs {
+		margin: 0;
+		padding-left: var(--space-4);
+	}
+	.part {
+		margin: var(--space-1) 0 0;
+		color: var(--ink-muted);
+		font-size: var(--text-xs);
+		font-weight: 600;
 	}
 	.spec {
 		display: grid;

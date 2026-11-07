@@ -70,7 +70,30 @@ export function buildMocks(doc) {
 				const e = jsonExample(op.responses[c]);
 				if (e) errors[c] = e.value;
 			}
+			// Named examples (HUB-436): every `examples` entry of the JSON request body, the success
+			// response and the error responses, by name, for scenario mocks and tests.
+			/** @param {any} content */
+			const namedOf = (content) =>
+				content?.examples
+					? Object.fromEntries(
+							Object.entries(content.examples).map(([k, v]) => [k, deref(v).value])
+						)
+					: undefined;
+			/** @type {Record<string, any>} */
+			const named = {};
+			const req = namedOf(deref(op.requestBody)?.content?.['application/json']);
+			if (req) named.request = req;
+			const res = namedOf(okResponse.content?.['application/json']);
+			if (res) named.response = res;
+			/** @type {Record<string, any>} */
+			const namedErrors = {};
+			for (const c of codes.filter((c) => /^[45]\d\d$/.test(c))) {
+				const e = namedOf(deref(op.responses[c])?.content?.['application/json']);
+				if (e) namedErrors[c] = e;
+			}
+			if (Object.keys(namedErrors).length) named.errors = namedErrors;
 			ops[id] = { method, path, status: Number(ok), headers, example: example.value, errors };
+			if (Object.keys(named).length) ops[id].named = named;
 		}
 	}
 	return Object.fromEntries(Object.entries(ops).sort(([a], [b]) => a.localeCompare(b)));
@@ -96,9 +119,10 @@ export function render(ops, version) {
 			`\t\tstatus: ${m.status},`,
 			`\t\theaders: ${JSON.stringify(m.headers)},`,
 			`\t\texample: ${indent(JSON.stringify(m.example, null, '\t'), 2)},`,
-			`\t\terrors: ${indent(JSON.stringify(m.errors, null, '\t'), 2)}`,
-			'\t},'
+			`\t\terrors: ${indent(JSON.stringify(m.errors, null, '\t'), 2)}${m.named ? ',' : ''}`
 		);
+		if (m.named) lines.push(`\t\tnamed: ${indent(JSON.stringify(m.named, null, '\t'), 2)}`);
+		lines.push('\t},');
 	}
 	lines.push('};', '');
 	return lines.join('\n');

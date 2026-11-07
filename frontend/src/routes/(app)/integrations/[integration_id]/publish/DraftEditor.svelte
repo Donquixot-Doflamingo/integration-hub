@@ -29,11 +29,11 @@
 	import { formatUtc } from '$lib/utils/format';
 	import { parseSpecYaml, specToYaml } from '$lib/utils/spec-yaml';
 	import type { IntegrationSpec } from '$lib/api/types';
-	import type { Lookups } from './+page';
+	import { NO_LOOKUPS, type Lookups } from './lookups';
 	import ChecksList from './ChecksList.svelte';
 	import SpecEditor from './SpecEditor.svelte';
 	import SpecForm from './SpecForm.svelte';
-	import { formProblems, forForm, starterSpec } from './spec-form';
+	import { formProblems, forForm, operationNames, starterSpec } from './spec-form';
 	import {
 		reportFromError,
 		reportProblems,
@@ -68,7 +68,7 @@
 	// The editor keeps its own text across data reloads (saving reloads the page data). A first
 	// draft (no version at all yet) starts from a skeleton spec.
 	const initial = untrack(() =>
-		specToYaml((draft ?? integration.active)?.spec ?? starterSpec(false))
+		specToYaml((draft ?? integration.active)?.spec ?? starterSpec(integration.interactive))
 	);
 	let text = $state(initial);
 	let saved = $state(initial);
@@ -83,13 +83,7 @@
 	let switchError = $state<string | null>(null);
 	const current = $derived(mode === 'form' ? specToYaml($state.snapshot(formSpec)) : text);
 	const dirty = $derived(current !== saved);
-	let looked = $state.raw<Lookups>({
-		operations: [],
-		interactive: false,
-		vendors: [],
-		accounts: [],
-		transformers: []
-	});
+	let looked = $state.raw<Lookups>(NO_LOOKUPS);
 	$effect(() => {
 		let live = true;
 		lookups.then((l) => {
@@ -101,7 +95,7 @@
 	});
 	let formAttempted = $state(false);
 	const consoleProblems = $derived(
-		mode === 'form' ? formProblems(formSpec, looked.operations) : []
+		mode === 'form' ? formProblems(formSpec, operationNames(formSpec)) : []
 	);
 
 	function showForm() {
@@ -244,8 +238,8 @@
 	<button type="button" class="btn" aria-pressed={mode === 'form'} onclick={showForm}>Form</button>
 	<button type="button" class="btn" aria-pressed={mode === 'yaml'} onclick={showYaml}>YAML</button>
 	<span class="fk-hint"
-		>Both edit the same draft. The form covers targets, per-operation transformers, delivery and
-		audit; YAML covers everything (comments are not kept).</span
+		>Both edit the same draft. The form covers operations and their request schemas, targets,
+		per-operation transformers, delivery and audit; YAML covers everything (comments are not kept).</span
 	>
 </div>
 {#if switchError}<p class="fk-error" role="alert">
@@ -258,7 +252,8 @@
 		{#if saveFields.spec}<p class="fk-error" role="alert">{saveFields.spec}</p>{/if}
 		<SpecForm
 			bind:spec={formSpec}
-			operations={looked.operations}
+			operations={operationNames(formSpec)}
+			interactive={integration.interactive}
 			vendors={looked.vendors}
 			accounts={looked.accounts}
 			transformers={looked.transformers}
@@ -344,7 +339,7 @@
 		<section class="diff" aria-labelledby="draft-diff-h">
 			<h2 id="draft-diff-h">Changes against the active version</h2>
 			{#if d.ok}
-				<p class="meta" role="status">
+				<p class="meta changes" role="status">
 					v{d.data.from} to v{d.data.to}: {summarize(d.data.changes)}
 				</p>
 				<DiffSplit
@@ -405,7 +400,10 @@
 			The published version can never be edited.
 		</p>
 		{#await diff then d}
-			{#if d?.ok}<p><strong>Changes:</strong> {summarize(d.data.changes)}</p>{/if}
+			{#if d?.ok}<p class="changes">
+					<strong>Changes:</strong>
+					{summarize(d.data.changes)}
+				</p>{/if}
 		{/await}
 		{#snippet fields()}
 			<input type="hidden" name="version" value={version} />
@@ -535,9 +533,15 @@
 		justify-items: start;
 	}
 	.diff {
+		/* One column that may shrink below the diff's longest line; DiffSplit scrolls inside. */
+		grid-template-columns: minmax(0, 1fr);
 		justify-items: stretch;
 	}
 	h2 {
 		font-size: var(--text-lg);
+	}
+	/* Change summaries list the changed paths; long dotted paths must wrap on phones. */
+	.changes {
+		overflow-wrap: anywhere;
 	}
 </style>

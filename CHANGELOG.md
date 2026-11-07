@@ -38,6 +38,52 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
   - Vendors can use auth scheme `none`: their accounts carry no credentials
   - The admin API, discovery, hubctl, hubmcp and the Go client follow the 2.0.0 contracts; the capability endpoints are gone
   - Migration 00011 drops the capability table and columns after copying capability schemas into integration versions; archived snapshots, drafts and pending integrations from before are upgraded on the admin's first boot
+- 2026-11-07 · `docs(tickets)` · Put the console schema registry work in review · HUB-436 · F-23
+  - HUB-436 is in review with its three acceptance criteria met and mapped to tests; the real-backend e2e suite still waits for HUB-433
+
+- 2026-11-07 · `test(frontend)` · Prove a public API can be onboarded from the panel end to end · HUB-436 · F-23
+  - A Playwright flow onboards an agify-like API with no code: vendor with auth none, endpoint `GET /` whose required query `name` is built from a pasted sample, an account without credentials, a request transformer (`name: req.firstName + req.lastName`) and a response transformer keeping `age`, each unlocked by passing samples, an integration whose body `{firstName, lastName}` is required, then publish with a reason
+  - A second flow shows a failing sample naming the field that broke (`/query/name`, minLength) while Create stays locked; mock builds gain the scenario `samples-fail`
+  - The optional response transformer field is announced as "Response transformer (optional)" instead of running the words together
+
+- 2026-11-07 · `fix(frontend)` · Wrap long schema paths in diffs and bring the e2e up to date · HUB-436 · F-23
+  - On a 390 px phone, the publish page and the version diff no longer scroll sideways when a change touches an operation's request schema (long paths such as `operations.default.request_schema.body.properties.context.properties.channel` wrap, and the draft's diff scrolls inside its frame)
+  - Change summaries in sample results and change log entries wrap the same way
+  - The e2e suite follows the schema registry: request-kind label, sample results, endpoint pages opened from links, and the diff example's third path
+
+- 2026-11-07 · `fix(frontend)` · Keep the draft editor lookups out of the publish page module · HUB-436 · F-23
+  - The console builds again: the publish page's load module exported a constant SvelteKit refuses (`NO_LOOKUPS`), which stopped `npm run build` and the e2e server
+
+- 2026-11-07 · `test(frontend)` · Add an onboarding mock world for a public API · HUB-436 · F-23
+  - Mock builds and e2e can select the scenario `onboarding`: a public vendor `agify` (auth none) with endpoint `estimate@1` (`GET /`, required query `name`), a credential-less account, request and response transformers proven by samples, and integration `int_age_estimate`, all from the contract's named examples
+  - Create calls in that scenario answer with what was sent, so a flow that creates each object from the panel lands on pages that show it
+
+- 2026-11-07 · `feat(frontend)` · Show operations and their input fields on integration pages · HUB-436 · F-23
+  - The integration and version pages list each operation: description, idempotent, whether live calls are checked, its request body and headers as fields with Required / Optional, PII tags and constraints, and the transformer pair each target uses for it
+  - A target without a response transformer reads "pass-through" everywhere (operations, targets, failover)
+- 2026-11-07 · `feat(frontend)` · Prove transformers with samples and show the field that broke · HUB-436 · F-23
+  - Transformer authoring speaks of samples: request samples are the caller's input body, optional caller headers and the expected vendor request; response samples are a vendor response and the expected output or error
+  - A failing sample says why on its own card, field by field: the produced request breaks the endpoint's request schema (`/query/name` must not be empty) or differs from the expected one, also when the Hub refuses the version (422 `endpoint_schema` / `goldens_pass`)
+  - A request sample's expected request can start from what the endpoint accepts, and the page shows that endpoint's request schema
+  - Dry runs send caller headers and list the fields of the produced request that break the endpoint schema; MSW mocks carry every named contract example
+- 2026-11-07 · `feat(frontend)` · Declare each vendor endpoint's request schema and support auth none · HUB-436 · F-23
+  - Adding an endpoint (or its next version) is now its own page: besides method, path and timeouts, the operator declares the request it accepts, part by part (path parameters, query parameters, non-credential headers, body), each from a sample with required or optional fields; an empty part is not sent, and path placeholders can be declared in one click
+  - An optional, informational response schema documents what the vendor answers
+  - The endpoint page shows each part as a field list; the vendor page shows what each endpoint version declares
+  - Accounts of an auth `none` vendor are created without credentials, and their page says there is nothing to rotate
+- 2026-11-07 · `feat(frontend)` · Edit operations and their request schemas in the draft form · HUB-436 · F-23
+  - The draft form starts with an Operations section: add, rename or remove operations (`default` for one), each with a caller-facing description, idempotent and the "check live calls" switch (on by default: a call missing a required field gets 400 VALIDATION_FAILED)
+  - Each operation's request body (required) and caller headers (optional, what the transformer may read as `hdr.*`) are built with the schema editor; renaming or removing an operation moves or drops the targets' transformer pairs for it
+  - Publish checks name the sample and the field that broke (`input_schema`, `goldens_pass`, `endpoint_schema`)
+- 2026-11-07 · `feat(frontend)` · Add a schema editor that builds fields from a pasted sample · HUB-436 · F-23
+  - Operators paste a sample JSON and get its fields (name, type, nested objects and arrays), then tick each field required or optional, describe it, add or remove fields
+  - "Edit as JSON Schema" shows the same JSON Schema 2020-12 document as text; edits are checked and flow back into the field list, and keywords without a column (minLength, pattern, x-pii, ...) are kept
+  - Optional parts left empty are not sent
+- 2026-11-07 · `feat(frontend)` · Move the console to hub-admin 2.0.0 without capabilities · HUB-436 · F-23
+  - No capability column, filter, picker or field is left: the integrations list shows each integration's operations (and "interactive"), the request explorer shows the operation, transformers show their vendor endpoint or "none" for response transformers
+  - Creating an integration asks whether it is interactive and says that this can never change; its first draft starts with one operation, `default`
+  - The response transformer of a target is optional in the draft form: empty means the caller gets the vendor's status and body back unchanged
+  - Vendors can be created with auth scheme `none`; dry runs and samples send caller headers as `input_headers`; transformer authoring asks for a vendor endpoint only for request transformers
 - 2026-11-07 · `contract(contracts)` · Replace capabilities with request schemas · HUB-432 · F-23
   - hub-admin 2.0.0: the capability API and fields are gone; each integration version declares its operations with the caller's request schema (body and headers, required or optional fields, `validate_input`), each vendor endpoint declares the request it accepts, transformers are proven by samples checked against the endpoint schema, and the response transformer is optional
   - hub-public 2.0.0: discovery lists each operation with its request schema; an operation without a response transformer returns the vendor's status and body unchanged, marked `X-Hub-Pass-Through: true`, with only `Content-Type` and `Retry-After` vendor headers

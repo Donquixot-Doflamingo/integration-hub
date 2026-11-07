@@ -2,6 +2,7 @@ import type { HttpHandler } from 'msw';
 import type { OperationResponse } from '../types';
 import { contractMocks } from './contract.gen';
 import { mockError, mockOperation } from './handlers';
+import { onboardingHandlers } from './onboarding';
 import type { OperationId } from './types';
 
 /**
@@ -42,6 +43,21 @@ export const SSRF_DETAIL = {
 };
 
 export const presets: Record<string, () => HttpHandler[]> = {
+	/**
+	 * Onboarding a public API from the panel (HUB-436): vendor `agify` (auth none), endpoint,
+	 * account, request and response transformers, integration `int_age_estimate`, from the
+	 * contract's named examples (onboarding.ts).
+	 */
+	onboarding: onboardingHandlers,
+	/**
+	 * Running samples fails (HUB-436): the contract's named `failed` goldens run, where sample
+	 * `empty_last_name` produces `/query/name` = "" and breaks the endpoint's `minLength`. Put it
+	 * before `onboarding` (`samples-fail+onboarding`) so it wins.
+	 */
+	'samples-fail': () => {
+		const failed = contractMocks.runTransformerGoldens.named?.response?.failed;
+		return failed ? [mockOperation('runTransformerGoldens', failed)] : [];
+	},
 	/** After publishing the draft: rollback (to v7) and weights (two targets) have something to do. */
 	'v8-active': () => [
 		mockOperation('getIntegration', {

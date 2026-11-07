@@ -14,8 +14,8 @@ import Page from './+page.svelte';
 import { load } from './+page';
 import { actions } from './+page.server';
 
-// HUB-292: the structured draft editor on the publish page. The Aadhaar example (one target,
-// send_otp on the default pair, verify_otp on its own) as the open draft; capability operations,
+// HUB-292, HUB-436: the structured draft editor on the publish page. The Aadhaar example (two
+// operations; one target, send_otp on the default pair, verify_otp on its own) as the open draft;
 // vendors, accounts and transformers from the lookups.
 
 vi.mock('$app/navigation', () => ({ invalidateAll: vi.fn(), goto: vi.fn() }));
@@ -27,7 +27,7 @@ function aadhaarDraft(spec: IntegrationSpec = AADHAAR) {
 	const integration = {
 		...contractMocks.getIntegration.example,
 		integration_id: ID,
-		capability: 'demo.aadhaar_okyc@v1',
+		interactive: true,
 		active_version: null,
 		active: null,
 		latest_version: 1,
@@ -42,16 +42,7 @@ function aadhaarDraft(spec: IntegrationSpec = AADHAAR) {
 	};
 	server.use(
 		mockOperation('getIntegration', integration),
-		mockOperation('getIntegrationVersion', draft),
-		mockOperation('getCapability', {
-			...contractMocks.getCapability.example,
-			capability: 'demo.aadhaar_okyc@v1',
-			interactive: true,
-			operations: {
-				send_otp: contractMocks.getCapability.example.operations.default!,
-				verify_otp: contractMocks.getCapability.example.operations.default!
-			}
-		})
+		mockOperation('getIntegrationVersion', draft)
 	);
 }
 
@@ -82,7 +73,7 @@ async function renderEditor() {
 	} as never)) as object;
 	render(Page, { props: { data: { access: editor, ...data } as never } });
 	const target = await screen.findByRole('listitem', { name: /^Target 1/ });
-	// The capability's operations arrive with the lookups (send_otp is not in the spec).
+	// The spec's operations: send_otp has no own pair in the target.
 	await within(target).findByRole('listitem', { name: 'send_otp' });
 	return { user: userEvent.setup(), target };
 }
@@ -96,6 +87,8 @@ describe('form editor', () => {
 		expect(screen.getByRole('button', { name: 'Form' })).toHaveAttribute('aria-pressed', 'true');
 		expect(within(target).getByLabelText('Vendor')).toHaveValue('cashfree-sid');
 		expect(within(target).getByLabelText('Request transformer')).toHaveValue('CF-OKYC-OTP-REQ@1');
+		// The optional field's name keeps a space before "(optional)" (HUB-436).
+		expect(within(target).getByLabelText('Response transformer (optional)')).toBeInTheDocument();
 		const send = within(target).getByRole('listitem', { name: 'send_otp' });
 		expect(within(send).getByRole('checkbox')).not.toBeChecked();
 		expect(send).toHaveTextContent('Uses the default pair.');
@@ -196,12 +189,12 @@ describe('form editor', () => {
 		expect(specs).toHaveLength(0);
 	});
 
-	it('offers an operation the spec lists but the capability lacks for removal', async () => {
+	it('offers a target operation the spec does not declare for removal', async () => {
 		const spec = structuredClone(AADHAAR);
 		spec.targets[0]!.operations!.bogus = { request: 'A@1', response: 'B@1' };
 		aadhaarDraft(spec);
 		const { user, target } = await renderEditor();
-		expect(target).toHaveTextContent('Not an operation of this capability');
+		expect(target).toHaveTextContent('Not an operation of this integration');
 		await user.click(within(target).getByRole('button', { name: 'Remove bogus' }));
 		expect(target).not.toHaveTextContent('bogus');
 	});
@@ -219,9 +212,9 @@ describe('form editor', () => {
 		expect(screen.getByRole('button', { name: 'YAML' })).toHaveAttribute('aria-pressed', 'true');
 	});
 
-	it('a 403 on the capability only empties the lookups; typed values still work', async () => {
+	it('a 403 on a lookup only empties it; typed values still work', async () => {
 		aadhaarDraft();
-		server.use(mockError('getCapability', 403), mockError('listTransformers', 403));
+		server.use(mockError('listTransformers', 403));
 		const data = (await load({
 			fetch,
 			url: new URL(`http://console.test/integrations/${ID}/publish`),
@@ -230,7 +223,7 @@ describe('form editor', () => {
 		} as never)) as object;
 		render(Page, { props: { data: { access: editor, ...data } as never } });
 		const target = await screen.findByRole('listitem', { name: /^Target 1/ });
-		// The spec's own operations still show (verify_otp is listed in it).
+		// The spec's own operations show (they never depended on a lookup).
 		expect(within(target).getByLabelText('Request transformer for verify_otp')).toHaveValue(
 			'CF-OKYC-VERIFY-REQ@1'
 		);

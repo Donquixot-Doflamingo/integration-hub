@@ -11,6 +11,11 @@ const PAGES: { path: string; heading: string }[] = [
 	{ path: '/vendors/clevertap', heading: 'clevertap' },
 	{ path: '/vendors/clevertap/edit', heading: 'Edit clevertap' },
 	{ path: '/vendors/clevertap/endpoints/upload@1', heading: 'clevertap.upload@1' },
+	{ path: '/vendors/clevertap/endpoints/new', heading: 'Add an endpoint to clevertap' },
+	{
+		path: '/vendors/clevertap/endpoints/new?from=upload',
+		heading: 'New version of clevertap.upload'
+	},
 	{ path: '/accounts', heading: 'Accounts' },
 	{ path: '/accounts/new', heading: 'Create account' },
 	{ path: '/accounts/ct-brandA-in', heading: 'ct-brandA-in' },
@@ -33,12 +38,7 @@ for (const theme of ['light', 'dark'] as const) {
 }
 
 test('dialogs of the authoring pages are axe-clean', async ({ page }) => {
-	await signIn(page, { role: 'admin', next: '/vendors/clevertap' });
-	await page.getByRole('button', { name: 'Add endpoint' }).click();
-	await expect(page.getByRole('dialog')).toBeVisible();
-	await expectNoSeriousA11yViolations(page);
-	await page.keyboard.press('Escape');
-	await page.goto('/accounts/ct-brandA-in');
+	await signIn(page, { role: 'admin', next: '/accounts/ct-brandA-in' });
 	await page.getByRole('button', { name: 'Add next credential' }).click();
 	await expect(page.getByRole('dialog').getByLabel('Secret value')).toHaveAttribute(
 		'type',

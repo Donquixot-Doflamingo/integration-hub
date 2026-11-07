@@ -5,7 +5,11 @@
 	import { pointerToPath } from '$lib/utils/diff';
 	import { checkLabel } from './draft';
 
-	/** The publish checks of DESIGN §6.4 (`ValidationReport`), each with its result in text + icon. */
+	/**
+	 * The publish checks of DESIGN §6.4 (`ValidationReport`), each with its result in text + icon.
+	 * Sample checks (`input_schema`, `goldens_pass`, `endpoint_schema`, HUB-436) also name the
+	 * sample and the field that broke.
+	 */
 	let { report, heading = 'Publish checks' }: { report: ValidationReport; heading?: string } =
 		$props();
 
@@ -33,6 +37,8 @@
 			<li>
 				<StatusBadge tone={s.tone} icon={s.icon} label={s.label} />
 				<span class="name">{checkLabel(c.check)}</span>
+				{#if c.sample}<span class="where">sample <code>{c.sample}</code></span>{/if}
+				{#if c.field}<span class="where">field <code>{c.field}</code></span>{/if}
 				{#if c.message}<span class="msg">{c.message}</span>{/if}
 				{#if c.pointer}<code title={c.pointer}>{pointerToPath(c.pointer)}</code>{/if}
 			</li>
@@ -69,5 +75,8 @@
 	}
 	.msg {
 		color: var(--ink-muted);
+	}
+	.where {
+		font-weight: 600;
 	}
 </style>

@@ -15,14 +15,13 @@ import NewPage from './new/+page.svelte';
 import { actions as newActions } from './new/+page.server';
 import DetailPage from './[vendor_id]/+page.svelte';
 import { load as detailLoad } from './[vendor_id]/+page';
-import { actions as detailActions } from './[vendor_id]/+page.server';
 import EditPage from './[vendor_id]/edit/+page.svelte';
 import { load as editLoad } from './[vendor_id]/edit/+page';
 import { actions as editActions } from './[vendor_id]/edit/+page.server';
 import EndpointPage from './[vendor_id]/endpoints/[endpoint_ref]/+page.svelte';
 import { load as endpointLoad } from './[vendor_id]/endpoints/[endpoint_ref]/+page';
 
-// HUB-290: vendors list, create, detail (endpoints, new version), edit with If-Match, roles.
+// HUB-290, HUB-436: vendors list, create, detail (endpoints, new version), edit with If-Match, roles.
 
 const goto = vi.fn();
 vi.mock('$app/navigation', () => ({
@@ -155,8 +154,6 @@ describe('create vendor', () => {
 });
 
 describe('vendor detail', () => {
-	beforeEach(() => useActions(detailActions, { params: { vendor_id: ID } }));
-
 	it('shows regions, defaults and endpoint versions with the latest marked', async () => {
 		await renderDetail();
 		const regions = await screen.findByRole('region', { name: 'Region base URLs' });
@@ -166,43 +163,20 @@ describe('vendor detail', () => {
 		expect(within(endpoints).getByRole('row', { name: /upload@1/ })).toHaveTextContent('Latest');
 	});
 
-	it('creates the next endpoint version from the latest one (name fixed)', async () => {
-		const posts: unknown[] = [];
-		server.use(
-			http.post(mswPath('/vendors/:vendor_id/endpoints'), async ({ request }) => {
-				posts.push(await request.json());
-				return HttpResponse.json(
-					{
-						...contractMocks.createVendorEndpoint.example,
-						endpoint: {
-							...contractMocks.createVendorEndpoint.example.endpoint,
-							endpoint_ref: 'upload@2',
-							version: 2
-						}
-					},
-					{ status: 201 }
-				);
-			})
-		);
+	it('links "Add endpoint" and "New version" to the endpoint page, and lists what each declares', async () => {
 		await renderDetail();
-		await userEvent.click(await screen.findByRole('button', { name: /New version of upload/ }));
-		const dialog = screen.getByRole('dialog', { name: 'Create upload@2 on clevertap' });
-		expect(within(dialog).getByLabelText(/^Name/)).toHaveAttribute('readonly');
-		const path = within(dialog).getByLabelText(/^Path/);
-		expect(path).toHaveValue('/1/upload');
-		await userEvent.clear(path);
-		await userEvent.type(path, '/2/upload');
-		await userEvent.type(within(dialog).getByLabelText(/^Reason/), 'Move to the v2 upload path');
-		await userEvent.click(within(dialog).getByRole('button', { name: 'Create upload@2' }));
-		const notice = await screen.findByText(/Created endpoint upload@2/);
-		expect(notice.closest('[role="status"]')).toHaveTextContent(
-			contractMocks.createVendorEndpoint.example.change_id
+		const endpoints = await screen.findByRole('region', { name: 'Endpoint versions' });
+		expect(screen.getByRole('link', { name: 'Add endpoint' })).toHaveAttribute(
+			'href',
+			'/vendors/clevertap/endpoints/new'
 		);
-		expect(posts[0]).toMatchObject({
-			name: 'upload',
-			path: '/2/upload',
-			reason: 'Move to the v2 upload path'
-		});
+		expect(within(endpoints).getByRole('link', { name: /New version of upload/ })).toHaveAttribute(
+			'href',
+			'/vendors/clevertap/endpoints/new?from=upload'
+		);
+		expect(within(endpoints).getByRole('row', { name: /upload@1/ })).toHaveTextContent(
+			'headers (1), body (1)'
+		);
 	});
 
 	it('the endpoint page offers a new version only on the latest version', async () => {
@@ -210,10 +184,19 @@ describe('vendor detail', () => {
 			event(`/vendors/${ID}/endpoints/upload@1`, { vendor_id: ID, endpoint_ref: 'upload@1' }, admin)
 		);
 		render(EndpointPage, { props: { data: { access: admin, ...(data as object) } as never } });
-		expect(
-			await screen.findByRole('button', { name: 'New version (upload@2)' })
-		).toBeInTheDocument();
+		expect(await screen.findByRole('link', { name: 'New version (upload@2)' })).toHaveAttribute(
+			'href',
+			'/vendors/clevertap/endpoints/new?from=upload'
+		);
 		expect(screen.getByText('clevertap.upload@1', { selector: 'code' })).toBeInTheDocument();
+		// The request it accepts, part by part.
+		expect(screen.getByRole('region', { name: 'Headers of upload@1' })).toHaveTextContent(
+			/Content-Type\s*any\s*Required/
+		);
+		expect(screen.getByRole('region', { name: 'Body of upload@1' })).toHaveTextContent('d');
+		expect(
+			screen.getByRole('heading', { name: 'Query parameters' }).nextElementSibling
+		).toHaveTextContent('Not sent.');
 	});
 });
 
@@ -289,8 +272,8 @@ describe('roles (x-required-role: createVendor, updateVendor, createVendorEndpoi
 			await renderDetail(access(role));
 			await screen.findByRole('region', { name: 'Endpoint versions' });
 			expect(screen.queryByRole('link', { name: 'Edit vendor' })).toBeNull();
-			expect(screen.queryByRole('button', { name: 'Add endpoint' })).toBeNull();
-			expect(screen.queryByRole('button', { name: /New version/ })).toBeNull();
+			expect(screen.queryByRole('link', { name: 'Add endpoint' })).toBeNull();
+			expect(screen.queryByRole('link', { name: /New version/ })).toBeNull();
 			expect(screen.getByRole('note')).toHaveTextContent('needs the Admin role');
 		}
 	);
@@ -306,7 +289,7 @@ describe('roles (x-required-role: createVendor, updateVendor, createVendorEndpoi
 			'href',
 			'/vendors/clevertap/edit'
 		);
-		expect(screen.getByRole('button', { name: 'Add endpoint' })).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'Add endpoint' })).toBeInTheDocument();
 	});
 
 	it('tenant viewers get a note and no vendor call at all', async () => {

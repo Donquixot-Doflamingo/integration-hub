@@ -6,18 +6,29 @@ import type { PageLoad } from './$types';
 export const load: PageLoad = async (event) => {
 	const accountId = event.params.account_id;
 	const { access } = await event.parent();
-	if (access.tenantScoped) return { accountId, account: null, endpoints: Promise.resolve([]) };
+	if (access.tenantScoped)
+		return {
+			accountId,
+			account: null,
+			endpoints: Promise.resolve([]),
+			authScheme: Promise.resolve(null)
+		};
 	const api = consoleApi(event);
 	const account = api
 		.call((c) => c.GET('/accounts/{account_id}', { params: { path: { account_id: accountId } } }))
 		.then((r) => (r.ok ? { ...r, data: { account: r.data, etag: r.etag } } : r));
+	const vendor = account.then((r) =>
+		r.ok
+			? api.call((c) =>
+					c.GET('/vendors/{vendor_id}', {
+						params: { path: { vendor_id: r.data.account.vendor_id } }
+					})
+				)
+			: null
+	);
 	// The probe endpoints of the account's vendor; an empty list just hides the picker.
-	const endpoints = account.then(async (r) => {
-		if (!r.ok) return [];
-		const v = await api.call((c) =>
-			c.GET('/vendors/{vendor_id}', { params: { path: { vendor_id: r.data.account.vendor_id } } })
-		);
-		return v.ok ? v.data.endpoints.map((e) => e.endpoint_ref) : [];
-	});
-	return { accountId, account, endpoints };
+	const endpoints = vendor.then((v) => (v?.ok ? v.data.endpoints.map((e) => e.endpoint_ref) : []));
+	// Auth scheme `none` (HUB-436): the account has no credentials to rotate.
+	const authScheme = vendor.then((v) => (v?.ok ? v.data.auth_scheme : null));
+	return { accountId, account, endpoints, authScheme };
 };

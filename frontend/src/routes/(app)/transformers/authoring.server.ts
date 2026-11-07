@@ -17,7 +17,7 @@ import { buildFixtures, createBody, draftOf, draftProblems, valuesFromForm } fro
  * (editor); creating a version is the mutation (editor, reason, change id). The draft travels as
  * form fields with the fixtures as one JSON field, and is checked again here.
  */
-const DRAFT_POINTERS = ['/kind', '/capability', '/vendor_endpoint', '/yaml'] as const;
+const DRAFT_POINTERS = ['/kind', '/vendor_endpoint', '/yaml'] as const;
 
 function readDraft(op: string, form: FormData) {
 	const v = valuesFromForm(form);

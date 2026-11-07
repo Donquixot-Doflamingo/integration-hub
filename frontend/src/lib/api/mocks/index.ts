@@ -2,6 +2,7 @@ export { contractMocks } from './contract.gen';
 export {
 	createHandlers,
 	handlers,
+	mockEcho,
 	mockError,
 	mockMe,
 	mockNetworkError,

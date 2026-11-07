@@ -47,12 +47,11 @@
 						<dd>{t.kind}</dd>
 					</div>
 					<div>
-						<dt>Capability</dt>
-						<dd><code>{t.capability}</code></dd>
-					</div>
-					<div>
 						<dt>Vendor endpoint</dt>
-						<dd><code>{t.vendor_endpoint}</code></dd>
+						<dd>
+							{#if t.vendor_endpoint}<code>{t.vendor_endpoint}</code>{:else}None: a response
+								transformer stands alone{/if}
+						</dd>
 					</div>
 					<div>
 						<dt>Latest version</dt>
