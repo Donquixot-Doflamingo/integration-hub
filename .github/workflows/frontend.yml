@@ -56,10 +56,12 @@ jobs:
 
   # HUB-280: the Playwright suite (flows, axe in light and dark, keyboard, 768 px drawer, theme)
   # against `build:mock` (MSW contract mocks, no backend). Runs beside `console`; a failing test
-  # fails the job. Budget: 8 minutes for the whole job.
+  # fails the job. Budget: 15 minutes for the whole job.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    # 109 tests on one worker took ~8.5 min on a hosted runner after HUB-290..293 added the authoring
+    # flows (cancelled at 96/109 under the old 8 min limit, every test green).
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend

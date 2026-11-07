@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `ci(frontend)` · Give the console e2e job 15 minutes for the authoring flows (HUB-290) · HUB-290 · F-19
+  - The Playwright e2e job no longer hits its 8 minute limit now that the vendor, account, integration and transformer authoring flows are covered (109 tests on one worker)
 - 2026-11-07 · `test(frontend)` · Cover the vendor and account sections in the shell e2e (HUB-291) · HUB-291 · F-19
   - The shell e2e walks the Vendors and Accounts sections and their keyboard order in the sidebar
 - 2026-11-07 · `feat(frontend)` · Create transformer versions with goldens and dry run (HUB-293) · HUB-293 · F-19
