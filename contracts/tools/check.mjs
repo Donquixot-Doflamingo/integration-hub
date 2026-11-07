@@ -276,8 +276,6 @@ function makeAjv(mode) {
   addFormats(ajv);
   // OpenAPI 3.1 Schema Object annotations (no validation meaning).
   for (const k of ['example', 'discriminator', 'xml', 'externalDocs']) ajv.addKeyword({ keyword: k });
-  // Capability-level extensions documented in schemas/capabilities/README.md.
-  for (const k of ['interactive', 'operations']) ajv.addKeyword({ keyword: k });
   for (const k of xKeywords) ajv.addKeyword({ keyword: k });
   const forbid = mode === 'response' ? 'writeOnly' : mode === 'request' ? 'readOnly' : null;
   if (forbid) {
@@ -642,7 +640,7 @@ if (pub) {
     void toks;
   }
 }
-// Caller-facing JSON Schemas (capabilities, callback events).
+// Caller-facing JSON Schemas (callback events, canonical error).
 for (const r of docs.keys()) if (r.startsWith('schemas/')) scanSchemaNames(docs.get(r), r, r);
 
 // Vendor and account ids known from hub-admin examples must not appear in caller examples.

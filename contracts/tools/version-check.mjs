@@ -12,10 +12,10 @@
 // | openapi/<name>.v<N>.yaml     | info.version                 | `<name>` <version>             |
 // | mcp/hubmcp-tools.json        | version                      | `hubmcp-tools` <version>       |
 // | schemas/events/*.json        | hub-public info.version      | `hub-public` <version>         |
-// | schemas/capabilities/*.json  | x-capability-minor           | `<x-capability>` (e.g. `events.track@v1`) |
 //
 // A new document needs a changelog entry naming it; a deleted document is an error (a new
-// major is a new file, the old one stays: README "Versioning").
+// major is a new file, the old one stays: README "Versioning"). Since ADR-0023 (HUB-432)
+// schemas/events/ is the only JSON Schema document kind.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -51,7 +51,7 @@ const cmp = (a, b) => {
   return 0;
 };
 const parse = (file, text) => (file.endsWith('.json') ? JSON.parse(text) : parseYaml(text));
-const isDoc = (f) => /^contracts\/(openapi\/[^/]+\.ya?ml|mcp\/hubmcp-tools\.json|schemas\/(events|capabilities)\/[^/]+\.json)$/.test(f);
+const isDoc = (f) => /^contracts\/(openapi\/[^/]+\.ya?ml|mcp\/hubmcp-tools\.json|schemas\/events\/[^/]+\.json)$/.test(f);
 
 const atBase = (f) => {
   try {
@@ -100,16 +100,11 @@ for (const f of files) {
     vBefore = before?.version;
     vAfter = after?.version;
     strip = (d) => ({ ...d, version: undefined });
-  } else if (f.includes('/schemas/events/')) {
+  } else {
     name = 'hub-public';
     vBefore = publicBase?.info?.version;
     vAfter = publicNow?.info?.version;
     strip = (d) => d;
-  } else {
-    name = after?.['x-capability'] ?? before?.['x-capability'] ?? path.basename(f);
-    vBefore = before?.['x-capability-minor'];
-    vAfter = after?.['x-capability-minor'];
-    strip = (d) => ({ ...d, 'x-capability-minor': undefined });
   }
 
   if (before === undefined) {
@@ -122,17 +117,14 @@ for (const f of files) {
   const versionChanged = vBefore !== vAfter && !f.includes('/schemas/events/');
   if (!contentChanged && !versionChanged) continue;
 
-  const isCap = f.includes('/schemas/capabilities/');
-  const higher = isCap
-    ? Number.isInteger(vAfter) && Number.isInteger(vBefore) && vAfter > vBefore
-    : SEMVER.test(String(vAfter)) && SEMVER.test(String(vBefore)) && cmp(vAfter, vBefore) > 0;
-  const label = isCap ? 'x-capability-minor' : f.includes('/schemas/events/') ? 'hub-public info.version' : 'version';
+  const higher = SEMVER.test(String(vAfter)) && SEMVER.test(String(vBefore)) && cmp(vAfter, vBefore) > 0;
+  const label = f.includes('/schemas/events/') ? 'hub-public info.version' : 'version';
   report.push(`${f}: ${contentChanged ? 'content changed' : 'version only'}, ${name} ${vBefore} -> ${vAfter}`);
   if (!higher) {
     problems.push(`${f}: ${contentChanged ? 'content changed but ' : ''}${label} went ${vBefore} -> ${vAfter}; it must increase (README "Versioning")`);
     continue;
   }
-  const needle = isCap ? `\`${name}\`` : `\`${name}\` ${vAfter}`;
+  const needle = `\`${name}\` ${vAfter}`;
   if (!hasEntry(needle)) problems.push(`${f}: no contracts/CHANGELOG.md entry added for ${needle}`);
 }
 

@@ -15,7 +15,6 @@
         "FORBIDDEN",
         "INTEGRATION_NOT_FOUND",
         "OPERATION_NOT_FOUND",
-        "CAPABILITY_NOT_FOUND",
         "REQUEST_NOT_FOUND",
         "SESSION_NOT_FOUND",
         "IDEMPOTENCY_CONFLICT",
@@ -66,7 +65,7 @@
       }
     },
     "details": {
-      "description": "Field-level details. For VALIDATION_FAILED: one entry per schema violation with a JSON pointer into the request body.",
+      "description": "Field-level details. For VALIDATION_FAILED: one entry per violation of the operation's request_schema, with a JSON pointer into the request body; a violation of the declared caller headers has no pointer and its message names the header.",
       "type": "array",
       "maxItems": 100,
       "items": {

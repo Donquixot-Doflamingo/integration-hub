@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **282** · done: **204** · todo: **73** · other (in-progress/in-review/blocked): **5**
+Total tickets: **282** · done: **204** · todo: **72** · other (in-progress/in-review/blocked): **6**
 
 ## Epics
 
@@ -3507,15 +3507,16 @@ Record the decision ([ADR-0023](../tech/adr/0023-remove-capabilities-integration
 
 ### HUB-432 — Contracts without capabilities: operations and schemas on the integration, request schema on the endpoint
 - **Epic:** EP-14 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-431 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-431 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `contract/HUB-432-remove-capabilities`
 
 Contract-first change per [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md): remove `/capabilities*` and every `capability` field and filter from the admin and public APIs and the MCP tool contract; add `operations` with `request_schema {body, headers}` and `validate_input` to integration versions, `request_schema {path, query, headers, body}` (required) and optional `response_schema` to vendor endpoints, auth scheme `none`, optional response transformer in targets, samples (headers in fixture input). Major version bump (owner-approved breaking change).
 
 **Acceptance criteria**
-- [ ] Admin, public and MCP contracts updated, valid and versioned (major) with CHANGELOG entries
-- [ ] No `capability` field, path, parameter or example left in contracts/
+- [x] Admin, public and MCP contracts updated, valid and versioned (major) with CHANGELOG entries
+- [x] No `capability` field, path, parameter or example left in contracts/
 - [ ] contracts/schemas/capabilities removed; event and other schemas untouched
+  - Removed. Three event schemas changed (needs reviewer sign-off): `canonical-error.json` loses `CAPABILITY_NOT_FOUND` and rewords `details`, `envelope.json` rewords `operation`, `request.completed.json` rewords and lets `data.result` be any JSON value (pass-through bodies need not be objects). See contracts/CHANGELOG.md `hub-public` 2.0.0.
 
 ### HUB-433 — Backend: registry, transform, edge and delivery without capabilities
 - **Epic:** EP-14 · **Type:** refactor · **Area:** backend

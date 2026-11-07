@@ -18,7 +18,7 @@ Tenant tools (always registered):
 | Tool | Maps to (operationId) | Method | Side effects |
 | --- | --- | --- | --- |
 | `hub_list_integrations` | `hub-public#listIntegrations` | GET | none |
-| `hub_describe_integration` | `hub-public#getIntegration` + `#getCapability` | GET | none |
+| `hub_describe_integration` | `hub-public#getIntegration` (operations with their `request_schema`) | GET | none |
 | `hub_dry_run` | `hub-public#dryRunIntegration` | POST | none (reveals upstream request shape, redacted) |
 | `hub_invoke` | `hub-public#invokeIntegration` / `#invokeIntegrationOperation` (pre-check via `#getIntegration`) | POST | **yes** |
 | `hub_get_request` | `hub-public#getRequestStatus` | GET | none |
@@ -38,7 +38,6 @@ Admin read tools (registered when `HUB_ADMIN_TOKEN` is set; `readOnlyHint: true`
 | `hub_admin_get_vendor_endpoint` | `getVendorEndpoint` | GET | viewer |
 | `hub_admin_list_accounts` | `listAccounts` | GET | viewer |
 | `hub_admin_get_account` | `getAccount` | GET | viewer |
-| `hub_admin_list_capabilities` | `listCapabilities` | GET | viewer |
 | `hub_admin_get_transformer` | `getTransformer` | GET | viewer |
 | `hub_admin_run_transformer_goldens` | `runTransformerGoldens` | POST (non-mutating check) | editor |
 | `hub_admin_dry_run_transformer` | `dryRunTransformer` | POST (non-mutating check) | editor |
@@ -70,7 +69,7 @@ Admin write tools (registered when `HUB_ADMIN_TOKEN` is set **and** the transpor
 | `hub_admin_create_registrar_endpoint` | `createRegistrarEndpoint` | POST | admin | `mints_secret` (output `/signing_secret` sensitive) |
 | `hub_admin_update_registrar_endpoint` | `updateRegistrarEndpoint` | PATCH | admin | `live_traffic` |
 
-Vendor endpoint versions are immutable. To change an endpoint, call `hub_admin_create_vendor_endpoint` with the same name: it creates `<name>@<n+1>`. Accounts cannot be created through MCP yet, because `createAccount` requires credential values (see `forbidden_operations`).
+Vendor endpoint versions are immutable. To change an endpoint, call `hub_admin_create_vendor_endpoint` with the same name: it creates `<name>@<n+1>`. Accounts cannot be created through MCP yet, because `createAccount` takes credential values (required for every auth scheme except `none`, hub-admin 2.0.0; see `forbidden_operations`).
 
 Each tool in the JSON carries:
 
@@ -83,7 +82,7 @@ Admin tools also carry `requires` (`env`, the spec's `x-required-role` and, for 
 
 ## Safety rules (the backend must enforce them, not just document them)
 
-1. **No vendor leakage from tenant tools.** Tenant tool outputs carry only caller-API fields. `hubmcp` drops the `X-Hub-Integration-Version` and `X-Hub-Served-By` headers. The one documented exception is `hub_dry_run`, which shows the upstream request (secrets `***`) by design, and its description warns the model.
+1. **No vendor leakage from tenant tools.** Tenant tool outputs carry only caller-API fields. `hubmcp` drops the `X-Hub-Integration-Version` and `X-Hub-Served-By` headers. The one documented exception is `hub_dry_run`, which shows the upstream request (secrets `***`) by design, and its description warns the model. A pass-through result of `hub_invoke` (`pass_through: true`, since 2.0.0: the integration has no response transformer) is the third party's body exactly as the Hub returned it (ADR-0023); `hubmcp` does not alter it.
 2. **Confirmation for money or quota.** Before invoking, `hub_invoke` reads `getIntegration` (cached for at most 60 s). If `moves_money_or_quota` is true and the input lacks `confirm: true` or an `idempotency_key`, it returns `outcome: "refused"` with `error.code` `CONFIRMATION_REQUIRED` or `IDEMPOTENCY_KEY_REQUIRED` and **does not call the Hub**.
 3. **Queued is not done.** A 202 maps to `outcome: "queued"`. The tool description tells the model to report it as pending and follow up with `hub_get_request`.
 4. **Admin read tools never change anything.** They call only GET operations or the three non-mutating POST checks (`validateIntegrationVersion`, `runTransformerGoldens`, `dryRunTransformer`). Sealed payloads stay sealed.
@@ -107,14 +106,14 @@ The user's requirement: a team's Claude can create what the team needs on the pa
   - every HTTP DELETE;
   - purge, replay and unseal;
   - account lifecycle (drain or retire);
-  - `createAccount`, because its body requires credentials;
+  - `createAccount`, because its body carries credentials (for every auth scheme except `none`);
   - every credential operation (add-next, promote, delete-old);
   - breaker force-open, force-close and clear-force;
   - pause and resume;
   - API-key revoke and rotate;
   - signing-secret rotation.
 - No tool maps to any of them.
-- `not_exposed_operations` lists the rest of hub-admin that has no tool yet, with the reason. Every one of the 79 operations appears exactly once: mapped by a tool, forbidden, or not exposed. A new admin operation therefore fails the check until someone classifies it.
+- `not_exposed_operations` lists the rest of hub-admin that has no tool yet, with the reason. Every one of the 74 operations appears exactly once: mapped by a tool, forbidden, or not exposed. A new admin operation therefore fails the check until someone classifies it.
 - **No secret input.** No admin tool input has a property named in `forbidden_input_properties` (`credentials`, `secret`, `signing_secret`, `password`, `token`, ...). Credentials and signing secrets are set in the console or with `hubctl`, never through an LLM. Free-form objects (account `config`, transformer `input`) are documented as non-secret.
 - **No kill switches.** No mutating tool input has a property named in `forbidden_mutation_input_properties` (`disabled`, `paused`, `state`). Disabling a tenant or a callback endpoint, pausing an integration and changing account lifecycle stay manual console actions.
 - **Secret patterns.** `hubmcp` refuses any tool call whose arguments contain a string matching `secret_patterns` (Hub API keys, signing secrets). The refusal is an `isError` result with `error.code` `SECRET_IN_INPUT` (for `hub_invoke`, `outcome: "refused"`), and the Hub is not called. A minted key or secret therefore cannot be smuggled into a later call.

@@ -37,6 +37,6 @@ rules:
   # The `servers` lists name localhost on purpose: they document the local dev ports of
   # `hub`, `hub admin` and `mockvendor` (TECH_SPEC). Deployed URLs are templated next to them.
   no-server-example.com: off
-  # The 14 hub-admin tags have no description. Adding them is a docs-only patch for a later
+  # The 13 hub-admin tags have no description. Adding them is a docs-only patch for a later
   # round; until then the gap is reported as a warning, not an error.
   tag-description: warn

@@ -10,7 +10,7 @@ Rules for anyone working in `contracts/`. Inside this folder they override the r
 1. The requester writes the CCR: the problem, the proposed shape (YAML/JSON snippet), additive or breaking, the affected `operationId`s and tools, and example request and response.
 2. The steward checks it against `docs/DESIGN.md`:
    - **Reject anything that leaks vendor names, account names, or integration/transformer versions into `hub-public`** (D12), or that lets a caller select them. If a request needs this, stop and ask the user.
-   - Prefer additive changes. A breaking caller change means a new capability major plus a new integration ID (D11), never an edit in place. Breaking admin changes need the user's approval.
+   - Prefer additive changes. A breaking caller change (for example to an operation's request schema) means a new integration ID (D11), never an edit in place. Breaking admin changes need the user's approval.
 3. The steward edits the YAML/JSON and updates or adds examples.
 4. The steward bumps the version (semver, per document) and adds a `contracts/CHANGELOG.md` entry (newest first, with date, document, version, CCR/HUB id and summary).
 5. The steward runs validation (see `README.md` § Validate locally). It must be clean.

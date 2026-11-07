@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `contract(contracts)` · Replace capabilities with request schemas · HUB-432 · F-23
+  - hub-admin 2.0.0: the capability API and fields are gone; each integration version declares its operations with the caller's request schema (body and headers, required or optional fields, `validate_input`), each vendor endpoint declares the request it accepts, transformers are proven by samples checked against the endpoint schema, and the response transformer is optional
+  - hub-public 2.0.0: discovery lists each operation with its request schema; an operation without a response transformer returns the vendor's status and body unchanged, marked `X-Hub-Pass-Through: true`, with only `Content-Type` and `Retry-After` vendor headers
+  - Vendors can use auth scheme `none` for public APIs, whose accounts need no credentials
+  - hubmcp-tools 2.0.0 mirrors both; still no tool deletes anything
 - 2026-11-07 · `docs(adr)` · Decide to remove capabilities in favour of a schema registry (HUB-431) · HUB-431 · F-23
   - ADR-0023: integrations declare each operation's input (body and headers) and vendor endpoints declare the request they accept, field by field, required or optional; capabilities go
   - Request transformers are always required and proven by samples; response transformers are optional and their output goes back unchanged

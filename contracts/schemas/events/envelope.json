@@ -36,7 +36,7 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$"
     },
     "operation": {
-      "description": "Capability operation; `default` for single-operation capabilities.",
+      "description": "Operation invoked; `default` for single-operation integrations.",
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]{0,31}$"
     },
