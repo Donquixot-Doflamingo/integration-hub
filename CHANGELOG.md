@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · Record the HUB-433 latency budget run (HUB-433) · HUB-433 · F-23
+  - The sync latency budget holds without capabilities: a 100 ms vendor answers through the Hub at p50 102.1 ms and p99 107.6 ms (1.2 ms and 5.7 ms added)
 - 2026-11-07 · `docs(adr)` · Record the LLM limit and legacy data decisions of HUB-433 (HUB-434) · HUB-434 · F-23
   - ADR-0025: snapshots, drafts and pending integrations from before ADR-0023 are upgraded in code (on every read, and archived once by the admin), so an existing database needs no manual step; the legacy reader can go 90 days after every environment ran this version
   - OBSERVABILITY: the pass-through `request failed` line and audit meta, and the admin's one-time legacy upgrade logs; TECH_SPEC links ADR-0024 and ADR-0025

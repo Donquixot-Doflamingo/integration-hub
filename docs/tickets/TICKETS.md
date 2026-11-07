@@ -3542,8 +3542,8 @@ Per [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request
   - Transformer create: 422 `goldens_pass` / `endpoint_schema` with `sample` and `field` (`TestAgifyOnboardedWithoutCapabilities`, `/query/name`); publish/validate: `snapshot_test`, `operations_test` (`input_schema`, `schemas_compile`)
 - [x] Pass-through returns vendor status and body, only Content-Type and Retry-After headers
   - `TestE2EPassThrough` (wait mode, contract-validated), `TestWorkerPassThrough` (async keeps `UPSTREAM_*`, non-JSON stored as a JSON string), agify end-to-end (sync)
-- [ ] `make lint test itest` green; latency budget test green
-  - lint, test (-race) and itest (-race) green. Latency budget: not yet measured clean on the shared 2-CPU dev box (the gate discards runs where the process is frozen > 20 ms by other load)
+- [x] `make lint test itest` green; latency budget test green
+  - `make latency-budget` (100 ms vendor, 2 CPUs): sync hub p50/p99 102.1/107.6 ms (added 1.2/5.7), with idempotency key added 1.7/3.0, wait mode added 4.7/7.7
   - The 4 MB LLM body limit and the llm pool no longer derive from capability names: [ADR-0024](../tech/adr/0024-llm-body-limit-and-pool-without-capability-names.md), follow-up HUB-439
 
 ### HUB-434 — Backend: admin API, migration and auth scheme none
