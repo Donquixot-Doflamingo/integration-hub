@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(adr)` · Decide to remove capabilities in favour of a schema registry (HUB-431) · HUB-431 · F-23
+  - ADR-0023: integrations declare each operation's input (body and headers) and vendor endpoints declare the request they accept, field by field, required or optional; capabilities go
+  - Request transformers are always required and proven by samples; response transformers are optional and their output goes back unchanged
+  - EP-14 tickets HUB-431 to HUB-438 filed; DESIGN.md and TECH_SPEC.md point to the ADR
 - 2026-11-07 · `fix(scripts)` · Stop dev-up when the database points at missing snapshot files (HUB-430) · HUB-430 · F-19
   - After a fresh clone over a dev database from an earlier run, `make dev-up` now stops with the cause instead of starting a console whose Integrations, Tenants, Vendors, Accounts and Transformers pages all fail with INTERNAL_ERROR
   - `DEV_RESET=1 make dev-up` recreates the docker compose Postgres and Redis and starts clean; a database named with HUB_PG_DSN is never dropped
