@@ -59,7 +59,9 @@ jobs:
   # fails the job. Budget: 8 minutes for the whole job.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    # 109 tests on one worker took ~8.5 min on a hosted runner after HUB-290..293 added the authoring
+    # flows (cancelled at 96/109 under the old 8 min limit, every test green).
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
