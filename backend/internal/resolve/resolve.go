@@ -32,7 +32,7 @@ type Resolution struct {
 	Failover        []registry.Target
 	Delivery        registry.Delivery
 	SnapshotVersion uint64
-	// Operation is the invoked operation of the capability (envelope operation). The caller of
+	// Operation is the invoked operation of the integration (envelope operation). The caller of
 	// Resolve sets it; Pair uses it to pick the target's transformer pair (HUB-343).
 	Operation string
 }

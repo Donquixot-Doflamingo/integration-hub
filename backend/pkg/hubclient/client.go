@@ -17,7 +17,7 @@ import (
 const Version = "0.1.0"
 
 // maxResponseBytes bounds how much of a response body the client reads. Canonical responses are
-// far smaller (the Hub caps request bodies at 1 MB, 4 MB for LLM capabilities).
+// far smaller (the Hub caps request bodies at 1 MB).
 const maxResponseBytes = 16 << 20
 
 // Client calls the Hub caller API (contracts/openapi/hub-public.v1.yaml). It is safe for
