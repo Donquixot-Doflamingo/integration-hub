@@ -1,0 +1,9 @@
+# EXAMPLE ONLY (HUB-435). Estimate a person's age from their first and last name. The caller sends
+# {firstName, lastName} and gets {"age"}: it never learns which API answered. A lookup moves no
+# money and no paid quota: no Idempotency-Key needed.
+integration: int_age_by_name
+owner_tenant: age-demo
+grants: []
+active_version: 1
+description: Age estimate from a first and last name (example)
+moves_money_or_quota: false

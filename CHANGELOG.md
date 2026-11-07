@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(examples)` · Add the agify age example on a public API (HUB-435) · HUB-435 · F-23
+  - `examples/agify-age`: `int_age_by_name` takes `{firstName, lastName}` (both required) and returns only `{"age"}` from agify.io (`GET /?name=<first><last>`), vendor `agify` with auth `none` and an account without credentials, endpoint `estimate@1` requiring `query.name`
+  - `AGIFY-REQ` and `AGIFY-RES` ship with samples (found, unknown name, 429, invalid name, vendor down, non-JSON); an unknown name returns `{}`, a used-up allowance 429 `UPSTREAM_RATE_LIMITED` with `retry_after_ms` from `X-Rate-Limit-Reset`
+  - `run.sh` runs offline against mockvendor by default (`{"age":29}`), `AGIFY_TARGET=live` calls the public API; `TestExampleAgifyConfigBuilds` and `TestExampleAgifyAge` cover the config and the gateway flow
 - 2026-11-07 · `refactor(edge)` · Load the examples without the legacy upgrade (HUB-435) · HUB-435 · F-23
   - The example tests merge each example over `backend/config` as it is: the in-memory capability upgrade (ADR-0025) is no longer used for examples, and an example that brings back `config/capabilities` or a `contracts/` overlay fails its test
   - `examples/lib/local-hub.sh` copies only config (no `contracts/` merge, no `-contracts-dir`) and refuses a `contracts/` overlay; the legacy upgrade itself stays in the code for stored archives

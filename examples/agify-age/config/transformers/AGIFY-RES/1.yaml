@@ -1,0 +1,32 @@
+# EXAMPLE ONLY (HUB-435). agify.io answer (see AGIFY-REQ@1), checked on 2026-11-07 against
+# https://agify.io/documentation/api/reference:
+#   200 {"name", "age": <integer | null when no prediction>, "count"}; errors {"error": "<text>"}
+#   with 401, 402, 422 or 429; X-Rate-Limit-Reset gives the seconds until the window resets.
+# Only the age goes back. An unknown name is a 200 with "age": null, not an error: a null field is
+# left out of the output, so the caller gets {} (no age). The vendor's name echo, count and
+# rate-limit headers never reach the caller.
+transformer: AGIFY-RES
+version: 1
+kind: response
+docs_url: https://agify.io/documentation/api/reference
+response:
+  age: res.body.age
+errors:
+  - when: 'res.status < 300 && res.body == nil'
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+  # The free allowance or the per-IP limit is used up; retry when the window resets.
+  - when: res.status == 429
+    code: UPSTREAM_RATE_LIMITED
+    retryable: true
+    retry_after_ms: int(header(res, "X-Rate-Limit-Reset") ?? "60") * 1000
+  - when: res.status == 401 || res.status == 402
+    code: UPSTREAM_AUTH_FAILED
+    retryable: false
+  - when: res.status >= 500
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+  - when: res.status >= 400
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: '"The age could not be estimated for this name"'

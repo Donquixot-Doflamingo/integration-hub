@@ -1,0 +1,49 @@
+# EXAMPLE ONLY (HUB-435). agify.io predicts a person's age from a name: a public API, free for a
+# small daily volume without a key, so its vendor uses auth scheme none (ADR-0023). Checked on
+# 2026-11-07 against https://agify.io/documentation and its API reference
+# https://agify.io/documentation/api/reference:
+#   GET https://api.agify.io?name=<name>[&country_id=<ISO 3166-1 alpha-2>][&apikey=<key>]
+#   200 {"name": <as sent>, "age": <integer | null when no prediction>, "count": <data points>}
+#   errors {"error": "<text>"}: 401 Invalid API key · 402 Subscription is not active ·
+#   422 Missing 'name' parameter / Invalid 'name' parameter · 429 Request limit reached /
+#   Request too low to process. Every answer carries X-Rate-Limit-Limit, X-Rate-Limit-Remaining
+#   and X-Rate-Limit-Reset (seconds until the window resets); no Retry-After.
+# A request from the build machine the same day answered 200 {"count":1744,"name":"harsh","age":29}
+# with X-Rate-Limit-Limit 10 (the free, keyless allowance is small: keep live runs short).
+#
+# Regions: public (the internet) and mock (mockvendor on this machine). The account's region picks
+# one; examples/agify-age/run.sh uses mock unless AGIFY_TARGET=live.
+vendor: agify
+auth: none
+docs_url: https://agify.io/documentation
+regions:
+  public: https://api.agify.io
+  mock:   http://127.0.0.1:8099
+endpoints:
+  estimate@1:
+    method: GET
+    path: /
+    timeout_ms: 3000
+    connect_timeout_ms: 1000
+    idempotent: true
+    # What the endpoint accepts (ADR-0023): AGIFY-REQ's samples must fit it.
+    request_schema:
+      query:
+        type: object
+        required: [name]
+        additionalProperties: false
+        properties:
+          name: { type: string, minLength: 1 }
+          country_id: { type: string, pattern: '^[A-Z]{2}$' }
+    # Informational only, never enforced.
+    response_schema:
+      type: object
+      properties:
+        name: { type: string }
+        age: { type: [integer, "null"] }
+        count: { type: integer }
+        country_id: { type: string }
+defaults:
+  # The free allowance is per day; a small per-account rate keeps a mistaken loop from burning it.
+  rate_limit: { per_account_rps: 5 }
+  breaker: { window_s: 30, min_calls: 10, failure_ratio: 0.5, consecutive_timeouts: 3, open_s: 30, open_max_s: 300, half_open_probes: 2 }

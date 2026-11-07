@@ -1,0 +1,1 @@
+{"status": 429, "headers": {"X-Rate-Limit-Limit": "10", "X-Rate-Limit-Remaining": "0", "X-Rate-Limit-Reset": "30"}, "body": {"error": "Request limit reached"}}
