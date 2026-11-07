@@ -119,8 +119,8 @@
 )}
 	<div class="fk-field">
 		<label for={fid(ptr)}
-			>{label}{#if optional}
-				<span class="fk-req">(optional)</span>{/if}</label
+			>{optional ? `${label} ` : label}{#if optional}<span class="fk-req">(optional)</span
+				>{/if}</label
 		>
 		<input
 			id={fid(ptr)}

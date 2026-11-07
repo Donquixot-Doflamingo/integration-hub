@@ -87,6 +87,8 @@ describe('form editor', () => {
 		expect(screen.getByRole('button', { name: 'Form' })).toHaveAttribute('aria-pressed', 'true');
 		expect(within(target).getByLabelText('Vendor')).toHaveValue('cashfree-sid');
 		expect(within(target).getByLabelText('Request transformer')).toHaveValue('CF-OKYC-OTP-REQ@1');
+		// The optional field's name keeps a space before "(optional)" (HUB-436).
+		expect(within(target).getByLabelText('Response transformer (optional)')).toBeInTheDocument();
 		const send = within(target).getByRole('listitem', { name: 'send_otp' });
 		expect(within(send).getByRole('checkbox')).not.toBeChecked();
 		expect(send).toHaveTextContent('Uses the default pair.');

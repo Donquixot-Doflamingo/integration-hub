@@ -49,6 +49,15 @@ export const presets: Record<string, () => HttpHandler[]> = {
 	 * contract's named examples (onboarding.ts).
 	 */
 	onboarding: onboardingHandlers,
+	/**
+	 * Running samples fails (HUB-436): the contract's named `failed` goldens run, where sample
+	 * `empty_last_name` produces `/query/name` = "" and breaks the endpoint's `minLength`. Put it
+	 * before `onboarding` (`samples-fail+onboarding`) so it wins.
+	 */
+	'samples-fail': () => {
+		const failed = contractMocks.runTransformerGoldens.named?.response?.failed;
+		return failed ? [mockOperation('runTransformerGoldens', failed)] : [];
+	},
 	/** After publishing the draft: rollback (to v7) and weights (two targets) have something to do. */
 	'v8-active': () => [
 		mockOperation('getIntegration', {

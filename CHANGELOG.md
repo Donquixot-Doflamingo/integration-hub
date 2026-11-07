@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(frontend)` · Prove a public API can be onboarded from the panel end to end · HUB-436 · F-23
+  - A Playwright flow onboards an agify-like API with no code: vendor with auth none, endpoint `GET /` whose required query `name` is built from a pasted sample, an account without credentials, a request transformer (`name: req.firstName + req.lastName`) and a response transformer keeping `age`, each unlocked by passing samples, an integration whose body `{firstName, lastName}` is required, then publish with a reason
+  - A second flow shows a failing sample naming the field that broke (`/query/name`, minLength) while Create stays locked; mock builds gain the scenario `samples-fail`
+  - The optional response transformer field is announced as "Response transformer (optional)" instead of running the words together
+
 - 2026-11-07 · `fix(frontend)` · Wrap long schema paths in diffs and bring the e2e up to date · HUB-436 · F-23
   - On a 390 px phone, the publish page and the version diff no longer scroll sideways when a change touches an operation's request schema (long paths such as `operations.default.request_schema.body.properties.context.properties.channel` wrap, and the draft's diff scrolls inside its frame)
   - Change summaries in sample results and change log entries wrap the same way
