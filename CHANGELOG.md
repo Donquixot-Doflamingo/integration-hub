@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tickets)` · Close out the merged work and record the CI latency numbers (HUB-429) · HUB-429 · F-18
+  - 31 tickets merged in #28 to #39 marked done with their merge subjects; open criteria that need staging hardware move to HUB-422
+  - Follow-ups filed: HUB-319 to HUB-321 (contract requests, MCP snippet checks in real clients) and HUB-423 to HUB-428 (backend bugs found by the console authoring work)
+  - docs/tech/LATENCY.md leads with the CI runner's numbers: a 100 ms vendor answers through the Hub at p99 103.6 ms (sync), 102.7 ms (keyed), 105.4 ms (wait mode)
 - 2026-11-07 · `ci(frontend)` · Give the console e2e job 15 minutes for the authoring flows (HUB-290) · HUB-290 · F-19
   - The Playwright e2e job no longer hits its 8 minute limit now that the vendor, account, integration and transformer authoring flows are covered (109 tests on one worker)
 - 2026-11-07 · `test(frontend)` · Cover the vendor and account sections in the shell e2e (HUB-291) · HUB-291 · F-19
