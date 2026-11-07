@@ -34,13 +34,19 @@ export function requireSession(event: RequestEvent): void {
  */
 export const ENHANCED_HEADER = 'x-sveltekit-action';
 
-export function requireEnhanced(op: string, event: RequestEvent) {
+export function requireEnhanced(
+	op: string,
+	event: RequestEvent,
+	message = 'This action needs JavaScript: the new secret is shown once, in a dialog.'
+) {
 	return event.request.headers.get(ENHANCED_HEADER) === 'true'
 		? null
-		: invalid(op, {
-				reason: 'This action needs JavaScript: the new secret is shown once, in a dialog.'
-			});
+		: invalid(op, { reason: message });
 }
+
+/** `requireEnhanced` text for forms that carry credentials (HUB-291). */
+export const CREDENTIALS_NEED_JS =
+	'This form needs JavaScript: credentials are sent in the background and cleared from the page right away.';
 
 /** The admin client for an action (SvelteKit `fetch`, token attached by `handleFetch`). */
 export function actionApi(event: RequestEvent) {

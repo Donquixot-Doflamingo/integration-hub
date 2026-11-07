@@ -24,6 +24,7 @@ describe('SideNav', () => {
 			'DLQ',
 			'Transformers',
 			'Vendors',
+			'Accounts',
 			'Tenants',
 			'Snapshots',
 			'Change log'

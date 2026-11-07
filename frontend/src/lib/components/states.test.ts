@@ -176,7 +176,8 @@ describe('every console page uses the shared states', () => {
 	// The home page is a static index of sections, and create pages are forms: they load nothing.
 	const STATIC = new Set([
 		'/src/routes/(app)/+page.svelte',
-		'/src/routes/(app)/vendors/new/+page.svelte'
+		'/src/routes/(app)/vendors/new/+page.svelte',
+		'/src/routes/(app)/accounts/new/+page.svelte'
 	]);
 
 	it('finds the pages', () => {

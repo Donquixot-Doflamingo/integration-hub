@@ -39,6 +39,7 @@
 		extra,
 		oneTimeSecret = false,
 		conflictIsStale = true,
+		onsubmitted,
 		onsuccess,
 		onfailure
 	}: {
@@ -77,6 +78,11 @@
 		 * shows the API's message instead (HUB-289). 412 `PRECONDITION_FAILED` is always a race.
 		 */
 		conflictIsStale?: boolean;
+		/**
+		 * Runs right after the browser captured the form data, before the request goes out (a valid
+		 * submit only): secret inputs are cleared here (HUB-291), whatever the outcome.
+		 */
+		onsubmitted?: () => void;
 		onsuccess?: (data: ActionSuccessData) => void;
 		/** The action's failure data, e.g. to mark publish problems on the spec editor. */
 		onfailure?: (data: ActionFailureData) => void;
@@ -163,6 +169,7 @@
 		submitting = true;
 		error = null;
 		fieldErrors = {};
+		onsubmitted?.();
 		return async ({ result, update }) => {
 			try {
 				if (result.type === 'success') {

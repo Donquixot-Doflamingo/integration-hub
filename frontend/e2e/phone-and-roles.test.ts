@@ -20,6 +20,9 @@ const PAGES = [
 	'/vendors/clevertap',
 	'/vendors/clevertap/edit',
 	'/vendors/clevertap/endpoints/upload@1',
+	'/accounts',
+	'/accounts/new',
+	'/accounts/ct-brandA-in',
 	'/tenants',
 	'/tenants/orders-service',
 	'/snapshots',
@@ -66,7 +69,10 @@ const DESTRUCTIVE: { path: string; name: RegExp; min: Role }[] = [
 	{ path: '/tenants/orders-service', name: /^Revoke hk_/, min: 'admin' },
 	{ path: '/tenants/orders-service', name: /^Disable tenant$/, min: 'admin' },
 	{ path: '/vendors/clevertap', name: /^Add endpoint$/, min: 'admin' },
-	{ path: '/vendors/clevertap', name: /^New version of upload/, min: 'admin' }
+	{ path: '/vendors/clevertap', name: /^New version of upload/, min: 'admin' },
+	{ path: '/accounts/ct-brandA-in', name: /^Add next credential$/, min: 'admin' },
+	{ path: '/accounts/ct-brandA-in', name: /^Start draining$/, min: 'admin' },
+	{ path: '/accounts/ct-brandA-in', name: /^Test connection$/, min: 'editor' }
 ];
 const RANK: Record<Role, number> = { tenant_viewer: 0, viewer: 1, editor: 2, admin: 3 };
 

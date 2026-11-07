@@ -162,3 +162,36 @@ already were in the contract.
 - **Error codes**: none new
 - **Rollout**: contract PR first; the console needs no code change, only the mock preset swaps to the example
 - **Status**: requested (2026-11-01)
+
+### CCR-005: credential keys a vendor's accounts need
+- **Requested by**: frontend-engineer (ticket HUB-291)
+- **Why**: HUB-291 (F-19, US-1908) lets admins create accounts and rotate credentials in the console. The
+  contract's `Credentials` is "scheme-specific keys" (`additionalProperties: string`), and nothing says which
+  keys a vendor's transformers read (`creds.account_id`, `creds.passcode` for CleverTap). The console therefore
+  asks the operator to type each key name; a typo is only found when a call fails with UPSTREAM_AUTH_FAILED
+  (the connection test catches it earlier, not at create time). Nothing is blocked: free-form keys work today.
+- **Document**: `hub-admin.v1.yaml`
+- **Operation / schema**: `VendorFields` (so `createVendor`, `updateVendor`, `getVendor`)
+- **Before**:
+  ```yaml
+  VendorFields:
+    properties:
+      auth_scheme: { $ref: '#/components/schemas/AuthScheme' }
+      # no list of credential keys
+  ```
+- **After** (proposal):
+  ```yaml
+  VendorFields:
+    properties:
+      credential_keys:
+        description: Keys every account of this vendor must provide in `credentials` (what transformers read as `creds.<key>`). createAccount and addNextCredential answer 400 VALIDATION_FAILED (pointer `/credentials/<key>`) when one is missing.
+        type: array
+        items: { type: string, pattern: '^[A-Za-z_][A-Za-z0-9_]{0,63}$' }
+        example: [account_id, passcode]
+  ```
+- **Breaking?**: no (additive optional property; the 400 applies only when the vendor declares keys) -> minor bump
+- **Consumers affected**: backend vendor store and account validation, frontend accounts create / rotate (prefill
+  the key rows, mark missing ones), vendor form, hubmcp (none: credentials are not exposed there)
+- **Error codes**: none new
+- **Rollout**: contract PR first
+- **Status**: requested (2026-11-07)

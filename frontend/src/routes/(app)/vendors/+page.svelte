@@ -98,7 +98,11 @@
 			<td>{authSchemeLabels[v.auth_scheme] ?? v.auth_scheme}</td>
 			<td>{v.regions.join(', ')}</td>
 			<td class="numeric">{formatNumber(v.endpoint_count)}</td>
-			<td class="numeric">{formatNumber(v.account_count)}</td>
+			<td class="numeric">
+				<a href="{resolve('/accounts')}?vendor_id={encodeURIComponent(v.vendor_id)}"
+					>{formatNumber(v.account_count)}</a
+				>
+			</td>
 			<td class="numeric">{formatNumber(v.revision)}</td>
 			<td>{formatUtc(v.updated_at)}</td>
 		{/snippet}

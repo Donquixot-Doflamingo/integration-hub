@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { breadcrumbsFor, sectionFor, sections } from './nav';
 
 describe('sections', () => {
-	it('lists the nine console sections in order', () => {
+	it('lists the ten console sections in order', () => {
 		expect(sections.map((s) => s.label)).toEqual([
 			'Integrations',
 			'Health',
@@ -10,6 +10,7 @@ describe('sections', () => {
 			'DLQ',
 			'Transformers',
 			'Vendors',
+			'Accounts',
 			'Tenants',
 			'Snapshots',
 			'Change log'

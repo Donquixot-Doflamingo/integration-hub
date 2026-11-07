@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **261** · done: **177** · todo: **61** · other (in-progress/in-review/blocked): **23**
+Total tickets: **261** · done: **177** · todo: **60** · other (in-progress/in-review/blocked): **24**
 
 ## Epics
 
@@ -2546,15 +2546,15 @@ Found writing the operator skill (HUB-316): the console has no vendor pages, so 
 
 ### HUB-291 — Console: accounts page with write-only credentials and rotation
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
-- **Branch:** `feat/HUB-291-console-accounts`
+- **Status:** in-review · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1908
+- **Branch:** `feat/HUB-291-console-accounts` (delivered on `feat/HUB-290-console-authoring`)
 
 Accounts (a vendor's credentials and quota) can only be created by calling the admin API today, yet the MCP contract and the operator skill send people to the console for anything with secrets. Add list, detail, create (`createAccount`), config and quota edit (`updateAccount`), test connection, and credential rotation (`addNextCredential`, `promoteNextCredential`; `deleteOldCredential` only for roles that have it). Secrets are write-only: never shown after submit.
 
 **Acceptance criteria**
-- [ ] Create an account with credentials from the console; values never rendered again or kept in client state after submit
-- [ ] Rotation flow add next → test → promote; delete-old hidden without the role
-- [ ] Lifecycle actions (retire) role-gated; tests per role
+- [x] Create an account with credentials from the console; values never rendered again or kept in client state after submit (`accounts/page.test.ts` "posts the credentials once, clears them right away", "on an API error the secret is gone"; `server/actions.test.ts` scrubSecrets; `e2e-real/accounts.test.ts` DOM/inputs/storage/URL/history/request URLs)
+- [x] Rotation flow add next → test → promote; delete-old hidden without the role (`accounts/page.test.ts` "rotates: add next ... delete old" and the roles matrix; `e2e-real/accounts.test.ts` rotation and editor checks)
+- [x] Lifecycle actions (retire) role-gated; tests per role (`accounts/page.test.ts` roles matrix admin / editor / viewer / tenant viewer, RETIRE_BLOCKED; `e2e/phone-and-roles.test.ts`; `e2e-real/accounts.test.ts` drain and retire, in-use refusal, roles)
 
 ### HUB-292 — Console: create an integration, edit drafts, validate and publish
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

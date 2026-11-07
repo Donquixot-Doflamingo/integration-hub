@@ -525,6 +525,13 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** an API validation error, **when** it comes back, **then** it is shown on the field its pointer names.
 - **Given** the editor, viewer or tenant viewer role, **when** I open vendors, **then** no create or edit control is rendered (tenant viewers see no vendors).
 
+### US-1908 — Accounts with write-only credentials and rotation in the console
+**As a** platform engineer, **I want** to create vendor accounts with their credentials and rotate them in the console, **so that** secrets never need the admin API, a script or MCP (which may not touch them). · **Must**
+- **Given** the admin role, **when** I create an account with credentials, **then** the values are typed in password fields, sent once, cleared from the page as soon as I submit and never shown again (not in the page, a URL, storage, logs or an error message).
+- **Given** an account, **when** I rotate, **then** the console walks me through add next → test → promote, and offers "delete the previous credential" only to roles that may call `deleteOldCredential`.
+- **Given** a draining account, **when** I retire it, **then** I type its id and give a reason; a `RETIRE_BLOCKED` refusal shows the Hub's reason.
+- **Given** the editor role, **when** I open an account, **then** I can test its connection but see no rotation, edit or lifecycle control; viewers only read; tenant viewers see no accounts.
+
 ## F-20 Hub MCP server (`hubmcp`)
 
 ### US-2001 — Discover integrations from Claude

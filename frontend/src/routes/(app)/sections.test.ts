@@ -67,6 +67,14 @@ const cases: SectionCase[] = [
 		load: () => import('./vendors/+page') as never
 	},
 	{
+		path: '/accounts',
+		heading: 'Accounts',
+		op: 'listAccounts',
+		firstRow: 'ct-brandA-in',
+		page: () => import('./accounts/+page.svelte') as never,
+		load: () => import('./accounts/+page') as never
+	},
+	{
 		path: '/tenants',
 		heading: 'Tenants',
 		op: 'listTenants',

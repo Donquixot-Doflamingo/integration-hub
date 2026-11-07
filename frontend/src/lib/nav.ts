@@ -68,6 +68,13 @@ export const sections: readonly NavSection[] = [
 		icon: 'vendors'
 	},
 	{
+		href: '/accounts',
+		label: 'Accounts',
+		summary:
+			'Credentialed vendor accounts: lifecycle, quota, credential slots and rotation. Secrets are write-only.',
+		icon: 'accounts'
+	},
+	{
 		href: '/tenants',
 		label: 'Tenants',
 		summary: 'Calling teams, the integrations they own and their active API keys.',

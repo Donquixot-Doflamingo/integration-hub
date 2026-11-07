@@ -104,6 +104,9 @@
 						<dd>{formatUtc(v.updated_at)}</dd>
 					</div>
 				</dl>
+				<p class="fk-note">
+					<a href="{resolve('/accounts')}?vendor_id={encodeURIComponent(id)}">Accounts of {id}</a>
+				</p>
 				<RoleGate access={data.access} op="updateVendor">
 					<div class="fk-actions">
 						<a

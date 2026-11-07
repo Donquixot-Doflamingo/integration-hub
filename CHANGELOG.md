@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(frontend)` · Add account pages with write-only credentials and rotation (HUB-291) · HUB-291 · F-19
+  - Admins create vendor accounts with their credentials in the console; secret values are typed in password fields, cleared from the page as soon as the form is sent and never shown again
+  - Credential rotation is a guided flow: add the next credential, test it, promote it, then delete the previous one (admins only); editors can test an account's connection
+  - Admins edit an account's config and quota (only the changes are sent, with the loaded ETag) and drain, reactivate or retire it with the account id typed; refusals show the Hub's reason
 - 2026-11-07 · `feat(frontend)` · Add vendor and vendor endpoint pages to the console (HUB-290) · HUB-290 · F-19
   - Admins create and edit vendors (regions, auth scheme, defaults, webhook verification) in the console; edits send the loaded ETag, so a concurrent change offers a reload instead of being overwritten
   - Endpoint versions are added from the vendor page; "New version" starts from the latest version and creates the next one, older versions stay as they were
