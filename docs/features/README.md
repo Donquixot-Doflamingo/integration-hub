@@ -29,7 +29,8 @@ For a cross-feature, example-driven view (what a caller sends and gets back, and
 | F-19 | Admin console (SvelteKit frontend) | Parallel · EP-10 | proposed | [F-19](F-19-admin-console.md) | US-1901–1906 | HUB-250–299 |
 | F-20 | Hub MCP server (`hubmcp`) | After M3 · EP-11 | in-progress | [F-20](F-20-hub-mcp-server.md) | US-2001–2006 | HUB-300–329 |
 | F-21 | Consumer Claude skill & Go SDK (`hubclient`) | After M3 · EP-11 | in-progress | [F-21](F-21-claude-skill-sdk.md) | US-2101–2104 | HUB-300–329 |
-| F-22 | Release-2 capabilities | Release 2 · EP-12 | proposed | [F-22](F-22-release-2.md) | US-2201–2208 | HUB-330–399 |
+| F-22 | Release-2 features | Release 2 · EP-12 | proposed | [F-22](F-22-release-2.md) | US-2201–2208 | HUB-330–399 |
+| F-23 | Schema registry: operations on the integration, request schemas on the endpoint (capabilities removed, ADR-0023) | post-M8 · EP-14 | shipped | [F-23](F-23-schema-registry.md) | US-2301–2313 | HUB-431–459 |
 
 ## Dependency graph
 
@@ -49,8 +50,9 @@ flowchart TD
   F16 -. frozen contracts .-> F19[F-19 Console]
   F05 & F06 --> F20[F-20 hubmcp] & F21[F-21 Skill/SDK]
   F18 --> F22[F-22 Release 2]
+  F03 & F04 & F05 & F19 --> F23[F-23 Schema registry]
 ```
 
 ## Contract references
 
-Feature docs refer to operationIds as `<file>#<operationId>` in the frozen 1.0.0 contracts: `contracts/openapi/hub-public.v1.yaml` (caller API `/v1/*`, health, inbound webhooks, outbound callback `webhooks`), `contracts/openapi/hub-admin.v1.yaml` (`/admin/v1/*`), `contracts/openapi/mockvendor.v1.yaml` (mockvendor control API) and `contracts/mcp/hubmcp-tools.json` (MCP tools). Error codes and conventions are in `contracts/README.md`. An operation a feature needs but the contract lacks is marked **(missing — needs CCR)** and goes through `docs/process/CONTRACT_CHANGES.md`; never code against it until the steward adds it.
+Feature docs refer to operationIds as `<file>#<operationId>` in the frozen contracts (2.0.0 since ADR-0023; older docs were written against 1.x): `contracts/openapi/hub-public.v1.yaml` (caller API `/v1/*`, health, inbound webhooks, outbound callback `webhooks`), `contracts/openapi/hub-admin.v1.yaml` (`/admin/v1/*`), `contracts/openapi/mockvendor.v1.yaml` (mockvendor control API) and `contracts/mcp/hubmcp-tools.json` (MCP tools). Error codes and conventions are in `contracts/README.md`. An operation a feature needs but the contract lacks is marked **(missing — needs CCR)** and goes through `docs/process/CONTRACT_CHANGES.md`; never code against it until the steward adds it.

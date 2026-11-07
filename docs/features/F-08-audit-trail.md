@@ -59,7 +59,7 @@ Nobody can answer "what exactly did we send to the bureau for this loan, and wha
 `requests`, `request_events(request_id, seq, type, at, payload|payload_ref, sha256, bytes)`, `request_attempts` — partitioned by day (DESIGN §18.2).
 
 ## Config impact
-Integration version `audit: { payloads, retention }`; capability schema `x-pii` tags.
+Integration version `audit: { payloads, retention }`; `x-pii` tags in each operation's `request_schema` (ADR-0023; they used to come from the capability schema). Pass-through requests carry `pass_through: true` and the vendor `status` on `response.transformed` / `request.failed`.
 
 ## Observability
 | Kind | Name | Notes |
@@ -88,7 +88,7 @@ Partition maintenance job ships with the first audit migration.
 
 ## Open questions
 - Retention for `full` and `metadata_only` (DESIGN gives 30 d masked, 90 d sealed only) — PRD Q6.
-- Is dropping audit events acceptable for regulated capabilities, or must they block/fail closed?
+- Is dropping audit events acceptable for regulated integrations, or must they block/fail closed?
 
 ## Tickets
 HUB-080 – HUB-109 (EP-04, filter `feature: F-08`).
@@ -97,3 +97,4 @@ HUB-080 – HUB-109 (EP-04, filter `feature: F-08`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-07 | `x-pii` from operation schemas; pass-through audit meta (ADR-0023, HUB-437) | docs-keeper |

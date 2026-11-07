@@ -1,6 +1,6 @@
 ---
 name: integration-hub
-description: Call third-party capabilities (engagement events, SMS/WhatsApp, credit bureau, KYC/PAN/Aadhaar, Account Aggregator, payments/mandates, LLMs) through the company Integration Hub instead of integrating vendors directly. Covers HUB_BASE_URL/HUB_API_KEY setup, discovering integrations and capability schemas, building canonical bodies, dry-run first, invoke with Idempotency-Key, 200 vs 202 Queued handling and polling, two-step flows such as OTP send then verify with X-Hub-Session, error codes and retry rules, verifying X-Hub-Signature callbacks (Go/Python/Node), the Go hubclient SDK, the hubmcp MCP tools, and requesting a new integration. Use whenever the user wants to send an event or message, pull a bureau report, verify PAN/Aadhaar or an OTP, call an LLM or any external vendor from an internal service, mentions the Hub, an integration id like int_..., X-Hub-Session, hubclient, hubmcp, or a vendor SDK/API (CleverTap, MoEngage, OpenAI, etc.) for a company service.
+description: Call third-party APIs (engagement events, SMS/WhatsApp, credit bureau, KYC/PAN/Aadhaar, Account Aggregator, payments, LLMs, public lookups) through the company Integration Hub instead of integrating vendors directly. Covers HUB_BASE_URL/HUB_API_KEY setup, discovering integrations with their operations and request schemas, building the body, dry-run first, invoke with Idempotency-Key, 200 vs 202 Queued and polling, pass-through answers (X-Hub-Pass-Through), two-step flows such as OTP send then verify with X-Hub-Session, error codes and retries, verifying X-Hub-Signature callbacks, the Go hubclient SDK, the hubmcp MCP tools, and requesting a new integration. Use whenever the user wants to send an event or message, pull a bureau report, verify PAN/Aadhaar or an OTP, call an LLM or any external API from an internal service, mentions the Hub, an integration id like int_..., X-Hub-Session, hubclient, hubmcp, or a vendor SDK/API for a company service.
 ---
 
 # Using the Integration Hub
@@ -9,9 +9,15 @@ description: Call third-party capabilities (engagement events, SMS/WhatsApp, cre
 > claude.ai, OpenAI Codex, Cursor) or as pasted instructions. Where it says "MCP tools", use them only
 > if your client has the `hubmcp` server configured; otherwise use the HTTP calls shown.
 
-The Hub is **one vendor-agnostic API** for every third party. You send a **stable integration ID** +
-a **canonical request body**; you get a **canonical response**. The Hub picks vendor, account
-(credentials) and version, handles retries, rate limits, circuit breakers and audit.
+The Hub is **one vendor-agnostic API** for every third party. You send a **stable integration ID**,
+an **operation** and a **request body that matches the operation's request schema**; you get back
+what the integration returns. The Hub picks vendor, account (credentials) and version, handles
+retries, rate limits, circuit breakers and audit.
+
+Each integration publishes, per operation, a **request schema**: the JSON Schema of the body (and of
+any caller headers it reads). Fields in `required` must be sent; the others are optional. There is
+**no response schema**: an integration either returns the output its platform team configured, or
+(pass-through) the third party's own answer unchanged, marked `X-Hub-Pass-Through: true`.
 
 **Callers never choose a vendor, account or version.** There is no header or field for it. If the
 user asks "send this via CleverTap account B", explain that the platform team configures that
@@ -39,8 +45,10 @@ creation, rotatable. Use a non-production environment for experiments.
 
 Prefer the MCP server if it is configured (tools `hub_list_integrations`, `hub_describe_integration`,
 `hub_dry_run`, `hub_invoke`, `hub_get_request`): see `references/mcp-setup.md`. `hub_invoke` takes
-`integration_id`, `body`, and optionally `operation`, `idempotency_key`, `session`, `prefer_async`,
-`deadline_ms`, `confirm`; a 202 comes back as `outcome: "queued"`, never success. It refuses
+`integration_id`, `body`, and optionally `operation`, `headers` (only header names the operation
+declares in `request_schema.headers`), `idempotency_key`, `session`, `prefer_async`, `deadline_ms`,
+`confirm`; a 202 comes back as `outcome: "queued"`, never success. `pass_through: true` means
+`result` is the third party's own body (on `outcome: "error"` too, with `error` null). It refuses
 money/quota integrations until you pass `idempotency_key` and `confirm: true`, and you set `confirm`
 only after the user said yes in this conversation.
 
@@ -49,17 +57,23 @@ only after the user said yes in this conversation.
 ```bash
 curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/integrations"
 curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/integrations/int_evt_brandA"
-curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/capabilities/events.track@v1"
 ```
-- `/v1/integrations` lists only what **your tenant** may invoke: id, capability, operations,
-  delivery mode, paused flag, description.
-- `/v1/capabilities/{capability}` returns the canonical request/response JSON Schemas per operation.
+- `/v1/integrations` lists only what **your tenant** may invoke: id, `operations` (each with `name`,
+  `description`, `idempotent` and `request_schema`), delivery mode, interactive, paused,
+  `moves_money_or_quota`, `idempotency_key_required`, description.
+- `/v1/integrations/{id}` adds the delivery details (wait window, TTL, what happens when the
+  upstream is down, callback events). Its `operations[].request_schema.body` is the JSON Schema of
+  the body; `request_schema.headers` (when present) lists the caller headers the integration reads.
   Build bodies from this schema, not from vendor docs.
 - No suitable integration? See "Requesting a new integration" below. Do not work around it.
 
-### 2. Build the canonical body
-Follow the capability schema exactly (required fields, formats such as E.164 phones, RFC 3339
-timestamps, minor currency units). Unknown fields may be rejected with `VALIDATION_FAILED`.
+### 2. Build the body
+Follow the operation's `request_schema.body` exactly: send every field in `required`, add optional
+fields only when you have real values, and respect formats (E.164 phones, RFC 3339 timestamps, minor
+currency units). Most operations check live calls against the schema (`validate_input`); a missing
+required field or unknown field is rejected with 400 `VALIDATION_FAILED`, `details` naming each
+field. If the operation declares `request_schema.headers`, send those headers too (HTTP headers, or
+`headers` in `hub_invoke`); undeclared headers are not passed on.
 
 ### 3. Dry-run first
 ```bash
@@ -79,7 +93,7 @@ curl -s -i -X POST "$HUB_BASE_URL/v1/integrations/int_evt_brandA/invoke" \
   -H "Authorization: Bearer $HUB_API_KEY" -H "Content-Type: application/json" \
   -H "Idempotency-Key: order-8821-created" -d @body.json
 ```
-- Multi-operation capabilities: `POST /v1/integrations/{id}/invoke/{op}` (e.g. `send_otp`, then
+- Multi-operation integrations: `POST /v1/integrations/{id}/invoke/{op}` (e.g. `send_otp`, then
   `verify_otp` with header `X-Hub-Session: <session id from step 1>`). See "Two-step flows" below.
 - **`Idempotency-Key`**: recommended always, **mandatory where money or vendor quota moves**
   (discovery shows `moves_money_or_quota` / `idempotency_key_required`; missing key → 400 `IDEMPOTENCY_KEY_REQUIRED`).
@@ -92,9 +106,10 @@ curl -s -i -X POST "$HUB_BASE_URL/v1/integrations/int_evt_brandA/invoke" \
 ### 5. Handle the response
 | Status | Meaning | Do |
 | --- | --- | --- |
-| `200` | Done. Canonical response body. | Use it. Ignore `X-Hub-Integration-Version` (debug only). |
+| `200` | Done. The integration's output (no response schema; any JSON). | Use it. Ignore `X-Hub-Integration-Version` (debug only). |
 | `202` | Accepted, **not done**: `{"request_id","status":"accepted\|queued\|in_flight","reason","poll"}` | Poll `GET /v1/requests/{request_id}` (back off, e.g. 1 s, 2 s, 5 s, ... capped) or rely on your callback subscription. |
 | `4xx/5xx` | Error envelope `{ "error": { "code", "message", "retryable", "retry_after_ms", "request_id", ... } }` | Branch on `error.code` (table below), never on `message`. |
+| any, with `X-Hub-Pass-Through: true` | **Pass-through**: the integration has no response transformer, so this is the third party's own status and body, unchanged (JSON or not; check `Content-Type`). Never the error envelope, even on 4xx/5xx. | Check this header **before** parsing `{"error": ...}`. A 2xx is success; a non-2xx is the third party's refusal after the Hub's retries. Only `Content-Type` and `Retry-After` come from the third party. |
 
 Final states from `GET /v1/requests/{id}`: `succeeded`, `failed` (sync error), `dead_lettered`, `expired`; intermediate:
 `accepted`, `in_flight`, `retry_scheduled`, `parked` (vendor down, will drain automatically).
@@ -108,7 +123,7 @@ Final states from `GET /v1/requests/{id}`: `succeeded`, `failed` (sync error), `
 | `INTEGRATION_NOT_FOUND` | 404 | no | Check id via `/v1/integrations` |
 | `SESSION_NOT_FOUND` | 404 | no | Restart the multi-step flow from step 1 |
 | `IDEMPOTENCY_CONFLICT` | 409 | no | Same key with a different body, or original still running; do not change the body under a key |
-| `PAYLOAD_TOO_LARGE` | 413 | no | Body over 1 MB (4 MB LLM); shrink it |
+| `PAYLOAD_TOO_LARGE` | 413 | no | Body over 1 MB; shrink it |
 | `INTEGRATION_PAUSED` | 503 | yes | Admin kill switch; retry later with backoff |
 | `TRANSFORM_FAILED` | 500 | no | Hub bug; report with request id |
 | `INTERNAL_ERROR` | 500 | yes | Unexpected Hub failure; retry with backoff, same key |
@@ -119,10 +134,13 @@ Final states from `GET /v1/requests/{id}`: `succeeded`, `failed` (sync error), `
 | `UPSTREAM_AUTH_FAILED` | 502 | no | Hub credential problem; platform is paged; report |
 | `EXPIRED` | - | no | Async request passed TTL; decide whether to resubmit |
 Retry only when `retryable: true`, with exponential backoff + jitter, bounded attempts, same
-`Idempotency-Key`. Full table and headers: `references/api-quickref.md`.
+`Idempotency-Key`. A pass-through error has no `retryable`: the Hub already retried timeouts, 429
+and 5xx; honour the third party's `Retry-After` if it sent one. Requests completed after a 202 report
+failures with the usual `UPSTREAM_*` codes, also for pass-through integrations. Full table and
+headers: `references/api-quickref.md`.
 
 ## Two-step flows (OTP send, then verify)
-Some capabilities have several **operations** on **one integration id**: for Aadhaar or mobile OTP,
+Some integrations have several **operations** on **one integration id**: for Aadhaar or mobile OTP,
 `send_otp` then `verify_otp`. That is **two calls on the same integration**, linked by a session:
 
 1. `POST /v1/integrations/{id}/invoke/send_otp` with an `Idempotency-Key` (an OTP costs quota, so
@@ -206,15 +224,21 @@ In Express use `express.raw({ type: 'application/json' })` on the callback route
 
 ## Go SDK: `pkg/hubclient`
 Module `github.com/Donquixot-Doflamingo/integration-hub/backend/pkg/hubclient`. `Invoke` returns an
-`Outcome` that is **either `*hubclient.Result` (200) or `*hubclient.Queued` (202), never both**, and
-errors as `*hubclient.Error` (canonical `Code`, `Retryable`, `RetryAfter`, `RequestID`, `Details`).
+`Outcome` that is **either `*hubclient.Result` (200, or a pass-through 2xx) or `*hubclient.Queued`
+(202), never both**, and errors as `*hubclient.Error` (canonical `Code`, `Retryable`, `RetryAfter`,
+`RequestID`, `Details`) or, for a pass-through non-2xx, `*hubclient.PassThroughError` (`Status`,
+`ContentType`, `Body`, `RetryAfter`).
 ```go
 hc, err := hubclient.New(os.Getenv("HUB_BASE_URL"), os.Getenv("HUB_API_KEY"))
 if err != nil { return err }
 out, err := hc.Invoke(ctx, "int_evt_brandA", body,
-	hubclient.WithIdempotencyKey("order-"+orderID+"-created")) // also WithOperation, WithSession, WithDeadline, WithPreferAsync
+	hubclient.WithIdempotencyKey("order-"+orderID+"-created")) // also WithOperation, WithHeaders, WithSession, WithDeadline, WithPreferAsync
 var hubErr *hubclient.Error
+var ptErr *hubclient.PassThroughError
 switch {
+case errors.As(err, &ptErr):
+	// pass-through: the third party refused (ptErr.Status, ptErr.Body); the Hub already retried
+	return err
 case errors.As(err, &hubErr):
 	// branch on hubErr.Code; retry only if hubErr.Retryable, after hubErr.RetryAfter, same key
 	return err
@@ -223,7 +247,7 @@ case err != nil:
 }
 switch o := out.(type) {
 case *hubclient.Result:
-	var resp MyCanonicalResponse
+	var resp MyResponse // o.PassThrough: the third party's own body; check o.ContentType first
 	return o.Decode(&resp) // o.Session holds X-Hub-Session for step 1 of a two-step flow
 case *hubclient.Queued:
 	// NOT done: persist o.RequestID; poll hc.GetRequest(ctx, o.RequestID) until Status.Terminal(),
@@ -232,7 +256,7 @@ case *hubclient.Queued:
 }
 ```
 Also: `hc.GetRequest` (status; `Status.Terminal()`, `Result`, `Error`), `hc.DryRun`,
-`hc.ListIntegrations` / `hc.AllIntegrations`, `hc.GetIntegration`, `hc.GetCapability`,
+`hc.ListIntegrations` / `hc.AllIntegrations`, `hc.GetIntegration` (each with `Operations[].RequestSchema`),
 `hubclient.NewIdempotencyKey()` (random; prefer a key derived from your business event),
 `hubclient.IsRetryable(err)`. Check with `go doc github.com/Donquixot-Doflamingo/integration-hub/backend/pkg/hubclient`.
 Do not collapse `Queued` into success. A callback verifier is not in the SDK yet: use the snippets above.
@@ -240,17 +264,20 @@ Do not collapse `Queued` into success. A callback verifier is not in the SDK yet
 ## Requesting a new integration
 If no integration fits, the platform team creates one (callers never configure vendors). Send:
 - Your tenant (service name) and owning team; which environment(s).
-- The capability (existing like `events.track@v1`, or a description of the new operation) and
-  operations needed.
+- The operations needed, each with an example body (fake data), which fields are required and
+  which optional, and any caller headers the call must carry.
+- What you need back: the third party's answer as it is (pass-through), or only some fields in a
+  fixed shape (the platform team adds a response transformer).
 - Delivery needs: must the user wait for the answer (`sync`), or is `wait`/`async`/`async_callback`
   fine? If callbacks: your registered callback endpoint.
 - Volume (peak RPS / msgs per day), latency needs, TTL for queued work.
 - Whether money or vendor quota moves (idempotency becomes mandatory).
 - Data classes (PII, bureau, Aadhaar, PAN) and residency constraints.
-- Example canonical bodies with fake data, and any vendor/contract preference (platform decides).
+- Any vendor preference (the platform decides) and a link to the third party's API docs if you have one.
+The platform team can onboard a new API from its console without a code change.
 Use the platform team's normal intake channel; ask the user which one their org uses.
 
 ## References
 - `references/api-quickref.md` - endpoints, headers, status codes, error codes, request states.
 - `references/mcp-setup.md` - add `hubmcp` to Claude Code, Claude Desktop, Codex CLI and Cursor; tenant key vs admin token; tool list.
-- `references/examples.md` - `events.track@v1` end to end with curl and Go; the two-step OTP flow with curl and Go.
+- `references/examples.md` - event tracking end to end with curl and Go; a pass-through answer; the two-step OTP flow with curl and Go.

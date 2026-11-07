@@ -24,7 +24,7 @@ On-call and integration admins cannot run incidents or cutovers efficiently from
 | Vendor & account health board | Breaker states, time in state, parked count/age, error rate; force breaker | `listBreakers`, `getBreaker`, `forceOpenBreaker`, `forceCloseBreaker`, `clearBreakerForce`, `listAccounts` |
 | Request explorer | Search; timeline of events and attempts; payload views per policy | `searchRequests`, `getRequest`, `getRequestTimeline`, `listRequestAttempts` |
 | DLQ console | Filter; replay / purge by filter with reason | `listDeadLetters`, `getDeadLetter`, `replayDeadLetters`, `purgeDeadLetters` |
-| Transformer viewer | View YAML + fixtures; run goldens; dry-run a body | `listTransformers`, `getTransformer`, `listTransformerVersions`, `getTransformerVersion`, `dryRunTransformer`, `runTransformerGoldens` |
+| Transformer viewer and authoring | View YAML + samples; run samples; dry-run a body; create versions with samples | `listTransformers`, `getTransformer`, `listTransformerVersions`, `getTransformerVersion`, `dryRunTransformer`, `runTransformerGoldens` |
 | Tenants / API keys / registrar | Create tenant, create/revoke key (shown once), registrar endpoints | `listTenants`, `createTenant`, `listApiKeys`, `createApiKey`, `revokeApiKey`, `listRegistrarEndpoints`, `createRegistrarEndpoint` |
 | Change log | Filter by actor/object/time; before/after diff | `listChangeLog`, `getChangeLogEntry` |
 
@@ -42,6 +42,7 @@ On-call and integration admins cannot run incidents or cutovers efficiently from
 - [US-1908](../product/USER_STORIES.md) — Accounts with write-only credentials and rotation (HUB-291)
 - [US-1909](../product/USER_STORIES.md) — Create an integration and edit its draft in a form (HUB-292)
 - [US-1910](../product/USER_STORIES.md) — Create transformer versions in the console (HUB-293)
+- [US-2301](../product/USER_STORIES.md#us-2301--onboard-a-public-api-from-the-panel-without-code), [US-2302](../product/USER_STORIES.md#us-2302--build-a-schema-from-a-pasted-sample), [US-2303](../product/USER_STORIES.md#us-2303--prove-a-request-transformer-with-samples), [US-2308](../product/USER_STORIES.md#us-2308--public-apis-with-auth-scheme-none) — Onboarding from the panel with schema editors and samples (HUB-436, [F-23](F-23-schema-registry.md))
 
 ## UX / API surface
 - Typed client generated from `contracts/openapi/hub-admin.v1.yaml` (`npm run gen:api`); no hand-written API types (AGENTS.md §4.6).
@@ -119,8 +120,11 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 - Mock builds: the browser's MSW worker cannot answer server-side form actions, so `hooks.server.ts` answers admin calls from the same handlers (`src/lib/api/mocks/server-fetch.ts`, mock builds only; production bundles contain no mock code). The cookie `hub_mock_scenario` selects contract-derived states (`v8-active`, `paused`, `breaker-forced`) or contract error examples (`<operationId>:<status>`) for both the worker and the server; e2e uses it.
 
 ## Shipped so far
+Rows record what each ticket shipped at the time. HUB-436 (ADR-0023) later removed every capability column, filter, picker and lookup that the HUB-256, HUB-257, HUB-268, HUB-292 and HUB-293 rows mention.
+
 | Ticket | What shipped |
 | --- | --- |
+| HUB-436 | Schema registry in the console ([F-23](F-23-schema-registry.md)): no capability left in `frontend/src`. `SchemaEditor` (paste a sample, **Generate fields**, type and **required** per field, JSON Schema 2020-12 view) on the endpoint form (path parameters, query parameters, headers, body) and on the draft form's **Operations** section (per operation: name, description shown to callers, idempotent, **Check live calls against the request schema** = `validate_input` on by default, request body required, request headers optional; **Add operation**). Target pairs take an optional response transformer (empty = pass-through). Vendor endpoint pages show the request schema and the optional response schema. Auth scheme **None (public API, no credentials)** and credential-less accounts (no secret fields). Transformer authoring takes samples (`input_headers` for request samples), runs them on the draft (**Run samples on this draft**) and shows each failing sample's field and message (`schema_errors`, `details[].field`); **Create** stays locked until the exact draft passes. Integration create has the **Interactive** flag; integration and version pages list operations and their input fields. E2E `e2e/onboarding.test.ts` (agify-like API onboarded from scratch and published; a failing sample names its field). Mock world `onboarding`, preset `samples-fail` |
 | HUB-250 | `frontend/` scaffold: SvelteKit 2 + Svelte 5 (runes enforced) + TypeScript strict, adapter-node (SSR), ESLint/Prettier, Vitest + Testing Library, Playwright; `.github/workflows/frontend.yml` |
 | HUB-251 | `npm run gen:api` -> `src/lib/api/schema.d.ts`; `adminClient()` (openapi-fetch, bearer token, `X-Hub-Request-Id`, typed `HubApiError` from the envelope); lint guard against hand-written API types; CI freshness check |
 | HUB-252 | MSW handlers for all 79 admin operations from contract examples (`contract.gen.ts`, generated); fixtures validated with Ajv 2020-12; `npm run dev:mock` with no backend |
@@ -205,3 +209,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-11-07 | HUB-291: accounts, write-only credentials, rotation and lifecycle; US-1908 | frontend-engineer |
 | 2026-11-07 | HUB-292: create integration, form draft editor with per-operation transformers; US-1909; CCR-006, CCR-007 | frontend-engineer |
 | 2026-11-07 | HUB-293: transformer version authoring with goldens gate and dry run; US-1910; PRD non-goal updated | frontend-engineer |
+| 2026-11-07 | HUB-436: schema editors, operations, samples, auth none, pass-through; capability UI removed (ADR-0023, HUB-437) | docs-keeper |

@@ -24,7 +24,7 @@ Fire-and-forget traffic (engagement events, SMS) is lost today when a vendor or 
 - Backoff +1 s, +5 s, +30 s, +2 min, +10 min, +30 min, +1 h, +1 h, full jitter; DLQ after 8 attempts or TTL.
 - `wait`: persist → immediate in-gateway attempt → 200 within `wait_ms` (3000) or 202 `in_flight`.
 - DLQ (14 days) with replay by filter; poison detector (2 worker crashes → DLQ).
-- Interactive capabilities restricted to `sync` (DESIGN §5.4).
+- Interactive integrations (flag set at creation) restricted to `sync` (DESIGN §5.4).
 
 **Non-goals**
 - Parking/drain logic (F-12); micro-batching and `ordering_key` at scale (Release 2/3).
@@ -35,7 +35,7 @@ Fire-and-forget traffic (engagement events, SMS) is lost today when a vendor or 
 - [US-0903](../product/USER_STORIES.md) — Crash-safe worker
 - [US-0904](../product/USER_STORIES.md) — Retry, DLQ and replay
 - [US-0905](../product/USER_STORIES.md) — TTL expiry
-- [US-0906](../product/USER_STORIES.md) — Interactive capabilities stay sync
+- [US-0906](../product/USER_STORIES.md) — Interactive integrations stay sync
 
 ## UX / API surface
 | Surface | Item | Contract ref |
@@ -76,7 +76,7 @@ stateDiagram-v2
 `outbox` (indexes `(status, next_attempt_at)`, `(status, account_id, endpoint_id)`), `dead_letters` (DESIGN §18.2).
 
 ## Config impact
-Integration version `delivery: { mode, wait_ms, ttl, retry? }`; capability default TTL. Worker process: `HUB_WORKER_CONCURRENCY`, `HUB_WORKER_CLAIM_BATCH`, `HUB_WORKER_TARGET_CAP` (TECH_SPEC §8.1).
+Integration version `delivery: { mode, wait_ms, ttl, retry? }`; without `ttl` the Hub default TTL applies (the capability's `default_ttl` is gone, ADR-0023). Every async request is queued in the `messaging` pool until HUB-439 adds an explicit LLM setting (ADR-0024). A pass-through request completed by the worker stores the vendor body as its result (non-JSON as a JSON string) and keeps `UPSTREAM_*` codes for failures. Worker process: `HUB_WORKER_CONCURRENCY`, `HUB_WORKER_CLAIM_BATCH`, `HUB_WORKER_TARGET_CAP` (TECH_SPEC §8.1).
 
 ## Observability
 | Kind | Name | Notes |
@@ -123,3 +123,4 @@ HUB-110 – HUB-139 (EP-05, filter `feature: F-09`).
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-11-07 | Rules 11–12: continuous claiming, per-target cap, snapshot gate; worker settings (HUB-412, HUB-406) | backend-engineer |
+| 2026-11-07 | Interactive is an integration flag; Hub default TTL; pool and pass-through results (ADR-0023, ADR-0024, HUB-437) | docs-keeper |

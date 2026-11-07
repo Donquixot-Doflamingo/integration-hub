@@ -6,6 +6,39 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(agents)` · Describe the caller contract without capabilities in AGENTS and CLAUDE (HUB-437) · HUB-437 · F-23
+  - The operating rules for agents and contributors describe the caller contract as integration ID + operation + request body against the operation's schema (ADR-0023); contracts/ no longer lists capability schemas; D11 is guidance
+- 2026-11-07 · `docs(tickets)` · Put HUB-437 in review with the real F-23 story ids (HUB-437) · HUB-437 · F-23
+  - EP-14 tickets HUB-431 to HUB-439 name their stories (US-2301 to US-2313) instead of `US-23xx`; HUB-437 is in review with its criteria checked and what other owners still have to do
+  - The tickets README lists EP-13, EP-14 and F-23; counters recounted
+- 2026-11-07 · `docs(skills)` · Describe operations_have_transformers as it works after ADR-0023 (HUB-437) · HUB-437 · F-23
+  - hub-operator says what the check refuses today (a target `operations` key the version does not declare); per-operation correctness comes from `schemas_compile` and `input_schema`
+- 2026-11-07 · `docs(tech)` · Describe the schema registry in TECH_SPEC and the tech docs (HUB-437) · HUB-437 · F-23
+  - TECH_SPEC: layout, registry tables, outbox pool, what the snapshot holds (compiled operation and endpoint schemas, blob formats), registry files, `HUB_CONTRACTS_DIR` unused, console routes for vendors, endpoints, accounts, transformers and drafts, MCP results and tool counts, and new extension points (onboard an API without code; changing what callers send)
+  - SECURITY: the pass-through body caveat, the caller header allowlist, console-authored transformers and auth `none` accounts in the threat model; RBAC without capabilities
+  - TESTING_STRATEGY, ISOLATION, OBSERVABILITY, the HubOverheadP99High and SnapshotBehind runbooks, the use-case catalogue, the contract-change and git workflow docs and the root README follow ADR-0023; ADR-0004 is marked superseded by ADR-0023
+- 2026-11-07 · `docs(features)` · Update feature docs for the schema registry model (HUB-437) · HUB-437 · F-23
+  - F-03, F-04, F-05, F-06, F-08, F-09, F-10, F-14, F-16, F-17: operations on integration versions and request schemas on endpoints instead of capabilities; samples checked against both; `validate_input`; pass-through; Hub default TTL; the 1 MB body limit until HUB-439
+  - F-14 explains how per-operation pairs are checked now that transformers name no operation (HUB-345 is caught by the sample check)
+  - F-19 records what HUB-436 shipped (schema editors, operations, samples, auth none); F-20 and F-21 follow MCP and caller contracts 2.0.0; F-22 is "Release-2 features"; the feature template drops capability YAML
+- 2026-11-07 · `docs(product)` · Add F-23, US-2301 to US-2313 and PRD DV-7 for the schema registry (HUB-437) · HUB-437 · F-23
+  - PRD: DV-7 records the removal of capabilities (operations on the integration, request schemas on the endpoint, samples, optional response transformer, pass-through, auth `none`); new FR-54 to FR-60; goals, non-goals, discovery, error catalogue and body limit follow contracts 2.0.0
+  - USER_STORIES: thirteen F-23 stories with Given/When/Then (onboarding from the panel, schemas from a sample, samples, operation checks, `validate_input`, response output, pass-through, auth `none`, discovery, vendor switch, upgrade, skills, the planned LLM setting); older stories and journeys no longer mention capabilities
+  - New feature doc F-23 (status shipped) with contract references, observability, failure modes and the pass-through body caveat; feature index entry; personas updated
+- 2026-11-07 · `docs(skills)` · Update the consumer skill for request schemas and pass-through (HUB-437) · HUB-437 · F-23
+  - Callers' assistants now discover each operation's request schema from `/v1/integrations` (required vs optional fields, declared headers) instead of `/v1/capabilities`, which no longer exists
+  - New: how to recognise a pass-through answer (`X-Hub-Pass-Through: true`, the third party's own status and body, never the error envelope), in curl, Go, the SDK (`Result.PassThrough`, `PassThroughError`) and `hub_invoke` (`pass_through`)
+  - `hub_invoke` and `hub_dry_run` document the `headers` input; the MCP tool list drops `hub_admin_list_capabilities`; `CAPABILITY_NOT_FOUND` and the 4 MB LLM limit are gone from the error tables
+  - The paste-in rules and the "request a new integration" checklist ask for operations, example bodies and the wanted output
+- 2026-11-07 · `docs(skills)` · Update the backend skills for operations and endpoint schemas (HUB-437) · HUB-437 · F-23
+  - hub-transformers: no `capability` key; `req.*` checked against the operation's body schema and `hdr.*` against its declared headers; samples with input headers; the `endpoint_schema` check on every request sample; response transformer optional, pass-through otherwise
+  - dsl.md: the keys the registry really loads (`docs_url`, literal `path`, no `auth`/`stream`/`supports` yet), a table of what checks each reference, and the new refusal messages
+  - go-architecture, api-contract-backend, go-system-design and go-debugging: a new API is registry data, not a capability or a contract change
+- 2026-11-07 · `docs(skills)` · Rewrite hub-operator for the schema registry model (HUB-437) · HUB-437 · F-23
+  - hub-operator teaches the ADR-0023 onboarding order: vendor, endpoint with its request schema from a sample, account (or none for a public API), request transformer proven by samples, optional response transformer, integration with operations and input schema, validate, publish; console clicks, hubmcp calls and admin API for each step
+  - New worked walk-through: the agify age estimate (`references/onboard-an-api.md`), with what each refusal (`endpoint_schema`, `goldens_pass`, `input_schema`, `schemas_compile`) means
+  - Pass-through, `validate_input`, auth `none`, the Aadhaar OTP flow with operations on the integration, and a vendor switch that warns the output may change without a response transformer reproducing it
+  - The console column now lists the vendor, endpoint, account and transformer pages; contract-change, prd-writing and user-stories skills drop capabilities
 - 2026-11-07 · `docs(tickets)` · Record the HUB-433 latency budget run (HUB-433) · HUB-433 · F-23
   - The sync latency budget holds without capabilities: a 100 ms vendor answers through the Hub at p50 102.1 ms and p99 107.6 ms (1.2 ms and 5.7 ms added)
 - 2026-11-07 · `docs(adr)` · Record the LLM limit and legacy data decisions of HUB-433 (HUB-434) · HUB-434 · F-23

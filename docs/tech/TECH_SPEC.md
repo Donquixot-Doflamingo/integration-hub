@@ -1,6 +1,6 @@
 # Integration Hub — Technical Specification
 
-> **Capabilities were removed on 2026-11-07 ([ADR-0023](adr/0023-remove-capabilities-integration-owns-its-request-schema.md)).** Where this document talks about capabilities, the integration's per-operation request schema and the vendor endpoint's request schema now apply. EP-14 updates the code and docs. The backend side added [ADR-0024](adr/0024-llm-body-limit-and-pool-without-capability-names.md) (1 MB body limit and `messaging` pool for every integration until HUB-439) and [ADR-0025](adr/0025-pre-adr-0023-data-upgraded-in-code.md) (archived snapshots, drafts and pending integrations from before are upgraded in code).
+> **Schema registry (2026-11-07, [ADR-0023](adr/0023-remove-capabilities-integration-owns-its-request-schema.md), feature [F-23](../features/F-23-schema-registry.md)).** There is no capability object any more. Each integration version declares its operations, each with the caller's `request_schema` (body, optional headers) and `validate_input`; each vendor endpoint version declares the `request_schema` it accepts (path, query, headers, body). Request transformers are proven by samples against both; response transformers are optional (pass-through without one). This document describes that model (EP-14, HUB-437). The backend side added [ADR-0024](adr/0024-llm-body-limit-and-pool-without-capability-names.md) (1 MB body limit and `messaging` pool for every integration until HUB-439) and [ADR-0025](adr/0025-pre-adr-0023-data-upgraded-in-code.md) (archived snapshots, drafts and pending integrations from before are upgraded in code).
 
 | | |
 | --- | --- |
@@ -111,8 +111,8 @@ integration-hub/
 │   │   ├── hub-public.v1.yaml    # /v1 caller API + discovery endpoints (ADR-0007)
 │   │   └── hub-admin.v1.yaml     # /admin/v1 control plane
 │   ├── schemas/
-│   │   ├── capabilities/<capability>.v<major>.{request,response}.json
-│   │   └── events/<event>.json   # webhook payloads, envelope, canonical-error
+│   │   └── events/<event>.json   # webhook payloads, envelope, canonical-error (request schemas are registry data, ADR-0023)
+│   ├── mcp/hubmcp-tools.json     # MCP tool contract
 │   ├── CHANGELOG.md
 │   └── AGENTS.md
 ├── backend/                      # Go module github.com/Donquixot-Doflamingo/integration-hub/backend
@@ -205,7 +205,7 @@ Each table is written by exactly one package; others read through that package's
 
 | Package | Owns tables |
 | --- | --- |
-| `control` | `tenants`, `api_keys`, `vendors`, `vendor_endpoints`, `accounts`, `account_credentials`, `capabilities`, `transformers`, `integrations`, `integration_versions`, `integration_grants`, `registrar_endpoints`, `config_snapshots`, `change_log` |
+| `control` | `tenants`, `api_keys`, `vendors`, `vendor_endpoints`, `accounts`, `account_credentials`, `transformers`, `integrations`, `integration_versions`, `integration_grants`, `registrar_endpoints`, `config_snapshots`, `change_log` |
 | `queue` | `outbox`, `dead_letters` |
 | `audit` | `requests`, `request_events`, `request_attempts` |
 | `sessions` | `vendor_sessions` |
@@ -393,17 +393,18 @@ Columns per DESIGN §18.2. This section adds keys, indexes, partitioning and ret
 | `tenants` | `tenant_id` | — |
 | `api_keys` | `key_id` | unique `key_hash` (SHA-256 of key, see SECURITY §6); `(tenant_id) WHERE revoked_at IS NULL`; `expires_at` for overlap rotation |
 | `vendors` | `vendor_id` | — |
-| `vendor_endpoints` | `(vendor_id, endpoint_id, version)` | — |
+| `vendor_endpoints` | `(vendor_id, endpoint_id, version)` | the endpoint version's `request_schema` (required) and `response_schema` (optional, informational) travel in the registry tree and snapshot (ADR-0023) |
 | `accounts` | `account_id` | `(vendor_id)`, check `state IN ('active','draining','retired')` |
 | `account_credentials` | `(account_id, cred_version)` | unique `(account_id, slot) WHERE slot IS NOT NULL` (one `active`, one `next`) |
-| `capabilities` | `(capability, major, minor)` | — |
 | `transformers` | `(transformer_id, version)` | immutable: trigger rejects UPDATE/DELETE |
 | `integrations` | `integration_id` | `(owner_tenant)`; FK `(integration_id, active_version)` → `integration_versions` |
-| `integration_versions` | `(integration_id, version)` | immutable trigger; GIN on `spec jsonb_path_ops` for "which versions target account X" (account lifecycle, DESIGN §6.5) |
+| `integration_versions` | `(integration_id, version)` | immutable trigger; GIN on `spec jsonb_path_ops` for "which versions target account X" (account lifecycle, DESIGN §6.5); `spec.operations` holds each operation's `request_schema` and `validate_input` (ADR-0023) |
 | `integration_grants` | `(integration_id, tenant_id)` | `(tenant_id)` |
 | `registrar_endpoints` | `endpoint_id` | `(tenant_id)` |
 | `config_snapshots` | `version` (bigint, monotonic) | `(created_at)`; retention 90 days (DESIGN §8.2) |
-| `change_log` | `id` (bigserial) | `(object_type, object_id, at DESC)`, `(actor, at DESC)`; append-only trigger |
+| `change_log` | `id` (bigserial) | `(object_type, object_id, at DESC)`, `(actor, at DESC)`; append-only trigger (old rows with object type `capability` stay) |
+
+Migration 00011 (ADR-0023) dropped `hub.capabilities` and every `capability` column, copied capability schemas into integration versions' `operations`, and wrote `pool: llm` into queued `llm.*` envelopes. Snapshot blobs, drafts and pending integrations from before are upgraded in code ([ADR-0025](adr/0025-pre-adr-0023-data-upgraded-in-code.md)).
 
 ### 6.2 Ledger (owned by `audit`; partitioned)
 | Table | Partitioning | PK | Indexes |
@@ -435,7 +436,7 @@ WHERE o.request_id IN (
   LIMIT $3 FOR UPDATE SKIP LOCKED)
 RETURNING o.*;
 ```
-`pool` (messaging | llm) is a column derived from the capability at insert time (**Decision**; DESIGN §17 asks for separate pools but the table has no column for it).
+`pool` (messaging | llm) is a column set at insert time (**Decision**; DESIGN §17 asks for separate pools but the table has no column for it). It used to be derived from `llm.*` capability names; since ADR-0023 every new request is `messaging` until an explicit integration setting exists ([ADR-0024](adr/0024-llm-body-limit-and-pool-without-capability-names.md), HUB-439).
 
 **Guarded transitions** (DESIGN §10.9): every status change is `UPDATE … WHERE request_id=$1 AND status=$expected AND claimed_by=$me`; zero rows affected means another actor won, and the caller drops its result (no double completion, no double callback).
 
@@ -459,7 +460,7 @@ flowchart LR
   B --> P[Redis PUBLISH hub:snapshot N+1]
   P --> N[Nodes]
   LP[GET /admin/v1/snapshots/latest?wait=ms<br/>If-None-Match: N, held up to 30 s] --> N
-  N --> D[download + verify sha256] --> C[compile in background:<br/>JSON Schemas, expr programs,<br/>indexes, weights tables]
+  N --> D[download + verify sha256] --> C[compile in background:<br/>operation and endpoint JSON Schemas,<br/>expr programs, indexes, weights tables]
   C --> W[warm credential cache for referenced accounts]
   W --> S[atomic.Pointer.Store]
   S --> M[snapshot_version gauge, snapshot_apply_delay_seconds]
@@ -469,6 +470,7 @@ flowchart LR
 - **Distribution**: Redis ping is the fast path (sub-second); the long-poll is the guaranteed path; both fetch the same blob. Target ≤ 10 s end to end (DESIGN §1).
 - **Failure**: a node that cannot fetch or compile keeps the last good snapshot, logs `snapshot.apply_failed`, and the "node behind snapshot" alert fires after 60 s (DESIGN §16.3).
 - **Boot**: admin API → object storage (latest by key listing) → local cache file `$HUB_DATA_DIR/snapshot.json.gz`. **M1 implementation (HUB-048):** every role builds from `HUB_CONFIG_DIR`; if that fails, data-plane roles boot from the archive (`hub.config_snapshots` + blob at `HUB_BLOB_URL`), then from the local cache; the admin role never boots from a copy and archives each new snapshot (dedup by checksum). Blobs hold the snapshot *sources* and are rebuilt and checksum-verified on load (`registry.Unpack`). The scheduler prunes archived snapshots older than 90 days hourly, always keeping the newest. Gauge `snapshot_origin{origin}` shows where the serving snapshot came from. `/readyz` stays false until a snapshot is loaded and credentials for active accounts are warm.
+- **What the snapshot holds** (ADR-0023): per integration version, each operation with its compiled request schema (body, headers), the declared header allowlist, `validate_input` and the `x-pii` locations; per vendor endpoint, its compiled request schema (used only by sample checks at build, never on the hot path); per target, the pair per operation (response transformer optional = pass-through). Blob format 2 holds the config tree only; format 1 also packed capability schemas and is upgraded on load (`registry.Unpack`, ADR-0025).
 - **Swap safety**: in-flight requests hold the old `*Snapshot` pointer for their whole attempt (DESIGN §6.3 "nothing switches mid-flight"); the old snapshot is garbage-collected when the last reference drops. Compiled objects are immutable after construction.
 - **Node auth to admin — Open**: nodes need a service credential for `/admin/v1/snapshots/latest` (§22).
 
@@ -500,7 +502,7 @@ Flags override env. Env names: `HUB_*`. Loaded once at start into an immutable s
 | `HUB_CONFIG_DIR` | `config` (dev registry, M1) | dev only |
 | `HUB_CONFIG_WATCH` | `false` (rebuild and swap on file changes, HUB-045) | dev only |
 | `HUB_DATA_DIR` | `.data` (local cache `snapshot.json.gz` of the last good snapshot, HUB-048) | all |
-| `HUB_CONTRACTS_DIR` | `../contracts` | admin, dev loader |
+| `HUB_CONTRACTS_DIR` | `../contracts` | unused since ADR-0023 (kept so old scripts still start; the registry reads no schema from `contracts/`) |
 | `HUB_WORKER_POOL`, `HUB_WORKER_CLAIM_BATCH`, `HUB_WORKER_CONCURRENCY` | `messaging`, 32, 256 (64 for `llm`); `0` = default | worker |
 | `HUB_WORKER_TARGET_CAP` | `0` = a quarter of the concurrency, at most 64 (the per-account bulkhead): the most attempts one `(account, endpoint)` may have in flight in one worker (HUB-412, ADR-0019) | worker |
 | `HUB_SHUTDOWN_GRACE` | `25s` | all |
@@ -515,11 +517,8 @@ Dev registry, round-trippable with `hubctl plan|apply` (DESIGN §16.1). No secre
 
 ```text
 backend/config/
-├── capabilities/
-│   └── events.track.v1.yaml          # metadata: operations, interactive, default TTL,
-│                                      # schema_ref → contracts/schemas/capabilities/events.track.v1.request.json
 ├── vendors/
-│   └── clevertap.yaml                # DESIGN §8.3 (dev regions point at mockvendor)
+│   └── clevertap.yaml                # DESIGN §8.3 (dev regions point at mockvendor); endpoints carry request_schema (+ optional response_schema)
 ├── accounts/
 │   ├── ct-brandA-in.yaml
 │   └── ct-brandB-us.yaml             # credentials_ref: localfile://ct-brandB-us
@@ -531,8 +530,8 @@ backend/config/
 │   └── R2/1.yaml, R2/fixtures/...
 ├── integrations/
 │   └── int_evt_brandA/
-│       ├── integration.yaml           # owner_tenant, capability, grants, active_version
-│       └── versions/{1,2,...}.yaml    # DESIGN §3.4, immutable
+│       ├── integration.yaml           # owner_tenant, grants, active_version, interactive, moves_money_or_quota
+│       └── versions/{1,2,...}.yaml    # DESIGN §3.4, immutable; operations.<name>.request_schema, validate_input
 ├── tenants/
 │   └── orders-service.yaml            # keys referenced by hash only; dev keys in dev-secrets.enc
 ├── registrar/
@@ -540,9 +539,11 @@ backend/config/
 └── dev-secrets.enc                    # AES-GCM blob (DESIGN §9), dev key not committed
 ```
 
-- **Capability schemas live only in `contracts/schemas/`** (ADR-0004). `backend/config/capabilities/*.yaml` references them by path; a CI check fails if a schema is duplicated under `backend/`. Container builds copy `contracts/` into the image (Go `embed` cannot reach outside the module).
+- **Every schema lives inline in the registry tree** (ADR-0023, superseding ADR-0004): the caller's request schema per operation in the integration version, the vendor request schema on the endpoint version. Nothing is read from `contracts/` at runtime; `hubctl transform test -contracts-dir` is ignored. Files are decoded strictly, so a leftover `capability:` key is a load error.
+- **Samples** (`transformers/<id>/fixtures/`): `_context.hdr` holds a request sample's caller headers. `hubctl transform test` and the snapshot build check each request sample's produced request against its endpoint's `request_schema` (credentials excluded, `endpoint_schema`) and, per operation that uses the transformer, its input against the operation (`input_schema`) and the transformer's `req.*`/`hdr.*` reads (`schemas_compile`).
+- **Auth `none`** vendors (`auth: none`) have accounts without `credentials_ref`.
 - Each file is one object; filenames equal IDs; loader errors are path-qualified (`integrations/int_evt_brandA/versions/3.yaml: delivery.wait_ms: must be ≤ 30000`).
-- **Per-operation transformers (HUB-343).** A version target (`targets[]`, `failover[]`, `shadow.target`; `registry.Target`) has the default pair `transformer: {request, response}` and an optional `operations: {<operation>: {request, response}}` (`Target.Operations`). The invoked operation selects the pair (`Target.Pair(op)`, `resolve.Resolution.Pair()`): its own when listed, else the default. Multi-operation transformers declare `operation:`; the build check `operations_have_transformers` refuses a pair serving an operation it is not compiled for and an undeclared operation key (F-14). Stored as part of the version's `spec` (`integration_versions.spec`, admin `TargetRef.operations`); no migration.
+- **Per-operation transformers (HUB-343).** A version target (`targets[]`, `failover[]`, `shadow.target`; `registry.Target`) has the default pair `transformer: {request, response}` and an optional `operations: {<operation>: {request, response}}` (`Target.Operations`). The invoked operation selects the pair (`Target.Pair(op)`, `resolve.Resolution.Pair()`): its own when listed, else the default. Transformers name no operation (ADR-0023); each selected pair is checked against its own operation's schema (`schemas_compile`, `input_schema`), and `operations_have_transformers` refuses a target `operations` key the version does not declare (F-14). Stored as part of the version's `spec` (`integration_versions.spec`, admin `TargetRef.operations`); no migration.
 
 ---
 
@@ -778,10 +779,11 @@ Rules: tests never call real vendors (AGENTS §3.3) — only `staging`/`prod` re
 | `/integrations`, `/integrations/[id]` | list; detail with active version, weights, pause | integrations, versions |
 | `/integrations/[id]/versions/[v]`, `/integrations/[id]/diff?from=&to=` | version view, diff | versions, diff |
 | `/integrations/[id]/publish` | publish/rollback wizard with validation report | publish, rollback |
-| `/capabilities`, `/capabilities/[cap]` | schemas, operations, PII tags | capabilities |
-| `/vendors`, `/vendors/[id]` | endpoints, defaults, health | vendors |
-| `/accounts`, `/accounts/[id]` | lifecycle, credential slots (metadata only), test connection, rotate | accounts |
-| `/transformers`, `/transformers/[id]/[version]` | YAML view, dry-run, run goldens | transformers |
+| `/vendors`, `/vendors/new`, `/vendors/[id]`, `/vendors/[id]/edit` | vendor (auth scheme incl. `none`), regions, defaults, endpoint versions | vendors |
+| `/vendors/[id]/endpoints/new`, `/vendors/[id]/endpoints/[ref]` | endpoint version with its request schema (path, query, headers, body from a pasted sample; required/optional) and optional response schema | vendor endpoints |
+| `/accounts`, `/accounts/new`, `/accounts/[id]` | create (no credential fields for auth `none`), lifecycle, credential slots (metadata only), test connection, rotate | accounts |
+| `/transformers`, `/transformers/new`, `/transformers/[id]`, `/transformers/[id]/new-version`, `/transformers/[id]/versions/[version]` | YAML view, samples, run samples, dry-run, create a version once its samples pass | transformers |
+| `/integrations/new`, `/integrations/[id]/publish` (draft form) | create (interactive flag); operations with their request schema (body, headers) and `validate_input`; targets with optional response transformer | integrations |
 | `/tenants`, `/tenants/[id]` | keys (create shows once), registrar endpoints, grants | tenants, api-keys, registrar-endpoints |
 | `/requests`, `/requests/[request_id]` | search; timeline; unseal (admin, reason required) | requests |
 | `/dlq` | filter, replay, purge | dlq |
@@ -813,7 +815,7 @@ flowchart LR
   S --> T1[hub_list_integrations] & T2[hub_describe_integration] & T3[hub_dry_run] & T4[hub_invoke] & T5[hub_get_request]
   S -.-> AT[admin read tools<br/>with HUB_ADMIN_TOKEN]
   S -.-> AW[admin write tools<br/>HUB_ADMIN_TOKEN + stdio only]
-  T1 & T2 --> D["/v1/integrations, /v1/integrations/{id}, /v1/capabilities/{capability}"]
+  T1 & T2 --> D["/v1/integrations, /v1/integrations/{id}"]
   T3 --> DR["POST /v1/integrations/{id}/dry-run"]
   T4 --> INV["POST /v1/integrations/{id}/invoke[/{op}]"]
   T5 --> RQ["GET /v1/requests/{request_id}"]
@@ -823,29 +825,29 @@ flowchart LR
 
 - **Client only**: talks HTTP to `/v1` (tenant key) and optionally `/admin/v1` (`HUB_ADMIN_TOKEN`); never opens a DB or Redis connection. One `main` package in `cmd/hubmcp` (ADR-0018): the caller side is `pkg/hubclient`, the admin side an allowlisted client (operations = the registered tools' `maps_to`, every HTTP client method-guarded against DELETE, ADR-0020); the tool definitions are an embedded byte-for-byte copy of `contracts/mcp/hubmcp-tools.json` guarded by a drift test.
 - **Transports**: stdio (default, one tenant per process, key `HUB_API_KEY`) and streamable HTTP (`-transport http -addr 127.0.0.1:8090`, path `/mcp`). In HTTP mode the tenant key comes from the MCP client's `Authorization: Bearer` header on every request, is checked with the Hub (`listIntegrations`, limit 1; only a SHA-256 fingerprint is cached, 60 s) and is never persisted or logged; non-loopback addresses need `-allow-remote`; `HUB_ADMIN_TOKEN` is refused on a remote-reachable listener; cross-origin requests are refused and the SDK's DNS-rebinding protection is on (ADR-0018).
-- **Tools** (contract owned by the steward in `contracts/`): input schemas derived from the discovery endpoints (ADR-0007), so the LLM sees capability schemas but **never vendor, account or version** (D12), except in `hub_dry_run`, which shows the upstream request with secrets `***` by design (PRD DV-6; key scope `dry_run`). Tool contract: `contracts/mcp/hubmcp-tools.json`. Annotations: list/describe/get/dry-run `readOnlyHint: true`; `hub_invoke` `destructiveHint: true, openWorldHint: true`; `hub_invoke` forwards the caller's `idempotency_key` and never generates one (the contract has no field to return it, ADR-0018); integrations with `moves_money_or_quota` refuse to run without one.
-- **Results**: canonical bodies and the error envelope verbatim; 202 is returned as a distinct "queued" result with a `request_id` for `hub_get_request` (mirrors DESIGN §4.5).
-- **Admin tools** (ADR-0020, contract 1.1.0): 21 read and check tools and 16 write tools, each mapped to exactly one hub-admin operation, with handlers derived from the input schema and the route (path parameters, query or JSON body, `if_match` → `If-Match`, `etag` from `ETag`). They are registered only with `HUB_ADMIN_TOKEN`, **the signed-in user's own token**. Write tools (`requires.transport: ["stdio"]`) exist on stdio only, never on Streamable HTTP. The Hub's RBAC decides, and a 403 is an `isError` result. `reason` is required on writes and forwarded with ` (via hubmcp)` appended. Local refusals that make no Hub call: `SECRET_IN_INPUT` (arguments matching `secret_patterns`, every tool) and `CONFIRMATION_REQUIRED` (`requires_confirm` tools without `confirm: true`). `sensitive_output` (minted key, signing secret) is returned once, then redacted by value. No tool maps to a DELETE or to a `forbidden_operations` entry: `loadContract` refuses such a contract, and the method guard refuses the request. Read tools never unseal and never return payload bodies.
+- **Tools** (contract owned by the steward in `contracts/`): input schemas derived from the discovery endpoints (ADR-0007), so the LLM sees each operation's request schema but **never vendor, account or version** (D12), except in `hub_dry_run`, which shows the upstream request with secrets `***` by design (PRD DV-6; key scope `dry_run`). Tool contract: `contracts/mcp/hubmcp-tools.json`. Annotations: list/describe/get/dry-run `readOnlyHint: true`; `hub_invoke` `destructiveHint: true, openWorldHint: true`; `hub_invoke` forwards the caller's `idempotency_key` and never generates one (the contract has no field to return it, ADR-0018); integrations with `moves_money_or_quota` refuse to run without one.
+- **Results**: the integration's output and the error envelope verbatim; a pass-through answer (`X-Hub-Pass-Through: true`) is returned unchanged with `pass_through: true`; `hub_invoke` and `hub_dry_run` forward only caller headers the operation declares (`headers`); 202 is returned as a distinct "queued" result with a `request_id` for `hub_get_request` (mirrors DESIGN §4.5).
+- **Admin tools** (ADR-0020, contract 2.0.0): 20 read and check tools and 16 write tools, each mapped to exactly one hub-admin operation, with handlers derived from the input schema and the route (path parameters, query or JSON body, `if_match` → `If-Match`, `etag` from `ETag`). They are registered only with `HUB_ADMIN_TOKEN`, **the signed-in user's own token**. Write tools (`requires.transport: ["stdio"]`) exist on stdio only, never on Streamable HTTP. The Hub's RBAC decides, and a 403 is an `isError` result. `reason` is required on writes and forwarded with ` (via hubmcp)` appended. Local refusals that make no Hub call: `SECRET_IN_INPUT` (arguments matching `secret_patterns`, every tool) and `CONFIRMATION_REQUIRED` (`requires_confirm` tools without `confirm: true`). `sensitive_output` (minted key, signing secret) is returned once, then redacted by value. No tool maps to a DELETE or to a `forbidden_operations` entry: `loadContract` refuses such a contract, and the method guard refuses the request. Read tools never unseal and never return payload bodies.
 - Observability: OBSERVABILITY §14. Security: SECURITY §2.5.
 
 ---
 
 ## 19. Extension points
 
-### 19.1 New vendor for an existing capability (target ≤ 2 engineer-days, DESIGN §1)
-1. Ticket + feature doc. Read the vendor's current API docs; cite the URL in the transformer file (AGENTS §3.3).
-2. `config/vendors/<vendor>.yaml`: regions, endpoints (timeouts, idempotent, batch), auth scheme (existing plugin), defaults, health probe; add the hosts to the egress allowlist (SECURITY §5).
-3. `config/accounts/<account>.yaml` + credentials via `hubctl` (never in Git).
-4. Request + response transformers with golden fixtures; `make goldens`.
-5. A `mockvendor` profile mimicking the vendor's shapes and failure modes; chaos scenarios reuse it.
-6. New integration version targeting it (weights/shadow for canary, DESIGN §6.4). No code change unless a new auth scheme is required.
+### 19.1 New API or new vendor (target ≤ 2 engineer-days, DESIGN §1; no code, ADR-0023)
+Done from the console (or admin API / hubmcp admin tools); local dev may use files in `backend/config/`. Walk-through: `.claude/skills/hub-operator/references/onboard-an-api.md`.
+1. Ticket. Read the vendor's current API docs; cite the URL in the vendor and every transformer (AGENTS §3.3).
+2. Vendor: regions, auth scheme (existing plugin, `none` for public APIs), defaults, health probe; the regions are the egress allowlist (SECURITY §5).
+3. Endpoint version(s) with their `request_schema` (path, query, non-credential headers, body), built from a sample; optional `response_schema`.
+4. Account: credentials entered by a human (never in Git, never through an AI), or none for an auth `none` vendor.
+5. Request transformer with samples (must pass `goldens_pass` and `endpoint_schema`); response transformer with samples only if callers need a mapped output (else pass-through).
+6. Integration: create (interactive fixed here), draft with `operations` (request schema per operation, `validate_input`) and a target; validate (`schemas_compile`, `input_schema`, …); publish. For an existing integration moving vendor: a new version with the new target, same operations; warn that the output changes unless the new response transformer reproduces it.
+7. A `mockvendor` profile mimicking the vendor's shapes and failure modes for tests; chaos scenarios reuse it. No code change unless a new auth scheme or stdlib function is required.
 
-### 19.2 New capability
-1. Contract first: the steward adds `contracts/schemas/capabilities/<cap>.v1.{request,response}.json` with `x-pii`, `interactive`, `operations` (DESIGN §8.1) via a CCR (`docs/process/CONTRACT_CHANGES.md`). It appears through the discovery endpoints automatically.
-2. `config/capabilities/<cap>.v1.yaml` metadata (pool, default TTL, delivery restrictions).
-3. Transformers + goldens for at least one vendor; if the capability is interactive, publish enforces sync-only.
-4. If new canonical inbound events are needed, add them under `contracts/schemas/events/`.
-5. Breaking schema change = new major + new integration ID (D11).
+### 19.2 Changing what callers send
+1. A new optional field or operation: a new integration version (draft, validate, publish); discovery shows it at once.
+2. A breaking change (new required field, removed field, narrower type): prefer a new integration ID and keep the old one ≥ 6 months (D11, guidance since ADR-0023). The publish diff and change log show the schema change.
+3. New canonical inbound events still go through the contract-steward under `contracts/schemas/events/`.
 
 ### 19.3 New auth scheme
 1. Implement `creds.AuthScheme` (`Name() string`, `Validate(cfg) error`, `Apply(ctx, *core.VendorRequest, Credentials) error`, optional `Warm(ctx)` for token caches) in `internal/creds/schemes/<name>`.

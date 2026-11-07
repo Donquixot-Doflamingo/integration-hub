@@ -6,8 +6,9 @@ repo); the skill has the full error table, SDK examples and callback verifiers.
 
 ## What the Hub is
 Our services never call third-party vendors (engagement, SMS/WhatsApp, bureau, KYC/PAN/Aadhaar,
-Account Aggregator, payments, LLMs) directly. They call the **Integration Hub** with a stable
-**integration id** (`int_...`) and a **canonical body**, and get a canonical response. The Hub picks
+Account Aggregator, payments, LLMs, public APIs) directly. They call the **Integration Hub** with a
+stable **integration id** (`int_...`), an **operation** and a body that matches the operation's
+**request schema**, and get back what the integration returns. The Hub picks
 the vendor, account and version; callers can never choose them and must never mention them in code.
 Never add a vendor SDK or vendor URL when an integration exists.
 
@@ -25,9 +26,11 @@ Environment: `HUB_BASE_URL`, `HUB_API_KEY` (tenant key). Header on every call:
 `Authorization: Bearer $HUB_API_KEY`. If MCP tools `hub_list_integrations`,
 `hub_describe_integration`, `hub_dry_run`, `hub_invoke`, `hub_get_request` exist, prefer them.
 
-1. **Discover**: `GET /v1/integrations` (what this tenant may call: operations, delivery mode,
-   `moves_money_or_quota`), `GET /v1/integrations/{id}`, `GET /v1/capabilities/{capability}`
-   (canonical JSON Schemas). Build bodies from the schema, never from vendor docs. Never invent ids.
+1. **Discover**: `GET /v1/integrations` (what this tenant may call: operations with their
+   `request_schema`, delivery mode, `moves_money_or_quota`) and `GET /v1/integrations/{id}`.
+   `operations[].request_schema.body` is the JSON Schema of the body: send every field in `required`,
+   the rest only when you have real values; `request_schema.headers` lists caller headers to send.
+   Build bodies from the schema, never from vendor docs. Never invent ids. There is no response schema.
 2. **Dry-run** (developer keys with scope `dry_run`): `POST /v1/integrations/{id}/dry-run` shows the
    upstream request with secrets `***`, sends nothing. Use it to check the mapping only; never copy
    vendor hosts, headers or shapes from it into code.
@@ -36,7 +39,10 @@ Environment: `HUB_BASE_URL`, `HUB_API_KEY` (tenant key). Header on every call:
    quota moves. Same key within 24 h replays the stored result (`X-Hub-Idempotent-Replay: true`).
    Log `X-Hub-Request-Id`.
 4. **Handle**:
-   - `200`: canonical response.
+   - `X-Hub-Pass-Through: true` on any status: the third party's own status and body, unchanged (the
+     integration has no response transformer). Never the error envelope, even on 4xx/5xx; check this
+     header first. 2xx = done; non-2xx = the third party refused after the Hub's retries.
+   - `200`: the integration's output (any JSON).
    - `202 {"request_id", "status": "accepted|queued|in_flight", "poll"}`: not done; poll
      `GET /v1/requests/{request_id}` with backoff until `succeeded | failed | dead_lettered | expired`,
      or wait for the signed callback.
@@ -70,11 +76,14 @@ bytes before parsing, constant-time compare, reject `|now - t| > 5 min`, accept 
 ## Go
 Use `github.com/Donquixot-Doflamingo/integration-hub/backend/pkg/hubclient`: `hubclient.New(baseURL,
 key)`, `Invoke(ctx, id, body, hubclient.WithIdempotencyKey(k), hubclient.WithOperation(op),
-hubclient.WithSession(s))` returns `*hubclient.Result` (200; `.Session` after step 1) or
-`*hubclient.Queued` (202) and errors as `*hubclient.Error` (`Code`, `Retryable`, `RetryAfter`).
+hubclient.WithSession(s), hubclient.WithHeaders(h))` returns `*hubclient.Result` (200; `.Session` after
+step 1; `.PassThrough` for a third party's own 2xx) or `*hubclient.Queued` (202) and errors as
+`*hubclient.Error` (`Code`, `Retryable`, `RetryAfter`) or `*hubclient.PassThroughError` (third party's
+non-2xx: `Status`, `Body`).
 Handle both outcomes; never treat `Queued` as success.
 
 ## No integration fits?
-Do not work around it. The platform team creates integrations: send the tenant, capability and
-operations, delivery needs (sync / wait / async / callback), volume, whether money or quota moves,
+Do not work around it. The platform team creates integrations (from its console, no code): send
+the tenant, the operations with example bodies (required and optional fields), what you need back
+(the third party's answer as it is, or a fixed shape), delivery needs (sync / wait / async / callback), volume, whether money or quota moves,
 data classes (PII, Aadhaar, PAN, bureau) and example bodies with fake data.

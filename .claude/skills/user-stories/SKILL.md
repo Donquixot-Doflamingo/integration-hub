@@ -63,7 +63,7 @@ Split by, in order of preference:
 1. **Delivery mode** (sync / wait / async / async_callback).
 2. **Happy path vs failure handling** (circuit open, 429, TTL expiry as separate stories).
 3. **Surface** (caller API vs admin API vs console vs `hubctl` vs MCP).
-4. **Operation** of a multi-step capability (`generate` vs `verify`).
+4. **Operation** of a multi-operation integration (`generate` vs `verify`).
 5. **Data/role variation** (`tenant_viewer` vs `admin`).
 Do not split by technical layer ("backend story", "frontend story"); that is ticket-level.
 

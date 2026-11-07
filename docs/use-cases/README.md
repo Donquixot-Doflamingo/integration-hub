@@ -12,7 +12,7 @@ Every use case below has a status line:
 | **Partly** | The Hub mechanism exists and is tested, but something a production rollout needs is missing. The gap has a ticket. |
 | **Planned** | Designed (DESIGN.md) but not built. The ticket is named. Request shapes for planned items are not in the contract yet, so this page shows the flow, not field names. |
 
-The HTTP examples use the real caller contract, [`contracts/openapi/hub-public.v1.yaml`](../../contracts/openapi/hub-public.v1.yaml), and real capability schemas. Callers never see a vendor name, an account name or a version, so neither do the requests and responses here. Vendor names appear only in the prose, to explain what happens behind the Hub.
+The HTTP examples use the real caller contract, [`contracts/openapi/hub-public.v1.yaml`](../../contracts/openapi/hub-public.v1.yaml), and the operations' real request schemas (since ADR-0023 each integration publishes its own, per operation, in discovery). Callers never see a vendor name, an account name or a version, so neither do the requests and responses here. Vendor names appear only in the prose, to explain what happens behind the Hub.
 
 ## Catalogue
 
@@ -35,8 +35,8 @@ The HTTP examples use the real caller contract, [`contracts/openapi/hub-public.v
 **In one sentence:** your service calls one stable URL per business integration with a vendor-neutral body; the Hub picks the vendor, account and payload format, calls the vendor, and gives you back a vendor-neutral answer.
 
 ```text
-POST /v1/integrations/{integration_id}/invoke              single-step capabilities
-POST /v1/integrations/{integration_id}/invoke/{operation}  one operation of a multi-operation capability
+POST /v1/integrations/{integration_id}/invoke              the default operation of a single-operation integration
+POST /v1/integrations/{integration_id}/invoke/{operation}  one operation of a multi-operation integration
 GET  /v1/requests/{request_id}                             status and result of wait/async requests
 ```
 
@@ -47,7 +47,7 @@ There is deliberately **no header or field to choose a vendor, account or versio
 ```mermaid
 flowchart LR
   A[Your service] -->|HTTPS + API key| B[Authenticate key,<br/>check grant,<br/>tenant rate limit]
-  B --> C[Body size limit,<br/>validate against the<br/>capability schema]
+  B --> C[Body size limit,<br/>validate against the<br/>operation's request schema<br/>(validate_input)]
   C --> D[Resolve: active version,<br/>vendor + account<br/>from the in-memory snapshot]
   D --> E[Idempotency check<br/>Redis, only with a key]
   E --> F[Transform canonical body<br/>to the vendor format,<br/>inject credentials]
@@ -101,7 +101,8 @@ A 202 always means "accepted, not done". The Go SDK returns it as a separate `Qu
 
 | HTTP | Body |
 | --- | --- |
-| 200 | The canonical response of the capability |
+| 200 | The integration's output: what its response transformer produces (unchanged, no schema check) |
+| any status, with `X-Hub-Pass-Through: true` | The vendor's own status and body, unchanged, when the operation has no response transformer (sync answers only; never the error envelope) |
 | 202 | `{"request_id", "status": "accepted" \| "queued" \| "in_flight", "reason", "poll"}` |
 | 4xx / 5xx | One envelope: `{"error": {"code", "message", "retryable", "retry_after_ms", "circuit", "reason", "upstream", "details", "request_id"}}` (unused members are null or absent) |
 
@@ -113,7 +114,7 @@ The error codes and when they happen are in DESIGN §4.4 and `contracts/README.m
 
 **Scenario.** The orders service records "order placed" for analytics. Brand A and brand B each have their own CleverTap account (different region, different payload shape), and one team only wants a minimal "ok" back.
 
-**Hub features.** Capability `events.track@v1`; one integration per brand, each bound to its own account; transformers T1 (brand A) and T2 (brand B, adds brand and campaign fields) share the vendor definition; R1 is a full response, R2 a minimal one (DESIGN §3.3, §7.4).
+**Hub features.** Operation `default` with the events-tracking request schema; one integration per brand, each bound to its own account; transformers T1 (brand A) and T2 (brand B, adds brand and campaign fields) share the vendor definition; R1 is a full response, R2 a minimal one (DESIGN §3.3, §7.4).
 
 | Integration | Account behind it (Hub-side only) | Mode | Response |
 | --- | --- | --- | --- |
@@ -225,7 +226,7 @@ sequenceDiagram
   H-->>S: 200 {"status":"ok", ...} (same schema)
 ```
 
-**On failure.** A publish that would break callers is refused before it goes live: schemas must compile, expressions type-check, every transformer's golden fixtures must pass, and the response transformer's output must match the capability response schema (DESIGN §6.4). A node that cannot fetch the new snapshot keeps serving the last good one.
+**On failure.** A publish that would break callers is refused before it goes live: schemas must compile, expressions type-check, every transformer's samples must pass, transformer field reads and sample inputs must fit each operation's request schema, and request samples must fit the vendor endpoint's request schema (DESIGN §6.4, ADR-0023). Response output is not checked against a schema, so a vendor switch keeps callers' output only if the new response transformer reproduces it. A node that cannot fetch the new snapshot keeps serving the last good one.
 
 **Status: Works today.** All six DESIGN §6.3 rows, for an account change, a vendor change (to a second, test-only vendor) and a transformer change: `TestCutoverCompletedAndNewRequests`, `TestCutoverInFlightStaysOnV7`, `TestCutoverQueuedReResolveOrPinned`, `TestCutoverRetryWithSameKeyResolvesFresh`, `TestMixedVersionPropagation` (`backend/internal/edge/cutover_integration_test.go`) and `TestSessionStepTwoStaysOnOpeningVersion` (`cutover_session_integration_test.go`). Shadow traffic: `TestShadow`. The publish step is driven from the admin API and `hubctl apply` (M7).
 
@@ -407,7 +408,7 @@ This is the product owner's question: *"In a UX flow, first an OTP comes, then t
 - **The Hub handles each call; your backend owns the journey.** The Hub is not a workflow engine (PRD non-goal: "not a multi-step workflow/orchestration engine across vendors"). Your onboarding backend knows which screen the user is on and decides what to call next. The Hub makes each call vendor-neutral, safe to retry, audited, and resilient.
 - **Where the vendor needs continuity between two calls** (an OTP is generated and must be verified against the same vendor transaction), the Hub keeps a **vendor session**: step 1 returns an `X-Hub-Session` header; your backend sends it back on step 2. The Hub stores only the vendor's transaction id, for 10 minutes, pinned to the exact account and version that sent the OTP. That works today.
 - **The bank account check is a separate integration** (a sync lookup, often a different vendor). It needs no session. Your backend calls it after it has seen "OTP verified".
-- **Each step is its own operation, on its own vendor endpoint.** `send_otp` and `verify_otp` are two operations of one integration (`POST .../invoke/send_otp`, `POST .../invoke/verify_otp`). The platform team gives each operation its own transformer pair, so its own vendor endpoint (per-operation transformers, HUB-343); a configuration that would let one operation's mapping serve the other is refused at publish (HUB-345). That works today. The production Aadhaar OTP capability, with a licensed KUA/ASA, is Release 2 (HUB-334).
+- **Each step is its own operation, on its own vendor endpoint.** `send_otp` and `verify_otp` are two operations of one integration (`POST .../invoke/send_otp`, `POST .../invoke/verify_otp`). The platform team gives each operation its own transformer pair, so its own vendor endpoint (per-operation transformers, HUB-343); a pair whose transformer reads fields the operation does not declare, or whose samples do not fit it, is refused at publish (HUB-345, `schemas_compile` / `input_schema`). That works today. A production Aadhaar OTP integration, with a licensed KUA/ASA, is Release 2 (HUB-334).
 
 ### The UX journey, step by step
 
@@ -536,7 +537,7 @@ For Aadhaar OTP eKYC, step 1 carries the Aadhaar number in the canonical body. T
 
 1. **Session store refuses it, twice.** `sessions.CheckData` rejects any session data that contains a 12-digit Aadhaar-like number (with or without spaces or hyphens), in keys or values; the `vendor_sessions` table has the same check as a database constraint. A transformer that tries anyway fails the call with `TRANSFORM_FAILED` and opens no session.
 2. **Logs never contain bodies** (redacting logger; codes and counts only).
-3. **Audit trail:** bureau, Aadhaar and PAN integrations use the `sealed` payload policy (decision D6): payloads are stored encrypted under a per-tenant key and are readable only through an audited "unseal" admin action (works today). The 90-day retention and KMS-managed keys are HUB-337. The capability schema tags the field `x-pii: government_id`. **Open question for compliance:** UIDAI rules restrict storing Aadhaar numbers outside an Aadhaar Data Vault. If even encrypted audit copies are not acceptable, the Aadhaar integration should use the `metadata_only` policy (hashes and sizes only, no bodies). Decide this before HUB-334 goes live.
+3. **Audit trail:** bureau, Aadhaar and PAN integrations use the `sealed` payload policy (decision D6): payloads are stored encrypted under a per-tenant key and are readable only through an audited "unseal" admin action (works today). The 90-day retention and KMS-managed keys are HUB-337. The `send_otp` operation's request schema tags the field `x-pii: government_id`. **Open question for compliance:** UIDAI rules restrict storing Aadhaar numbers outside an Aadhaar Data Vault. If even encrypted audit copies are not acceptable, the Aadhaar integration should use the `metadata_only` policy (hashes and sizes only, no bodies). Decide this before HUB-334 goes live.
 
 ### Try it against a real provider: Aadhaar OTP e-KYC
 
@@ -554,18 +555,18 @@ For Aadhaar OTP eKYC, step 1 carries the Aadhaar number in the canonical body. T
 | Steps on **different vendor endpoints** (`send_otp`, `verify_otp` as operations of one integration, each with its own transformer pair), in one session, also through failover, wait, async and dry-run | **Works today** | `TestExampleOTPAccountFlow` (step 1 hits `/v1/otp/send`, step 2 `/v1/otp/verify`, session pinned to v1 / account A across a publish), `TestPerOperationSyncSelectsThePair`, `TestPerOperationFailoverSelectsThePair`, `TestPerOperationDryRunSelectsThePair`, `TestPerOperationShadowSelectsThePair`, `TestPerOperationWaitMode`, `TestPerOperationAsyncWorker` (`backend/internal/edge/`); configured through the admin API: `TestPerOperationSpecs` (HUB-343, HUB-344) |
 | A config where one operation's mapping would serve another is refused at publish (check `operations_have_transformers`), never misrouted at request time | **Works today** | `TestOperationsHaveTransformers` (`backend/internal/registry/`), `TestExampleOTPRefusesOnePairForBothOperations` (HUB-345) |
 | Machine-readable reason for wrong vs expired OTP | **Partly** (message text only) | HUB-346 |
-| Production Aadhaar OTP capability (`kyc.aadhaar_otp@v1`) with a licensed KUA/ASA, UIDAI OTP limits as account quota | **Planned** | HUB-334; the capability schema goes through the contract-steward |
+| Production Aadhaar OTP integration with a licensed KUA/ASA, UIDAI OTP limits as account quota | **Planned** | HUB-334; its operations and request schemas are integration data built in the console (ADR-0023) |
 
 ---
 
 ## 7. Lending catalogue patterns
 
-DESIGN §14 groups lending integrations into seven patterns. No production lending vendor is configured today; the table says what the Hub can already do for each pattern and what is missing. For **planned** patterns the request bodies are not in the contract yet (each needs a capability schema from the contract-steward), so the flows below name endpoints, not fields.
+DESIGN §14 groups lending integrations into seven patterns. No production lending vendor is configured today; the table says what the Hub can already do for each pattern and what is missing. For **planned** patterns no integration declares the request bodies yet (each will declare its operations' request schemas when it is onboarded, ADR-0023), so the flows below name endpoints, not fields.
 
 | Pattern | Examples | Status | What exists / what is missing |
 | --- | --- | --- | --- |
-| Sync lookup | Bureau pull, PAN verify, PAN–Aadhaar link, GST/Udyam/MCA, penny drop, CKYC search | **Partly** | Works: sync mode, transformers with goldens, mandatory `Idempotency-Key` for money/quota, sealed audit (example: `int_demo_bank_verify`). Missing: capability schemas (CCR each), auth schemes many of these vendors use (OAuth2, HMAC signing, mTLS: HUB-332), the optional 24 h result cache (HUB-347), KMS-managed seal keys (HUB-337) |
-| Two-step with vendor txn id | Aadhaar OTP eKYC | **Partly** | Use case 6. Works: vendor sessions, one operation per vendor endpoint (HUB-343). Missing: the `kyc.aadhaar_otp@v1` capability with a licensed KUA/ASA (HUB-334), a canonical reason for wrong vs expired OTP (HUB-346) |
+| Sync lookup | Bureau pull, PAN verify, PAN–Aadhaar link, GST/Udyam/MCA, penny drop, CKYC search | **Partly** | Works: sync mode, transformers with goldens, mandatory `Idempotency-Key` for money/quota, sealed audit (example: `int_demo_bank_verify`). Missing: onboarded integrations with their request schemas, auth schemes many of these vendors use (OAuth2, HMAC signing, mTLS: HUB-332), the optional 24 h result cache (HUB-347), KMS-managed seal keys (HUB-337) |
+| Two-step with vendor txn id | Aadhaar OTP eKYC | **Partly** | Use case 6. Works: vendor sessions, one operation per vendor endpoint (HUB-343). Missing: a production Aadhaar OTP integration with a licensed KUA/ASA (HUB-334), a canonical reason for wrong vs expired OTP (HUB-346) |
 | Consent + async fetch | Account Aggregator | **Planned** | HUB-336 (long-running requests, consent store), HUB-330 (inbound notifications) |
 | Redirect + callback | DigiLocker, eSign, eNACH, reverse penny drop | **Planned** | HUB-335; the return endpoint is reserved in the contract (`GET /handoff/return/{session_id}`, `x-status: planned`, answers 404 today) |
 | Upload + job | Bank statement analysis, bulk CKYC | **Planned** | HUB-348 (needs object storage for large payloads, HUB-098) |
@@ -681,11 +682,11 @@ sequenceDiagram
 
 | Ticket | Gap | Why it matters |
 | --- | --- | --- |
-| HUB-343 | An integration version had one transformer pair for every operation, so multi-operation capabilities with different vendor endpoints (`generate` / `verify`) could not be configured | **Closed (in review, 2026-11-07):** per-operation transformer pairs; use case 6 uses them |
+| HUB-343 | An integration version had one transformer pair for every operation, so multi-operation integrations with different vendor endpoints (`generate` / `verify`) could not be configured | **Closed (in review, 2026-11-07):** per-operation transformer pairs; use case 6 uses them |
 | HUB-344 | Admin contract change (contract-steward) for the per-operation transformer map | **Closed (in review):** hub-admin 1.2.0 `TargetRef.operations` |
 | HUB-345 | Such a config was *accepted* and the second operation silently ran the first operation's transformers | **Closed (in review):** refused at publish by the check `operations_have_transformers` |
 | HUB-346 | Error rules cannot set a machine-readable `reason` (e.g. wrong vs expired OTP) | UX branching on free text is fragile |
 | HUB-347 | The 24 h result cache for sync lookups (DESIGN §14) has no implementation and had no ticket | Cost of repeated PAN/bureau lookups |
 | HUB-348 | The upload + job pattern (bank statements) had no Release 2 item | Lending catalogue coverage |
 
-Capability schemas are read only from `contracts/` by design (ADR-0004: they are the caller-facing contract). The runnable example therefore keeps its schemas in an example overlay that the test merges in memory; a production capability always goes through the contract-steward.
+Since ADR-0023 (which supersedes ADR-0004) request schemas are registry data: each integration version declares its operations' request schemas and each vendor endpoint its own, built in the console. Nothing goes through the contract-steward for a new integration. The runnable examples keep their schemas in their own config trees.

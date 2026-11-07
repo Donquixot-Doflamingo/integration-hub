@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Accepted |
+| Status | Superseded by ADR-0023 |
 | Date | 2026-10-31 |
 | Deciders | lead |
 | DESIGN refs | §4, §8.1, §16.1; AGENTS §4 |

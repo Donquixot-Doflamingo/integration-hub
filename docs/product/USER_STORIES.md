@@ -17,20 +17,19 @@ sequenceDiagram
   actor Plat as Platform engineer
   participant Hub
   participant V as Vendor (mockvendor in dev)
-  Dev->>Plat: Request: "track order events" (capability events.track@v1)
-  Plat->>Hub: hubctl apply: tenant, API key, integration int_evt_brandA (wait, 3 s)
-  Hub-->>Plat: Goldens pass, snapshot v42 live on all nodes ≤ 10 s
+  Dev->>Plat: Request: "track order events" (example body, required fields)
+  Plat->>Hub: console or admin API: tenant, API key, integration int_evt_brandA (operation default, wait, 3 s)
+  Hub-->>Plat: Samples pass, snapshot v42 live on all nodes ≤ 10 s
   Plat-->>Dev: API key (shown once) + integration ID
-  Dev->>Hub: GET /v1/integrations → int_evt_brandA, capability, mode
-  Dev->>Hub: GET /v1/capabilities/events.track@v1 → request/response schema
+  Dev->>Hub: GET /v1/integrations → int_evt_brandA, operations with request_schema, mode
   Dev->>Hub: POST /v1/integrations/int_evt_brandA/invoke (Idempotency-Key)
   Hub->>V: transformed vendor request
   V-->>Hub: 200
-  Hub-->>Dev: 200 canonical {status: ok} + X-Hub-Request-Id
+  Hub-->>Dev: 200 {status: ok} (response transformer output) + X-Hub-Request-Id
 ```
-1. Platform engineer adds tenant `orders-service`, key, and integration `int_evt_brandA` with `wait` mode; publish validates and goldens pass.
+1. Platform engineer adds tenant `orders-service`, key, and integration `int_evt_brandA` (operation `default` with its request schema) with `wait` mode; publish validates and samples pass.
 2. Developer receives the key once and lists invocable integrations; no vendor, account or version appears.
-3. Developer fetches the capability schema and builds a canonical body.
+3. Developer reads the operation's request schema from discovery and builds the body (required fields, optional ones when known).
 4. Developer calls `invoke` with an `Idempotency-Key`; receives 200 (or 202 `in_flight` handled as `Queued` by `hubclient`).
 5. Developer sees the request in the console (`tenant_viewer`) with a full timeline.
 
@@ -67,15 +66,15 @@ Stories: US-0801, US-0802, US-1603, US-1901, US-1903, US-0904
 
 1. A tenant reports `request_id = req_01J9…` returned `UPSTREAM_REJECTED`.
 2. SRE opens the request explorer, searches by id; the timeline shows `request.received` → `validated` → `integration.resolved` (v7, account, transformer, snapshot, breaker state) → `transformed` (secrets `***`) → `vendor.sent` → `vendor.responded` (422 body) → `request.failed`.
-3. Diff of canonical input vs vendor request reveals a transformer mapping bug; platform ships T1@8, publishes v8.
+3. Diff of the caller's input vs vendor request reveals a transformer mapping bug; platform ships T1@8, publishes v8.
 4. SRE replays matching dead letters by filter (integration, reason, time range); replay re-transforms with T1@8.
 
 ### J-E — A developer uses Claude + MCP to discover and dry-run an integration
 Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 
 1. Developer copies the skill to `~/.claude/skills/integration-hub/` and adds `hubmcp` to their MCP config with `HUB_BASE_URL` and their tenant `HUB_API_KEY`.
-2. Asks Claude "how do I send an order event?"; Claude calls `hub_list_integrations`, then `hub_describe_integration int_evt_brandA` (capability schema, delivery mode).
-3. Claude builds a canonical body and calls `hub_dry_run` (the developer's key has scope `dry_run`); the output shows the exact upstream request with secrets as `***` (PRD DV-6). Claude uses it only to check the mapping, never to generate logic.
+2. Asks Claude "how do I send an order event?"; Claude calls `hub_list_integrations`, then `hub_describe_integration int_evt_brandA` (operations with their request schemas, delivery mode).
+3. Claude builds the body from the request schema and calls `hub_dry_run` (the developer's key has scope `dry_run`); the output shows the exact upstream request with secrets as `***` (PRD DV-6). Claude uses it only to check the mapping, never to generate logic.
 4. Claude generates `hubclient` code with an `Idempotency-Key` and `Queued` handling.
 5. Developer asks to send one test event; Claude calls `hub_invoke`. For an integration with `moves_money_or_quota: true`, the tool refuses until `confirm: true` and an idempotency key are passed after the developer agrees.
 
@@ -149,8 +148,8 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** a transformer with no fixtures, **when** I publish, **then** it is rejected.
 
 ### US-0402 — Compile-time type checking
-**As a** platform engineer, **I want** expressions type-checked against the capability schema at snapshot build, **so that** typos fail before traffic. · **Must**
-- **Given** `req.event.nmae`, **when** the snapshot builds, **then** compile fails naming the transformer, line and unknown field.
+**As a** platform engineer, **I want** expressions type-checked at snapshot build and their field reads checked against the operation's request schema, **so that** typos fail before traffic. · **Must**
+- **Given** `req.event.nmae` and an operation that does not declare it, **when** the integration is validated or published, **then** it fails (`schemas_compile`) naming the transformer and the field (`/body/event/nmae`) (ADR-0023).
 - **Given** a transformer using `creds.passcode` in `body`, **when** `allow_creds_in_body` is not set, **then** compile fails.
 
 ### US-0403 — Bounded, pure execution
@@ -180,9 +179,9 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** an unknown or revoked key, **when** used, **then** 401 `UNAUTHORIZED` with no hint whether the integration exists.
 
 ### US-0503 — Discover what I can call
-**As a** service developer, **I want** `GET /v1/integrations` and `GET /v1/capabilities/{capability}`, **so that** I can find integration IDs and canonical schemas without asking the platform team. · **Must**
-- **Given** my key, **when** I list integrations, **then** each item has id, capability, operations, delivery mode, paused flag and description, and none has vendor, account or version.
-- **Given** a capability I can invoke, **when** I fetch it, **then** I receive request and response JSON Schemas per operation.
+**As a** service developer, **I want** `GET /v1/integrations` and `GET /v1/integrations/{id}`, **so that** I can find integration IDs and what to send without asking the platform team. · **Must**
+- **Given** my key, **when** I list integrations, **then** each item has id, operations (each with its request schema), delivery mode, paused flag and description, and none has vendor, account or version.
+- **Given** an integration I can invoke, **when** I fetch it, **then** each operation carries `request_schema.body` (and `headers` when it reads caller headers); there is no response schema (ADR-0023 removed `GET /v1/capabilities/{capability}`).
 - **Given** an integration I am neither owner nor grantee of, **when** I fetch `GET /v1/integrations/{id}`, **then** 404 `INTEGRATION_NOT_FOUND`.
 
 ### US-0504 — Validation errors at the edge
@@ -278,9 +277,9 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 **As a** service developer, **I want** envelopes past `expires_at` marked `expired` and reported, **so that** stale messages are not sent. · **Must**
 - **Given** an envelope parked past its TTL, **when** checked before an attempt, **then** status becomes `expired` and a `request.expired` callback is sent if subscribed.
 
-### US-0906 — Interactive capabilities stay sync
-**As an** integration admin, **I want** publish to reject non-sync modes for `interactive: true` capabilities, **so that** a person waiting never gets a 202. · **Must**
-- **Given** `llm.chat@v1` with mode `wait`, **when** I publish, **then** it is rejected citing §5.4.
+### US-0906 — Interactive integrations stay sync
+**As an** integration admin, **I want** publish to reject non-sync modes for integrations created with `interactive: true`, **so that** a person waiting never gets a 202. · **Must**
+- **Given** an interactive chat or OTP integration with mode `wait`, **when** I publish, **then** it is rejected (`interactive_sync_only`) citing §5.4.
 
 ## F-10 Idempotency
 
@@ -377,9 +376,9 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** v7 published, **when** anyone tries to modify it, **then** the API refuses; changes require v8.
 
 ### US-1402 — Full publish validation
-**As an** integration admin, **I want** publish to check schemas, expressions, goldens, response conformance, references and interactive rules, **so that** bad versions never go live. · **Must**
+**As an** integration admin, **I want** publish to check schemas, expressions, samples, references and interactive rules, **so that** bad versions never go live. · **Must**
 - **Given** a version referencing a `retired` account, **when** I publish, **then** it is rejected naming the account.
-- **Given** a response transformer whose output violates the capability response schema, **when** I publish, **then** it is rejected.
+- **Given** a request sample whose input breaks the operation's request schema, or whose vendor request breaks the endpoint's, **when** I publish, **then** it is rejected naming the sample and the field (`input_schema`, `endpoint_schema`). Response output is not checked against a schema (ADR-0023).
 
 ### US-1403 — Weighted canary
 **As an** integration admin, **I want** weights across targets hashed on idempotency key or request id, **so that** I can canary a new account or vendor. · **Must**
@@ -418,7 +417,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ## F-16 Admin API, RBAC & change log
 
 ### US-1601 — Manage the registry by API
-**As a** platform engineer, **I want** `/admin/v1` endpoints for vendors, accounts, capabilities, transformers, integrations, tenants, API keys, registrar endpoints, snapshots, requests, DLQ and breakers, **so that** every operation is scriptable. · **Must**
+**As a** platform engineer, **I want** `/admin/v1` endpoints for vendors (with endpoint request schemas), accounts, transformers, integrations, tenants, API keys, registrar endpoints, snapshots, requests, DLQ and breakers, **so that** every operation is scriptable. · **Must**
 - **Given** an `editor` token, **when** I create an integration draft and publish it, **then** it goes through the §6.4 pipeline and returns the new version.
 
 ### US-1602 — RBAC
@@ -540,7 +539,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-1909 — Create an integration and edit its draft in a form
 **As an** integration admin, **I want** to create an integration and build its draft in a form (targets, per-operation transformers, delivery, weights), **so that** I do not hand-write YAML for routine changes. · **Must**
 - **Given** the editor role, **when** I create an integration with a reason, **then** its first draft opens and shows the change log id.
-- **Given** a multi-operation capability such as the Aadhaar example (`send_otp`, `verify_otp`), **when** I edit a target, **then** I can keep an operation on the default transformer pair or give it its own (`TargetRef.operations`).
+- **Given** a multi-operation integration such as the Aadhaar example (`send_otp`, `verify_otp`), **when** I edit a target, **then** I can keep an operation on the default transformer pair or give it its own (`TargetRef.operations`).
 - **Given** a saved draft, **when** a publish check fails with a JSON pointer, **then** the message shows on the field the pointer names (or in a summary for parts only the YAML tab edits).
 - **Given** the targets, **when** I change a weight, **then** the total is shown live and a draft whose weights do not total 100 is not saved.
 - **Given** a valid draft, **when** I publish, **then** I see the diff against the active version and confirm with a reason; rollback stays one dialog with a reason.
@@ -555,9 +554,9 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ## F-20 Hub MCP server (`hubmcp`)
 
 ### US-2001 — Discover integrations from Claude
-**As an** AI-assisted developer, **I want** `hub_list_integrations` and `hub_describe_integration`, **so that** Claude knows what I can call and the exact canonical schema. · **Must**
+**As an** AI-assisted developer, **I want** `hub_list_integrations` and `hub_describe_integration`, **so that** Claude knows what I can call and the exact request schema. · **Must**
 - **Given** `HUB_BASE_URL` + `HUB_API_KEY`, **when** Claude calls `hub_list_integrations`, **then** it receives only integrations my tenant may invoke, with no vendor, account or version.
-- **Given** an integration id, **when** Claude calls `hub_describe_integration`, **then** it receives capability, operations, delivery mode and request/response schemas.
+- **Given** an integration id, **when** Claude calls `hub_describe_integration`, **then** it receives the operations with their request schemas and the delivery mode (no response schema, ADR-0023).
 
 ### US-2002 — Dry-run from the editor
 **As an** AI-assisted developer, **I want** `hub_dry_run`, **so that** Claude can verify a body before generating code. · **Must**
@@ -618,7 +617,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** my client, **when** I follow its section, **then** `hubmcp` connects with my tenant key read from my environment or keychain.
 - **Given** I am a platform engineer, **when** I add the admin profile, **then** it runs on stdio with my own token as a separate entry, and the page warns that deletes and secrets stay in the console.
 
-## F-22 Release-2 capabilities
+## F-22 Release-2 features
 
 ### US-2201 — Inbound vendor webhooks
 **As a** service developer, **I want** vendor delivery-status webhooks verified, correlated and forwarded as canonical events, **so that** I learn message outcomes without vendor code. · **Must**
@@ -655,3 +654,81 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 ### US-2208 — KMS / Vault credential sources
 **As a** platform engineer, **I want** KMS and Vault `CredentialSource` implementations, **so that** production secrets use managed envelope encryption. · **Must**
 - **Given** the KMS source, **when** a credential is decrypted, **then** the decrypt is audited and the plaintext data key never persists.
+
+## F-23 Schema registry: operations on the integration, request schemas on the endpoint
+
+Replaces capabilities ([ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md), PRD DV-7). Feature doc: [F-23](../features/F-23-schema-registry.md).
+
+### US-2301 — Onboard a public API from the panel without code
+**As a** platform engineer, **I want** to onboard a new third-party API from the console alone, **so that** a new integration needs no code change, PR or contract change. · **Must**
+- **Given** the admin role and the agify age API (`GET /?name=`), **when** I create a vendor with auth scheme **None**, an endpoint `estimate` with a required query `name`, an account without credentials, a request transformer and an optional response transformer proven by samples, and an integration whose operation `default` requires `firstName` and `lastName`, **then** I can publish v1 and a caller gets `{"age": ...}` from `POST /v1/integrations/int_age_estimate/invoke`.
+- **Given** the same steps through the admin API or the hubmcp admin tools (except the account, which MCP cannot create), **when** I run them, **then** the result is the same.
+- **Given** any step, **when** it is saved, **then** it lands in the change log with my identity and reason.
+
+### US-2302 — Build a schema from a pasted sample
+**As a** platform engineer, **I want** to paste a sample request and get its fields, then mark each required or optional, **so that** I never hand-write JSON Schema for routine APIs. · **Must**
+- **Given** the endpoint form, **when** I paste `{"name": "Michael"}` under **Query parameters** and generate fields, **then** I get `name` typed `string`, and ticking **required** puts it in the part's `required` list; the same editor exists for path parameters, headers and body.
+- **Given** the integration draft form, **when** I paste a body sample under an operation's **Request body**, **then** generated fields start as required, I can untick optional ones, and **Request headers** works the same way.
+- **Given** a schema built this way, **when** I open the JSON Schema view, **then** it is the JSON Schema 2020-12 document the Hub stores; a document that does not compile is refused.
+
+### US-2303 — Prove a request transformer with samples
+**As a** platform engineer, **I want** each transformer proven by samples (a sample input and the exact vendor request it must produce), **so that** a wrong mapping never reaches a vendor. · **Must**
+- **Given** a request transformer whose sample output differs from its expected request, **when** I create it, **then** it is refused (422, check `goldens_pass`) with the diff, and nothing is stored.
+- **Given** a sample whose produced request misses the endpoint's required query `name`, **when** I create the transformer, **then** it is refused (`endpoint_schema`) naming the sample and the field `/query/name`.
+- **Given** the console, **when** I run the samples on a draft, **then** each failing sample shows why with its field, and **Create** stays locked until this exact draft passes.
+- **Given** credential headers from `creds.*`, **when** samples are checked, **then** they are not part of the endpoint check and never appear in API samples.
+
+### US-2304 — Validate transformers against the operation schema
+**As an** integration admin, **I want** validate and publish to check each transformer against the operation it serves, **so that** a transformer never reads a field callers do not send. · **Must**
+- **Given** a request transformer reading `req.middleName` that the operation does not declare, **when** I validate the version, **then** `schemas_compile` fails with field `/body/middleName`; the same for `hdr.X-Source` not declared in `request_schema.headers`.
+- **Given** a request sample whose input is not a valid caller input of the operation, **when** I validate, **then** `input_schema` fails naming the sample.
+- **Given** a valid version, **when** I validate, **then** every check passes and there is no response schema check.
+
+### US-2305 — Check live caller input (`validate_input`)
+**As a** service developer, **I want** a call that misses a required field rejected before anything runs, **so that** I get a precise error instead of a vendor failure. · **Must**
+- **Given** an operation with `validate_input` on (the default), **when** I invoke without a required field, **then** I get 400 `VALIDATION_FAILED` with one `details[]` entry per violation, and nothing is queued or sent.
+- **Given** an operation with `validate_input: false`, **when** I invoke with the same body, **then** the transformer runs on it and the call goes to the vendor.
+- **Given** a header I send that the operation does not declare, **when** the transformer runs, **then** it cannot read it.
+
+### US-2306 — Return the response transformer's output unchanged
+**As a** service developer, **I want** the integration's output exactly as its response transformer produced it, **so that** what I get is what the platform team proved with samples. · **Must**
+- **Given** a response transformer `age: res.body.age` and a vendor answer `{"count": 21, "name": "Michael", "age": 57}`, **when** I invoke, **then** I get 200 `{"age": 57}` with no `X-Hub-Pass-Through` header.
+- **Given** a response transformer, **when** it is created, **then** it needs at least one sample and no vendor endpoint.
+
+### US-2307 — Pass-through without a response transformer
+**As an** integration admin, **I want** to skip the response transformer and return the vendor's answer as it is, **so that** simple APIs need only a request mapping. · **Must**
+- **Given** a target pair without a response transformer, **when** a sync call gets a vendor 2xx, **then** the caller gets the vendor's status and body unchanged (non-JSON keeps its `Content-Type`) and `X-Hub-Pass-Through: true`.
+- **Given** vendor headers such as `X-Vendor-Server`, **when** the answer passes through, **then** only `Content-Type` and `Retry-After` reach the caller, plus the Hub's own headers.
+- **Given** a vendor 422, **when** it passes through, **then** it is not retried and the caller gets 422 with the vendor's body (not the canonical envelope); a vendor 5xx or 429 is retried as usual first.
+- **Given** a request completed after a 202, **when** the vendor fails, **then** `GET /v1/requests/{id}` and callbacks report an `UPSTREAM_*` code, and a success stores the vendor body as the result.
+
+### US-2308 — Public APIs with auth scheme `none`
+**As a** platform engineer, **I want** an auth scheme for APIs that need no credentials, **so that** public APIs need no fake secrets. · **Must**
+- **Given** a vendor with auth scheme `none`, **when** I create an account without credentials (or with `{}`), **then** it is created and calls send no auth.
+- **Given** the same vendor, **when** I send credentials, **then** the call is refused with 400 at `/credentials`; credential rotation on the account answers 409.
+- **Given** the console, **when** I create such an account, **then** the form says it has no credentials and shows no secret field.
+
+### US-2309 — Callers discover operations and request schemas
+**As an** AI-assisted developer, **I want** discovery, the SDK and the MCP tools to give me each operation's request schema, **so that** my assistant builds correct bodies from discovery alone. · **Must**
+- **Given** my key, **when** I call `GET /v1/integrations/{id}` or `hub_describe_integration`, **then** each operation has `name`, `description`, `idempotent` and `request_schema` (`body`, optional `headers`), and nothing names a vendor, account or version.
+- **Given** an operation that declares caller headers, **when** I call `hub_invoke` with `headers`, **then** declared headers are forwarded and the Hub's own headers are refused.
+- **Given** a pass-through answer, **when** `hub_invoke` or `hubclient` reports it, **then** it says so (`pass_through: true`, `Result.PassThrough`, `PassThroughError`).
+
+### US-2310 — Switch vendor behind the same operation schema
+**As an** integration admin, **I want** to move an integration to another vendor while callers keep sending the same body, **so that** a vendor switch stays a Hub-side change. · **Must**
+- **Given** an integration whose operation schema is unchanged, **when** I publish a version with a new target and new transformers, **then** validation checks the new request transformer against the same operation schema and callers change nothing in their requests.
+- **Given** no response transformer that reproduces the old output, **when** I switch, **then** callers may receive a different body; the operator skill warns about this before publishing.
+
+### US-2311 — Existing data keeps working after the upgrade
+**As an** on-call SRE, **I want** a database and snapshot archive written before ADR-0023 to come up working, **so that** the upgrade needs no manual step. · **Must**
+- **Given** a pre-ADR-0023 database, **when** migration 00011 runs, **then** capability schemas become integration operations and queued `llm.*` envelopes keep their pool; the down migration restores the old tables.
+- **Given** an archived snapshot blob of format 1, **when** any role loads it, **then** it is upgraded in memory, and the admin role re-archives it once as format 2 together with drafts and pending integrations (ADR-0025).
+
+### US-2312 — Skills and docs teach the new model
+**As an** AI-assisted developer, **I want** the operator, transformer and consumer skills to describe operations, endpoint schemas, samples and pass-through, **so that** my assistant gives correct steps. · **Must**
+- **Given** the hub-operator skill, **when** I ask how to onboard an API, **then** it gives vendor → endpoint with request schema → account (or none) → request transformer with samples → optional response transformer → integration with operations → validate → publish, with console, hubctl and hubmcp for each step.
+- **Given** the consumer skill, **when** a call returns `X-Hub-Pass-Through: true` with a 4xx, **then** it treats the body as the third party's answer, not the Hub's error envelope.
+
+### US-2313 — LLM integrations get their body limit and pool back
+**As a** service developer, **I want** an explicit integration setting for LLM workloads, **so that** large prompts get the 4 MB limit and async work uses the `llm` pool again. · **Should** (planned, HUB-439, ADR-0024)
+- **Given** an integration with the setting, **when** I send a 3 MB body, **then** it is accepted and its async work is queued in the `llm` pool; other integrations keep 1 MB and `messaging`.

@@ -5,7 +5,7 @@ description: "Implementing Integration Hub HTTP handlers against the frozen cont
 
 # Implementing against the contract
 
-`contracts/` (OpenAPI 3.1 + JSON Schemas for capabilities and webhook events) is the **only** interface between backend, frontend, MCP server and SDKs (AGENTS.md §4). The backend implements it; it never defines it.
+`contracts/` (OpenAPI 3.1, JSON Schemas for webhook events, the MCP tool contract) is the **only** interface between backend, frontend, MCP server and SDKs (AGENTS.md §4). The backend implements it; it never defines it.
 
 ## The rule
 - Only `contract-steward` edits `contracts/`. You never do, not even a typo.
@@ -17,8 +17,8 @@ description: "Implementing Integration Hub HTTP handlers against the frozen cont
 | Change | Caller API (`/v1`) | Admin API (`/admin/v1`) |
 | --- | --- | --- |
 | Add optional field / new endpoint / new enum value consumers tolerate | minor bump, OK | minor bump, OK |
-| Remove/rename field, change type, make optional → required, change status code meaning | **Not allowed** (D11: new integration ID / capability version instead) | major bump, needs the user's approval |
-| Canonical capability schema breaking change | new capability major → new integration ID callers adopt; old kept ≥ 6 months | — |
+| Remove/rename field, change type, make optional → required, change status code meaning | **Not allowed** (D11: new integration ID instead) | major bump, needs the user's approval |
+| Breaking change to an operation's `request_schema` (registry data, ADR-0023) | not a contract change; guidance: new integration ID callers adopt, old kept ≥ 6 months (D11) | — |
 Backend must stay tolerant: ignore unknown request fields only where the schema allows (`additionalProperties`); never emit fields the schema doesn't declare.
 
 ## Handlers ↔ operationIds

@@ -16,8 +16,8 @@
 | Sync p99 jumps for requests without `Idempotency-Key` | Something added Redis/DB to the sync path | Trace spans under edge; §18.5 rules |
 | `audit_events_dropped_total` > 0 | Audit writer slower than ingest (DB slow, batch too small) | Writer batch latency metrics, Postgres write latency, partition existence for today |
 | Inserts fail at midnight UTC | Next day's partition not created | Partition maintenance job; `\d+ requests` |
-| `EXPIRED` callbacks during a long outage | Working as designed: TTL passed while parked | Integration TTL; consider longer TTL for that capability |
-| 202 returned to an interactive capability | Mode not `sync` — publish validation hole | Publish pipeline validation (§5.4) |
+| `EXPIRED` callbacks during a long outage | Working as designed: TTL passed while parked | Integration TTL; consider longer TTL for that integration |
+| 202 returned to an interactive integration | Mode not `sync` — publish validation hole | Publish pipeline validation (§5.4) |
 | 404 `INTEGRATION_NOT_FOUND` just after create | Snapshot not yet propagated (≤ 10 s) or node can't fetch | `snapshot_version` lag alert |
 | Secret visible in a log line | Value not registered in the secret set (new auth scheme, token minted after warm) or logged via `[]byte`/struct | `telemetry.SecretSet.Update` call sites; canary test coverage |
 | Flaky test only under `-race` or `-shuffle` | Shared state between tests, timing assumptions, `time.Sleep` waits | Use `synctest`/`require.Eventually`, isolate data |

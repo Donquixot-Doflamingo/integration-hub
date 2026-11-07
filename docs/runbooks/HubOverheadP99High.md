@@ -20,7 +20,7 @@
 | Stage or signal | Likely cause | Fix |
 | --- | --- | --- |
 | `idempotency` | Redis slow or far away (budget 1 ms) | Check Redis latency and load; fix Redis. The stage only runs for requests with an `Idempotency-Key`. |
-| `validate` | Larger payloads or a bigger capability schema (budget 0.8 ms) | Find the integration (step 2). If a tenant started sending much larger bodies, talk to its owner. |
+| `validate` | Larger payloads, or a bigger operation request schema or `validate_input` switched on in a new version (budget 0.8 ms) | Find the integration (step 2). If a tenant started sending much larger bodies, talk to its owner. |
 | `transform` | A new heavy transformer version (budget 0.5 ms) | Step 2 finds it; `rollbackIntegration` if it came with a publish, then simplify the transformer. |
 | `audit` | Audit buffer near full, Postgres slow | See [AuditEventsDropped](AuditEventsDropped.md). |
 | Every stage up together | CPU throttling or GC pressure on gateways | Add gateway replicas or raise CPU limits; check `GOMEMLIMIT` is set (85 % of the memory limit). |

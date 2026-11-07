@@ -1,18 +1,20 @@
-# Example: `events.track@v1` end to end
+# Example: event tracking end to end
 
 Scenario: `orders-service` tracks an "order created" engagement event via integration
 `int_evt_brandA` (dev config). Which engagement vendor and account receive it is the Hub's business.
 
-The body below follows the dev `events.track@v1` schema; always confirm against
-`GET /v1/capabilities/events.track@v1` in your environment.
+The body below follows the dev integration's request schema; always confirm against
+`GET /v1/integrations/int_evt_brandA` (`operations[0].request_schema.body`) in your environment.
 
 ## 1. Discover
 ```bash
-curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/integrations" | jq '.'
-curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/capabilities/events.track@v1" | jq '.'
+curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/integrations" | jq '.items[].integration_id'
+curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/integrations/int_evt_brandA" \
+  | jq '.operations[] | {name, idempotent, required: .request_schema.body.required}'
+# {"name": "default", "idempotent": true, "required": ["user", "event"]}
 ```
 
-## 2. Canonical body (`body.json`)
+## 2. Body (`body.json`): `user.id` and `event.name` required, the rest optional
 ```json
 {
   "user":    { "id": "u_10293" },
@@ -45,7 +47,7 @@ Possible outcomes:
 HTTP/1.1 200 OK
 X-Hub-Request-Id: req_01J9ABCD
 
-{ "status": "ok", ... }          # canonical response fields per the capability response schema
+{ "status": "ok", ... }          # the integration's output (its response transformer decides the fields)
 ```
 ```http
 HTTP/1.1 202 Accepted
@@ -62,6 +64,18 @@ HTTP/1.1 400 Bad Request
 ```
 Sending the same request again with the same `Idempotency-Key` within 24 h returns the stored result
 with `X-Hub-Idempotent-Replay: true`; no duplicate event.
+
+A pass-through integration (no response transformer) answers with the third party's own body:
+```http
+HTTP/1.1 200 OK
+X-Hub-Request-Id: req_01J9ABCG
+X-Hub-Pass-Through: true
+Content-Type: application/json
+
+{ ...the third party's own JSON, unchanged... }
+```
+A 4xx/5xx with `X-Hub-Pass-Through: true` is the third party's refusal, not the Hub's envelope. Check
+the header before you parse `error`.
 
 ## 5. Poll a 202
 ```bash
@@ -124,8 +138,14 @@ func trackOrderCreated(ctx context.Context, orderID, userID string) error {
 	reqID := resp.Header.Get("X-Hub-Request-Id")
 
 	switch {
+	case resp.Header.Get("X-Hub-Pass-Through") == "true":
+		// the third party's own status and body (no response transformer); 2xx means done
+		if resp.StatusCode < 300 {
+			return nil
+		}
+		return fmt.Errorf("upstream refused with HTTP %d (request_id=%s)", resp.StatusCode, reqID)
 	case resp.StatusCode == http.StatusOK:
-		return nil // done; decode the canonical response if you need fields
+		return nil // done; decode the integration's output if you need fields
 	case resp.StatusCode == http.StatusAccepted:
 		var a accepted
 		if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
@@ -141,24 +161,25 @@ func trackOrderCreated(ctx context.Context, orderID, userID string) error {
 	}
 }
 ```
-In real services prefer the SDK (`pkg/hubclient`), which returns `*hubclient.Result` (200) or
-`*hubclient.Queued` (202) and a typed `*hubclient.Error`: see the SKILL.md "Go SDK" section. Never
+In real services prefer the SDK (`pkg/hubclient`), which returns `*hubclient.Result` (200, `PassThrough`
+set for a third party's own 2xx) or `*hubclient.Queued` (202), and a typed `*hubclient.Error` or
+`*hubclient.PassThroughError`: see the SKILL.md "Go SDK" section. Never
 treat `Queued` as success. For fire-and-forget event tracking, a queued result is usually fine to
 accept, but record its request id rather than reporting "sent".
 
 # Example: two-step OTP (send, then verify)
 
 Scenario: a loan onboarding backend verifies a mobile number. One integration, `int_demo_otp`
-(from the runnable example `examples/otp-account-flow/` in the Hub repo), capability
-`demo.mobile_otp@v1` with operations `send_otp` and `verify_otp`. Aadhaar OTP e-KYC has the same
+(from the runnable example `examples/otp-account-flow/` in the Hub repo), with operations `send_otp`
+(body `mobile`) and `verify_otp` (body `mobile`, `otp`). Aadhaar OTP e-KYC has the same
 shape (`examples/aadhaar-okyc/`: `int_aadhaar_okyc`, `send_otp` with the Aadhaar number and consent,
 then `verify_otp` with the OTP). Always read the real operation names and schemas from discovery.
 Use fake numbers: every `send_otp` sends a real SMS in a real environment, so ask the user first.
 
 ## 1. Discover the operations
 ```bash
-curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/integrations/int_demo_otp" | jq '.operations, .moves_money_or_quota'
-curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/capabilities/demo.mobile_otp@v1" | jq '.'
+curl -s -H "Authorization: Bearer $HUB_API_KEY" "$HUB_BASE_URL/v1/integrations/int_demo_otp" \
+  | jq '{interactive, moves_money_or_quota, ops: [.operations[] | {name, required: .request_schema.body.required}]}'
 ```
 
 ## 2. Step 1: send the OTP and keep the session id
