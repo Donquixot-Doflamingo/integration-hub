@@ -8,6 +8,7 @@ import type {
 	TransformerPair,
 	TransformerSummary
 } from '$lib/api/types';
+import { schemaDocumentProblem } from '$lib/utils/json-schema';
 import type { SpecProblem } from './draft';
 
 /**
@@ -101,6 +102,48 @@ export function operationNames(spec: IntegrationSpec): string[] {
 	return Object.keys(spec.operations ?? {});
 }
 
+/** Why `name` cannot be an operation name (`current` is the operation being renamed), or null. */
+export function operationNameProblem(
+	spec: IntegrationSpec,
+	name: string,
+	current: string | null = null
+): string | null {
+	if (!name) return 'Enter an operation name.';
+	if (!OPERATION_NAME.test(name))
+		return 'Lower-case letters, digits and "_", starting with a letter, at most 32 (e.g. verify_otp).';
+	if (name !== current && name in (spec.operations ?? {})) return `"${name}" exists already.`;
+	return null;
+}
+
+/** Adds an operation (`default` first, then `operation_2`, ...) and returns its name. */
+export function addOperation(spec: IntegrationSpec): string {
+	const ops = (spec.operations ??= {});
+	let name = Object.keys(ops).length ? 'operation_2' : DEFAULT_OPERATION;
+	for (let i = 2; name in ops; i++) name = `operation_${i}`;
+	ops[name] = newOperation();
+	return name;
+}
+
+/** Renames an operation in place (order kept), with the per-operation pairs of every target. */
+export function renameOperation(spec: IntegrationSpec, from: string, to: string): void {
+	if (from === to || !(from in spec.operations)) return;
+	spec.operations = Object.fromEntries(
+		Object.entries(spec.operations).map(([k, v]) => [k === from ? to : k, v])
+	);
+	for (const t of [...spec.targets, ...(spec.failover ?? [])]) {
+		if (!t.operations || !(from in t.operations)) continue;
+		t.operations = Object.fromEntries(
+			Object.entries(t.operations).map(([k, v]) => [k === from ? to : k, v])
+		);
+	}
+}
+
+/** Removes an operation and the per-operation pairs targets had for it. */
+export function removeOperation(spec: IntegrationSpec, name: string): void {
+	delete spec.operations[name];
+	for (const t of spec.targets) setOwnPair(t, name, false);
+}
+
 /** Operation names a target lists that the spec does not declare (to be removed). */
 export function unknownOperations(target: Target, operations: readonly string[]): string[] {
 	return Object.keys(target.operations ?? {}).filter((op) => !operations.includes(op));
@@ -130,6 +173,11 @@ export function fieldPointers(spec: IntegrationSpec, operations: readonly string
 	out.push('/delivery/on_circuit_open', '/delivery/pending', '/delivery/retry');
 	out.push('/delivery/retry/max_attempts', '/delivery/retry/schedule_ms');
 	out.push('/audit', '/audit/payloads', '/audit/retention_ms');
+	for (const op of operations) {
+		const o = `/operations/${escapeToken(op)}`;
+		out.push(o, `${o}/description`, `${o}/idempotent`, `${o}/validate_input`);
+		out.push(`${o}/request_schema`, `${o}/request_schema/body`, `${o}/request_schema/headers`);
+	}
 	spec.targets.forEach((t, i) => {
 		const p = `/targets/${i}`;
 		out.push(p, `${p}/vendor_id`, `${p}/account_id`, `${p}/weight`);
@@ -172,6 +220,28 @@ export function formProblems(spec: IntegrationSpec, operations: readonly string[
 	const out: SpecProblem[] = [];
 	if (!operations.length)
 		out.push({ pointer: '/operations', message: 'Add at least one operation.' });
+	for (const [name, op] of Object.entries(spec.operations ?? {})) {
+		const o = `/operations/${escapeToken(name)}`;
+		const bad = operationNameProblem(spec, name, name);
+		if (bad) out.push({ pointer: o, message: bad });
+		if ((op.description ?? '').length > 1024)
+			out.push({ pointer: `${o}/description`, message: 'Use at most 1024 characters.' });
+		const body = op.request_schema?.body;
+		if (!isObject(body))
+			out.push({
+				pointer: `${o}/request_schema/body`,
+				message: 'Declare the body (at least {type: object}).'
+			});
+		else {
+			const p = schemaDocumentProblem(body, 'body');
+			if (p) out.push({ pointer: `${o}/request_schema/body`, message: p });
+		}
+		const headers = op.request_schema?.headers;
+		if (headers !== undefined) {
+			const p = schemaDocumentProblem(headers, 'headers');
+			if (p) out.push({ pointer: `${o}/request_schema/headers`, message: p });
+		}
+	}
 	if (!spec.targets.length) out.push({ pointer: '/targets', message: 'Add at least one target.' });
 	spec.targets.forEach((t, i) => {
 		const p = `/targets/${i}`;

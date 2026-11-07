@@ -10,6 +10,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { pointerToPath } from '$lib/utils/diff';
 	import type { SpecProblem } from './draft';
+	import OperationsEditor from './OperationsEditor.svelte';
 	import {
 		DELIVERY_MODES,
 		deliveryLabels,
@@ -43,6 +44,7 @@
 		accounts = [],
 		transformers = [],
 		problems = [],
+		interactive = false,
 		disabled = false
 	}: {
 		spec: IntegrationSpec;
@@ -52,6 +54,8 @@
 		accounts?: AccountSummary[];
 		transformers?: TransformerSummary[];
 		problems?: SpecProblem[];
+		/** The integration is interactive (fixed at creation). */
+		interactive?: boolean;
 		disabled?: boolean;
 	} = $props();
 
@@ -154,6 +158,8 @@
 			</ul>
 		</div>
 	{/if}
+
+	<OperationsEditor {spec} {interactive} {at} {fid} {disabled} />
 
 	<fieldset
 		class="fk-group"

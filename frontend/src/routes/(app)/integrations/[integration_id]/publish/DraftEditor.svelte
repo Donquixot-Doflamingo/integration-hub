@@ -238,8 +238,8 @@
 	<button type="button" class="btn" aria-pressed={mode === 'form'} onclick={showForm}>Form</button>
 	<button type="button" class="btn" aria-pressed={mode === 'yaml'} onclick={showYaml}>YAML</button>
 	<span class="fk-hint"
-		>Both edit the same draft. The form covers targets, per-operation transformers, delivery and
-		audit; YAML covers everything (comments are not kept).</span
+		>Both edit the same draft. The form covers operations and their request schemas, targets,
+		per-operation transformers, delivery and audit; YAML covers everything (comments are not kept).</span
 	>
 </div>
 {#if switchError}<p class="fk-error" role="alert">
@@ -253,6 +253,7 @@
 		<SpecForm
 			bind:spec={formSpec}
 			operations={operationNames(formSpec)}
+			interactive={integration.interactive}
 			vendors={looked.vendors}
 			accounts={looked.accounts}
 			transformers={looked.transformers}

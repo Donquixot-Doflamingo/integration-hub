@@ -185,6 +185,13 @@
 		emit(emptyRoot(root) ? undefined : parsed.value);
 	}
 
+	/** Enter in a field of the editor must not submit the form around it. */
+	function keepEnter(e: KeyboardEvent) {
+		const t = e.target as HTMLElement;
+		if (e.key === 'Enter' && t instanceof HTMLInputElement && t.type !== 'checkbox')
+			e.preventDefault();
+	}
+
 	const extrasOf = (n: SchemaNode) =>
 		Object.entries(n.extra).map(([k, v]) =>
 			typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? `${k} ${v}` : k
@@ -303,7 +310,13 @@
 	{/each}
 {/snippet}
 
-<fieldset class="schema" {disabled} aria-describedby="{hint ? `${uid}-hint ` : ''}{uid}-count">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<fieldset
+	class="schema"
+	{disabled}
+	aria-describedby="{hint ? `${uid}-hint ` : ''}{uid}-count"
+	onkeydown={keepEnter}
+>
 	<legend>
 		{label}
 		<span class="fk-req">{optional ? '(optional: empty = not sent)' : '(required)'}</span>
