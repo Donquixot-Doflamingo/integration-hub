@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(adr)` · Record the LLM limit and legacy data decisions of HUB-433 (HUB-434) · HUB-434 · F-23
+  - ADR-0025: snapshots, drafts and pending integrations from before ADR-0023 are upgraded in code (on every read, and archived once by the admin), so an existing database needs no manual step; the legacy reader can go 90 days after every environment ran this version
+  - OBSERVABILITY: the pass-through `request failed` line and audit meta, and the admin's one-time legacy upgrade logs; TECH_SPEC links ADR-0024 and ADR-0025
+  - HUB-433, HUB-434, HUB-435 and HUB-438 move to in-review with their criteria checked or explained
 - 2026-11-07 · `test(edge)` · Cover pass-through on the gateway, worker and hubmcp (HUB-433) · HUB-433 · F-23
   - Gateway (wait mode): vendor status and body unchanged for 2xx, 4xx and non-JSON 5xx, only `Content-Type` and `Retry-After` from the vendor, `X-Hub-Pass-Through: true`, retries as with a response transformer; every answer contract-validated against the `default` PassThrough response
   - Worker: a queued pass-through stores a JSON body as it is, other bodies as a JSON string and an empty body as null; vendor errors keep `UPSTREAM_*` and the retry classification

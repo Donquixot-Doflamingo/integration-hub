@@ -3531,40 +3531,48 @@ Contract-first change per [ADR-0023](../tech/adr/0023-remove-capabilities-integr
 
 ### HUB-433 — Backend: registry, transform, edge and delivery without capabilities
 - **Epic:** EP-14 · **Type:** refactor · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Per [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md): registry loads operations from integration versions and request schemas from endpoints; transformer compile drops capability binding, field checks run at integration validate against the operation schema; sample checks validate produced vendor requests against the endpoint schema (publish time only); edge validates the caller input when `validate_input`; response transformer optional with header-filtered pass-through; audit PII tags from the operation schema.
 
 **Acceptance criteria**
-- [ ] `registry.Capability` and the capability loader removed
-- [ ] Transformer create and integration publish refuse a sample whose output differs from the expected sample or breaks the endpoint schema, with the field in the message
-- [ ] Pass-through returns vendor status and body, only Content-Type and Retry-After headers
+- [x] `registry.Capability` and the capability loader removed
+- [x] Transformer create and integration publish refuse a sample whose output differs from the expected sample or breaks the endpoint schema, with the field in the message
+  - Transformer create: 422 `goldens_pass` / `endpoint_schema` with `sample` and `field` (`TestAgifyOnboardedWithoutCapabilities`, `/query/name`); publish/validate: `snapshot_test`, `operations_test` (`input_schema`, `schemas_compile`)
+- [x] Pass-through returns vendor status and body, only Content-Type and Retry-After headers
+  - `TestE2EPassThrough` (wait mode, contract-validated), `TestWorkerPassThrough` (async keeps `UPSTREAM_*`, non-JSON stored as a JSON string), agify end-to-end (sync)
 - [ ] `make lint test itest` green; latency budget test green
+  - lint, test (-race) and itest (-race) green. Latency budget: not yet measured clean on the shared 2-CPU dev box (the gate discards runs where the process is frozen > 20 ms by other load)
+  - The 4 MB LLM body limit and the llm pool no longer derive from capability names: [ADR-0024](../tech/adr/0024-llm-body-limit-and-pool-without-capability-names.md), follow-up HUB-439
 
 ### HUB-434 — Backend: admin API, migration and auth scheme none
 - **Epic:** EP-14 · **Type:** refactor · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Admin API handlers follow the new contract; append-only migration drops `hub.capabilities` and capability columns and copies existing capability schemas into integration versions' operations; vendor auth scheme `none` with credential-less accounts ([ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md)).
 
 **Acceptance criteria**
-- [ ] Contract tests green for every changed handler
-- [ ] Migration up and down tested on a database with the old data
-- [ ] An account on an auth `none` vendor needs no credentials
+- [x] Contract tests green for every changed handler
+- [x] Migration up and down tested on a database with the old data
+  - `TestRemoveCapabilitiesMigration` (00011 on a scratch database seeded at 00010); the snapshot archive, drafts and pending integrations are upgraded by the admin at boot (`TestUpgradeLegacyArchive`), and a dev database plus `.dev-stack` built by the pre-ADR-0023 `dev-up` came up with today's `scripts/dev-up.sh` (queued request delivered, old draft and pending integration validate and publish)
+- [x] An account on an auth `none` vendor needs no credentials
+  - Also on an admin without a credential store; credential operations answer 409 (`TestAuthNoneAccounts`)
 
 ### HUB-435 — hubctl, hubmcp, seed config and examples without capabilities
 - **Epic:** EP-14 · **Type:** refactor · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-433 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-433 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Update hubctl (apply, plan, export, dry-run, transform test), hubmcp tools, `backend/config` seed and all examples (Aadhaar OKYC, PAN, latency demo) to [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md); add the agify age example (firstName + lastName to `?name=`, only `age` back).
 
 **Acceptance criteria**
 - [ ] No capability files or fields left in backend/config or examples
-- [ ] Examples run offline against mockvendor
-- [ ] hubmcp tests green, still no delete tools
+  - backend/config, deploy/load and the testkit fixtures: done. examples/ is not converted on this branch (backend scope); the gateway upgrades their capability overlays in memory, so the example tests still pass. Converting the files and adding an agify example under examples/ is left to whoever owns examples (HUB-437)
+- [x] Examples run offline against mockvendor
+  - The example integration tests (`example_kyc`, `example_otp_flow`, `example_latency`) are green; the agify-like flow runs as `TestAgifyOnboardedWithoutCapabilities` against mockvendor
+- [x] hubmcp tests green, still no delete tools
 
 ### HUB-436 — Console: schema registry editors, samples and no capabilities
 - **Epic:** EP-14 · **Type:** feat · **Area:** frontend
@@ -3591,13 +3599,14 @@ Rewrite hub-operator, hub-transformers, consumer skill and MCP setup docs, PRD, 
 
 ### HUB-438 — Remove leftover capability tests, fixtures and references across the repo
 - **Epic:** EP-14 · **Type:** chore · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Sweep: `grep -ri capabilit` returns only ADR history and changelog entries.
 
 **Acceptance criteria**
 - [ ] Repo-wide grep clean apart from history
+  - backend/ Go code, config and deploy/: only migration history, the legacy upgrade (`registry/legacy.go`, `control/legacy.go`, `testdata/legacy`) and tests asserting the removal remain. Not swept here (other owners): `backend/.claude/skills/` (HUB-437), examples/ (HUB-435/437), frontend/ (HUB-436), docs
 
 ### HUB-439 — Explicit integration setting for the LLM body limit and worker pool
 - **Epic:** EP-14 · **Type:** feat · **Area:** backend
