@@ -403,16 +403,14 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	rot, err := s.accessRotator()
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
 	pub, err := s.accessPublisher()
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
+	// The credential store is only needed when the vendor's scheme takes credentials: an auth
+	// none account (ADR-0023) can be created on an admin without one.
+	var rot *control.Rotator
 	created := false
 	ctx := r.Context()
 	res, err := pub.Edit(ctx, func(t control.Tree, snap *registry.Snapshot) (control.Change, error) {
@@ -454,6 +452,9 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		if !needsCreds {
 			return control.Change{Actor: principal(r).Actor(), Action: "createAccount", ObjectType: "account", ObjectID: id, Reason: reason,
 				After: map[string]any{"vendor": a.Vendor, "region": a.Region, "config": a.Config, "quota": a.Quota, "credentials": []any{}}}, nil
+		}
+		if rot, err = s.accessRotator(); err != nil {
+			return control.Change{}, err
 		}
 		sec := creds.AccountSecrets{Active: creds.NewSlot(creds.AccountSecrets{}, body.Credentials, body.CredentialExpiresAt, s.d.Now())}
 		if err := rot.PutCredentials(ctx, id, &sec, true); err != nil {
@@ -633,12 +634,12 @@ func (s *Server) addNextCredential(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	rot, err := s.accessRotator()
+	a, err := s.accountForCredentials(r) // 404, or 409 for a retired or auth none account first
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	a, err := s.accountForCredentials(r)
+	rot, err := s.accessRotator()
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -669,12 +670,12 @@ func (s *Server) promoteNextCredential(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, badRequest("/expected_next_version", "expected_next_version must be >= 1"))
 		return
 	}
-	rot, err := s.accessRotator()
+	a, err := s.accountForCredentials(r) // 404, or 409 for a retired or auth none account first
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	a, err := s.accountForCredentials(r)
+	rot, err := s.accessRotator()
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -705,12 +706,12 @@ func (s *Server) deleteOldCredential(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, badRequest("/expected_previous_version", "expected_previous_version must be >= 1"))
 		return
 	}
-	rot, err := s.accessRotator()
+	a, err := s.accountForCredentials(r) // 404, or 409 for a retired or auth none account first
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	a, err := s.accountForCredentials(r)
+	rot, err := s.accessRotator()
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -791,11 +792,6 @@ func (s *Server) testAccountConnection(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, badRequest("/slot", "slot must be active or next"))
 		return
 	}
-	rot, err := s.accessRotator()
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
 	snap, a, err := s.accountForProbe(r)
 	if err != nil {
 		s.fail(w, r, err)
@@ -818,7 +814,12 @@ func (s *Server) testAccountConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	var sec creds.AccountSecrets
 	ok := false
-	if creds.NeedsCredentials(v.Auth) {
+	if creds.NeedsCredentials(v.Auth) { // auth none needs no credential store at all
+		rot, err := s.accessRotator()
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
 		if sec, ok, err = rot.ReadCredentials(a.Account); err != nil {
 			s.fail(w, r, err)
 			return

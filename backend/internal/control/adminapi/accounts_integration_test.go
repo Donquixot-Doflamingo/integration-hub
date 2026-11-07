@@ -215,3 +215,44 @@ func httpReq(t *testing.T, a *adminRig, method, path, body string) *http.Request
 	req.Header.Set("Content-Type", "application/json")
 	return req
 }
+
+// TestAuthNoneAccounts (ADR-0023, HUB-438): an account of an auth none vendor is created
+// without credentials, even on an admin without a credential store; credentials are refused
+// for it, its credential operations are 409 and its connection test runs without credentials.
+func TestAuthNoneAccounts(t *testing.T) {
+	a := newAdminRig(t) // no withRotator: none of this may need the credential store
+	vendor := `{"vendor_id":"publicapi","display_name":"Public API","auth_scheme":"none","regions":{"global":"https://api.public.test"},"reason":"Public API"}`
+	if resp, body := a.do(RoleAdmin, http.MethodPost, "/vendors", vendor); resp.Code != 201 || body["vendor"].(map[string]any)["auth_scheme"] != "none" {
+		t.Fatalf("create vendor: %d %s", resp.Code, resp.Body)
+	}
+	for _, c := range []struct{ name, credentials string }{{"omitted", ""}, {"empty", `"credentials":{},`}} {
+		id := "pub-" + c.name
+		resp, body := a.do(RoleAdmin, http.MethodPost, "/accounts", `{"account_id":"`+id+`","vendor_id":"publicapi","region":"global","config":{},`+c.credentials+`"reason":"public account"}`)
+		if resp.Code != 201 {
+			t.Fatalf("%s credentials: %d %s", c.name, resp.Code, resp.Body)
+		}
+		if slots, _ := body["credentials"].([]any); len(slots) != 0 {
+			t.Fatalf("%s: credential slots %v", c.name, slots)
+		}
+		if _, snap, _ := a.pub.Current(t.Context()); snap.Accounts[id] == nil || snap.Accounts[id].CredentialsRef != "" {
+			t.Fatalf("%s: snapshot account %+v", c.name, snap.Accounts[id])
+		}
+	}
+	resp, body := a.doInvalid(RoleAdmin, http.MethodPost, "/accounts", `{"account_id":"pub-creds","vendor_id":"publicapi","region":"global","config":{},"credentials":{"k":"v"},"reason":"public account"}`)
+	if d, _ := body["error"].(map[string]any)["details"].([]any); resp.Code != 400 || len(d) == 0 || d[0].(map[string]any)["pointer"] != "/credentials" {
+		t.Fatalf("credentials for auth none: %d %s", resp.Code, resp.Body)
+	}
+	// A credential-taking vendor still needs them.
+	if resp, _ := a.doInvalid(RoleAdmin, http.MethodPost, "/accounts", `{"account_id":"ct-nocreds","vendor_id":"clevertap","region":"in","config":{},"reason":"no credentials"}`); resp.Code != 400 {
+		t.Fatalf("clevertap account without credentials: %d %s", resp.Code, resp.Body)
+	}
+	for _, op := range []struct{ path, body string }{
+		{"/accounts/pub-omitted/credentials/next", `{"credentials":{"k":"v"},"reason":"rotate"}`},
+		{"/accounts/pub-omitted/credentials/promote", `{"expected_next_version":2,"reason":"promote"}`},
+		{"/accounts/pub-omitted/credentials/delete-old", `{"expected_previous_version":1,"reason":"delete old"}`},
+	} {
+		if resp, body := a.do(RoleAdmin, http.MethodPost, op.path, op.body); resp.Code != 409 || body["error"].(map[string]any)["code"] != CodeConflict {
+			t.Errorf("%s: %d %s", op.path, resp.Code, resp.Body)
+		}
+	}
+}

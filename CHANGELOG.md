@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(adminapi)` · Create auth none accounts without a credential store (HUB-438) · HUB-438 · F-23
+  - An account of an auth `none` vendor can be created, and its connection tested, on an admin that has no credential store (it used to answer 500)
+  - Credential operations on such an account answer 409 before anything asks for the store
+  - New end-to-end test: an agify-like public API is onboarded through the admin API alone (vendor `none`, endpoint request schema, account without credentials, transformers proven by samples, integration with its operation schema) and served by the gateway, with the response transformer's output, pass-through, `validate_input` on and off and the `endpoint_schema` refusal at `/query/name`
 - 2026-11-07 · `test(migrations)` · Test migration 00011 up and down over pre-ADR-0023 data · HUB-434 · F-23
   - Migration 00011 is proven on a scratch database holding capabilities, integrations, versions, transformers, endpoints and queued envelopes from before ADR-0023: operations come from the latest capability minor, `interactive` from the capability, down restores the old columns and up runs again
   - Queued and dead-lettered `llm.*` envelopes keep the `llm` pool after the migration (ADR-0024); HUB-439 brings back the 4 MB body limit and pool choice as an explicit integration setting
