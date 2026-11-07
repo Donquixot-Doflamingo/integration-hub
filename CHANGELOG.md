@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(frontend)` · Create transformer versions with goldens and dry run (HUB-293) · HUB-293 · F-19
+  - Editors create a new transformer or the next version of one in the console from its YAML and golden fixtures; a new version starts from the latest one
+  - "Run goldens on this draft" shows each fixture with its diff, and Create stays locked until the goldens of exactly that draft pass, as the Hub requires
+  - "Dry run this draft" shows the vendor request or canonical response with credentials masked
 - 2026-11-07 · `feat(frontend)` · Create integrations and edit drafts in a form editor (HUB-292) · HUB-292 · F-19
   - Editors create an integration in the console and land on its first draft
   - Drafts open in a form beside the YAML editor: targets with vendor, account, weight and transformers, a transformer pair per operation for multi-operation capabilities (for example Aadhaar send_otp and verify_otp), delivery and audit; the weights total is shown live

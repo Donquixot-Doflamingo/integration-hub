@@ -511,7 +511,7 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 
 ### US-1905 — Transformer viewer with dry-run and goldens
 **As a** platform engineer, **I want** to view a transformer version, run its goldens and dry-run a body, **so that** I can debug mappings in the browser. · **Should**
-- **Given** T1@7, **when** I run goldens, **then** pass/fail per fixture with diffs is shown; editing is not offered (Release 2).
+- **Given** T1@7, **when** I run goldens, **then** pass/fail per fixture with diffs is shown. Creating versions is US-1910 (pulled forward from Release 2 by HUB-293).
 
 ### US-1906 — Tenants, keys, registrar, change log
 **As a** platform engineer, **I want** screens for tenants, API keys, registrar endpoints and the change log, **so that** onboarding needs no CLI. · **Should**
@@ -539,6 +539,13 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** a saved draft, **when** a publish check fails with a JSON pointer, **then** the message shows on the field the pointer names (or in a summary for parts only the YAML tab edits).
 - **Given** the targets, **when** I change a weight, **then** the total is shown live and a draft whose weights do not total 100 is not saved.
 - **Given** a valid draft, **when** I publish, **then** I see the diff against the active version and confirm with a reason; rollback stays one dialog with a reason.
+
+### US-1910 — Create transformer versions in the console
+**As a** platform engineer, **I want** to write a transformer version (YAML plus golden fixtures), run its goldens and dry-run it before creating it, **so that** mapping changes need neither a repository change nor the admin API. · **Should**
+- **Given** a transformer, **when** I start a new version, **then** the form starts from the latest version's source and fixtures.
+- **Given** a draft, **when** I run the goldens, **then** each fixture shows pass or fail with its diff, and "Create" stays locked until a run of this exact draft passed (the Hub refuses failing goldens with 422 anyway).
+- **Given** a draft, **when** I dry-run it with an account, **then** I see the vendor request or canonical response with credentials masked as the API returns them.
+- **Given** the viewer or tenant viewer role, **when** I open transformers, **then** no authoring control is rendered.
 
 ## F-20 Hub MCP server (`hubmcp`)
 

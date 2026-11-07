@@ -1,8 +1,12 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import AsyncView from '$lib/components/AsyncView.svelte';
+	import ChangeNotice from '$lib/components/ChangeNotice.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import RoleGate from '$lib/components/RoleGate.svelte';
+	import { takeFlash, type Flash } from '$lib/stores/flash.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import VersionView from '$lib/components/transformer/VersionView.svelte';
 	import { formatNumber, formatUtc } from '$lib/utils/format';
@@ -16,9 +20,17 @@
 
 	const id = $derived(data.transformerId);
 	const scoped = $derived(data.access.tenantScoped && data.access.known);
+	let notice = $state.raw<Flash | null>(null);
+	onMount(() => {
+		notice = takeFlash();
+	});
 </script>
 
 <PageHeader title={id} summary="The transformer, its latest version and every earlier one." />
+
+{#if notice}
+	<ChangeNotice {...notice} ondismiss={() => (notice = null)} />
+{/if}
 
 {#if scoped}
 	<p class="note" role="note">
@@ -56,6 +68,16 @@
 					</div>
 				</dl>
 			</section>
+			<RoleGate access={data.access} ops={['createTransformerVersion', 'runTransformerGoldens']}>
+				<p class="new-version">
+					<a
+						class="btn btn-primary"
+						href={resolve('/(app)/transformers/[transformer_id]/new-version', {
+							transformer_id: id
+						})}>New version (v{t.latest_version + 1})</a
+					>
+				</p>
+			</RoleGate>
 			<section class="block" aria-labelledby="latest-heading">
 				<h2 id="latest-heading">Latest version: v{t.latest.version}</h2>
 				<VersionView version={t.latest} access={data.access} />
@@ -116,6 +138,9 @@
 {/if}
 
 <style>
+	.new-version {
+		margin: var(--space-4) 0 0;
+	}
 	.note {
 		color: var(--ink-muted);
 		max-width: 46rem;

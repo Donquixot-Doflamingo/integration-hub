@@ -4,6 +4,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import ListView from '$lib/components/ListView.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import RoleGate from '$lib/components/RoleGate.svelte';
 	import Pager from '$lib/components/Pager.svelte';
 	import { sectionFor } from '$lib/nav';
 	import { formatNumber, formatUtc } from '$lib/utils/format';
@@ -44,6 +45,12 @@
 </script>
 
 <PageHeader title={section.label} summary={section.summary} />
+
+<RoleGate access={data.access} ops={['createTransformerVersion', 'runTransformerGoldens']}>
+	<p class="create">
+		<a class="btn btn-primary" href={resolve('/(app)/transformers/new')}>New transformer</a>
+	</p>
+</RoleGate>
 
 {#if data.access.tenantScoped && data.access.known}
 	<p class="note" role="note">
@@ -181,6 +188,9 @@
 {/if}
 
 <style>
+	.create {
+		margin: 0 0 var(--space-3);
+	}
 	.note {
 		color: var(--ink-muted);
 		max-width: 46rem;

@@ -32,7 +32,9 @@ export async function shot(page: Page, name: string) {
 		await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
 		const height = await page.evaluate(() => document.documentElement.scrollHeight);
 		await page.setViewportSize({ width, height: Math.min(Math.max(height, 700), 4000) });
-		await page.screenshot({ path: join(SHOTS, file) });
+		// The rail turns into a drawer below 1024 px with a slide transition: let it finish.
+		await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
+		await page.screenshot({ path: join(SHOTS, file), animations: 'disabled' });
 	};
 	await tall(1280, `${name}.desktop.png`);
 	await tall(390, `${name}.mobile.png`);

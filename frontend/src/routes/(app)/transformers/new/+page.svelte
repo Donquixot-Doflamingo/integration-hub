@@ -1,0 +1,37 @@
+<script lang="ts">
+	import { invalidateAll } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import AsyncView from '$lib/components/AsyncView.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import RoleGate from '$lib/components/RoleGate.svelte';
+	import type { PageData } from './$types';
+	import TransformerAuthoring from '../TransformerAuthoring.svelte';
+	import { emptyValues } from '../authoring';
+
+	/** A new transformer, version 1 (HUB-293, `createTransformerVersion`, editor). */
+	let { data }: { data: PageData } = $props();
+</script>
+
+<PageHeader
+	title="New transformer"
+	summary="Map a capability operation to one vendor endpoint version, with golden fixtures that prove it."
+/>
+
+<RoleGate access={data.access} ops={['createTransformerVersion', 'runTransformerGoldens']}>
+	<AsyncView result={data.lookups} noun="capabilities and vendor endpoints" onretry={invalidateAll}>
+		{#snippet children(l)}
+			<TransformerAuthoring
+				mode="new"
+				initial={emptyValues()}
+				capabilities={l.capabilities}
+				endpointRefs={l.endpointRefs}
+			/>
+		{/snippet}
+	</AsyncView>
+	{#snippet denied(role)}
+		<p class="fk-note" role="note">
+			Read only. Creating transformers needs the {role} role.
+			<a href={resolve('/transformers')}>Back to transformers</a>
+		</p>
+	{/snippet}
+</RoleGate>

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **261** · done: **177** · todo: **59** · other (in-progress/in-review/blocked): **25**
+Total tickets: **261** · done: **177** · todo: **58** · other (in-progress/in-review/blocked): **26**
 
 ## Epics
 
@@ -2570,15 +2570,15 @@ The console shows integrations and versions but cannot create one or edit a draf
 
 ### HUB-293 — Console: create transformer versions and run goldens
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
-- **Branch:** `feat/HUB-293-console-transformer-authoring`
+- **Status:** in-review · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1910
+- **Branch:** `feat/HUB-293-console-transformer-authoring` (delivered on `feat/HUB-290-console-authoring`)
 
 Transformer pages are read-only. Add create transformer version (YAML editor plus golden fixtures), run goldens with diffs, and dry-run, using `createTransformerVersion`, `runTransformerGoldens` and `dryRunTransformer`.
 
 **Acceptance criteria**
-- [ ] Create a version from the console; publish blocked while goldens fail (as the API enforces)
-- [ ] Golden diffs rendered per case; dry-run output masked
-- [ ] Tests
+- [x] Create a version from the console; publish blocked while goldens fail (as the API enforces) (`transformers/authoring-page.test.ts` "create stays locked until goldens of this draft pass", 422 in the dialog; `e2e-real/transformers.test.ts` T1 next version and a new id)
+- [x] Golden diffs rendered per case; dry-run output masked (`authoring-page.test.ts` failing case diff, dry run `***`; e2e-real failing fixture `/1/wrong` and `X-CleverTap-Passcode` `***`)
+- [x] Tests (`transformers/authoring.test.ts`, `authoring-page.test.ts` incl. viewer / tenant viewer, `e2e/authoring.test.ts` axe light and dark, `e2e-real/transformers.test.ts`)
 
 ## EP-11 — MCP server + consumer skill + SDK
 
