@@ -66,7 +66,6 @@ type Record struct {
 	TenantID           string
 	IntegrationID      string
 	IntegrationVersion int
-	Capability         string
 	Operation          string
 	Mode               string
 	DryRun             bool

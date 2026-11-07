@@ -1,29 +1,37 @@
-import type { FieldErrors } from '$lib/api/actions';
+import type { FieldErrors, PlainApiError } from '$lib/api/actions';
 import type {
 	GoldenFixture,
+	GoldensRunResult,
 	TransformerDraft,
 	TransformerKind,
 	TransformerVersion,
-	TransformerVersionCreate
+	TransformerVersionCreate,
+	ValidationCheck,
+	VendorEndpoint
 } from '$lib/api/types';
 import { parseJsonObject, prettyJson } from '$lib/utils/json-input';
+import { skeletonOf } from '$lib/utils/json-schema';
 
 /**
- * Transformer authoring (HUB-293): a new transformer (version 1) or the next version of one, from
- * the YAML source and its golden fixtures, checked against `TransformerVersionCreate`. The Hub
- * refuses a version whose goldens fail (422 `PUBLISH_VALIDATION_FAILED`, AGENTS §3.4), so the
- * console asks for a passing goldens run of the exact draft before it offers "Create". Errors are
- * keyed by JSON pointer into the create body (`/yaml`, `/fixtures/0/input`).
+ * Transformer authoring (HUB-293, HUB-436): a new transformer (version 1) or the next version of
+ * one, from the YAML source and its samples (golden fixtures), checked against
+ * `TransformerVersionCreate`. A request transformer names its vendor endpoint and each sample is
+ * the caller's input (body, optional headers) and the vendor request it must produce; a response
+ * transformer stands alone (no endpoint) and each sample is a vendor response and the output (or
+ * error) it must produce (ADR-0023). The Hub refuses a version whose samples fail (422
+ * `PUBLISH_VALIDATION_FAILED`, checks `goldens_pass` and `endpoint_schema`, AGENTS §3.4), so the
+ * console asks for a passing run of the exact draft before it offers "Create". Errors are keyed by
+ * JSON pointer into the create body (`/yaml`, `/fixtures/0/input`).
  */
 export const TRANSFORMER_ID = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
-export const CAPABILITY = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$/;
 export const VENDOR_ENDPOINT = /^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$/;
 export const FIXTURE_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 export const KINDS: readonly TransformerKind[] = ['request', 'response', 'inbound'];
 
-/** Golden fixture fields that hold JSON objects. */
+/** Sample (golden fixture) fields that hold JSON objects. */
 export type FixtureField =
 	| 'input'
+	| 'input_headers'
 	| 'account_config'
 	| 'expected_request'
 	| 'vendor_response'
@@ -31,15 +39,19 @@ export type FixtureField =
 	| 'expected_error';
 
 export const fieldLabels: Record<FixtureField, string> = {
-	input: 'Canonical input',
+	input: 'Input body',
+	input_headers: 'Input headers (optional)',
 	account_config: 'Account config (optional)',
 	expected_request: 'Expected vendor request',
 	vendor_response: 'Vendor response',
-	expected_response: 'Expected canonical response',
-	expected_error: 'Expected canonical error'
+	expected_response: 'Expected output',
+	expected_error: 'Expected error'
 };
 
-/** The fields a fixture of `kind` uses (GoldenFixture description: request vs response). */
+/** Fields that may be left empty. */
+const OPTIONAL: readonly FixtureField[] = ['input_headers', 'account_config'];
+
+/** The fields a sample of `kind` uses (GoldenFixture description: request vs response). */
 export function fieldsFor(kind: string, outcome: 'response' | 'error'): FixtureField[] {
 	if (kind === 'response')
 		return [
@@ -47,7 +59,12 @@ export function fieldsFor(kind: string, outcome: 'response' | 'error'): FixtureF
 			outcome === 'error' ? 'expected_error' : 'expected_response',
 			'account_config'
 		];
-	return ['input', 'expected_request', 'account_config'];
+	return ['input', 'input_headers', 'expected_request', 'account_config'];
+}
+
+/** Request (and inbound) transformers target one vendor endpoint; response transformers none. */
+export function needsEndpoint(kind: string): boolean {
+	return kind !== 'response';
 }
 
 export interface FixtureRow {
@@ -61,7 +78,6 @@ export interface FixtureRow {
 export interface FormValues {
 	transformer_id: string;
 	kind: string;
-	capability: string;
 	vendor_endpoint: string;
 	docs_url: string;
 	yaml: string;
@@ -76,7 +92,6 @@ export function emptyValues(): FormValues {
 	return {
 		transformer_id: '',
 		kind: 'request',
-		capability: '',
 		vendor_endpoint: '',
 		docs_url: '',
 		yaml: '',
@@ -86,6 +101,7 @@ export function emptyValues(): FormValues {
 
 const FIELDS: FixtureField[] = [
 	'input',
+	'input_headers',
 	'account_config',
 	'expected_request',
 	'vendor_response',
@@ -93,13 +109,12 @@ const FIELDS: FixtureField[] = [
 	'expected_error'
 ];
 
-/** The next version starts from the latest one: same kind, capability, endpoint, source, fixtures. */
+/** The next version starts from the latest one: same kind, endpoint, source and samples. */
 export function valuesFromVersion(v: TransformerVersion): FormValues {
 	return {
 		transformer_id: v.transformer_id,
 		kind: v.kind,
-		capability: v.capability,
-		vendor_endpoint: v.vendor_endpoint,
+		vendor_endpoint: v.vendor_endpoint ?? '',
 		docs_url: v.docs_url ?? '',
 		yaml: v.yaml,
 		fixtures: v.fixtures.map((f) => ({
@@ -112,14 +127,14 @@ export function valuesFromVersion(v: TransformerVersion): FormValues {
 	};
 }
 
-/** The fixtures as the API takes them, or problems keyed by `/fixtures/<i>[/<field>]`. */
+/** The samples as the API takes them, or problems keyed by `/fixtures/<i>[/<field>]`. */
 export function buildFixtures(
 	rows: readonly FixtureRow[],
 	kind: string
 ): { ok: true; fixtures: GoldenFixture[] } | { ok: false; fields: FieldErrors } {
 	const fields: FieldErrors = {};
 	const out: GoldenFixture[] = [];
-	if (!rows.length) fields['/fixtures'] = 'Add at least one golden fixture.';
+	if (!rows.length) fields['/fixtures'] = 'Add at least one sample.';
 	const seen = new Set<string>();
 	rows.forEach((r, i) => {
 		const at = `/fixtures/${i}`;
@@ -131,11 +146,14 @@ export function buildFixtures(
 		const f: GoldenFixture = { name };
 		for (const key of fieldsFor(kind, r.outcome)) {
 			const parsed = parseJsonObject(r.json[key] ?? '', {
-				optional: key === 'account_config',
+				optional: OPTIONAL.includes(key),
+				stringValues: key === 'input_headers',
 				what: fieldLabels[key].replace(' (optional)', '')
 			});
 			if (!parsed.ok) fields[`${at}/${key}`] = parsed.message;
-			else if (parsed.value) f[key] = parsed.value;
+			else if (parsed.value && key === 'input_headers')
+				f.input_headers = parsed.value as Record<string, string>;
+			else if (parsed.value) f[key as Exclude<FixtureField, 'input_headers'>] = parsed.value;
 		}
 		out.push(f);
 	});
@@ -143,20 +161,16 @@ export function buildFixtures(
 }
 
 export function draftOf(v: FormValues): TransformerDraft {
-	return {
-		kind: v.kind as TransformerKind,
-		capability: v.capability.trim(),
-		vendor_endpoint: v.vendor_endpoint.trim(),
-		yaml: v.yaml
-	};
+	const draft: TransformerDraft = { kind: v.kind as TransformerKind, yaml: v.yaml };
+	if (needsEndpoint(v.kind)) draft.vendor_endpoint = v.vendor_endpoint.trim();
+	return draft;
 }
 
 /** Problems with the draft itself (what goldens and dry runs need). */
 export function draftProblems(v: FormValues): FieldErrors {
 	const out: FieldErrors = {};
 	if (!(KINDS as readonly string[]).includes(v.kind)) out['/kind'] = 'Pick request or response.';
-	if (!CAPABILITY.test(v.capability.trim())) out['/capability'] = 'Pick the capability.';
-	if (!VENDOR_ENDPOINT.test(v.vendor_endpoint.trim()))
+	if (needsEndpoint(v.kind) && !VENDOR_ENDPOINT.test(v.vendor_endpoint.trim()))
 		out['/vendor_endpoint'] = 'A vendor endpoint version such as clevertap.upload@1.';
 	if (!v.yaml.trim()) out['/yaml'] = 'Write the transformer source (YAML).';
 	return out;
@@ -180,8 +194,8 @@ export function problems(v: FormValues, mode: 'new' | 'version'): FieldErrors {
 }
 
 /**
- * Identity of what a goldens run checked: kind, capability, endpoint, source and fixtures. A
- * passing run unlocks "Create" only while the draft is still exactly this.
+ * Identity of what a samples run checked: kind, endpoint, source and samples. A passing run
+ * unlocks "Create" only while the draft is still exactly this.
  */
 export function draftKey(v: FormValues): string {
 	const fx = buildFixtures(v.fixtures, v.kind);
@@ -239,11 +253,88 @@ export function valuesFromForm(form: FormData): FormValues | null {
 	return {
 		transformer_id: get('transformer_id'),
 		kind: get('kind'),
-		capability: get('capability'),
 		vendor_endpoint: get('vendor_endpoint'),
 		docs_url: get('docs_url'),
 		// Form submission turns textarea line breaks into CRLF; the source is stored as typed.
 		yaml: get('yaml').replace(/\r\n/g, '\n'),
 		fixtures
 	};
+}
+
+// ---- sample findings (HUB-436) --------------------------------------------------------------
+
+/** One reason a sample failed, on the field it names when there is one. */
+export interface SampleFinding {
+	/** Which check: the output differs, the produced request breaks the endpoint schema, it threw. */
+	check: 'goldens_pass' | 'endpoint_schema' | 'error' | string;
+	/** JSON pointer of the field (in the produced request `{path, query, headers, body}`). */
+	field: string | null;
+	message: string;
+}
+
+const show = (v: unknown) => (v === undefined ? 'nothing' : JSON.stringify(v));
+
+/** What a samples run found, by sample name (failing samples only). */
+export function findingsFromRun(result: GoldensRunResult): Record<string, SampleFinding[]> {
+	const out: Record<string, SampleFinding[]> = {};
+	for (const r of result.results) {
+		if (r.passed) continue;
+		const list: SampleFinding[] = [];
+		if (r.error) list.push({ check: 'error', field: null, message: r.error });
+		for (const v of r.schema_errors ?? [])
+			list.push({
+				check: 'endpoint_schema',
+				field: v.field,
+				message: v.keyword ? `${v.message} (${v.keyword})` : v.message
+			});
+		for (const d of r.diff)
+			list.push({
+				check: 'goldens_pass',
+				field: d.path || null,
+				message:
+					d.op === 'add'
+						? `produced ${show(d.after)}, not expected`
+						: d.op === 'remove'
+							? `expected ${show(d.before)}, produced nothing`
+							: `expected ${show(d.before)}, produced ${show(d.after)}`
+			});
+		out[r.fixture] = list;
+	}
+	return out;
+}
+
+/**
+ * What a refused `createTransformerVersion` (422 `PUBLISH_VALIDATION_FAILED`) says about the
+ * samples: `error.details[]` and `error.meta.report.checks[]` name the sample and the field.
+ */
+export function findingsFromError(
+	error: PlainApiError | null | undefined
+): Record<string, SampleFinding[]> {
+	const out: Record<string, SampleFinding[]> = {};
+	const add = (sample: string | null | undefined, f: SampleFinding) => {
+		if (!sample) return;
+		const list = (out[sample] ??= []);
+		if (!list.some((x) => x.check === f.check && x.field === f.field)) list.push(f);
+	};
+	for (const d of error?.details ?? [])
+		add(d.sample, { check: d.keyword ?? 'error', field: d.field ?? null, message: d.message });
+	const report = (error?.meta as { report?: { checks?: unknown } } | null | undefined)?.report;
+	if (report && Array.isArray(report.checks))
+		for (const c of report.checks as ValidationCheck[])
+			if (c.status === 'fail')
+				add(c.sample, { check: c.check, field: c.field ?? null, message: c.message ?? c.check });
+	return out;
+}
+
+/**
+ * A starting point for a request sample's expected request, from the endpoint's request schema:
+ * method and path as declared, and the required fields of each declared part (placeholders by
+ * type). The operator fills in the values the transformer must produce.
+ */
+export function expectedRequestSkeleton(endpoint: VendorEndpoint): Record<string, unknown> {
+	const out: Record<string, unknown> = { method: endpoint.method, path: endpoint.path };
+	const rs = endpoint.request_schema ?? {};
+	for (const part of ['query', 'headers', 'body'] as const)
+		if (rs[part] !== undefined) out[part] = skeletonOf(rs[part]);
+	return out;
 }

@@ -10,6 +10,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { pointerToPath } from '$lib/utils/diff';
 	import type { SpecProblem } from './draft';
+	import OperationsEditor from './OperationsEditor.svelte';
 	import {
 		DELIVERY_MODES,
 		deliveryLabels,
@@ -31,9 +32,9 @@
 	/**
 	 * Structured draft editor (HUB-292). Edits `spec` in place (a `$state` object owned by the
 	 * draft editor, which renders it to YAML for saving and for the YAML tab). Targets: vendor,
-	 * account, weight, the default transformer pair and, for a multi-operation capability, a pair
+	 * account, weight, the default transformer pair and, for a multi-operation integration, a pair
 	 * per operation (`TargetRef.operations`, e.g. `send_otp` on the default pair and `verify_otp`
-	 * on its own). Problems (publish checks, API validation, the console's own checks) show on the
+	 * on its own). The response transformer is optional: none means pass-through. Problems (publish checks, API validation, the console's own checks) show on the
 	 * field their JSON pointer names; the rest are listed above with their path.
 	 */
 	let {
@@ -43,18 +44,18 @@
 		accounts = [],
 		transformers = [],
 		problems = [],
+		interactive = false,
 		disabled = false
 	}: {
 		spec: IntegrationSpec;
-		/**
-		 * The capability's operation names (`default` for single-operation capabilities); empty when
-		 * the capability could not be read (the spec's own operations are shown then).
-		 */
+		/** The spec's operation names (`default` for a single-operation integration). */
 		operations: string[];
 		vendors?: VendorSummary[];
 		accounts?: AccountSummary[];
 		transformers?: TransformerSummary[];
 		problems?: SpecProblem[];
+		/** The integration is interactive (fixed at creation). */
+		interactive?: boolean;
 		disabled?: boolean;
 	} = $props();
 
@@ -72,8 +73,6 @@
 	const describe = (ptr: string) => (at(ptr) ? `${fid(ptr)}-error` : undefined);
 	const invalid = (ptr: string) => (at(ptr) ? 'true' : undefined);
 
-	const opsFor = (t: IntegrationSpec['targets'][number]) =>
-		operations.length ? operations : Object.keys(t.operations ?? {});
 	const accountsOf = (vendor: string) =>
 		accounts.filter((a) => (!vendor || a.vendor_id === vendor) && a.state !== 'retired');
 
@@ -114,25 +113,34 @@
 	ptr: string,
 	label: string,
 	options: string[],
-	get: () => string,
-	set: (v: string) => void
+	get: () => string | null | undefined,
+	set: (v: string) => void,
+	optional = false
 )}
 	<div class="fk-field">
-		<label for={fid(ptr)}>{label}</label>
+		<label for={fid(ptr)}
+			>{optional ? `${label} ` : label}{#if optional}<span class="fk-req">(optional)</span
+				>{/if}</label
+		>
 		<input
 			id={fid(ptr)}
 			list="{fid(ptr)}-options"
-			value={get()}
+			value={get() ?? ''}
 			oninput={(e) => set(e.currentTarget.value.trim())}
 			autocomplete="off"
 			spellcheck="false"
-			placeholder="T1@7"
+			placeholder={optional ? 'none: pass-through' : 'T1@7'}
 			aria-invalid={invalid(ptr)}
-			aria-describedby={describe(ptr)}
+			aria-describedby="{optional ? `${fid(ptr)}-hint ` : ''}{describe(ptr) ?? ''}"
 		/>
 		<datalist id="{fid(ptr)}-options">
 			{#each options as o (o)}<option value={o}></option>{/each}
 		</datalist>
+		{#if optional}
+			<p id="{fid(ptr)}-hint" class="fk-hint">
+				Empty = none: the caller gets the vendor's status and body back unchanged.
+			</p>
+		{/if}
 		<FieldError id="{fid(ptr)}-error" message={at(ptr)} />
 	</div>
 {/snippet}
@@ -150,6 +158,8 @@
 			</ul>
 		</div>
 	{/if}
+
+	<OperationsEditor {spec} {interactive} {at} {fid} {disabled} />
 
 	<fieldset
 		class="fk-group"
@@ -247,7 +257,8 @@
 							'Response transformer',
 							transformerOptions(transformers, 'response', t.vendor_id),
 							() => t.transformer.response,
-							(v) => (t.transformer.response = v)
+							(v) => (t.transformer.response = v || null),
+							true
 						)}
 					</div>
 
@@ -255,7 +266,7 @@
 						<h4 class="sub">Per operation</h4>
 						<FieldError id="{fid(`${p}/operations`)}-error" message={at(`${p}/operations`)} />
 						<ul class="ops">
-							{#each opsFor(t) as op (op)}
+							{#each operations as op (op)}
 								{@const o = `${p}/operations/${escapeToken(op)}`}
 								{@const own = !!t.operations?.[op]}
 								<li class="op" aria-labelledby="{fid(o)}-name">
@@ -287,19 +298,20 @@
 												`Response transformer for ${op}`,
 												transformerOptions(transformers, 'response', t.vendor_id),
 												() => pair.response,
-												(v) => (pair.response = v)
+												(v) => (pair.response = v || null),
+												true
 											)}
 										</div>
 									{/if}
 								</li>
 							{/each}
-							{#each operations.length ? unknownOperations(t, operations) : [] as op (op)}
+							{#each unknownOperations(t, operations) as op (op)}
 								{@const o = `${p}/operations/${escapeToken(op)}`}
 								<li class="op unknown">
 									<div class="op-head">
 										<code>{op}</code>
 										<span class="fk-error"
-											><Icon name="alert" size={14} />Not an operation of this capability</span
+											><Icon name="alert" size={14} />Not an operation of this integration</span
 										>
 										<button
 											type="button"
@@ -360,7 +372,7 @@
 					inputmode="numeric"
 					value={spec.delivery.ttl_ms ?? ''}
 					oninput={(e) => setNumber(spec.delivery, 'ttl_ms', e.currentTarget.value)}
-					placeholder="capability default"
+					placeholder="Hub default"
 					aria-invalid={invalid('/delivery/ttl_ms')}
 					aria-describedby={describe('/delivery/ttl_ms')}
 				/>

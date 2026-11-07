@@ -34,11 +34,12 @@ export function vendorResponse(
 }
 
 /** Form fields of the dry-run form (also the names the page marks invalid). */
-export const DRY_RUN_FIELDS = ['account_id', 'input', 'headers', 'vendor_response'] as const;
+export const DRY_RUN_FIELDS = ['account_id', 'input', 'input_headers', 'vendor_response'] as const;
 
 /**
  * The dry-run request from the form, or field errors. `mode` says which body the transformer
- * takes: a canonical `input` (request and inbound transformers) or a `vendor_response`.
+ * takes: the caller's `input` (+ `input_headers`; request and inbound transformers) or a
+ * `vendor_response`.
  */
 export function dryRunBody(
 	ref: string,
@@ -59,13 +60,13 @@ export function dryRunBody(
 		const input = parseJsonObject(field(form, 'input'), { what: 'The input' });
 		if (input.ok) body.input = input.value;
 		else fields.input = input.message;
-		const headers = parseJsonObject(field(form, 'headers'), {
+		const headers = parseJsonObject(field(form, 'input_headers'), {
 			optional: true,
 			stringValues: true,
 			what: 'The caller headers'
 		});
-		if (!headers.ok) fields.headers = headers.message;
-		else if (headers.value) body.headers = headers.value as Record<string, string>;
+		if (!headers.ok) fields.input_headers = headers.message;
+		else if (headers.value) body.input_headers = headers.value as Record<string, string>;
 	}
 	return Object.keys(fields).length ? { ok: false, fields } : { ok: true, body };
 }

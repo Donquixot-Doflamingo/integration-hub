@@ -20,7 +20,7 @@ fi
 make -C backend build migrate >/dev/null
 
 backend/bin/hub gateway -ops-addr "$ops" -http-addr "$http_addr" -ready-drain 200ms \
-  -config-dir backend/config -contracts-dir contracts -data-dir "$data" -blob-url "file://$data/blobs" 2>"$log" &
+  -config-dir backend/config -data-dir "$data" -blob-url "file://$data/blobs" 2>"$log" &
 pid=$!
 cleanup() { kill "$pid" 2>/dev/null || true; rm -rf "$log" "$data"; }
 trap cleanup EXIT

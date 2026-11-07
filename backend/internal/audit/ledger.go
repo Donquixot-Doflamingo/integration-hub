@@ -40,9 +40,9 @@ func partitionWindow(requestID string) (time.Time, time.Time, error) {
 // a wait-mode immediate attempt).
 func (Ledger) Insert(ctx context.Context, db DB, r Record) error {
 	_, err := db.Exec(ctx, `INSERT INTO hub.requests (request_id, created_at, tenant_id, integration_id, integration_version,
-			capability, operation, mode, status, payload_policy, snapshot_version, idempotency_key, trace_id, attempts, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, $2)`,
-		r.RequestID, r.CreatedAt, r.TenantID, r.IntegrationID, nullable(r.IntegrationVersion), r.Capability, r.Operation, r.Mode,
+			operation, mode, status, payload_policy, snapshot_version, idempotency_key, trace_id, attempts, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, $2)`,
+		r.RequestID, r.CreatedAt, r.TenantID, r.IntegrationID, nullable(r.IntegrationVersion), r.Operation, r.Mode,
 		r.Status, r.PayloadPolicy, nullable(int64(r.SnapshotVersion)), nullable(r.IdempotencyKey), nullable(r.TraceID)) // #nosec G115 -- snapshot versions stay far below 2^63
 	if err != nil {
 		return fmt.Errorf("audit: insert request %s: %w", r.RequestID, err)
@@ -145,7 +145,6 @@ func (Ledger) PruneResults(ctx context.Context, db DB, now time.Time) (int64, er
 type RequestStatus struct {
 	RequestID      string               `json:"request_id"`
 	IntegrationID  string               `json:"integration_id"`
-	Capability     string               `json:"capability"`
 	Operation      string               `json:"operation"`
 	Mode           string               `json:"mode"`
 	Status         string               `json:"status"`
@@ -176,13 +175,13 @@ func (Ledger) Status(ctx context.Context, db DB, tenant, requestID string) (Requ
 	var result, errJSON []byte
 	var updated *time.Time
 	err = db.QueryRow(ctx, `
-		SELECT r.request_id, r.integration_id, r.capability, r.operation, r.mode, r.status, r.idempotency_key, r.attempts,
+		SELECT r.request_id, r.integration_id, r.operation, r.mode, r.status, r.idempotency_key, r.attempts,
 			r.created_at, r.updated_at, r.completed_at, o.status, o.attempt, o.next_attempt_at, o.expires_at, res.result, res.error
 		FROM hub.requests r
 		LEFT JOIN hub.outbox o ON o.request_id = r.request_id
 		LEFT JOIN hub.request_results res ON res.request_id = r.request_id AND res.expires_at > now()
 		WHERE r.created_at BETWEEN $2 AND $3 AND r.request_id = $1 AND r.tenant_id = $4`,
-		requestID, from, to, tenant).Scan(&s.RequestID, &s.IntegrationID, &s.Capability, &s.Operation, &s.Mode, &s.Status,
+		requestID, from, to, tenant).Scan(&s.RequestID, &s.IntegrationID, &s.Operation, &s.Mode, &s.Status,
 		&s.IdempotencyKey, &s.Attempts, &s.CreatedAt, &updated, &s.CompletedAt, &outboxStatus, &outboxAttempt, &s.NextAttemptAt,
 		&s.ExpiresAt, &result, &errJSON)
 	if errors.Is(err, pgx.ErrNoRows) {

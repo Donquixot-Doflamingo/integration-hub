@@ -29,9 +29,12 @@
 		account,
 		endpoints,
 		access,
+		noCredentials = false,
 		onnotice
 	}: {
 		account: Account;
+		/** The vendor's auth scheme is `none` (HUB-436): no credentials, nothing to rotate. */
+		noCredentials?: boolean;
 		endpoints: string[];
 		access: Access;
 		onnotice: (n: Flash) => void;
@@ -115,7 +118,12 @@
 		Secret values are write-only: the Hub stores them encrypted and returns only version,
 		fingerprint and dates.
 	</p>
-	{#if slots.length === 0}
+	{#if noCredentials && slots.length === 0}
+		<p class="empty" role="status">
+			No credentials: the vendor is a public API (auth scheme none), so there is nothing to store or
+			rotate.
+		</p>
+	{:else if slots.length === 0}
 		<p class="empty" role="status">
 			No credentials: {retired ? 'retiring deleted them.' : 'add one below.'}
 		</p>
@@ -147,7 +155,7 @@
 		</div>
 	{/if}
 
-	{#if !retired}
+	{#if !retired && !noCredentials}
 		<h3>Rotate</h3>
 		<ol class="steps" aria-label="Rotation steps">
 			{#each steps as s (s.key)}

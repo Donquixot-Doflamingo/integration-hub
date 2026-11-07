@@ -42,6 +42,18 @@ func Up(ctx context.Context, db *sql.DB) (int, error) {
 	return len(res), nil
 }
 
+// UpTo applies pending migrations up to and including version (tests that need an old schema).
+func UpTo(ctx context.Context, db *sql.DB, version int64) error {
+	p, err := provider(db)
+	if err != nil {
+		return err
+	}
+	if _, err := p.UpTo(ctx, version); err != nil {
+		return fmt.Errorf("apply migrations up to %d: %w", version, err)
+	}
+	return nil
+}
+
 // Status reports, per migration version, whether it has been applied.
 func Status(ctx context.Context, db *sql.DB) (map[int64]bool, error) {
 	p, err := provider(db)

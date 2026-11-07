@@ -1,6 +1,6 @@
 # Integration Hub — Technical Specification
 
-> **Capabilities were removed on 2026-11-07 ([ADR-0023](adr/0023-remove-capabilities-integration-owns-its-request-schema.md)).** Where this document talks about capabilities, the integration's per-operation request schema and the vendor endpoint's request schema now apply. EP-14 updates the code and docs.
+> **Capabilities were removed on 2026-11-07 ([ADR-0023](adr/0023-remove-capabilities-integration-owns-its-request-schema.md)).** Where this document talks about capabilities, the integration's per-operation request schema and the vendor endpoint's request schema now apply. EP-14 updates the code and docs. The backend side added [ADR-0024](adr/0024-llm-body-limit-and-pool-without-capability-names.md) (1 MB body limit and `messaging` pool for every integration until HUB-439) and [ADR-0025](adr/0025-pre-adr-0023-data-upgraded-in-code.md) (archived snapshots, drafts and pending integrations from before are upgraded in code).
 
 | | |
 | --- | --- |

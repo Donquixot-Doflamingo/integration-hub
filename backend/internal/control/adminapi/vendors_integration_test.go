@@ -20,7 +20,7 @@ func init() {
 	mutationCases["updateVendor"] = mutationCase{role: RoleAdmin, method: http.MethodPut, path: "/vendors/clevertap",
 		body: `{"display_name":"CleverTap","auth_scheme":"static_headers","regions":{"in":"http://127.0.0.1:8099","us":"http://127.0.0.1:8099"},"reason":"Rename"}`}
 	mutationCases["createVendorEndpoint"] = mutationCase{role: RoleAdmin, method: http.MethodPost, path: "/vendors/clevertap/endpoints",
-		body: `{"name":"profile","method":"POST","path":"/1/profile","idempotent":true,"reason":"Profile uploads"}`}
+		body: `{"name":"profile","method":"POST","path":"/1/profile","idempotent":true,"request_schema":{},"reason":"Profile uploads"}`}
 }
 
 // doH is do with extra request headers.
@@ -102,10 +102,23 @@ func TestVendorsReadAndWrite(t *testing.T) {
 		t.Fatalf("update unknown: %d", resp.Code)
 	}
 
-	ep := `{"name":"upload","method":"POST","path":"/1/upload","timeout_ms":2500,"idempotent":true,"batch_max":500,"reason":"v2 limits"}`
+	ep := `{"name":"upload","method":"POST","path":"/1/upload","timeout_ms":2500,"idempotent":true,"batch_max":500,` +
+		`"request_schema":{"body":{"type":"object","required":["d"]}},"response_schema":{"type":"object"},"reason":"v2 limits"}`
 	resp, body = a.do(RoleAdmin, http.MethodPost, "/vendors/clevertap/endpoints", ep)
-	if e, _ := body["endpoint"].(map[string]any); resp.Code != 201 || e["endpoint_ref"] != "upload@2" || e["connect_timeout_ms"] != 500.0 {
+	if e, _ := body["endpoint"].(map[string]any); resp.Code != 201 || e["endpoint_ref"] != "upload@2" || e["connect_timeout_ms"] != 500.0 ||
+		e["request_schema"].(map[string]any)["body"] == nil || e["response_schema"].(map[string]any)["type"] != "object" {
 		t.Fatalf("create endpoint: %d %v", resp.Code, body)
+	}
+	// ADR-0023: request_schema is required, and must compile.
+	for _, bad := range []struct{ body, pointer string }{
+		{`{"name":"upload","method":"POST","path":"/1/upload","idempotent":true,"reason":"no schema"}`, "/request_schema"},
+		{`{"name":"upload","method":"POST","path":"/1/upload","idempotent":true,"request_schema":{"query":{"type":7}},"reason":"bad schema"}`, "/request_schema/query"},
+	} {
+		resp, body := a.doInvalid(RoleAdmin, http.MethodPost, "/vendors/clevertap/endpoints", bad.body)
+		d, _ := body["error"].(map[string]any)["details"].([]any)
+		if resp.Code != 400 || len(d) == 0 || d[0].(map[string]any)["pointer"] != bad.pointer {
+			t.Errorf("%s: %d %v", bad.pointer, resp.Code, body)
+		}
 	}
 	_, snap, _ := a.pub.Current(t.Context())
 	if old := snap.Vendors["clevertap"].Endpoints["upload@1"]; old.TimeoutMS != 3000 || old.BatchMax != 1000 {

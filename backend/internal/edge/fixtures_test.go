@@ -18,7 +18,7 @@ func (s staticSnapshots) Snapshot() *registry.Snapshot { return s.s }
 // devSnapshot builds the dev registry (backend/config + contracts).
 func devSnapshot(t testing.TB) *registry.Snapshot {
 	t.Helper()
-	snap, err := registry.Build(registry.Sources{Config: os.DirFS("../../config"), Contracts: os.DirFS("../../../contracts")}, time.Now())
+	snap, err := registry.Build(registry.Sources{Config: os.DirFS("../../config")}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

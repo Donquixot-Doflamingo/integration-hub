@@ -85,8 +85,7 @@ func (e *erasureEnv) request(tenant, subject string, policy registry.PayloadPoli
 	tr.Add(audit.VendorResponded, 1, []byte(`{"status":"VALID","pan":"`+subject+`","msg":"PAN `+subject+` verified"}`), map[string]any{"status": 200})
 	tr.Add(audit.ResponseTransformed, 0, []byte(`{"valid":true,"pan":"`+subject+`"}`), nil)
 	tr.Add(audit.RequestCompleted, 0, nil, map[string]any{"status": 200})
-	rec := audit.Record{RequestID: id, CreatedAt: now, TenantID: tenant, IntegrationID: "int_pan_verify", IntegrationVersion: 1,
-		Capability: "kyc.pan_verify@v1", Operation: "default", Mode: "sync", Status: status, HTTPStatus: 200, Attempts: 1,
+	rec := audit.Record{RequestID: id, CreatedAt: now, TenantID: tenant, IntegrationID: "int_pan_verify", IntegrationVersion: 1, Operation: "default", Mode: "sync", Status: status, HTTPStatus: 200, Attempts: 1,
 		HubOverheadMS: 1.25, VendorMS: 80.5, CompletedAt: now}
 	att := audit.Attempt{StartedAt: now, RequestID: id, AttemptNo: 1, AccountID: "acct-kyc-1", EndpointID: "pan_verify@1",
 		IntegrationVersion: 1, Host: "kyc.mock", DurationMS: 80.5, HTTPStatus: 200}
@@ -120,7 +119,7 @@ func (e *erasureEnv) callback(id, subject, status string) {
 func (e *erasureEnv) queued(id, subject string) {
 	e.t.Helper()
 	now := time.Now().UTC()
-	env := core.Envelope{RequestID: id, Tenant: e.tenant, IntegrationID: "int_pan_verify", ResolvedVersion: 1, Capability: "kyc.pan_verify@v1",
+	env := core.Envelope{RequestID: id, Tenant: e.tenant, IntegrationID: "int_pan_verify", ResolvedVersion: 1,
 		Operation: "default", Canonical: json.RawMessage(`{"pan":"` + subject + `"}`), Mode: "async", NextAttemptAt: now,
 		ExpiresAt: now.Add(6 * time.Hour), CreatedAt: now}
 	if err := (&queue.Outbox{}).EnqueueClaimed(e.t.Context(), e.pool, env, e.worker, 10*time.Minute); err != nil {

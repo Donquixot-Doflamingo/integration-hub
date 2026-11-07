@@ -11,7 +11,6 @@ import { pagingParams, parsePaging, type Paging } from '$lib/utils/paging';
 export const FILTER_KEYS = [
 	'q',
 	'tenant_id',
-	'capability',
 	'vendor_id',
 	'account_id',
 	'paused',
@@ -23,7 +22,6 @@ export type FilterKey = (typeof FILTER_KEYS)[number];
 export const filterLabels: Record<FilterKey, string> = {
 	q: 'Search',
 	tenant_id: 'Owner tenant',
-	capability: 'Capability',
 	vendor_id: 'Vendor',
 	account_id: 'Account',
 	paused: 'State',
@@ -60,7 +58,6 @@ export interface ListState {
 const MAX_LEN: Record<FilterKey, number> = {
 	q: 128,
 	tenant_id: 64,
-	capability: 128,
 	vendor_id: 64,
 	account_id: 64,
 	paused: 5,
@@ -80,7 +77,6 @@ export function parseListState(params: URLSearchParams): ListState {
 	const query: ListIntegrationsQuery = { limit: paging.limit };
 	if (filters.q) query.q = filters.q;
 	if (filters.tenant_id) query.tenant_id = filters.tenant_id;
-	if (filters.capability) query.capability = filters.capability;
 	if (filters.vendor_id) query.vendor_id = filters.vendor_id;
 	if (filters.account_id) query.account_id = filters.account_id;
 	if (filters.paused) query.paused = filters.paused === 'true';

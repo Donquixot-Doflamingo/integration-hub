@@ -133,6 +133,7 @@
 		font-size: var(--text-lg);
 	}
 	.meta {
+		overflow-wrap: anywhere;
 		margin: var(--space-1) 0 var(--space-3);
 		color: var(--ink-muted);
 		font-size: var(--text-sm);

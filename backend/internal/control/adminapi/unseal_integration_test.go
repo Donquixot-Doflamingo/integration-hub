@@ -44,8 +44,7 @@ func sealedRequest(t *testing.T, a *adminRig, id string, sealer *audit.Sealer) s
 	tr.Add(audit.RequestReceived, 0, []byte(sealedBody), map[string]any{"ip": "hmac:1"})
 	tr.Add(audit.IntegrationResolved, 0, nil, map[string]any{"version": 1})
 	tr.Add(audit.VendorResponded, 1, []byte(sealedResp), map[string]any{"status": 200})
-	b := tr.Batch(audit.Record{RequestID: id, CreatedAt: created, TenantID: "orders-service", IntegrationID: "int_bureau_pull",
-		Capability: "events.track@v1", Operation: "default", Mode: "sync", Status: "succeeded", Attempts: 1, CompletedAt: created.Add(time.Second)})
+	b := tr.Batch(audit.Record{RequestID: id, CreatedAt: created, TenantID: "orders-service", IntegrationID: "int_bureau_pull", Operation: "default", Mode: "sync", Status: "succeeded", Attempts: 1, CompletedAt: created.Add(time.Second)})
 	if err := (audit.PGStore{Pool: a.s.d.Pool}).Write(t.Context(), b); err != nil {
 		t.Fatal(err)
 	}

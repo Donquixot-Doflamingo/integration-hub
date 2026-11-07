@@ -194,6 +194,10 @@ Subject erasure (HUB-233, `hub erase-subject`, ADR-0012) writes one INFO line, `
 
 Worker isolation and startup (HUB-412, HUB-406, ADR-0019): the worker logs `worker.waiting_for_snapshot` (INFO, once, `pool`) when it starts before the first registry snapshot; it claims nothing until one is loaded, and an envelope claimed without a snapshot is put back (no attempt, no crash). An envelope put back over its target's cap logs `worker.target_at_cap` at DEBUG only (`account`, `endpoint`, request-scoped fields), since the counter above carries the rate. Its `hub.worker.attempt` span ends with `hub.outcome` = `target_at_cap` (or `no_snapshot`).
 
+Capabilities removed (ADR-0023, HUB-433, HUB-434): no new metric or span.
+- Pass-through (an operation without a response transformer): a vendor error the caller gets unchanged logs the usual `request failed` INFO line with the vendor's `status` and `pass_through=true` (codes and counts only, never the body). The audit trail marks `response.transformed` and `request.failed` with `pass_through: true` and the vendor `status`; `hub_requests_total` counts it with `code` = `ok` for a vendor 2xx and the default classification's code otherwise (`UPSTREAM_REJECTED`, `UPSTREAM_UNAVAILABLE`, …), and `hub.requests.http_status` holds the vendor's status.
+- Pre-ADR-0023 data, once, on the admin role at boot: `legacy snapshot upgraded and archived (ADR-0023)` (INFO, `archive_version`, `drafts_skipped`) when it re-archives a format-1 snapshot and rewrites drafts and pending integrations; `legacy draft not upgraded: edit it to declare operations` (WARN, `integration`) for a draft whose capability is unknown; `legacy snapshot not upgraded` (ERROR, `error`) plus `snapshot_apply_failures_total{reason="archive_error"}` when the step fails (nodes keep upgrading the legacy blob in memory on every load, so serving is not affected).
+
 ### 4.5 Sampling
 - Hot-path WARN events that can storm (Redis timeout, limiter rejection) are rate-limited per `(msg, account)` key: first 10 per 10 s, then 1 in 100, with `sampled_out` count on the next emitted line.
 - ERROR is never sampled.
@@ -233,7 +237,7 @@ Worker isolation and startup (HUB-412, HUB-406, ADR-0019): the worker logs `work
 | `hub.queue.enqueue` | producer | `edge` (async, wait, park) | `hub.pool`; status `persist_failed` | HUB-231 |
 | `hub.worker.attempt` | consumer (new root, linked) | `delivery` (Worker) | `hub.request_id`, `hub.tenant`, `hub.integration_id`, `hub.pool`, `hub.attempt`, `hub.queue_wait_ms`, `hub.outcome` (final state or short reason, e.g. `target_at_cap`, `no_snapshot`, `paused`); status `transition_failed` | HUB-231, HUB-412 |
 | `hub.callback.deliver` | client (new root, linked) | `callbacks` | `hub.endpoint_id`, `hub.callback.attempt`, `hub.callback.event`, `hub.request_id`, `http.response.status_code`, `hub.outcome` | HUB-120, link HUB-231 |
-| `hub.validate`, `hub.resolve`, `hub.idempotency` | internal / client | `edge` | `hub.capability`; `hub.snapshot_version`, `hub.target_index`, `hub.failover`; `hub.idempotency.result` | planned (HUB-240) |
+| `hub.validate`, `hub.resolve`, `hub.idempotency` | internal / client | `edge` | `hub.operation`; `hub.snapshot_version`, `hub.target_index`, `hub.failover`; `hub.idempotency.result` | planned (HUB-240) |
 | upstream `hub.attempt`, `hub.breaker_state`, `hub.wait.limiter_ms`, `hub.wait.bulkhead_ms` | — | `upstream` | — | planned (HUB-240) |
 | `hub.webhook.inbound` | server | `webhooks` | `hub.vendor`, `hub.account`, `hub.event_type`, `hub.correlated` | planned (HUB-240) |
 | `hub.snapshot.apply` | internal | `registry` | `hub.snapshot_version`, `hub.compile_ms` | planned (HUB-240) |

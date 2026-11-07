@@ -63,17 +63,6 @@ type HubCallbackDelivery struct {
 	Traceparent        pgtype.Text        `json:"traceparent"`
 }
 
-type HubCapability struct {
-	Capability     string             `json:"capability"`
-	Major          int32              `json:"major"`
-	Minor          int32              `json:"minor"`
-	RequestSchema  []byte             `json:"request_schema"`
-	ResponseSchema []byte             `json:"response_schema"`
-	Operations     []byte             `json:"operations"`
-	Interactive    bool               `json:"interactive"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-}
-
 type HubChangeLog struct {
 	ChangeID        string             `json:"change_id"`
 	At              pgtype.Timestamptz `json:"at"`
@@ -117,12 +106,12 @@ type HubDeadLetter struct {
 type HubIntegration struct {
 	IntegrationID     string             `json:"integration_id"`
 	OwnerTenant       string             `json:"owner_tenant"`
-	Capability        string             `json:"capability"`
 	ActiveVersion     int32              `json:"active_version"`
 	Paused            bool               `json:"paused"`
 	Description       string             `json:"description"`
 	MovesMoneyOrQuota bool               `json:"moves_money_or_quota"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	Interactive       bool               `json:"interactive"`
 }
 
 type HubIntegrationDraft struct {
@@ -193,7 +182,6 @@ type HubRequest struct {
 	TenantID           string             `json:"tenant_id"`
 	IntegrationID      string             `json:"integration_id"`
 	IntegrationVersion pgtype.Int4        `json:"integration_version"`
-	Capability         string             `json:"capability"`
 	Operation          string             `json:"operation"`
 	Mode               string             `json:"mode"`
 	DryRun             bool               `json:"dry_run"`
@@ -260,7 +248,6 @@ type HubTransformer struct {
 	TransformerID string             `json:"transformer_id"`
 	Version       int32              `json:"version"`
 	Kind          string             `json:"kind"`
-	Capability    string             `json:"capability"`
 	EndpointID    pgtype.Text        `json:"endpoint_id"`
 	Yaml          string             `json:"yaml"`
 	Fixtures      []byte             `json:"fixtures"`
@@ -286,6 +273,8 @@ type HubVendorEndpoint struct {
 	ConnectTimeoutMs int32       `json:"connect_timeout_ms"`
 	Idempotent       bool        `json:"idempotent"`
 	BatchMax         pgtype.Int4 `json:"batch_max"`
+	RequestSchema    []byte      `json:"request_schema"`
+	ResponseSchema   []byte      `json:"response_schema"`
 }
 
 type HubVendorSession struct {

@@ -53,9 +53,13 @@ func cleanup(t *testing.T, p *pgxpool.Pool, ids ...string) {
 	})
 }
 
-func env(capability string, created time.Time) core.Envelope {
-	return core.Envelope{
-		RequestID: core.NewRequestID(), Tenant: "orders-service", IntegrationID: "int_evt_brandA", Capability: capability,
+// env is an envelope queued in pool ("llm" or anything else for messaging).
+func env(pool string, created time.Time) core.Envelope {
+	if pool != queue.PoolLLM {
+		pool = ""
+	}
+	return core.Envelope{Pool: pool,
+		RequestID: core.NewRequestID(), Tenant: "orders-service", IntegrationID: "int_evt_brandA",
 		Operation: "default", Canonical: json.RawMessage(`{"user":{"id":"u_1"},"event":{"name":"e"}}`), Mode: "async",
 		NextAttemptAt: created, ExpiresAt: created.Add(6 * time.Hour), CreatedAt: created,
 	}
@@ -77,7 +81,7 @@ func TestConcurrentClaimersNeverShare(t *testing.T) {
 	now := time.Now().Add(-time.Second)
 	var ids []string
 	for range 200 {
-		e := env("llm.chat@v1", now)
+		e := env(queue.PoolLLM, now)
 		ids = append(ids, e.RequestID)
 		if err := q.Enqueue(t.Context(), p, e); err != nil {
 			t.Fatal(err)
@@ -121,7 +125,7 @@ func TestExpiredVisibilityIsClaimableAgain(t *testing.T) {
 	isolate(t, p, queue.PoolLLM)
 	clock := time.Now()
 	q := &queue.Outbox{Visibility: 30 * time.Second, Now: func() time.Time { return clock }}
-	e := env("llm.chat@v1", clock.Add(-time.Second))
+	e := env(queue.PoolLLM, clock.Add(-time.Second))
 	cleanup(t, p, e.RequestID)
 	if err := q.Enqueue(t.Context(), p, e); err != nil {
 		t.Fatal(err)
@@ -154,7 +158,7 @@ func TestReleaseInArrivalOrder(t *testing.T) {
 	base := time.Now().Add(-time.Hour)
 	var ids []string
 	for i := range 5 {
-		e := env("llm.chat@v1", base.Add(time.Duration(i)*time.Minute))
+		e := env(queue.PoolLLM, base.Add(time.Duration(i)*time.Minute))
 		e.NextAttemptAt = time.Now().Add(-time.Second)
 		ids = append(ids, e.RequestID)
 		if err := q.Enqueue(t.Context(), p, e); err != nil {
@@ -189,7 +193,7 @@ func TestGuardedTransitionsAndDeadLetter(t *testing.T) {
 	p := pool(t)
 	isolate(t, p, queue.PoolLLM)
 	q := &queue.Outbox{}
-	e := env("llm.chat@v1", time.Now().Add(-time.Second))
+	e := env(queue.PoolLLM, time.Now().Add(-time.Second))
 	cleanup(t, p, e.RequestID)
 	ctx := t.Context()
 	if err := q.Enqueue(ctx, p, e); err != nil {
@@ -249,7 +253,7 @@ func TestDoubleCompleteOnlyOnce(t *testing.T) {
 	for range 20 {
 		clock := time.Now()
 		q := &queue.Outbox{Now: func() time.Time { return clock }}
-		e := env("llm.chat@v1", clock.Add(-time.Second))
+		e := env(queue.PoolLLM, clock.Add(-time.Second))
 		cleanup(t, p, e.RequestID)
 		_ = q.Enqueue(ctx, p, e)
 		_, _ = q.Claim(ctx, p, "first", queue.PoolLLM, 1)
@@ -282,7 +286,7 @@ func TestExpireOnlyWaitingEnvelopes(t *testing.T) {
 	ctx := t.Context()
 	clock := time.Now()
 	q := &queue.Outbox{Now: func() time.Time { return clock }}
-	waiting, claimed := env("llm.chat@v1", clock.Add(-2*time.Hour)), env("llm.chat@v1", clock.Add(-2*time.Hour))
+	waiting, claimed := env(queue.PoolLLM, clock.Add(-2*time.Hour)), env(queue.PoolLLM, clock.Add(-2*time.Hour))
 	waiting.ExpiresAt, claimed.ExpiresAt = clock.Add(-time.Minute), clock.Add(-time.Minute)
 	waiting.NextAttemptAt = clock.Add(time.Hour)
 	cleanup(t, p, waiting.RequestID, claimed.RequestID)
@@ -314,11 +318,11 @@ func TestPoolsAreSeparate(t *testing.T) {
 	now := time.Now().Add(-time.Second)
 	var ids []string
 	for range 50 {
-		e := env("llm.chat@v1", now)
+		e := env(queue.PoolLLM, now)
 		ids = append(ids, e.RequestID)
 		_ = q.Enqueue(t.Context(), p, e)
 	}
-	msg := env("events.track@v1", now)
+	msg := env(queue.PoolMessaging, now)
 	ids = append(ids, msg.RequestID)
 	_ = q.Enqueue(t.Context(), p, msg)
 	cleanup(t, p, ids...)
@@ -335,7 +339,7 @@ func TestDeferTarget(t *testing.T) {
 	isolate(t, p, queue.PoolMessaging)
 	q := &queue.Outbox{}
 	now := time.Now().Add(-time.Second)
-	a := env("events.track@v1", now)
+	a := env(queue.PoolMessaging, now)
 	cleanup(t, p, a.RequestID)
 	if err := q.Enqueue(t.Context(), p, a); err != nil {
 		t.Fatal(err)
@@ -398,7 +402,7 @@ func TestClaimWithinTargetRoom(t *testing.T) {
 			hinted := map[string]queue.Target{}
 			var ids, plain []string
 			add := func(target *queue.Target) {
-				e := env("events.track@v1", base.Add(time.Duration(len(ids))*time.Millisecond))
+				e := env(queue.PoolMessaging, base.Add(time.Duration(len(ids))*time.Millisecond))
 				ids = append(ids, e.RequestID)
 				if err := q.Enqueue(t.Context(), p, e); err != nil {
 					t.Fatal(err)

@@ -108,7 +108,7 @@ func TestHTTPTransportServesSameToolsAsStdio(t *testing.T) {
 		if !slices.Equal(got, want) {
 			t.Errorf("admin=%v: http tools %v, stdio tools without write tools %v", withAdmin, got, want)
 		}
-		if n := len(got); (withAdmin && n != 26) || (!withAdmin && n != 5) {
+		if n := len(got); (withAdmin && n != 25) || (!withAdmin && n != 5) {
 			t.Errorf("admin=%v: %d tools", withAdmin, n)
 		}
 	}

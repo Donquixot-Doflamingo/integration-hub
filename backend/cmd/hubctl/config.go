@@ -30,7 +30,7 @@ const configUsage = `config as code:
   export -out DIR [-force]
       Write the live registry tree (the latest published snapshot) to DIR. No secret is ever
       written: the tree holds credential references only.
-  plan [-config-dir DIR] [-contracts-dir DIR]
+  plan [-config-dir DIR]
       Diff DIR (default config) against live, per object with path-level changes. Objects
       are compared as loaded (formatting, comments, defaults and publish metadata are not
       changes); admin/ files are written by the control plane and skipped.
@@ -186,7 +186,7 @@ func planCmd(args []string, stdout, stderr io.Writer) int {
 	var a adminFlags
 	a.register(fs)
 	dir := fs.String("config-dir", "config", "local registry config directory")
-	contracts := fs.String("contracts-dir", "../contracts", "contracts directory (capability schemas)")
+	_ = fs.String("contracts-dir", "", "ignored since ADR-0023 (schemas live in the config tree)")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		fmt.Fprintln(stderr, configUsage)
 		return 2
@@ -206,7 +206,7 @@ func planCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "hubctl: %v\n", err)
 		return 1
 	}
-	changes, _, _ := semanticDiff(live, local, *contracts)
+	changes, _, _ := semanticDiff(live, local)
 	if len(changes) == 0 {
 		fmt.Fprintf(stdout, "No changes: %s matches snapshot %d.\n", *dir, version)
 		return 0

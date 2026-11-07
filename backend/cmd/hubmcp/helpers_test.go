@@ -208,10 +208,14 @@ func callTool(t testing.TB, cs *mcp.ClientSession, name string, args any) toolOu
 	}
 	if res.IsError {
 		var env struct {
-			Error map[string]any `json:"error"`
+			Error       map[string]any `json:"error"`
+			PassThrough bool           `json:"pass_through"`
 		}
 		_ = json.Unmarshal(b, &env)
-		if env.Error["code"] == nil || env.Error["message"] == nil || env.Error["retryable"] == nil {
+		// A pass-through third-party error has no canonical error: its body is the result
+		// (contract hub_invoke, ADR-0023).
+		passThrough := env.PassThrough && env.Error == nil
+		if !passThrough && (env.Error["code"] == nil || env.Error["message"] == nil || env.Error["retryable"] == nil) {
 			t.Fatalf("%s: error result lacks a canonical error object: %s", name, b)
 		}
 	}

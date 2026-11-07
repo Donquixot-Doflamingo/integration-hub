@@ -12,8 +12,8 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
 
-// Masker masks x-pii values for the `masked` policy (DESIGN §13.2,
-// contracts/schemas/capabilities/README.md). Identifiers are HMAC-SHA256'd with a per-tenant key
+// Masker masks x-pii values for the `masked` policy (DESIGN §13.2; the tags come from the
+// operation request schemas, ADR-0023, contracts/README.md). Identifiers are HMAC-SHA256'd with a per-tenant key
 // derived from the master key, so the same subject masks to the same value within a tenant (and
 // the deletion job can find it) but cannot be joined across tenants.
 type Masker struct{ master []byte }

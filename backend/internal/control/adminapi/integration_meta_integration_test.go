@@ -7,16 +7,18 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 )
 
 func init() {
 	mutationCases["createIntegration"] = mutationCase{role: RoleEditor, method: http.MethodPost, path: "/integrations",
-		body: `{"integration_id":"int_evt_brandC","owner_tenant":"orders-service","capability":"events.track@v1","reason":"brand C pilot"}`, setup: resetArchive}
+		body: `{"integration_id":"int_evt_brandC","owner_tenant":"orders-service","reason":"brand C pilot"}`, setup: resetArchive}
 	mutationCases["updateIntegration"] = mutationCase{role: RoleEditor, method: http.MethodPatch, path: "/integrations/int_evt_brandA",
 		body: `{"description":"Brand A events (renamed)","reason":"clearer name"}`, setup: resetArchive}
 }
 
-const brandC = `{"integration_id":"int_evt_brandC","owner_tenant":"orders-service","capability":"events.track@v1","description":"Brand C","grants":[],"reason":"brand C pilot"}`
+const brandC = `{"integration_id":"int_evt_brandC","owner_tenant":"orders-service","description":"Brand C","grants":[],"reason":"brand C pilot"}`
 
 // TestCreateAndFirstPublish is HUB-205: a created integration has no active version and is not
 // in the snapshot; its first draft publishes integration.yaml and v1 together
@@ -35,12 +37,21 @@ func TestCreateAndFirstPublish(t *testing.T) {
 	for _, tc := range []struct{ body, want string }{
 		{brandC, "409"},
 		{strings.Replace(strings.Replace(brandC, "int_evt_brandC", "int_evt_brandE", 1), `"orders-service"`, `"nobody-here"`, 1), "/owner_tenant"},
-		{strings.Replace(strings.Replace(brandC, "int_evt_brandC", "int_evt_brandD", 1), "events.track@v1", "events.nope@v1", 1), "/capability"},
+		// ADR-0023: capability is no member of IntegrationCreate any more.
+		{strings.Replace(strings.Replace(brandC, "int_evt_brandC", "int_evt_brandD", 1), `"grants"`, `"capability":"events.track@v1","grants"`, 1), "unknown field"},
 	} {
 		resp, _ := a.do(RoleEditor, http.MethodPost, "/integrations", tc.body)
 		if !strings.Contains(resp.Body.String(), tc.want) && !strings.Contains(resp.Result().Status, tc.want) {
 			t.Errorf("want %s: %d %s", tc.want, resp.Code, resp.Body)
 		}
+	}
+	// interactive is set at creation (ADR-0023) and shown on the integration and its summary.
+	inter := mustDo(a, RoleEditor, http.MethodPost, "/integrations", strings.Replace(strings.Replace(brandC, "int_evt_brandC", "int_evt_brandI", 1), `"grants"`, `"interactive":true,"grants"`, 1), 201)
+	if inter["integration"].(map[string]any)["interactive"] != true {
+		t.Fatalf("interactive not kept: %v", inter)
+	}
+	if err := control.DeletePending(t.Context(), a.pub.Pool, "int_evt_brandI"); err != nil {
+		t.Fatal(err)
 	}
 	if got := mustDo(a, RoleViewer, http.MethodGet, "/integrations?has_active_version=false", "", 200); len(got["items"].([]any)) != 1 {
 		t.Fatalf("never-published filter: %v", got)

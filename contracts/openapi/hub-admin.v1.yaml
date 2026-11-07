@@ -2,8 +2,8 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: Integration Hub - Admin (Control Plane) API
-  version: 1.2.0
-  summary: Control plane for vendors, accounts, capabilities, transformers, integrations, tenants and operations.
+  version: 2.0.0
+  summary: Control plane for vendors, accounts, transformers, integrations, tenants and operations.
   description: |
     The control plane (DESIGN §16.1). Unlike the caller API, this API **does** show vendors,
     accounts and versions. Do not proxy it to callers.
@@ -24,8 +24,16 @@ info:
     Publish and rollback take `expected_active_version` and return 409 `CONFLICT` if another
     publish happened first.
 
-    **Immutability.** Transformer versions, capability versions, published integration versions and
-    snapshots are never changed or deleted. Rollback publishes a copy (DESIGN §6.4).
+    **Immutability.** Vendor endpoint versions, transformer versions, published integration
+    versions and snapshots are never changed or deleted. Rollback publishes a copy (DESIGN §6.4).
+
+    **Schemas (2.0.0, ADR-0023).** Each integration version declares its `operations`, and each operation carries the caller's `request_schema` (`body`, optional
+    `headers`). Each vendor endpoint version declares the `request_schema` it accepts (`path`,
+    `query`, `headers`, `body`) and an optional, informational `response_schema`. Request
+    transformers turn the caller's input into the vendor request. Their samples (golden fixtures)
+    are checked against the endpoint's `request_schema` when the transformer is created and when
+    an integration version is validated or published, never on live calls. Response transformers
+    are optional: without one the vendor's status and body are passed through (hub-public).
 
     **Secrets** are write-only (`writeOnly: true`). They are never returned, except a newly minted
     API key or registrar signing secret, which is shown exactly once in the create/rotate response.
@@ -57,7 +65,6 @@ tags:
   - name: me
   - name: vendors
   - name: accounts
-  - name: capabilities
   - name: transformers
   - name: integrations
   - name: tenants
@@ -147,27 +154,46 @@ paths:
       tags: [vendors]
       x-required-role: admin
       summary: Create a vendor definition
-      description: Creates a vendor (base URLs per region, auth scheme shape, defaults). Endpoints are added with `createVendorEndpoint`. Egress is restricted to the hosts declared here.
+      description: |
+        Creates a vendor (base URLs per region, auth scheme shape, defaults). Endpoints are added with
+        `createVendorEndpoint`. Egress is restricted to the hosts declared here. Use auth scheme
+        `none` (since 2.0.0) for public APIs that need no credentials: its accounts carry none.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/VendorCreate'
-            example:
-              vendor_id: clevertap
-              display_name: CleverTap
-              auth_scheme: static_headers
-              regions:
-                in: https://in1.api.clevertap.com
-                us: https://us1.api.clevertap.com
-              defaults:
-                rate_limit: { per_account_rps: 50 }
-                breaker: { window_ms: 30000, min_calls: 20, failure_ratio: 0.5, consecutive_timeouts: 5, open_ms: 30000, open_max_ms: 600000, half_open_probes: 3 }
-                health_probe: { endpoint: upload@1, dry: true, every_ms: 30000 }
-              webhook_verification: { scheme: hmac_sha256, header: X-CleverTap-Signature, max_skew_ms: 300000 }
-              docs_url: https://developer.clevertap.com/docs/upload-events-api
-              reason: Onboard CleverTap for brand A/B engagement events
+            examples:
+              static_headers:
+                summary: Vendor with per-account header credentials
+                value:
+                  vendor_id: clevertap
+                  display_name: CleverTap
+                  auth_scheme: static_headers
+                  regions:
+                    in: https://in1.api.clevertap.com
+                    us: https://us1.api.clevertap.com
+                  defaults:
+                    rate_limit: { per_account_rps: 50 }
+                    breaker: { window_ms: 30000, min_calls: 20, failure_ratio: 0.5, consecutive_timeouts: 5, open_ms: 30000, open_max_ms: 600000, half_open_probes: 3 }
+                    health_probe: { endpoint: upload@1, dry: true, every_ms: 30000 }
+                  webhook_verification: { scheme: hmac_sha256, header: X-CleverTap-Signature, max_skew_ms: 300000 }
+                  docs_url: https://developer.clevertap.com/docs/upload-events-api
+                  reason: Onboard CleverTap for brand A/B engagement events
+              public_api:
+                summary: Public API without credentials (auth scheme none)
+                value:
+                  vendor_id: agify
+                  display_name: Agify
+                  auth_scheme: none
+                  regions:
+                    global: https://api.agify.io
+                  defaults:
+                    rate_limit: { per_account_rps: 1 }
+                  webhook_verification: null
+                  docs_url: https://agify.io/documentation
+                  reason: Age estimate from first and last name (no credentials needed)
       responses:
         '201':
           description: Created.
@@ -253,6 +279,10 @@ paths:
                     connect_timeout_ms: 500
                     idempotent: true
                     batch_max: 1000
+                    request_schema:
+                      headers: { type: object, required: [Content-Type], properties: { Content-Type: { const: application/json } } }
+                      body: { type: object, required: [d], properties: { d: { type: array, minItems: 1, maxItems: 1000 } } }
+                    response_schema: null
                     created_at: '2026-10-31T09:01:00Z'
                 revision: 3
                 created_at: '2026-10-31T09:00:00Z'
@@ -366,6 +396,10 @@ paths:
                     connect_timeout_ms: 500
                     idempotent: true
                     batch_max: 1000
+                    request_schema:
+                      headers: { type: object, required: [Content-Type], properties: { Content-Type: { const: application/json } } }
+                      body: { type: object, required: [d], properties: { d: { type: array, minItems: 1, maxItems: 1000 } } }
+                    response_schema: null
                     created_at: '2026-10-31T09:01:00Z'
                 next_cursor: null
         '401':
@@ -381,22 +415,77 @@ paths:
       tags: [vendors]
       x-required-role: admin
       summary: Add an endpoint or a new endpoint version
-      description: Creates `<name>@<n+1>`, or `<name>@1` if the name is new. Existing endpoint versions are immutable.
+      description: |
+        Creates `<name>@<n+1>`, or `<name>@1` if the name is new. Existing endpoint versions are
+        immutable.
+
+        `request_schema` is required (since 2.0.0): the request this endpoint version accepts, as JSON
+        Schemas (2020-12) of the path parameters, the query parameters, the non-credential headers
+        and the body. Each key is optional, and `{}` means the endpoint takes nothing besides its
+        method and path. Request transformer samples are checked against it when a transformer is
+        created (`createTransformerVersion`) and when an integration version is validated or
+        published; live calls are never checked against it. Credential headers and query values set
+        from `creds.*` are not part of the checked request, so never declare them here.
+        `response_schema` is optional and informational: the Hub never enforces it.
+
+        A schema that is not a valid JSON Schema 2020-12 document gives 400 `VALIDATION_FAILED` with
+        a `pointer` into `request_schema` or `response_schema`.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/VendorEndpointCreate'
-            example:
-              name: upload
-              method: POST
-              path: /1/upload
-              timeout_ms: 3000
-              connect_timeout_ms: 500
-              idempotent: true
-              batch_max: 1000
-              reason: Upload events endpoint
+            examples:
+              json_body:
+                summary: POST endpoint with a JSON body
+                value:
+                  name: upload
+                  method: POST
+                  path: /1/upload
+                  timeout_ms: 3000
+                  connect_timeout_ms: 500
+                  idempotent: true
+                  batch_max: 1000
+                  request_schema:
+                    headers: { type: object, required: [Content-Type], properties: { Content-Type: { const: application/json } } }
+                    body:
+                      type: object
+                      required: [d]
+                      properties:
+                        d:
+                          type: array
+                          minItems: 1
+                          maxItems: 1000
+                          items:
+                            type: object
+                            required: [identity, type, evtName]
+                            properties:
+                              identity: { type: string, minLength: 1 }
+                              type: { const: event }
+                              evtName: { type: string, minLength: 1 }
+                              ts: { type: integer }
+                              evtData: { type: object }
+                  reason: Upload events endpoint
+              query_only:
+                summary: GET endpoint with one required query parameter
+                description: For the vendor `agify` (auth scheme `none`). `response_schema` documents the answer and is never enforced.
+                value:
+                  name: estimate
+                  method: GET
+                  path: /
+                  timeout_ms: 2000
+                  connect_timeout_ms: 500
+                  idempotent: true
+                  request_schema:
+                    query: { type: object, required: [name], properties: { name: { type: string, minLength: 1 } } }
+                  response_schema:
+                    type: object
+                    properties:
+                      count: { type: integer }
+                      name: { type: string }
+                      age: { type: [integer, 'null'] }
+                  reason: Age estimate endpoint
       responses:
         '201':
           description: Created.
@@ -419,6 +508,10 @@ paths:
                   connect_timeout_ms: 500
                   idempotent: true
                   batch_max: 1000
+                  request_schema:
+                    headers: { type: object, required: [Content-Type], properties: { Content-Type: { const: application/json } } }
+                    body: { type: object, required: [d], properties: { d: { type: array, minItems: 1, maxItems: 1000 } } }
+                  response_schema: null
                   created_at: '2026-10-31T09:01:00Z'
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -439,7 +532,7 @@ paths:
       tags: [vendors]
       x-required-role: viewer
       summary: Get one endpoint version
-      description: One immutable endpoint version.
+      description: One immutable endpoint version, with its `request_schema` and optional `response_schema`.
       responses:
         '200':
           description: Endpoint.
@@ -460,6 +553,10 @@ paths:
                 connect_timeout_ms: 500
                 idempotent: true
                 batch_max: 1000
+                request_schema:
+                  headers: { type: object, required: [Content-Type], properties: { Content-Type: { const: application/json } } }
+                  body: { type: object, required: [d], properties: { d: { type: array, minItems: 1, maxItems: 1000 } } }
+                response_schema: null
                 created_at: '2026-10-31T09:01:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -548,22 +645,43 @@ paths:
       tags: [accounts]
       x-required-role: admin
       summary: Create an account
-      description: Creates an account in state `active`. Initial credentials (write-only) become the `active` slot at cred version 1.
+      description: |
+        Creates an account in state `active`. Initial credentials (write-only) become the `active`
+        slot at cred version 1.
+
+        `credentials` is required unless the vendor's auth scheme is `none` (since 2.0.0). For a
+        `none` vendor it must be omitted or `{}`: the account has no credential slots
+        (`credentials: []`, `active_cred_version: null`), and the credential operations
+        (`addNextCredential`, `promoteNextCredential`, `deleteOldCredential`) answer 409 `CONFLICT`.
+        Missing credentials for any other scheme, or non-empty credentials for `none`, give 400
+        `VALIDATION_FAILED` (pointer `/credentials`).
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/AccountCreate'
-            example:
-              account_id: ct-brandA-in
-              vendor_id: clevertap
-              region: in
-              config: { project_id: 4RW-XXX-XXXX, brand_code: A }
-              quota: { rps: 50, daily: 5000000 }
-              credentials: { account_id: 4RW-XXX-XXXX, passcode: example-passcode-not-real }
-              credential_expires_at: null
-              reason: Brand A India workspace
+            examples:
+              with_credentials:
+                summary: Account of a vendor that needs credentials
+                value:
+                  account_id: ct-brandA-in
+                  vendor_id: clevertap
+                  region: in
+                  config: { project_id: 4RW-XXX-XXXX, brand_code: A }
+                  quota: { rps: 50, daily: 5000000 }
+                  credentials: { account_id: 4RW-XXX-XXXX, passcode: example-passcode-not-real }
+                  credential_expires_at: null
+                  reason: Brand A India workspace
+              auth_none:
+                summary: Account of an auth `none` vendor (no credentials)
+                value:
+                  account_id: agify-public
+                  vendor_id: agify
+                  region: global
+                  config: {}
+                  quota: { rps: 1, daily: 1000 }
+                  reason: Public age estimate API, free tier
       responses:
         '201':
           description: Created.
@@ -962,253 +1080,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  # ------------------------------------------------------------------ capabilities
-  /capabilities:
-    get:
-      operationId: listCapabilities
-      tags: [capabilities]
-      x-required-role: viewer
-      summary: List capabilities
-      description: One row per capability major (`events.track@v1`), showing its latest minor.
-      parameters:
-        - $ref: '#/components/parameters/Q'
-        - $ref: '#/components/parameters/Cursor'
-        - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: A page of capabilities.
-          headers:
-            X-Hub-Request-Id:
-              $ref: '#/components/headers/X-Hub-Request-Id'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CapabilityList'
-              example:
-                items:
-                  - capability: events.track@v1
-                    name: events.track
-                    major: 1
-                    latest_minor: 0
-                    interactive: false
-                    operations: [default]
-                    integrations_using: 3
-                    updated_at: '2026-10-31T09:00:00Z'
-                next_cursor: null
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '500':
-          $ref: '#/components/responses/InternalError'
-    post:
-      operationId: createCapability
-      tags: [capabilities]
-      x-required-role: editor
-      summary: Create a capability or a new major
-      description: Creates `<name>@v<major>` at minor 0. A new major is how a breaking change is made. Callers adopt it through a new integration ID (D11).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CapabilityCreate'
-            example:
-              name: events.track
-              major: 1
-              description: Track a user event with an engagement/analytics tool.
-              interactive: false
-              operations:
-                default:
-                  description: Track a single event for a user.
-                  idempotent: true
-                  request_schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: object, required: [user, event] }
-                  response_schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: object, required: [status] }
-              reason: First capability for the CleverTap pilot
-      responses:
-        '201':
-          description: Created.
-          headers:
-            X-Hub-Request-Id:
-              $ref: '#/components/headers/X-Hub-Request-Id'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CapabilityVersionChange'
-              example:
-                change_id: chg_01J9Z4B2C3D4E5F6G7H8J9K0MY
-                capability_version:
-                  capability: events.track@v1
-                  name: events.track
-                  major: 1
-                  minor: 0
-                  description: Track a user event with an engagement/analytics tool.
-                  interactive: false
-                  operations:
-                    default:
-                      description: Track a single event for a user.
-                      idempotent: true
-                      request_schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: object, required: [user, event] }
-                      response_schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: object, required: [status] }
-                  author: priya@example.com
-                  created_at: '2026-10-31T09:00:00Z'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/PublishValidationFailed'
-        '500':
-          $ref: '#/components/responses/InternalError'
-  /capabilities/{capability}:
-    parameters:
-      - $ref: '#/components/parameters/CapabilityKey'
-    get:
-      operationId: getCapability
-      tags: [capabilities]
-      x-required-role: viewer
-      summary: Get a capability (latest minor, full schemas)
-      description: The latest minor of the given major, with full schemas.
-      responses:
-        '200':
-          description: Capability version.
-          headers:
-            X-Hub-Request-Id:
-              $ref: '#/components/headers/X-Hub-Request-Id'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CapabilityVersion'
-              example:
-                capability: events.track@v1
-                name: events.track
-                major: 1
-                minor: 0
-                description: Track a user event with an engagement/analytics tool.
-                interactive: false
-                operations:
-                  default:
-                    description: Track a single event for a user.
-                    idempotent: true
-                    request_schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: object, required: [user, event] }
-                    response_schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: object, required: [status] }
-                author: priya@example.com
-                created_at: '2026-10-31T09:00:00Z'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-  /capabilities/{capability}/versions:
-    parameters:
-      - $ref: '#/components/parameters/CapabilityKey'
-    get:
-      operationId: listCapabilityVersions
-      tags: [capabilities]
-      x-required-role: viewer
-      summary: List minors of a capability major
-      description: All immutable minor versions, newest first.
-      parameters:
-        - $ref: '#/components/parameters/Cursor'
-        - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: A page of capability versions (schemas omitted; fetch one with getCapability).
-          headers:
-            X-Hub-Request-Id:
-              $ref: '#/components/headers/X-Hub-Request-Id'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CapabilityVersionList'
-              example:
-                items:
-                  - { capability: events.track@v1, minor: 0, author: priya@example.com, created_at: '2026-10-31T09:00:00Z', summary: Initial }
-                next_cursor: null
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-    post:
-      operationId: createCapabilityVersion
-      tags: [capabilities]
-      x-required-role: editor
-      summary: Create a new (additive) minor version
-      description: |
-        Adds minor `n+1`. The Hub checks that the change is additive (no removed or renamed fields, no
-        tightened constraints, no removed operations, `interactive` unchanged). It returns 422
-        `PUBLISH_VALIDATION_FAILED` with details if not.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CapabilityVersionCreate'
-            example:
-              expected_latest_minor: 0
-              operations:
-                default:
-                  description: Track a single event for a user.
-                  idempotent: true
-                  request_schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: object, required: [user, event] }
-                  response_schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: object, required: [status] }
-              summary: Add optional context.campaign
-              reason: Brand B needs campaign attribution
-      responses:
-        '201':
-          description: Created.
-          headers:
-            X-Hub-Request-Id:
-              $ref: '#/components/headers/X-Hub-Request-Id'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CapabilityVersionChange'
-              example:
-                change_id: chg_01J9Z4B2C3D4E5F6G7H8J9K0MZ
-                capability_version:
-                  capability: events.track@v1
-                  name: events.track
-                  major: 1
-                  minor: 1
-                  description: Track a user event with an engagement/analytics tool.
-                  interactive: false
-                  operations:
-                    default:
-                      description: Track a single event for a user.
-                      idempotent: true
-                      request_schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: object, required: [user, event] }
-                      response_schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: object, required: [status] }
-                  author: priya@example.com
-                  created_at: '2026-10-31T10:00:00Z'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/PublishValidationFailed'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
   # ------------------------------------------------------------------ transformers
   /transformers:
     get:
@@ -1224,15 +1095,9 @@ paths:
           schema:
             $ref: '#/components/schemas/TransformerKind'
           example: request
-        - name: capability
-          in: query
-          description: Filter by capability key.
-          schema:
-            $ref: '#/components/schemas/CapabilityKeyValue'
-          example: events.track@v1
         - name: vendor_id
           in: query
-          description: Filter by the vendor of the endpoint the transformer targets.
+          description: Filter by the vendor of the endpoint the transformer targets. Response transformers name no endpoint (since 2.0.0), so this filter never matches them.
           schema:
             $ref: '#/components/schemas/Slug'
           example: clevertap
@@ -1253,15 +1118,13 @@ paths:
                 items:
                   - transformer_id: T1
                     kind: request
-                    capability: events.track@v1
                     vendor_endpoint: clevertap.upload@1
                     latest_version: 7
                     used_by_active_versions: 1
                     updated_at: '2026-10-20T08:00:00Z'
                   - transformer_id: R1
                     kind: response
-                    capability: events.track@v1
-                    vendor_endpoint: clevertap.upload@1
+                    vendor_endpoint: null
                     latest_version: 2
                     used_by_active_versions: 1
                     updated_at: '2026-10-20T08:00:00Z'
@@ -1281,9 +1144,14 @@ paths:
       x-required-role: editor
       summary: Run a transformer (stored or draft) without sending anything
       description: |
-        For a request transformer: canonical input -> exact vendor request (secrets redacted). For a
-        response transformer: vendor response -> canonical response or canonical error. Give
-        either `ref` (a stored version) or `draft` (unsaved YAML), not both. It is non-mutating.
+        For a request transformer: the caller's input (`input` body and `input_headers`) -> exact
+        vendor request (secrets redacted). For a response transformer: vendor response -> its
+        output, or a canonical error from its `errors` rules. Give either `ref` (a stored version) or
+        `draft` (unsaved YAML), not both. It is non-mutating.
+
+        For a request transformer the produced request is also checked against the vendor
+        endpoint's `request_schema`. Violations are listed in `schema_errors` (the same check as
+        `endpoint_schema` on samples). They do not make `ok` false here, because nothing is stored.
       requestBody:
         required: true
         content:
@@ -1296,6 +1164,7 @@ paths:
               input:
                 user: { id: u_48213 }
                 event: { name: order_placed, timestamp: '2026-10-31T09:15:00Z', properties: { order_id: ord_8821 } }
+              input_headers: { X-Request-Source: checkout }
       responses:
         '200':
           description: Transformation output.
@@ -1316,6 +1185,7 @@ paths:
                   body: { d: [ { identity: u_48213, type: event, evtName: order_placed, ts: 1793438100, evtData: { order_id: ord_8821 } } ] }
                 canonical_response: null
                 canonical_error: null
+                schema_errors: []
                 compile_errors: []
                 duration_us: 142
         '400':
@@ -1333,8 +1203,18 @@ paths:
       operationId: runTransformerGoldens
       tags: [transformers]
       x-required-role: editor
-      summary: Run golden fixtures for a stored or draft transformer
-      description: Runs every fixture (`input -> expected_request`, `vendor_response -> expected_response`) and reports per-fixture diffs. Publishing runs the same check. Non-mutating.
+      summary: Run the samples (golden fixtures) of a stored or draft transformer
+      description: |
+        Runs every sample and reports per-sample results. Non-mutating. `createTransformerVersion`
+        runs the same checks and refuses the version if any sample fails:
+
+        * Request samples: `input` (+ `input_headers`) -> the produced request must equal
+          `expected_request` (`diff` lists the differences) and must fit the vendor endpoint's
+          `request_schema` (`schema_errors` lists each violation with the JSON pointer of the field).
+        * Response samples: `vendor_response` -> the output must equal `expected_response`, or the
+          canonical error must equal `expected_error`.
+
+        A sample passes only when `diff` and `schema_errors` are both empty and `error` is null.
       requestBody:
         required: true
         content:
@@ -1353,14 +1233,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GoldensRunResult'
-              example:
-                passed: true
-                total: 2
-                failed: 0
-                results:
-                  - { fixture: order_placed, passed: true, diff: [] }
-                  - { fixture: no_timestamp, passed: true, diff: [] }
-                duration_ms: 12
+              examples:
+                passed:
+                  summary: Every sample passes
+                  value:
+                    passed: true
+                    total: 2
+                    failed: 0
+                    results:
+                      - { fixture: order_placed, passed: true, diff: [], schema_errors: [] }
+                      - { fixture: no_timestamp, passed: true, diff: [], schema_errors: [] }
+                    duration_ms: 12
+                failed:
+                  summary: One sample differs from its expected request and breaks the endpoint schema
+                  value:
+                    passed: false
+                    total: 2
+                    failed: 1
+                    results:
+                      - { fixture: full_name, passed: true, diff: [], schema_errors: [] }
+                      - fixture: empty_last_name
+                        passed: false
+                        diff:
+                          - { op: replace, path: /query/name, before: Michael, after: '' }
+                        schema_errors:
+                          - { field: /query/name, keyword: minLength, message: must NOT have fewer than 1 characters }
+                        error: null
+                    duration_ms: 4
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1393,7 +1292,6 @@ paths:
               example:
                 transformer_id: T1
                 kind: request
-                capability: events.track@v1
                 vendor_endpoint: clevertap.upload@1
                 latest_version: 7
                 used_by_active_versions: 1
@@ -1403,12 +1301,12 @@ paths:
                   version: 7
                   ref: T1@7
                   kind: request
-                  capability: events.track@v1
                   vendor_endpoint: clevertap.upload@1
                   yaml: "transformer: T1\nversion: 7\nkind: request\n..."
                   fixtures:
                     - name: order_placed
                       input: { user: { id: u_48213 }, event: { name: order_placed } }
+                      input_headers: { X-Request-Source: checkout }
                       expected_request: { method: POST, path: /1/upload }
                   docs_url: https://developer.clevertap.com/docs/upload-events-api
                   goldens: { passed: true, total: 2, failed: 0 }
@@ -1464,28 +1362,75 @@ paths:
       x-required-role: editor
       summary: Create a new immutable transformer version
       description: |
-        Creates version `n+1` (or version 1 with a new transformer id). Compile, type-check against the
-        capability schema, budget checks and **all goldens must pass**. Otherwise it returns 422
-        `PUBLISH_VALIDATION_FAILED`, so a transformer with failing goldens cannot exist (AGENTS §3.4).
-        At least one fixture is required. Production transformers must cite `docs_url`.
+        Creates version `n+1` (or version 1 with a new transformer id). The YAML must compile, pass
+        the budget checks and **every sample (golden fixture) must pass**. Otherwise it returns 422
+        `PUBLISH_VALIDATION_FAILED` and nothing is stored, so a transformer with failing samples
+        cannot exist (AGENTS §3.4). Production transformers must cite `docs_url`.
+
+        * **`kind: request`**: `vendor_endpoint` is required. At least one sample is required. Each
+          sample is `input` (the caller body) + optional `input_headers` + `expected_request`. The
+          Hub runs the transformer on the sample and refuses the version with check `goldens_pass`
+          when the produced request differs from `expected_request`, and with check
+          `endpoint_schema` when the produced request (path parameters, query, non-credential
+          headers, body) breaks the endpoint's `request_schema` (a required field missing, a wrong
+          type). Each failing check names the sample (`sample`) and the JSON pointer of the field in
+          the produced request (`field`, e.g. `/query/name`), in `error.details[]` and in
+          `error.meta.report.checks[]`.
+        * **`kind: response`**: `vendor_endpoint` must be absent (or null): a response transformer
+          stands alone. At least one sample is required. Each sample is `vendor_response`
+          (`status`, `headers`, `body`) + `expected_response` or `expected_error`; check
+          `goldens_pass`. The output is not checked against any schema.
+        * **`kind: inbound`**: unchanged; `vendor_endpoint` is required.
+
+        A transformer no longer knows a caller schema. Its field references (`req.x`, `hdr.X`) and
+        its samples' inputs are checked against the operation's `request_schema` when an
+        integration version that uses it is validated or published (`validateIntegrationVersion`).
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/TransformerVersionCreate'
-            example:
-              kind: request
-              capability: events.track@v1
-              vendor_endpoint: clevertap.upload@1
-              expected_latest_version: 7
-              yaml: "transformer: T1\nkind: request\ncapability: events.track@v1\nvendor_endpoint: clevertap.upload@1\nrequest:\n  method: POST\n  path: /1/upload\n"
-              fixtures:
-                - name: order_placed
-                  input: { user: { id: u_48213 }, event: { name: order_placed, timestamp: '2026-10-31T09:15:00Z' } }
-                  expected_request: { method: POST, path: /1/upload, body: { d: [ { identity: u_48213, type: event, evtName: order_placed, ts: 1793438100 } ] } }
-              docs_url: https://developer.clevertap.com/docs/upload-events-api
-              reason: Map context.campaign
+            examples:
+              request:
+                summary: Request transformer (POST body) with one sample
+                value:
+                  kind: request
+                  vendor_endpoint: clevertap.upload@1
+                  expected_latest_version: 7
+                  yaml: "transformer: T1\nkind: request\nvendor_endpoint: clevertap.upload@1\nrequest:\n  method: POST\n  path: /1/upload\n"
+                  fixtures:
+                    - name: order_placed
+                      input: { user: { id: u_48213 }, event: { name: order_placed, timestamp: '2026-10-31T09:15:00Z' } }
+                      input_headers: { X-Request-Source: checkout }
+                      expected_request: { method: POST, path: /1/upload, body: { d: [ { identity: u_48213, type: event, evtName: order_placed, ts: 1793438100 } ] } }
+                  docs_url: https://developer.clevertap.com/docs/upload-events-api
+                  reason: Map context.campaign
+              request_query:
+                summary: Request transformer (GET with a query parameter), first version of a new id
+                value:
+                  kind: request
+                  vendor_endpoint: agify.estimate@1
+                  expected_latest_version: null
+                  yaml: "transformer: AGE_REQ\nkind: request\nvendor_endpoint: agify.estimate@1\nrequest:\n  method: GET\n  path: /\n  query:\n    name: req.firstName + req.lastName\n"
+                  fixtures:
+                    - name: full_name
+                      input: { firstName: Mich, lastName: ael }
+                      expected_request: { method: GET, path: /, query: { name: Michael } }
+                  docs_url: https://agify.io/documentation
+                  reason: Age estimate request mapping
+              response:
+                summary: Response transformer (no vendor endpoint)
+                value:
+                  kind: response
+                  expected_latest_version: null
+                  yaml: "transformer: AGE_RES\nkind: response\nresponse:\n  age: res.body.age\n"
+                  fixtures:
+                    - name: known_name
+                      vendor_response: { status: 200, headers: { Content-Type: application/json }, body: { count: 21, name: Michael, age: 57 } }
+                      expected_response: { age: 57 }
+                  docs_url: https://agify.io/documentation
+                  reason: Return only the age
       responses:
         '201':
           description: Created.
@@ -1503,12 +1448,12 @@ paths:
                   version: 8
                   ref: T1@8
                   kind: request
-                  capability: events.track@v1
                   vendor_endpoint: clevertap.upload@1
                   yaml: "transformer: T1\nkind: request\n..."
                   fixtures:
                     - name: order_placed
                       input: { user: { id: u_48213 }, event: { name: order_placed } }
+                      input_headers: { X-Request-Source: checkout }
                       expected_request: { method: POST, path: /1/upload }
                   docs_url: https://developer.clevertap.com/docs/upload-events-api
                   goldens: { passed: true, total: 1, failed: 0 }
@@ -1524,7 +1469,53 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
-          $ref: '#/components/responses/PublishValidationFailed'
+          description: |
+            A check failed and nothing was stored, for example `expressions_typecheck`,
+            `goldens_pass` (a sample's output differs from what it expects) or `endpoint_schema` (a
+            request sample's produced request breaks the endpoint's `request_schema`). `details[]` and `meta.report.checks[]`
+            name the sample and the JSON pointer of the field.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorEnvelope'
+              examples:
+                endpoint_schema:
+                  summary: Produced request breaks the endpoint's request_schema
+                  value:
+                    error:
+                      code: PUBLISH_VALIDATION_FAILED
+                      message: 1 sample check failed
+                      retryable: false
+                      retry_after_ms: null
+                      details:
+                        - { pointer: /fixtures/1, keyword: endpoint_schema, sample: empty_name, field: /query/name, message: "sample 'empty_name': /query/name must NOT have fewer than 1 characters" }
+                      meta:
+                        report:
+                          valid: false
+                          checks:
+                            - { check: goldens_pass, status: pass, message: null, pointer: null }
+                            - { check: endpoint_schema, status: fail, message: "/query/name must NOT have fewer than 1 characters", pointer: /fixtures/1, sample: empty_name, field: /query/name }
+                      request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KP
+                goldens_pass:
+                  summary: Produced request differs from the expected request
+                  value:
+                    error:
+                      code: PUBLISH_VALIDATION_FAILED
+                      message: 1 sample check failed
+                      retryable: false
+                      retry_after_ms: null
+                      details:
+                        - { pointer: /fixtures/0/expected_request/query/name, keyword: goldens_pass, sample: full_name, field: /query/name, message: "sample 'full_name': expected 'Michael', got 'Mich ael'" }
+                      meta:
+                        report:
+                          valid: false
+                          checks:
+                            - { check: goldens_pass, status: fail, message: "expected 'Michael', got 'Mich ael'", pointer: /fixtures/0/expected_request/query/name, sample: full_name, field: /query/name }
+                            - { check: endpoint_schema, status: pass, message: null, pointer: null }
+                      request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KQ
         '500':
           $ref: '#/components/responses/InternalError'
   /transformers/{transformer_id}/versions/{version}:
@@ -1535,7 +1526,7 @@ paths:
       operationId: getTransformerVersion
       tags: [transformers]
       x-required-role: viewer
-      summary: Get one transformer version (YAML + fixtures)
+      summary: Get one transformer version (YAML + samples)
       description: One immutable version.
       responses:
         '200':
@@ -1552,7 +1543,6 @@ paths:
                 version: 7
                 ref: T1@7
                 kind: request
-                capability: events.track@v1
                 vendor_endpoint: clevertap.upload@1
                 yaml: "transformer: T1\nversion: 7\nkind: request\n..."
                 fixtures:
@@ -1587,12 +1577,6 @@ paths:
         integrations that were never published and those with a newer version or draft waiting.
       parameters:
         - $ref: '#/components/parameters/TenantFilter'
-        - name: capability
-          in: query
-          description: Filter by capability key.
-          schema:
-            $ref: '#/components/schemas/CapabilityKeyValue'
-          example: events.track@v1
         - name: vendor_id
           in: query
           description: Integrations whose active version targets this vendor (primary or failover).
@@ -1648,8 +1632,9 @@ paths:
                 items:
                   - integration_id: int_evt_brandA
                     owner_tenant: orders-service
-                    capability: events.track@v1
                     description: Brand A product analytics events
+                    interactive: false
+                    operations: [default]
                     active_version: 7
                     latest_version: 8
                     has_draft: true
@@ -1671,7 +1656,17 @@ paths:
       tags: [integrations]
       x-required-role: editor
       summary: Create an integration (no active version yet)
-      description: Creates the stable ID, owner tenant, capability binding and grants. Invocations return 503 `INTEGRATION_PAUSED` (reason `no_active_version`) until a first version is published.
+      description: |
+        Creates the stable ID, owner tenant, grants and the integration-level flags `interactive` and
+        `moves_money_or_quota`. Invocations return 503 `INTEGRATION_PAUSED` (reason
+        `no_active_version`) until a first version is published. The operations and their request
+        schemas live in the versions (`createIntegrationDraft`), so they go through draft, validate,
+        publish, diff and the change log.
+
+        `interactive` (default false) means the operations are steps of one session that a person
+        is waiting on: step 1 returns `X-Hub-Session` and later steps send it. Interactive
+        integrations may only use `sync` delivery (check `interactive_sync_only`). It is fixed at
+        creation; changing it would break callers, so create a new integration ID instead.
       requestBody:
         required: true
         content:
@@ -1681,9 +1676,9 @@ paths:
             example:
               integration_id: int_evt_brandA
               owner_tenant: orders-service
-              capability: events.track@v1
               description: Brand A product analytics events
               grants: []
+              interactive: false
               moves_money_or_quota: false
               reason: CleverTap pilot for brand A
       responses:
@@ -1703,9 +1698,9 @@ paths:
                 integration:
                   integration_id: int_evt_brandA
                   owner_tenant: orders-service
-                  capability: events.track@v1
                   description: Brand A product analytics events
                   grants: []
+                  interactive: false
                   moves_money_or_quota: false
                   active_version: null
                   latest_version: null
@@ -1749,9 +1744,9 @@ paths:
               example:
                 integration_id: int_evt_brandA
                 owner_tenant: orders-service
-                capability: events.track@v1
                 description: Brand A product analytics events
                 grants: []
+                interactive: false
                 moves_money_or_quota: false
                 active_version: 7
                 latest_version: 8
@@ -1763,6 +1758,20 @@ paths:
                   version: 7
                   state: published
                   spec:
+                    operations:
+                      default:
+                        description: Track a single event for a user.
+                        idempotent: true
+                        validate_input: true
+                        request_schema:
+                          body:
+                            type: object
+                            required: [user, event]
+                            properties:
+                              user: { type: object, required: [id], properties: { id: { type: string, x-pii: identifier } } }
+                              event: { type: object, required: [name], properties: { name: { type: string }, timestamp: { type: string, format: date-time }, properties: { type: object, x-pii: free_text } } }
+                              context: { type: object, properties: { campaign: { type: string } } }
+                          headers: { type: object, properties: { X-Request-Source: { type: string } } }
                     targets: [ { vendor_id: clevertap, account_id: ct-brandA-in, transformer: { request: T1@7, response: R1@2 }, weight: 100 } ]
                     failover: []
                     delivery: { mode: wait, wait_ms: 3000, ttl_ms: 21600000, on_circuit_open: queue_if_allowed, pending: re_resolve }
@@ -1791,7 +1800,7 @@ paths:
       tags: [integrations]
       x-required-role: editor
       summary: Update integration metadata and grants
-      description: Merge-patch of `description`, `grants` and `moves_money_or_quota`. Routing and policy change only through versions.
+      description: Merge-patch of `description`, `grants` and `moves_money_or_quota`. Operations, request schemas, routing and policy change only through versions. `interactive` cannot be changed.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -1820,9 +1829,9 @@ paths:
                 integration:
                   integration_id: int_evt_brandA
                   owner_tenant: orders-service
-                  capability: events.track@v1
                   description: Brand A product analytics events
                   grants: [checkout-service]
+                  interactive: false
                   moves_money_or_quota: false
                   active_version: 7
                   latest_version: 8
@@ -1892,7 +1901,16 @@ paths:
       tags: [integrations]
       x-required-role: editor
       summary: Create a draft version
-      description: Creates draft version `n+1` from a full spec. Omit `spec` to copy `based_on` (default is the active version). Drafts are editable until published. Only one draft may exist at a time (409 `CONFLICT`).
+      description: |
+        Creates draft version `n+1` from a full spec. Omit `spec` to copy `based_on` (default is the
+        active version). Drafts are editable until published. Only one draft may exist at a time
+        (409 `CONFLICT`).
+
+        Since 2.0.0 the spec carries `operations` (required, at least one): the operation names
+        callers invoke (`default` for a single-operation integration) and, per operation, the
+        caller's `request_schema` (`body`, optional `headers`), `idempotent` and `validate_input`.
+        A draft is stored even when a schema does not compile or a sample does not fit it; those
+        problems are reported by `validateIntegrationVersion` and block `publishIntegrationVersion`.
       requestBody:
         required: true
         content:
@@ -1901,10 +1919,24 @@ paths:
               $ref: '#/components/schemas/IntegrationDraftCreate'
             examples:
               canary:
-                summary: Weighted canary (single-operation capability, one pair per target)
+                summary: Weighted canary (single operation `default`, one pair per target)
                 value:
                   based_on: 7
                   spec:
+                    operations:
+                      default:
+                        description: Track a single event for a user.
+                        idempotent: true
+                        validate_input: true
+                        request_schema:
+                          body:
+                            type: object
+                            required: [user, event]
+                            properties:
+                              user: { type: object, required: [id], properties: { id: { type: string, x-pii: identifier } } }
+                              event: { type: object, required: [name], properties: { name: { type: string }, timestamp: { type: string, format: date-time }, properties: { type: object, x-pii: free_text } } }
+                              context: { type: object, properties: { campaign: { type: string } } }
+                          headers: { type: object, properties: { X-Request-Source: { type: string } } }
                     targets:
                       - { vendor_id: clevertap, account_id: ct-brandA-in, transformer: { request: T1@7, response: R1@2 }, weight: 90 }
                       - { vendor_id: clevertap, account_id: ct-brandA-in-v2, transformer: { request: T1@8, response: R1@2 }, weight: 10 }
@@ -1915,12 +1947,25 @@ paths:
                     audit: { payloads: masked, retention_ms: 2592000000 }
                   reason: Canary 10% to the new workspace
               per_operation:
-                summary: Multi-operation capability (generate and verify on different vendor endpoints)
+                summary: Two operations (generate and verify on different vendor endpoints)
                 description: |
-                  Draft for an integration bound to `kyc.aadhaar_otp@v1`. `transformer` is the default
-                  pair (compiled for `generate`); `operations.verify` gives `verify` its own pair.
+                  Draft for an interactive OTP integration. `transformer` is the default pair (used by
+                  `generate`); `operations.verify` gives `verify` its own pair.
                 value:
                   spec:
+                    operations:
+                      generate:
+                        description: Send an OTP to the mobile number linked to the Aadhaar number.
+                        idempotent: false
+                        validate_input: true
+                        request_schema:
+                          body: { type: object, required: [aadhaar_number], properties: { aadhaar_number: { type: string, pattern: '^[0-9]{12}$', x-pii: government_id } } }
+                      verify:
+                        description: Verify the OTP and return the e-KYC result.
+                        idempotent: false
+                        validate_input: true
+                        request_schema:
+                          body: { type: object, required: [otp], properties: { otp: { type: string, pattern: '^[0-9]{6}$', x-pii: free_text } } }
                     targets:
                       - vendor_id: kycdemo
                         account_id: kycdemo-in
@@ -1933,6 +1978,35 @@ paths:
                     webhooks: []
                     audit: { payloads: sealed, retention_ms: 7776000000 }
                   reason: Verify OTP through its own vendor endpoint
+              pass_through:
+                summary: Caller headers in the schema, no response transformer
+                description: |
+                  `request_schema.body` lists `firstName` and `lastName` as required;
+                  `X-Request-Source` is an optional caller header the request transformer may read as
+                  `hdr.X-Request-Source`. `response: null` means pass-through: the caller gets the
+                  vendor's status and body unchanged. No TTL is given, so the Hub default applies.
+                value:
+                  spec:
+                    operations:
+                      default:
+                        description: Estimate the age for a first and last name.
+                        idempotent: true
+                        validate_input: true
+                        request_schema:
+                          body:
+                            type: object
+                            required: [firstName, lastName]
+                            properties:
+                              firstName: { type: string, minLength: 1, x-pii: name }
+                              lastName: { type: string, minLength: 1, x-pii: name }
+                          headers: { type: object, properties: { X-Request-Source: { type: string } } }
+                    targets:
+                      - { vendor_id: agify, account_id: agify-public, transformer: { request: AGE_REQ@1, response: null }, weight: 100 }
+                    failover: []
+                    delivery: { mode: sync, on_circuit_open: fail_fast, pending: re_resolve }
+                    webhooks: []
+                    audit: { payloads: masked, retention_ms: 2592000000 }
+                  reason: First version of the age estimate
       responses:
         '201':
           description: Draft created.
@@ -1950,6 +2024,20 @@ paths:
                   version: 8
                   state: draft
                   spec:
+                    operations:
+                      default:
+                        description: Track a single event for a user.
+                        idempotent: true
+                        validate_input: true
+                        request_schema:
+                          body:
+                            type: object
+                            required: [user, event]
+                            properties:
+                              user: { type: object, required: [id], properties: { id: { type: string, x-pii: identifier } } }
+                              event: { type: object, required: [name], properties: { name: { type: string }, timestamp: { type: string, format: date-time }, properties: { type: object, x-pii: free_text } } }
+                              context: { type: object, properties: { campaign: { type: string } } }
+                          headers: { type: object, properties: { X-Request-Source: { type: string } } }
                     targets:
                       - { vendor_id: clevertap, account_id: ct-brandA-in, transformer: { request: T1@7, response: R1@2 }, weight: 90 }
                       - { vendor_id: clevertap, account_id: ct-brandA-in-v2, transformer: { request: T1@8, response: R1@2 }, weight: 10 }
@@ -1998,12 +2086,26 @@ paths:
                 $ref: '#/components/schemas/IntegrationVersion'
               examples:
                 single_operation:
-                  summary: Single-operation capability (one pair per target)
+                  summary: Single operation `default` (one pair per target)
                   value:
                     integration_id: int_evt_brandA
                     version: 7
                     state: published
                     spec:
+                      operations:
+                        default:
+                          description: Track a single event for a user.
+                          idempotent: true
+                          validate_input: true
+                          request_schema:
+                            body:
+                              type: object
+                              required: [user, event]
+                              properties:
+                                user: { type: object, required: [id], properties: { id: { type: string, x-pii: identifier } } }
+                                event: { type: object, required: [name], properties: { name: { type: string }, timestamp: { type: string, format: date-time }, properties: { type: object, x-pii: free_text } } }
+                                context: { type: object, properties: { campaign: { type: string } } }
+                            headers: { type: object, properties: { X-Request-Source: { type: string } } }
                       targets: [ { vendor_id: clevertap, account_id: ct-brandA-in, transformer: { request: T1@7, response: R1@2 }, weight: 100 } ]
                       failover: []
                       delivery: { mode: wait, wait_ms: 3000, ttl_ms: 21600000, on_circuit_open: queue_if_allowed, pending: re_resolve }
@@ -2017,16 +2119,29 @@ paths:
                     published_by: priya@example.com
                     snapshot_version: 412
                 per_operation:
-                  summary: Multi-operation capability with per-operation pairs
+                  summary: Two operations with per-operation pairs
                   description: |
-                    `kyc.aadhaar_otp@v1`: `generate` uses the default `transformer` pair, `verify` the pair
-                    in `operations`. Listing every operation (here also `generate`) is allowed; the
-                    default pair is then used by no operation but is still required.
+                    `generate` uses the default `transformer` pair, `verify` the pair in the target's
+                    `operations`. Listing every operation there is allowed; the default pair is then
+                    used by no operation but is still required.
                   value:
                     integration_id: int_kyc_otp
                     version: 2
                     state: published
                     spec:
+                      operations:
+                        generate:
+                          description: Send an OTP to the mobile number linked to the Aadhaar number.
+                          idempotent: false
+                          validate_input: true
+                          request_schema:
+                            body: { type: object, required: [aadhaar_number], properties: { aadhaar_number: { type: string, pattern: '^[0-9]{12}$', x-pii: government_id } } }
+                        verify:
+                          description: Verify the OTP and return the e-KYC result.
+                          idempotent: false
+                          validate_input: true
+                          request_schema:
+                            body: { type: object, required: [otp], properties: { otp: { type: string, pattern: '^[0-9]{6}$', x-pii: free_text } } }
                       targets:
                         - vendor_id: kycdemo
                           account_id: kycdemo-in
@@ -2067,6 +2182,20 @@ paths:
               $ref: '#/components/schemas/IntegrationDraftUpdate'
             example:
               spec:
+                operations:
+                  default:
+                    description: Track a single event for a user.
+                    idempotent: true
+                    validate_input: true
+                    request_schema:
+                      body:
+                        type: object
+                        required: [user, event]
+                        properties:
+                          user: { type: object, required: [id], properties: { id: { type: string, x-pii: identifier } } }
+                          event: { type: object, required: [name], properties: { name: { type: string }, timestamp: { type: string, format: date-time }, properties: { type: object, x-pii: free_text } } }
+                          context: { type: object, properties: { campaign: { type: string } } }
+                      headers: { type: object, properties: { X-Request-Source: { type: string } } }
                 targets:
                   - { vendor_id: clevertap, account_id: ct-brandA-in, transformer: { request: T1@7, response: R1@2 }, weight: 80 }
                   - { vendor_id: clevertap, account_id: ct-brandA-in-v2, transformer: { request: T1@8, response: R1@2 }, weight: 20 }
@@ -2092,6 +2221,20 @@ paths:
                   version: 8
                   state: draft
                   spec:
+                    operations:
+                      default:
+                        description: Track a single event for a user.
+                        idempotent: true
+                        validate_input: true
+                        request_schema:
+                          body:
+                            type: object
+                            required: [user, event]
+                            properties:
+                              user: { type: object, required: [id], properties: { id: { type: string, x-pii: identifier } } }
+                              event: { type: object, required: [name], properties: { name: { type: string }, timestamp: { type: string, format: date-time }, properties: { type: object, x-pii: free_text } } }
+                              context: { type: object, properties: { campaign: { type: string } } }
+                          headers: { type: object, properties: { X-Request-Source: { type: string } } }
                     targets:
                       - { vendor_id: clevertap, account_id: ct-brandA-in, transformer: { request: T1@7, response: R1@2 }, weight: 80 }
                       - { vendor_id: clevertap, account_id: ct-brandA-in-v2, transformer: { request: T1@8, response: R1@2 }, weight: 20 }
@@ -2127,7 +2270,26 @@ paths:
       tags: [integrations]
       x-required-role: editor
       summary: Run the publish validation without publishing
-      description: Runs every DESIGN §6.4 check and returns a report. It is non-mutating, so the request body is empty.
+      description: |
+        Runs every DESIGN §6.4 check and returns a report. It is non-mutating, so the request body is
+        empty. `publishIntegrationVersion` runs the same checks. Since 2.0.0 (ADR-0023) they include:
+
+        * `schemas_compile`: every operation's `request_schema` compiles as JSON Schema 2020-12, and
+          every field reference of the request transformers (`req.x`, `hdr.X`) exists in the
+          operation's `request_schema` (`body` for `req.*`, `headers` for `hdr.*`). Pointer
+          `/operations/<op>/request_schema/...` or the target's transformer pair.
+        * `input_schema`: every sample input of each request transformer used by an operation
+          (`input` and `input_headers`) fits that operation's `request_schema`. The check names the
+          `sample` and the `field` (`/body/firstName`, `/headers/X-Request-Source`).
+        * `goldens_pass` and `endpoint_schema`: the same sample checks as `createTransformerVersion`
+          (the produced request equals `expected_request` and fits the vendor endpoint's
+          `request_schema`), run again for every referenced transformer.
+        * `operations_have_transformers`: every key of a target's `operations` is declared in
+          `spec.operations`.
+        * `interactive_sync_only`: an `interactive` integration uses `sync` delivery.
+
+        Response transformers are optional (`response: null` = pass-through) and their output is not
+        checked against any schema.
       requestBody:
         required: false
         content:
@@ -2150,13 +2312,15 @@ paths:
                 checks:
                   - { check: schemas_compile, status: pass, message: null, pointer: null }
                   - { check: expressions_typecheck, status: pass, message: null, pointer: null }
+                  - { check: input_schema, status: pass, message: null, pointer: null }
                   - { check: goldens_pass, status: pass, message: null, pointer: null }
-                  - { check: response_conforms, status: pass, message: null, pointer: null }
+                  - { check: endpoint_schema, status: pass, message: null, pointer: null }
                   - { check: references_exist, status: pass, message: null, pointer: null }
                   - { check: accounts_not_retired, status: pass, message: null, pointer: null }
                   - { check: interactive_sync_only, status: pass, message: null, pointer: null }
                   - { check: weights_sum_100, status: pass, message: null, pointer: null }
                   - { check: delivery_path_declared, status: pass, message: null, pointer: null }
+                  - { check: operations_have_transformers, status: pass, message: null, pointer: null }
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2278,7 +2442,7 @@ paths:
       tags: [integrations]
       x-required-role: tenant_viewer
       summary: Diff two versions
-      description: Structured diff (RFC 6902-style operations on the spec) plus a unified YAML diff for display.
+      description: Structured diff (RFC 6902-style operations on the spec, including `operations` and their request schemas) plus a unified YAML diff for display. Show it before publishing, so a schema change that breaks callers is seen (D11 guidance - use a new integration ID for that).
       parameters:
         - name: from
           in: query
@@ -2313,6 +2477,7 @@ paths:
                 changes:
                   - { op: replace, path: /targets/0/weight, before: 100, after: 90 }
                   - { op: add, path: /targets/1, before: null, after: { vendor_id: clevertap, account_id: ct-brandA-in-v2, transformer: { request: T1@8, response: R1@2 }, weight: 10 } }
+                  - { op: add, path: /operations/default/request_schema/body/properties/context/properties/channel, before: null, after: { type: string } }
                 unified: "--- v7\n+++ v8\n@@ targets @@\n-  weight: 100\n+  weight: 90\n+- vendor_id: clevertap\n+  account_id: ct-brandA-in-v2\n"
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -2356,9 +2521,9 @@ paths:
                 integration:
                   integration_id: int_evt_brandA
                   owner_tenant: orders-service
-                  capability: events.track@v1
                   description: Brand A product analytics events
                   grants: []
+                  interactive: false
                   moves_money_or_quota: false
                   active_version: 7
                   latest_version: 8
@@ -2410,9 +2575,9 @@ paths:
                 integration:
                   integration_id: int_evt_brandA
                   owner_tenant: orders-service
-                  capability: events.track@v1
                   description: Brand A product analytics events
                   grants: []
+                  interactive: false
                   moves_money_or_quota: false
                   active_version: 7
                   latest_version: 8
@@ -3251,7 +3416,6 @@ paths:
               example:
                 version: 413
                 tenants: {}
-                capabilities: {}
                 vendors: {}
                 accounts: {}
                 transformers: {}
@@ -3338,7 +3502,6 @@ paths:
                   - request_id: req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
                     tenant_id: orders-service
                     integration_id: int_evt_brandA
-                    capability: events.track@v1
                     operation: default
                     mode: wait
                     status: succeeded
@@ -3383,7 +3546,6 @@ paths:
                 request_id: req_01J9Z3K8X2V7Q4M6N8P0R2S4T6
                 tenant_id: orders-service
                 integration_id: int_evt_brandA
-                capability: events.track@v1
                 operation: default
                 mode: wait
                 status: succeeded
@@ -3438,7 +3600,7 @@ paths:
                 payload_policy: masked
                 events:
                   - { seq: 1, type: request.received, at: '2026-10-31T09:15:00.001Z', payload: { headers: { authorization: 'sha256:1c9e' }, body: { user: { id: 'hmac:7f1a' } } }, payload_ref: null, sha256: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b, bytes: 214, sealed: false, truncated: false }
-                  - { seq: 2, type: request.validated, at: '2026-10-31T09:15:00.002Z', payload: { schema_id: 'urn:hub:capability:events.track@v1:default:request', warnings: [] }, payload_ref: null, sha256: 9b74c9897bac770ffc029102a200c5de4c6cb4b0c4c2a0a9e6c1d3b7f0e1a2b3, bytes: 96, sealed: false, truncated: false }
+                  - { seq: 2, type: request.validated, at: '2026-10-31T09:15:00.002Z', payload: { operation: default, validate_input: true, warnings: [] }, payload_ref: null, sha256: 9b74c9897bac770ffc029102a200c5de4c6cb4b0c4c2a0a9e6c1d3b7f0e1a2b3, bytes: 96, sealed: false, truncated: false }
                   - { seq: 3, type: integration.resolved, at: '2026-10-31T09:15:00.002Z', payload: { integration_version: 7, vendor_id: clevertap, account_id: ct-brandA-in, transformers: { request: T1@7, response: R1@2 }, snapshot_version: 412, breaker_state: closed }, payload_ref: null, sha256: 1f40fc92da241694750979ee6cf582f2d5d7d28e18335de05abc54d0560e0f53, bytes: 188, sealed: false, truncated: false }
                   - { seq: 4, type: vendor.responded, at: '2026-10-31T09:15:00.214Z', payload: { status: 200, vendor_ref: a1b2c3d4e5 }, payload_ref: null, sha256: 6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b, bytes: 61, sealed: false, truncated: false }
                   - { seq: 5, type: request.completed, at: '2026-10-31T09:15:02Z', payload: { status: succeeded, attempts: 1 }, payload_ref: null, sha256: d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35, bytes: 40, sealed: false, truncated: false }
@@ -4166,14 +4328,6 @@ components:
       schema:
         $ref: '#/components/schemas/Slug'
       example: ct-brandA-in
-    CapabilityKey:
-      name: capability
-      in: path
-      required: true
-      description: Capability key `<name>@v<major>`.
-      schema:
-        $ref: '#/components/schemas/CapabilityKeyValue'
-      example: events.track@v1
     TransformerId:
       name: transformer_id
       in: path
@@ -4411,13 +4565,13 @@ components:
               retry_after_ms: null
               details:
                 - { pointer: /targets/1/account_id, keyword: accounts_not_retired, message: "account 'ct-brandB-us' is retired" }
-                - { pointer: /delivery/mode, keyword: interactive_sync_only, message: interactive capability requires mode 'sync' }
+                - { pointer: /delivery/mode, keyword: interactive_sync_only, message: interactive integration requires mode 'sync' }
               meta:
                 report:
                   valid: false
                   checks:
                     - { check: accounts_not_retired, status: fail, message: "account 'ct-brandB-us' is retired", pointer: /targets/1/account_id }
-                    - { check: interactive_sync_only, status: fail, message: interactive capability requires mode 'sync', pointer: /delivery/mode }
+                    - { check: interactive_sync_only, status: fail, message: interactive integration requires mode 'sync', pointer: /delivery/mode }
               request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KM
     InternalError:
       description: Unexpected server error.
@@ -4454,13 +4608,8 @@ components:
     KeyIdValue:
       type: string
       pattern: '^key_[0-9A-HJKMNP-TV-Z]{26}$'
-    CapabilityKeyValue:
-      type: string
-      pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$'
-    CapabilityName:
-      type: string
-      pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'
     OperationName:
+      description: Operation name callers invoke (`POST /v1/integrations/{id}/invoke/{operation}`). Single-operation integrations use `default`.
       type: string
       pattern: '^[a-z][a-z0-9_]{0,31}$'
     TransformerIdValue:
@@ -4509,7 +4658,7 @@ components:
       enum: [closed, open, half_open]
     ObjectType:
       type: string
-      enum: [vendor, vendor_endpoint, account, capability, transformer, integration, tenant, api_key, registrar_endpoint, breaker, dlq, request, snapshot]
+      enum: [vendor, vendor_endpoint, account, transformer, integration, tenant, api_key, registrar_endpoint, breaker, dlq, request, snapshot]
     Pagination:
       type: object
       required: [next_cursor]
@@ -4555,9 +4704,20 @@ components:
             type: object
             required: [message]
             properties:
-              pointer: { type: string }
-              keyword: { type: string }
+              pointer: { description: 'JSON pointer into the submitted document (the request body, or the integration spec for publish checks).', type: string }
+              keyword: { description: 'Failing JSON Schema keyword, or the failing check name for PUBLISH_VALIDATION_FAILED.', type: string }
               message: { type: string }
+              sample:
+                description: Sample (golden fixture) name, for sample checks (`goldens_pass`, `endpoint_schema`, `input_schema`). Since 2.0.0.
+                type: [string, 'null']
+              field:
+                description: |
+                  JSON pointer of the offending field inside the checked object, for sample checks.
+                  `endpoint_schema` and `goldens_pass`: the produced vendor request
+                  `{path, query, headers, body}` (e.g. `/query/name`, `/body/d/0/identity`; `path` holds
+                  the path parameters). `input_schema`: the sample input `{body, headers}` (e.g.
+                  `/body/firstName`, `/headers/X-Request-Source`). Since 2.0.0.
+                type: [string, 'null']
         meta:
           description: Code-specific structured data (e.g. `report` for PUBLISH_VALIDATION_FAILED, reference counts for RETIRE_BLOCKED).
           type: [object, 'null']
@@ -4591,8 +4751,9 @@ components:
 
     # ---------------- vendors
     AuthScheme:
+      description: How the Hub authenticates to the vendor. `none` (since 2.0.0) is for public APIs; accounts of a `none` vendor have no credentials.
       type: string
-      enum: [static_headers, bearer, basic, query_param, hmac_signing, oauth2_client_credentials, mtls]
+      enum: [none, static_headers, bearer, basic, query_param, hmac_signing, oauth2_client_credentials, mtls]
     BreakerConfig:
       type: object
       properties:
@@ -4704,6 +4865,33 @@ components:
       properties:
         change_id: { $ref: '#/components/schemas/ChangeId' }
         vendor: { $ref: '#/components/schemas/Vendor' }
+    JsonSchemaDocument:
+      description: |
+        A JSON Schema 2020-12 document, as a JSON object. A field listed in `required` is required;
+        every other declared field is optional. Annotations such as `x-pii` are allowed. The Hub
+        compiles it; a document that does not compile is refused (or reported, for drafts).
+      type: object
+    EndpointRequestSchema:
+      description: |
+        The request a vendor endpoint version accepts (ADR-0023). Each key is optional; `{}` means the
+        endpoint takes nothing besides its method and path. Request transformer samples are checked
+        against it (`endpoint_schema`) at transformer creation and at integration validate/publish,
+        never on live calls. Credential headers and query values set from `creds.*` are not part of
+        the checked request: do not declare them.
+      type: object
+      properties:
+        path:
+          description: JSON Schema of the path parameters object (names from `{...}` in `path`).
+          $ref: '#/components/schemas/JsonSchemaDocument'
+        query:
+          description: JSON Schema of the query parameters object.
+          $ref: '#/components/schemas/JsonSchemaDocument'
+        headers:
+          description: JSON Schema of the non-credential headers object (header names as keys).
+          $ref: '#/components/schemas/JsonSchemaDocument'
+        body:
+          description: JSON Schema of the body. Omit it for endpoints without a body.
+          $ref: '#/components/schemas/JsonSchemaDocument'
     VendorEndpointFields:
       type: object
       properties:
@@ -4714,11 +4902,17 @@ components:
         idempotent: { type: boolean }
         batch_max: { type: [integer, 'null'], minimum: 1 }
         stream: { type: boolean, default: false }
+        request_schema:
+          description: Required on create and always returned (since 2.0.0).
+          $ref: '#/components/schemas/EndpointRequestSchema'
+        response_schema:
+          description: Optional JSON Schema of the vendor's response body. Informational only (console, docs); never enforced. Null when not given. Since 2.0.0.
+          type: [object, 'null']
     VendorEndpointCreate:
       allOf:
         - $ref: '#/components/schemas/VendorEndpointFields'
         - type: object
-          required: [name, method, path, idempotent, reason]
+          required: [name, method, path, idempotent, request_schema, reason]
           properties:
             name: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
             reason: { $ref: '#/components/schemas/Reason' }
@@ -4726,7 +4920,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/VendorEndpointFields'
         - type: object
-          required: [endpoint_ref, name, version, method, path, timeout_ms, connect_timeout_ms, idempotent, created_at]
+          required: [endpoint_ref, name, version, method, path, timeout_ms, connect_timeout_ms, idempotent, request_schema, created_at]
           properties:
             endpoint_ref: { $ref: '#/components/schemas/EndpointRefValue' }
             name: { type: string }
@@ -4763,10 +4957,9 @@ components:
         created_at: { type: string, format: date-time }
         expires_at: { type: [string, 'null'], format: date-time }
     Credentials:
-      description: Secret values (scheme-specific keys). Write-only. Never echoed or logged.
+      description: Secret values (scheme-specific keys). Write-only. Never echoed or logged. Empty only for accounts of an auth `none` vendor (`AccountCreate`).
       type: object
       writeOnly: true
-      minProperties: 1
       additionalProperties: { type: string }
     AccountQuota:
       type: object
@@ -4851,14 +5044,20 @@ components:
               items: { $ref: '#/components/schemas/AccountSummary' }
     AccountCreate:
       type: object
-      required: [account_id, vendor_id, region, config, credentials, reason]
+      required: [account_id, vendor_id, region, config, reason]
       properties:
         account_id: { $ref: '#/components/schemas/Slug' }
         vendor_id: { $ref: '#/components/schemas/Slug' }
         region: { type: string }
         config: { type: object }
         quota: { $ref: '#/components/schemas/AccountQuota' }
-        credentials: { $ref: '#/components/schemas/Credentials' }
+        credentials:
+          description: |
+            Initial credentials (the `active` slot, cred version 1). Required, with at least one key,
+            unless the vendor's auth scheme is `none`. For `none` it must be omitted or `{}`.
+            400 `VALIDATION_FAILED` (pointer `/credentials`) otherwise. Optional in the schema since
+            2.0.0.
+          $ref: '#/components/schemas/Credentials'
         credential_expires_at: { type: [string, 'null'], format: date-time }
         reason: { $ref: '#/components/schemas/Reason' }
     AccountUpdate:
@@ -4896,7 +5095,10 @@ components:
       type: object
       required: [credentials, reason]
       properties:
-        credentials: { $ref: '#/components/schemas/Credentials' }
+        credentials:
+          description: At least one key. Accounts of an auth `none` vendor have no credentials (409 `CONFLICT`).
+          $ref: '#/components/schemas/Credentials'
+          minProperties: 1
         expires_at: { type: [string, 'null'], format: date-time }
         reason: { $ref: '#/components/schemas/Reason' }
     CredentialPromote:
@@ -4927,117 +5129,38 @@ components:
         target_state: { $ref: '#/components/schemas/AccountState' }
         reason: { $ref: '#/components/schemas/Reason' }
 
-    # ---------------- capabilities
-    CapabilityOperationDef:
-      type: object
-      required: [idempotent, request_schema, response_schema]
-      properties:
-        description: { type: [string, 'null'] }
-        idempotent: { type: boolean }
-        request_schema: { description: 'JSON Schema 2020-12 document.', type: object }
-        response_schema: { description: 'JSON Schema 2020-12 document.', type: object }
-    CapabilityOperations:
-      description: Operation name -> definition. Single-operation capabilities use the key `default`.
-      type: object
-      minProperties: 1
-      propertyNames: { $ref: '#/components/schemas/OperationName' }
-      additionalProperties: { $ref: '#/components/schemas/CapabilityOperationDef' }
-    CapabilityCreate:
-      type: object
-      required: [name, major, interactive, operations, reason]
-      properties:
-        name: { $ref: '#/components/schemas/CapabilityName' }
-        major: { type: integer, minimum: 1 }
-        description: { type: [string, 'null'] }
-        interactive: { type: boolean }
-        operations: { $ref: '#/components/schemas/CapabilityOperations' }
-        reason: { $ref: '#/components/schemas/Reason' }
-    CapabilityVersionCreate:
-      type: object
-      required: [expected_latest_minor, operations, reason]
-      properties:
-        expected_latest_minor: { type: integer, minimum: 0 }
-        description: { type: [string, 'null'] }
-        operations: { $ref: '#/components/schemas/CapabilityOperations' }
-        summary: { description: 'One-line change summary.', type: string }
-        reason: { $ref: '#/components/schemas/Reason' }
-    CapabilityVersion:
-      type: object
-      required: [capability, name, major, minor, interactive, operations, author, created_at]
-      properties:
-        capability: { $ref: '#/components/schemas/CapabilityKeyValue' }
-        name: { $ref: '#/components/schemas/CapabilityName' }
-        major: { type: integer }
-        minor: { type: integer }
-        description: { type: [string, 'null'] }
-        interactive: { type: boolean }
-        operations: { $ref: '#/components/schemas/CapabilityOperations' }
-        author: { type: string }
-        created_at: { type: string, format: date-time }
-    CapabilitySummary:
-      type: object
-      required: [capability, name, major, latest_minor, interactive, operations, integrations_using, updated_at]
-      properties:
-        capability: { $ref: '#/components/schemas/CapabilityKeyValue' }
-        name: { type: string }
-        major: { type: integer }
-        latest_minor: { type: integer }
-        interactive: { type: boolean }
-        operations:
-          type: array
-          items: { $ref: '#/components/schemas/OperationName' }
-        integrations_using: { type: integer, minimum: 0 }
-        updated_at: { type: string, format: date-time }
-    CapabilityList:
-      allOf:
-        - $ref: '#/components/schemas/Pagination'
-        - type: object
-          required: [items]
-          properties:
-            items:
-              type: array
-              items: { $ref: '#/components/schemas/CapabilitySummary' }
-    CapabilityVersionSummary:
-      type: object
-      required: [capability, minor, author, created_at]
-      properties:
-        capability: { $ref: '#/components/schemas/CapabilityKeyValue' }
-        minor: { type: integer }
-        author: { type: string }
-        created_at: { type: string, format: date-time }
-        summary: { type: [string, 'null'] }
-    CapabilityVersionList:
-      allOf:
-        - $ref: '#/components/schemas/Pagination'
-        - type: object
-          required: [items]
-          properties:
-            items:
-              type: array
-              items: { $ref: '#/components/schemas/CapabilityVersionSummary' }
-    CapabilityVersionChange:
-      type: object
-      required: [change_id, capability_version]
-      properties:
-        change_id: { $ref: '#/components/schemas/ChangeId' }
-        capability_version: { $ref: '#/components/schemas/CapabilityVersion' }
-
     # ---------------- transformers
     TransformerKind:
       type: string
       enum: [request, response, inbound]
     GoldenFixture:
-      description: One golden fixture (DESIGN §7.6). Request transformers use input + expected_request. Response transformers use vendor_response + expected_response (or expected_error).
+      description: |
+        One sample (golden fixture, DESIGN §7.6; the field keeps its historical name `fixtures`).
+        Samples prove a transformer before it can be stored or published.
+
+        * Request transformers: `input` (the caller's JSON body) + optional `input_headers` (the
+          caller headers, read as `hdr.*`) + `expected_request` (the vendor request the transformer
+          must produce: `method`, `path` (the resolved path), and optional `query`, `headers`
+          (non-credential headers only) and `body`). The produced request must equal
+          `expected_request` (check `goldens_pass`) and fit the vendor endpoint's `request_schema`
+          (check `endpoint_schema`). At integration validate and publish, `input` and
+          `input_headers` must also fit the operation's `request_schema` (check `input_schema`).
+        * Response transformers: `vendor_response` (`status`, `headers`, `body`) + `expected_response`
+          (the transformer's output) or `expected_error` (a canonical error from its `errors` rules).
       type: object
       required: [name]
       properties:
         name: { type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$' }
-        input: { type: object }
-        account_config: { type: object }
-        expected_request: { type: object }
-        vendor_response: { type: object }
-        expected_response: { type: object }
-        expected_error: { type: object }
+        input: { description: 'Caller body (request samples).', type: object }
+        input_headers:
+          description: Caller headers (request samples), header name -> value. Optional. Since 2.0.0.
+          type: object
+          additionalProperties: { type: string }
+        account_config: { description: 'Non-secret account config injected as `account.config`.', type: object }
+        expected_request: { description: 'Expected vendor request (request samples): method, path, query, headers, body. Credentials are never part of it.', type: object }
+        vendor_response: { description: 'Vendor response (response samples): status, headers, body.', type: object }
+        expected_response: { description: 'Expected transformer output (response samples).', type: object }
+        expected_error: { description: 'Expected canonical error (response samples).', type: object }
     GoldensSummary:
       type: object
       required: [passed, total, failed]
@@ -5045,18 +5168,30 @@ components:
         passed: { type: boolean }
         total: { type: integer, minimum: 0 }
         failed: { type: integer, minimum: 0 }
+    SchemaViolation:
+      description: One JSON Schema violation found by a sample check (since 2.0.0).
+      type: object
+      required: [field, message]
+      properties:
+        field: { description: 'JSON pointer of the field in the checked object (produced request `{path, query, headers, body}`, or sample input `{body, headers}`).', type: string }
+        keyword: { description: 'Failing JSON Schema keyword (e.g. `required`, `type`, `minLength`).', type: string }
+        message: { type: string }
     TransformerVersion:
       type: object
-      required: [transformer_id, version, ref, kind, capability, vendor_endpoint, yaml, fixtures, goldens, author, reason, created_at]
+      required: [transformer_id, version, ref, kind, vendor_endpoint, yaml, fixtures, goldens, author, reason, created_at]
       properties:
         transformer_id: { $ref: '#/components/schemas/TransformerIdValue' }
         version: { type: integer, minimum: 1 }
         ref: { $ref: '#/components/schemas/TransformerRef' }
         kind: { $ref: '#/components/schemas/TransformerKind' }
-        capability: { $ref: '#/components/schemas/CapabilityKeyValue' }
-        vendor_endpoint: { $ref: '#/components/schemas/VendorEndpointRef' }
+        vendor_endpoint:
+          description: The endpoint a request (or inbound) transformer targets. Null for response transformers.
+          oneOf:
+            - $ref: '#/components/schemas/VendorEndpointRef'
+            - type: 'null'
         yaml: { description: 'Transformer DSL source (DESIGN §7).', type: string }
         fixtures:
+          description: The samples.
           type: array
           items: { $ref: '#/components/schemas/GoldenFixture' }
         docs_url: { type: [string, 'null'], format: uri }
@@ -5086,12 +5221,15 @@ components:
               items: { $ref: '#/components/schemas/TransformerVersionSummary' }
     TransformerSummary:
       type: object
-      required: [transformer_id, kind, capability, vendor_endpoint, latest_version, used_by_active_versions, updated_at]
+      required: [transformer_id, kind, vendor_endpoint, latest_version, used_by_active_versions, updated_at]
       properties:
         transformer_id: { $ref: '#/components/schemas/TransformerIdValue' }
         kind: { $ref: '#/components/schemas/TransformerKind' }
-        capability: { $ref: '#/components/schemas/CapabilityKeyValue' }
-        vendor_endpoint: { $ref: '#/components/schemas/VendorEndpointRef' }
+        vendor_endpoint:
+          description: Null for response transformers.
+          oneOf:
+            - $ref: '#/components/schemas/VendorEndpointRef'
+            - type: 'null'
         latest_version: { type: integer }
         used_by_active_versions: { type: integer, minimum: 0 }
         updated_at: { type: string, format: date-time }
@@ -5112,15 +5250,23 @@ components:
               type: array
               items: { $ref: '#/components/schemas/TransformerSummary' }
     TransformerVersionCreate:
+      description: |
+        `vendor_endpoint` is required for `kind: request` (and `inbound`) and must be absent or null
+        for `kind: response`; 400 `VALIDATION_FAILED` (pointer `/vendor_endpoint`) otherwise. At
+        least one sample is required for every kind.
       type: object
-      required: [kind, capability, vendor_endpoint, yaml, fixtures, reason]
+      required: [kind, yaml, fixtures, reason]
       properties:
         kind: { $ref: '#/components/schemas/TransformerKind' }
-        capability: { $ref: '#/components/schemas/CapabilityKeyValue' }
-        vendor_endpoint: { $ref: '#/components/schemas/VendorEndpointRef' }
+        vendor_endpoint:
+          description: '`<vendor_id>.<endpoint name>@<version>`. Required for request (and inbound) transformers; absent or null for response transformers.'
+          oneOf:
+            - $ref: '#/components/schemas/VendorEndpointRef'
+            - type: 'null'
         expected_latest_version: { description: 'Omit or null for a new transformer id.', type: [integer, 'null'] }
         yaml: { type: string, minLength: 1 }
         fixtures:
+          description: The samples (at least one).
           type: array
           minItems: 1
           items: { $ref: '#/components/schemas/GoldenFixture' }
@@ -5133,12 +5279,15 @@ components:
         change_id: { $ref: '#/components/schemas/ChangeId' }
         transformer_version: { $ref: '#/components/schemas/TransformerVersion' }
     TransformerDraft:
+      description: Unsaved transformer. `vendor_endpoint` follows the same rule as in `TransformerVersionCreate`.
       type: object
-      required: [kind, capability, vendor_endpoint, yaml]
+      required: [kind, yaml]
       properties:
         kind: { $ref: '#/components/schemas/TransformerKind' }
-        capability: { $ref: '#/components/schemas/CapabilityKeyValue' }
-        vendor_endpoint: { $ref: '#/components/schemas/VendorEndpointRef' }
+        vendor_endpoint:
+          oneOf:
+            - $ref: '#/components/schemas/VendorEndpointRef'
+            - type: 'null'
         yaml: { type: string }
     TransformerDryRunRequest:
       description: Exactly one of `ref` or `draft`.
@@ -5147,8 +5296,8 @@ components:
         ref: { $ref: '#/components/schemas/TransformerRef' }
         draft: { $ref: '#/components/schemas/TransformerDraft' }
         account_id: { description: 'Account whose non-secret config and credentials (redacted) are injected.', $ref: '#/components/schemas/Slug' }
-        input: { description: 'Canonical request (request transformers).', type: object }
-        headers: { description: 'Caller headers (`hdr`).', type: object, additionalProperties: { type: string } }
+        input: { description: 'Caller body (request transformers).', type: object }
+        input_headers: { description: 'Caller headers (`hdr.*`, request transformers). Replaces `headers` (2.0.0).', type: object, additionalProperties: { type: string } }
         session: { type: object }
         vendor_response:
           description: Vendor response (response transformers).
@@ -5175,8 +5324,12 @@ components:
           oneOf:
             - $ref: '#/components/schemas/VendorRequestPreview'
             - type: 'null'
-        canonical_response: { type: [object, 'null'] }
-        canonical_error: { type: [object, 'null'] }
+        canonical_response: { description: 'Response transformer output, exactly what the caller would receive.', type: [object, 'null'] }
+        canonical_error: { description: 'Canonical error produced by the response transformer `errors` rules.', type: [object, 'null'] }
+        schema_errors:
+          description: Request transformers only. Violations of the vendor endpoint's `request_schema` by the produced request (empty when it fits, or for other kinds). Since 2.0.0.
+          type: array
+          items: { $ref: '#/components/schemas/SchemaViolation' }
         compile_errors:
           type: array
           items:
@@ -5194,6 +5347,7 @@ components:
         ref: { $ref: '#/components/schemas/TransformerRef' }
         draft: { $ref: '#/components/schemas/TransformerDraft' }
         fixtures:
+          description: The samples to run with the draft.
           type: array
           items: { $ref: '#/components/schemas/GoldenFixture' }
     GoldensRunResult:
@@ -5209,22 +5363,83 @@ components:
             type: object
             required: [fixture, passed, diff]
             properties:
-              fixture: { type: string }
+              fixture: { description: 'Sample name.', type: string }
               passed: { type: boolean }
               diff:
+                description: Differences between the produced output and the expected one (`goldens_pass`).
                 type: array
                 items: { $ref: '#/components/schemas/DiffOp' }
+              schema_errors:
+                description: Request samples only. Violations of the vendor endpoint's `request_schema` by the produced request (`endpoint_schema`). Since 2.0.0.
+                type: array
+                items: { $ref: '#/components/schemas/SchemaViolation' }
               error: { type: [string, 'null'] }
         duration_ms: { type: integer, minimum: 0 }
 
     # ---------------- integrations
-    TransformerPair:
-      description: The request and response transformers a target uses for one operation (or, as `transformer`, for every operation not listed in `operations`).
+    OperationRequestSchema:
+      description: |
+        The caller's input for one operation (ADR-0023). Built in the console from a pasted sample,
+        each field marked required or optional.
       type: object
-      required: [request, response]
+      required: [body]
+      properties:
+        body:
+          description: |
+            JSON Schema 2020-12 of the caller's JSON body. Required for every operation; use
+            `{type: object}` when a call has no fields. Fields listed in `required` are required,
+            every other field is optional. `x-pii` tags (see contracts/README.md) drive audit masking
+            and sealing. Request transformers read the body as `req.*`.
+          $ref: '#/components/schemas/JsonSchemaDocument'
+        headers:
+          description: |
+            Optional JSON Schema 2020-12 of the caller headers object (header names as keys, matched
+            case-insensitively). It is the allowlist of caller headers the request transformer may
+            read as `hdr.*`; other caller headers are not visible to it. The Hub's own headers
+            (`Authorization`, `Idempotency-Key`, `Prefer`, `X-Request-Deadline`, `X-Hub-Session`,
+            `traceparent`) can never be declared here.
+          $ref: '#/components/schemas/JsonSchemaDocument'
+    IntegrationOperation:
+      description: One operation callers invoke. Part of the integration version, so a change goes through draft, validate, publish, diff and the change log.
+      type: object
+      required: [idempotent, request_schema]
+      properties:
+        description: { description: 'Caller-facing description (shown in discovery). No vendor, account or version in it.', type: [string, 'null'], maxLength: 1024 }
+        idempotent:
+          description: Repeating the operation has no extra side effect. Allows an immediate sync retry on timeout and `failover` without an `Idempotency-Key` (DESIGN §5.3, §10.2).
+          type: boolean
+        validate_input:
+          description: |
+            `true` (default): live calls are checked against `request_schema` (body and headers)
+            before anything else runs, and a mismatch gives 400 `VALIDATION_FAILED` with one
+            `details[]` entry per violation. `false`: live calls are not checked (the samples are
+            still checked at publish). The Hub always returns the effective value.
+          type: boolean
+          default: true
+        request_schema: { $ref: '#/components/schemas/OperationRequestSchema' }
+    IntegrationOperations:
+      description: Operation name -> definition. At least one. Single-operation integrations use the key `default`.
+      type: object
+      minProperties: 1
+      propertyNames: { $ref: '#/components/schemas/OperationName' }
+      additionalProperties: { $ref: '#/components/schemas/IntegrationOperation' }
+    TransformerPair:
+      description: |
+        The request and response transformers a target uses for one operation (or, as `transformer`,
+        for every operation not listed in `operations`). `request` is required and names a `request`
+        transformer. `response` is optional: omitted or null means pass-through (the caller gets the
+        vendor's status and body unchanged, with only `Content-Type` and `Retry-After` vendor
+        headers, see hub-public). When set, it names a `response` transformer whose output is
+        returned to the caller unchanged, without a schema check.
+      type: object
+      required: [request]
       properties:
         request: { $ref: '#/components/schemas/TransformerRef' }
-        response: { $ref: '#/components/schemas/TransformerRef' }
+        response:
+          description: Response transformer, or null for pass-through. Optional since 2.0.0.
+          oneOf:
+            - $ref: '#/components/schemas/TransformerRef'
+            - type: 'null'
     TargetRef:
       type: object
       required: [vendor_id, account_id, transformer]
@@ -5232,23 +5447,21 @@ components:
         vendor_id: { $ref: '#/components/schemas/Slug' }
         account_id: { $ref: '#/components/schemas/Slug' }
         transformer:
-          description: Default pair. Used for every operation of the capability that `operations` does not list (for a single-operation capability, the only pair).
+          description: Default pair. Used for every operation in `spec.operations` that the target's `operations` does not list (for a single-operation integration, the only pair).
           $ref: '#/components/schemas/TransformerPair'
         operations:
           description: |
-            Optional per-operation pairs for a multi-operation capability whose operations go to
-            different vendor endpoints (DESIGN §3.1, e.g. `kyc.aadhaar_otp@v1` with `generate` and
-            `verify`). Keys are operation names of the integration's capability. The pair of a listed
-            operation replaces `transformer` for that operation, both request and response; operations
-            not listed use `transformer`. The same selection applies wherever the target is used:
-            weighted targets, the failover chain, shadow, sync/wait/async delivery, session steps and
-            dry-run. Omit it for single-operation capabilities. Listing every operation is allowed;
-            `transformer` is still required and must still reference existing transformers of the
-            capability. Validation and publish fail check `operations_have_transformers` (pointer
-            `/targets/<i>/operations/<operation>`, or `/targets/<i>/transformer` for a defaulted
-            operation; `/failover/<i>/...` and `/shadow/target/...` likewise) for a key the
-            capability does not declare, and for any operation whose selected pair is compiled for
-            another operation. Added in 1.2.0.
+            Optional per-operation pairs for an integration whose operations go to different vendor
+            endpoints (e.g. an OTP flow with `generate` and `verify`). Keys are operation names
+            declared in `spec.operations`. The pair of a listed operation replaces `transformer` for
+            that operation, both request and response; operations not listed use `transformer`. The
+            same selection applies wherever the target is used: weighted targets, the failover chain,
+            shadow, sync/wait/async delivery, session steps and dry-run. Omit it for single-operation
+            integrations. Listing every operation is allowed; `transformer` is still required and
+            must still reference existing transformers. Validation and publish fail check
+            `operations_have_transformers` (pointer `/targets/<i>/operations/<operation>`;
+            `/failover/<i>/...` and `/shadow/target/...` likewise) for a key that `spec.operations`
+            does not declare. Added in 1.2.0.
           type: object
           minProperties: 1
           propertyNames: { $ref: '#/components/schemas/OperationName' }
@@ -5267,7 +5480,7 @@ components:
       properties:
         mode: { $ref: '#/components/schemas/DeliveryMode' }
         wait_ms: { type: [integer, 'null'], minimum: 0, default: 3000 }
-        ttl_ms: { type: [integer, 'null'], minimum: 0 }
+        ttl_ms: { description: 'How long an accepted request may wait for delivery. Omitted or null: the Hub default TTL.', type: [integer, 'null'], minimum: 0 }
         on_circuit_open: { type: string, enum: [fail_fast, failover, queue_if_allowed], default: fail_fast }
         pending: { type: string, enum: [re_resolve, pinned], default: re_resolve }
         retry:
@@ -5307,10 +5520,13 @@ components:
         mode: { type: string, enum: [send, dry_run] }
         sample_ratio: { type: number, minimum: 0, maximum: 1, default: 1 }
     IntegrationSpec:
-      description: Content of an integration version (DESIGN §3.4). Durations are in ms.
+      description: Content of an integration version (DESIGN §3.4, ADR-0023). Durations are in ms.
       type: object
-      required: [targets, delivery, audit]
+      required: [operations, targets, delivery, audit]
       properties:
+        operations:
+          description: The operations callers invoke, each with the caller's `request_schema`. Required since 2.0.0.
+          $ref: '#/components/schemas/IntegrationOperations'
         targets:
           type: array
           minItems: 1
@@ -5377,16 +5593,18 @@ components:
         integration_version: { $ref: '#/components/schemas/IntegrationVersion' }
     Integration:
       type: object
-      required: [integration_id, owner_tenant, capability, grants, moves_money_or_quota, active_version, latest_version, has_draft, paused, created_at, updated_at]
+      required: [integration_id, owner_tenant, grants, interactive, moves_money_or_quota, active_version, latest_version, has_draft, paused, created_at, updated_at]
       properties:
         integration_id: { $ref: '#/components/schemas/Slug' }
         owner_tenant: { $ref: '#/components/schemas/Slug' }
-        capability: { $ref: '#/components/schemas/CapabilityKeyValue' }
         description: { type: [string, 'null'] }
         grants:
           description: Other tenants allowed to invoke.
           type: array
           items: { $ref: '#/components/schemas/Slug' }
+        interactive:
+          description: The operations are steps of one session a person is waiting on (`X-Hub-Session`). Only `sync` delivery is allowed. Set at creation and never changed. Since 2.0.0.
+          type: boolean
         moves_money_or_quota:
           description: Requires Idempotency-Key from callers and confirmation in MCP tools.
           type: boolean
@@ -5404,12 +5622,16 @@ components:
         updated_at: { type: string, format: date-time }
     IntegrationSummary:
       type: object
-      required: [integration_id, owner_tenant, capability, active_version, latest_version, has_draft, paused, targets, updated_at]
+      required: [integration_id, owner_tenant, interactive, operations, active_version, latest_version, has_draft, paused, targets, updated_at]
       properties:
         integration_id: { $ref: '#/components/schemas/Slug' }
         owner_tenant: { $ref: '#/components/schemas/Slug' }
-        capability: { $ref: '#/components/schemas/CapabilityKeyValue' }
         description: { type: [string, 'null'] }
+        interactive: { description: 'See `Integration.interactive`. Since 2.0.0.', type: boolean }
+        operations:
+          description: Operation names of the active version (empty when there is none). Since 2.0.0.
+          type: array
+          items: { $ref: '#/components/schemas/OperationName' }
         active_version: { type: [integer, 'null'] }
         latest_version: { type: [integer, 'null'] }
         has_draft: { type: boolean }
@@ -5439,15 +5661,18 @@ components:
               items: { $ref: '#/components/schemas/IntegrationSummary' }
     IntegrationCreate:
       type: object
-      required: [integration_id, owner_tenant, capability, reason]
+      required: [integration_id, owner_tenant, reason]
       properties:
         integration_id: { $ref: '#/components/schemas/Slug' }
         owner_tenant: { $ref: '#/components/schemas/Slug' }
-        capability: { $ref: '#/components/schemas/CapabilityKeyValue' }
         description: { type: [string, 'null'], maxLength: 1024 }
         grants:
           type: array
           items: { $ref: '#/components/schemas/Slug' }
+        interactive:
+          description: Operations are steps of one session using `X-Hub-Session`; only `sync` delivery is allowed. Cannot be changed later. Since 2.0.0.
+          type: boolean
+          default: false
         moves_money_or_quota: { type: boolean, default: false }
         reason: { $ref: '#/components/schemas/Reason' }
     IntegrationUpdate:
@@ -5484,11 +5709,19 @@ components:
       required: [check, status]
       properties:
         check:
-          description: 'Known: schemas_compile, expressions_typecheck, goldens_pass, response_conforms, references_exist, accounts_not_retired, interactive_sync_only, weights_sum_100, delivery_path_declared, failover_requires_idempotency, supports_features, operations_have_transformers (1.2.0). Clients must tolerate unknown check names.'
+          description: |
+            Known: schemas_compile, expressions_typecheck, goldens_pass, input_schema (2.0.0),
+            endpoint_schema (2.0.0), references_exist, accounts_not_retired, interactive_sync_only,
+            weights_sum_100, delivery_path_declared, failover_requires_idempotency,
+            supports_features, operations_have_transformers (1.2.0). `response_conforms` was removed
+            in 2.0.0 (response transformer output is not checked against a schema). Clients must
+            tolerate unknown check names.
           type: string
         status: { type: string, enum: [pass, fail, warn, skipped] }
         message: { type: [string, 'null'] }
-        pointer: { description: 'JSON pointer into the spec.', type: [string, 'null'] }
+        pointer: { description: 'JSON pointer into the submitted document (the spec, or the TransformerVersionCreate body).', type: [string, 'null'] }
+        sample: { description: 'Sample (golden fixture) name, for goldens_pass, endpoint_schema and input_schema. Since 2.0.0.', type: [string, 'null'] }
+        field: { description: 'JSON pointer of the offending field in the checked object (see AdminError details `field`). Since 2.0.0.', type: [string, 'null'] }
     ValidationReport:
       type: object
       required: [valid, checks]
@@ -5814,12 +6047,11 @@ components:
         queue_wait_ms: { type: integer, minimum: 0 }
     RequestSummary:
       type: object
-      required: [request_id, tenant_id, integration_id, capability, operation, mode, status, attempts, created_at]
+      required: [request_id, tenant_id, integration_id, operation, mode, status, attempts, created_at]
       properties:
         request_id: { $ref: '#/components/schemas/RequestIdValue' }
         tenant_id: { $ref: '#/components/schemas/Slug' }
         integration_id: { $ref: '#/components/schemas/Slug' }
-        capability: { $ref: '#/components/schemas/CapabilityKeyValue' }
         operation: { $ref: '#/components/schemas/OperationName' }
         mode: { $ref: '#/components/schemas/DeliveryMode' }
         status: { $ref: '#/components/schemas/RequestState' }
@@ -5853,7 +6085,7 @@ components:
             payload_policy: { type: string, enum: [full, masked, sealed, metadata_only] }
             sealed: { type: boolean }
             timings: { $ref: '#/components/schemas/Timings' }
-            result: { description: 'Canonical result (subject to payload policy).', type: [object, 'null'] }
+            result: { description: 'Response body returned to the caller (response transformer output, or the vendor body in pass-through), subject to the payload policy. Null until succeeded.' }
             error: { description: 'Canonical error object (public CanonicalError shape).', type: [object, 'null'] }
             snapshot_version: { type: [integer, 'null'] }
             trace_id: { type: [string, 'null'] }

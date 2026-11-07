@@ -11,7 +11,7 @@
 
 	/**
 	 * One transformer version (HUB-268): who made it and why, the vendor doc it cites (link), its
-	 * stored goldens result, the DSL source with syntax colours, the golden fixtures, and for
+	 * stored goldens result, the DSL source with syntax colours, the samples (golden fixtures), and for
 	 * editors a "Run goldens" control. Read only: editing
 	 * transformers is Release 2 (F-19 non-goals). Editors also get the dry run (HUB-269).
 	 */
@@ -21,12 +21,13 @@
 	/** Only http(s) links are rendered as links (the contract says `format: uri`). */
 	const docsUrl = $derived(v.docs_url && /^https?:\/\//i.test(v.docs_url) ? v.docs_url : null);
 	const fixtureParts = [
-		['input', 'Input (canonical request)'],
+		['input', 'Sample input body'],
+		['input_headers', 'Sample input headers'],
 		['account_config', 'Account config'],
 		['expected_request', 'Expected vendor request'],
 		['vendor_response', 'Vendor response'],
-		['expected_response', 'Expected canonical response'],
-		['expected_error', 'Expected canonical error']
+		['expected_response', 'Expected output'],
+		['expected_error', 'Expected error']
 	] as const;
 	const json = (value: unknown) => JSON.stringify(redactSecrets(value), null, 2);
 </script>
@@ -42,12 +43,11 @@
 			<dd>{v.kind}</dd>
 		</div>
 		<div>
-			<dt>Capability</dt>
-			<dd><code>{v.capability}</code></dd>
-		</div>
-		<div>
 			<dt>Vendor endpoint</dt>
-			<dd><code>{v.vendor_endpoint}</code></dd>
+			<dd>
+				{#if v.vendor_endpoint}<code>{v.vendor_endpoint}</code>{:else}None: a response transformer
+					stands alone{/if}
+			</dd>
 		</div>
 		<div>
 			<dt>Author</dt>
@@ -76,7 +76,7 @@
 			</dd>
 		</div>
 		<div>
-			<dt>Stored goldens</dt>
+			<dt>Samples when stored</dt>
 			<dd>
 				<StatusBadge
 					tone={v.goldens.passed ? 'ok' : 'danger'}
@@ -89,11 +89,11 @@
 	</dl>
 
 	<section aria-labelledby="{uid}-goldens">
-		<h3 id="{uid}-goldens">Goldens</h3>
+		<h3 id="{uid}-goldens">Run the samples</h3>
 		<RoleGate {access} op="runTransformerGoldens">
 			{#key v.ref}<GoldensRunner transformerRef={v.ref} />{/key}
 			{#snippet denied(role)}
-				<p class="muted">Running goldens needs the {role} role. The stored result is above.</p>
+				<p class="muted">Running samples needs the {role} role. The stored result is above.</p>
 			{/snippet}
 		</RoleGate>
 	</section>
@@ -115,10 +115,10 @@
 
 	<section aria-labelledby="{uid}-fixtures">
 		<h3 id="{uid}-fixtures">
-			Golden fixtures <span class="muted">({formatNumber(v.fixtures.length)})</span>
+			Samples <span class="muted">({formatNumber(v.fixtures.length)})</span>
 		</h3>
 		{#if v.fixtures.length === 0}
-			<p class="muted">No fixtures returned.</p>
+			<p class="muted">No samples returned.</p>
 		{:else}
 			<ul class="fixtures">
 				{#each v.fixtures as f (f.name)}

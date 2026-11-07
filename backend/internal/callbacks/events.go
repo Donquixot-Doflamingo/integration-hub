@@ -57,7 +57,7 @@ type Event struct {
 	// IntegrationVersion is the version the request ran on; its webhooks are the
 	// subscriptions (registry.IntegrationVersion.Webhooks).
 	IntegrationVersion int
-	// Operation is the capability operation. Empty: "default".
+	// Operation is the integration operation. Empty: "default".
 	Operation string
 	RequestID string
 	// IdempotencyKey is the caller's Idempotency-Key. Empty: null.

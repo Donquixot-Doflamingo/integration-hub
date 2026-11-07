@@ -1,0 +1,39 @@
+# CleverTap Upload Events API, checked against https://developer.clevertap.com/docs/upload-events-api on 2026-10-31 (AGENTS §3.3):
+# POST /1/upload, headers X-CleverTap-Account-Id + X-CleverTap-Passcode, body {"d": [records]},
+# record = identity, type "event", evtName, evtData (object), ts (epoch seconds); max 1000 records.
+# Response {"status", "processed", "unprocessed": [{"status", "code", "error", "record"}]}.
+# Dev only: regions point at mockvendor. Goldens in fixtures/ (hubctl transform test).
+transformer: R1
+version: 2
+kind: response
+capability: events.track@v1
+docs_url: https://developer.clevertap.com/docs/upload-events-api
+response:
+  # Expressions containing ": " (the ternary) must be quoted to be valid YAML.
+  status:     'len(res.body.unprocessed ?? []) == 0 ? "ok" : "partial"'
+  accepted:   res.body.processed
+  # Each unprocessed entry is {status, code, error, record}; callers get only the reason.
+  # expr reads a "{" right after "map(x," as a predicate block: wrap the object literal in ().
+  rejected:   'map(res.body.unprocessed ?? [], ({reason: string(#.error ?? "rejected")}))'
+  vendor_ref: header(res, "X-Request-Id")
+  raw:        res.body
+errors:
+  - when: res.status == 401 || res.status == 403
+    code: UPSTREAM_AUTH_FAILED
+    retryable: false
+  - when: res.status == 429
+    code: UPSTREAM_RATE_LIMITED
+    retryable: true
+    retry_after_ms: int(header(res, "Retry-After") ?? "1") * 1000
+  # CleverTap answers a missing/invalid account ID with 503: a configuration error, not an outage.
+  # Retrying would never succeed, so treat it as an auth failure (pages on-call).
+  - when: 'res.status == 503 && string(res.body.error ?? "") contains "account ID"'
+    code: UPSTREAM_AUTH_FAILED
+    retryable: false
+  - when: res.status >= 500
+    code: UPSTREAM_UNAVAILABLE
+    retryable: true
+  - when: res.status >= 400
+    code: UPSTREAM_REJECTED
+    retryable: false
+    message: res.body.error

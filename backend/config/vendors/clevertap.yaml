@@ -7,7 +7,45 @@ regions:
   in: http://127.0.0.1:8099
   us: http://127.0.0.1:8099
 endpoints:
-  upload@1: { method: POST, path: /1/upload, timeout_ms: 3000, connect_timeout_ms: 500, idempotent: true, batch_max: 1000 }
+  upload@1:
+    method: POST
+    path: /1/upload
+    timeout_ms: 3000
+    connect_timeout_ms: 500
+    idempotent: true
+    batch_max: 1000
+    # What the endpoint accepts (ADR-0023): request transformer samples must fit it. The
+    # credential headers (X-CleverTap-Account-Id, X-CleverTap-Passcode) come from creds.* and are
+    # never part of the checked request.
+    request_schema:
+      headers:
+        type: object
+        required: [Content-Type]
+        properties:
+          Content-Type: { type: string, pattern: '^application/json' }
+      body:
+        type: object
+        required: [d]
+        properties:
+          d:
+            type: array
+            minItems: 1
+            maxItems: 1000
+            items:
+              type: object
+              required: [identity, type, evtName]
+              properties:
+                identity: { type: string, minLength: 1 }
+                type: { enum: [event, profile] }
+                evtName: { type: string, minLength: 1 }
+                ts: { type: integer }
+                evtData: { type: object }
+    response_schema:
+      type: object
+      properties:
+        status: { type: string }
+        processed: { type: integer }
+        unprocessed: { type: array }
 defaults:
   rate_limit: { per_account_rps: 50 }
   breaker: { window_s: 30, min_calls: 20, failure_ratio: 0.5, consecutive_timeouts: 5, open_s: 30, open_max_s: 600, half_open_probes: 3 }

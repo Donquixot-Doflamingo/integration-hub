@@ -10,6 +10,8 @@ const PAGES = [
 	'/integrations/int_evt_brandA',
 	'/integrations/new',
 	'/integrations/int_evt_brandA/publish',
+	'/integrations/int_evt_brandA/diff?from=7&to=8',
+	'/integrations/int_evt_brandA/diff?from=7&to=8&view=paths',
 	'/health',
 	'/requests',
 	'/requests/req_01J9Z3K8X2V7Q4M6N8P0R2S4T6',
@@ -24,6 +26,8 @@ const PAGES = [
 	'/vendors/clevertap',
 	'/vendors/clevertap/edit',
 	'/vendors/clevertap/endpoints/upload@1',
+	'/vendors/clevertap/endpoints/new',
+	'/vendors/clevertap/endpoints/new?from=upload',
 	'/accounts',
 	'/accounts/new',
 	'/accounts/ct-brandA-in',
@@ -64,7 +68,8 @@ test.describe('390 px phone', () => {
 	});
 });
 
-const DESTRUCTIVE: { path: string; name: RegExp; min: Role }[] = [
+// `link`: controls that open their own page (HUB-436: endpoint versions are created on a page).
+const DESTRUCTIVE: { path: string; name: RegExp; min: Role; role?: 'button' | 'link' }[] = [
 	{ path: '/dlq', name: /^Purge matching/, min: 'admin' },
 	{ path: '/dlq', name: /^Replay matching/, min: 'editor' },
 	{ path: '/health', name: /^Force open$/, min: 'admin' },
@@ -72,8 +77,8 @@ const DESTRUCTIVE: { path: string; name: RegExp; min: Role }[] = [
 	{ path: '/tenants/orders-service', name: /^Delete reg_/, min: 'admin' },
 	{ path: '/tenants/orders-service', name: /^Revoke hk_/, min: 'admin' },
 	{ path: '/tenants/orders-service', name: /^Disable tenant$/, min: 'admin' },
-	{ path: '/vendors/clevertap', name: /^Add endpoint$/, min: 'admin' },
-	{ path: '/vendors/clevertap', name: /^New version of upload/, min: 'admin' },
+	{ path: '/vendors/clevertap', name: /^Add endpoint$/, min: 'admin', role: 'link' },
+	{ path: '/vendors/clevertap', name: /^New version of upload/, min: 'admin', role: 'link' },
 	{ path: '/accounts/ct-brandA-in', name: /^Add next credential$/, min: 'admin' },
 	{ path: '/accounts/ct-brandA-in', name: /^Start draining$/, min: 'admin' },
 	{ path: '/accounts/ct-brandA-in', name: /^Test connection$/, min: 'editor' }
@@ -90,7 +95,7 @@ for (const role of ['admin', 'editor', 'viewer', 'tenant_viewer'] as const) {
 			await page.goto(c.path);
 			await expect(page.locator('main h1')).toBeVisible();
 			await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
-			const control = page.getByRole('button', { name: c.name });
+			const control = page.getByRole(c.role ?? 'button', { name: c.name });
 			if (RANK[role] >= RANK[c.min]) await expect(control.first()).toBeVisible();
 			else await expect(control).toHaveCount(0);
 		}

@@ -88,7 +88,7 @@ describe('publish page', () => {
 			spec: { targets: [{ weight: 100 }] }
 		});
 		expect(screen.getByRole('region', { name: 'Publish checks' })).toHaveTextContent(
-			'All 9 checks pass'
+			'All 11 checks pass'
 		);
 	});
 

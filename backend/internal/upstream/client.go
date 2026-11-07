@@ -154,6 +154,9 @@ type Attempt struct {
 	Truncated bool
 	// MalformedBody means the response declared JSON but did not parse; Body is the raw text.
 	MalformedBody bool
+	// Raw is the body as read (bounded by MaxResponseBytes): what pass-through returns unchanged
+	// (ADR-0023). It shares the buffer Body was parsed from; nothing copies it.
+	Raw []byte
 }
 
 // Do sends req to t and returns the vendor's response (any status) or a *TransportError.
@@ -244,7 +247,7 @@ func (c *Client) Attempt(ctx context.Context, t Target, req core.VendorRequest) 
 	return Attempt{
 		Response:  core.VendorResponse{Status: resp.StatusCode, Headers: resp.Header, Body: parsed},
 		Latency:   latency,
-		Truncated: truncated, MalformedBody: malformed,
+		Truncated: truncated, MalformedBody: malformed, Raw: body,
 	}, nil
 }
 

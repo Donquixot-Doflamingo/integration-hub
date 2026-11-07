@@ -13,7 +13,7 @@ import (
 
 func TestGetRequest(t *testing.T) {
 	t.Parallel()
-	failed := []byte(`{"request_id":"req_01J9Z3M1A5B7C9D1E3F5G7H9JK","integration_id":"int_evt_brandA","capability":"events.track@v1",
+	failed := []byte(`{"request_id":"req_01J9Z3M1A5B7C9D1E3F5G7H9JK","integration_id":"int_evt_brandA",
 		"operation":"default","mode":"async","status":"dead_lettered","idempotency_key":"order-8822-created","attempts":1,
 		"created_at":"2026-10-31T11:00:00Z","updated_at":"2026-10-31T11:02:40Z","completed_at":"2026-10-31T11:02:40Z",
 		"next_attempt_at":null,"expires_at":null,"result":null,
@@ -158,8 +158,8 @@ func TestListIntegrations(t *testing.T) {
 		wantQuery url.Values
 	}{
 		{name: "first page", wantQuery: url.Values{}},
-		{name: "filter and page", opts: hubclient.ListOptions{Capability: "events.track@v1", Cursor: "eyJrIjoiaW50X2V2dF9icmFuZEEifQ", Limit: 2},
-			wantQuery: url.Values{"capability": {"events.track@v1"}, "cursor": {"eyJrIjoiaW50X2V2dF9icmFuZEEifQ"}, "limit": {"2"}}},
+		{name: "page", opts: hubclient.ListOptions{Cursor: "eyJrIjoiaW50X2V2dF9icmFuZEEifQ", Limit: 2},
+			wantQuery: url.Values{"cursor": {"eyJrIjoiaW50X2V2dF9icmFuZEEifQ"}, "limit": {"2"}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -178,9 +178,18 @@ func TestListIntegrations(t *testing.T) {
 				t.Fatalf("page = %+v", page)
 			}
 			first := page.Items[0]
-			if first.IntegrationID != "int_evt_brandA" || first.Capability != "events.track@v1" || first.DeliveryMode != "wait" ||
+			if first.IntegrationID != "int_evt_brandA" || first.DeliveryMode != "wait" ||
 				first.Description != "Brand A product analytics events" || len(first.Operations) != 1 {
 				t.Errorf("item = %+v", first)
+			}
+			// ADR-0023: each operation carries the request schema to follow.
+			op := first.Operation("default")
+			var schema struct {
+				Required []string `json:"required"`
+			}
+			if op == nil || !op.Idempotent || json.Unmarshal(op.RequestSchema.Body, &schema) != nil || len(schema.Required) != 2 ||
+				len(op.RequestSchema.Headers) == 0 || first.OperationNames()[0] != "default" {
+				t.Errorf("operation = %+v", op)
 			}
 		})
 	}
@@ -189,7 +198,7 @@ func TestListIntegrations(t *testing.T) {
 func TestAllIntegrations(t *testing.T) {
 	t.Parallel()
 	item := func(id string) string {
-		return `{"integration_id":"` + id + `","capability":"events.track@v1","operations":["default"],"delivery_mode":"wait",` +
+		return `{"integration_id":"` + id + `","operations":[{"name":"default","description":null,"idempotent":true,"request_schema":{"body":{"type":"object"}}}],"delivery_mode":"wait",` +
 			`"interactive":false,"paused":false,"moves_money_or_quota":false,"idempotency_key_required":false,"description":null}`
 	}
 	p1 := []byte(`{"items":[` + item("int_a") + `,` + item("int_b") + `],"next_cursor":"c2"}`)
@@ -259,7 +268,7 @@ func TestGetIntegration(t *testing.T) {
 		t.Errorf("path = %s", got)
 	}
 	if d.IntegrationID != "int_evt_brandA" || !d.Owned || d.Wait != 3*time.Second || d.TTL != 6*time.Hour ||
-		d.OnCircuitOpen != "queue_if_allowed" || len(d.CallbackEvents) != 2 || d.CapabilityURL != "/v1/capabilities/events.track@v1" {
+		d.OnCircuitOpen != "queue_if_allowed" || len(d.CallbackEvents) != 2 || d.Operation("default") == nil {
 		t.Errorf("detail = %+v", d)
 	}
 
@@ -285,39 +294,6 @@ func TestGetIntegration(t *testing.T) {
 	})
 }
 
-func TestGetCapability(t *testing.T) {
-	t.Parallel()
-	hub := newHub(t, true, reply{status: http.StatusOK, body: pathExample(t, "/v1/capabilities/{capability}", http.MethodGet, 200, "")})
-	c, err := hub.client.GetCapability(t.Context(), "events.track@v1")
-	if err != nil {
-		t.Fatalf("GetCapability: %v", err)
-	}
-	if got := hub.last(t).Path; got != "/v1/capabilities/events.track@v1" {
-		t.Errorf("path = %s", got)
-	}
-	if c.Capability != "events.track@v1" || c.Major != 1 || len(c.Operations) != 1 || c.Operations[0].Name != "default" || !c.Operations[0].Idempotent {
-		t.Fatalf("capability = %+v", c)
-	}
-	var schema struct {
-		Required []string `json:"required"`
-	}
-	if err := json.Unmarshal(c.Operations[0].RequestSchema, &schema); err != nil || len(schema.Required) != 2 {
-		t.Errorf("request schema = %s (%v)", c.Operations[0].RequestSchema, err)
-	}
-
-	t.Run("not found", func(t *testing.T) {
-		t.Parallel()
-		body := componentExample(t, "CapabilityNotFound", "")
-		hub := newHub(t, true, reply{status: http.StatusNotFound, body: body})
-		_, err := hub.client.GetCapability(t.Context(), "events.trak@v1")
-		var he *hubclient.Error
-		if !errors.As(err, &he) {
-			t.Fatalf("err = %v", err)
-		}
-		checkAgainstExample(t, he, http.StatusNotFound, body)
-	})
-}
-
 func TestEmptyIdentifiersAreRejected(t *testing.T) {
 	t.Parallel()
 	hub := newHub(t, true, reply{status: http.StatusOK, body: []byte(`{}`)})
@@ -325,7 +301,6 @@ func TestEmptyIdentifiersAreRejected(t *testing.T) {
 	calls := map[string]func() error{
 		"GetRequest":     func() error { _, err := hub.client.GetRequest(ctx, ""); return err },
 		"GetIntegration": func() error { _, err := hub.client.GetIntegration(ctx, ""); return err },
-		"GetCapability":  func() error { _, err := hub.client.GetCapability(ctx, ""); return err },
 		"DryRun":         func() error { _, err := hub.client.DryRun(ctx, "", trackEvent()); return err },
 	}
 	for name, call := range calls {

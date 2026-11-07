@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
@@ -20,18 +19,14 @@ func (s *Server) registerIntegrationDrafts() {
 }
 
 // decodeSpec reads a contract IntegrationSpec strictly and converts it (pointer prefix /spec).
-func decodeSpec(raw json.RawMessage, c *catalog, in *registry.Integration) (*registry.IntegrationVersion, error) {
+func decodeSpec(raw json.RawMessage) (*registry.IntegrationVersion, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var spec apiSpec
 	if err := dec.Decode(&spec); err != nil {
 		return nil, badRequest("/spec", "spec is not a valid IntegrationSpec: "+err.Error())
 	}
-	var ttl time.Duration
-	if capability, ok := c.snap.Capabilities[in.Capability]; ok {
-		ttl = capability.DefaultTTL
-	}
-	return fromAPISpec(spec, ttl)
+	return fromAPISpec(spec)
 }
 
 // mutationTarget loads the integration of a mutating call (no tenant scoping: editors and up).
@@ -65,7 +60,7 @@ func (s *Server) createIntegrationDraft(w http.ResponseWriter, r *http.Request) 
 		s.fail(w, r, err)
 		return
 	}
-	c, in, err := s.mutationTarget(r)
+	_, in, err := s.mutationTarget(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -83,7 +78,7 @@ func (s *Server) createIntegrationDraft(w http.ResponseWriter, r *http.Request) 
 	var v *registry.IntegrationVersion
 	switch {
 	case len(body.Spec) > 0 && string(body.Spec) != "null":
-		if v, err = decodeSpec(body.Spec, c, in); err != nil {
+		if v, err = decodeSpec(body.Spec); err != nil {
 			s.fail(w, r, err)
 			return
 		}
@@ -160,7 +155,7 @@ func (s *Server) updateIntegrationDraft(w http.ResponseWriter, r *http.Request) 
 		s.fail(w, r, err)
 		return
 	}
-	v, err := decodeSpec(body.Spec, c, in)
+	v, err := decodeSpec(body.Spec)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -191,8 +186,9 @@ func (s *Server) updateIntegrationDraft(w http.ResponseWriter, r *http.Request) 
 }
 
 // knownChecks are the DESIGN §6.4 checks a validation report lists (contract ValidationCheck).
-var knownChecks = []string{"schemas_compile", "expressions_typecheck", "goldens_pass", "response_conforms", "references_exist",
-	"accounts_not_retired", "interactive_sync_only", "weights_sum_100", "delivery_path_declared", registry.CheckOperationsHaveTransformers}
+var knownChecks = []string{registry.CheckSchemasCompile, "expressions_typecheck", registry.CheckGoldensPass, registry.CheckInputSchema,
+	registry.CheckEndpointSchema, "references_exist", "accounts_not_retired", "interactive_sync_only", "weights_sum_100",
+	"delivery_path_declared", registry.CheckOperationsHaveTransformers}
 
 // validationReport lists every known check: failed ones once per problem, the others as pass.
 func validationReport(problems registry.ConfigErrors) map[string]any {
@@ -202,7 +198,7 @@ func validationReport(problems registry.ConfigErrors) map[string]any {
 		if p.File != "" {
 			msg = p.File + ": " + msg
 		}
-		failed[check] = append(failed[check], map[string]any{"check": check, "status": "fail", "message": msg, "pointer": nullable(pointer(p.Path))})
+		failed[check] = append(failed[check], checkRow(check, msg, pointer(p.Path), p))
 	}
 	checks := []map[string]any{}
 	for _, name := range knownChecks {
@@ -210,7 +206,7 @@ func validationReport(problems registry.ConfigErrors) map[string]any {
 			checks = append(checks, f...)
 			continue
 		}
-		checks = append(checks, map[string]any{"check": name, "status": "pass", "message": nil, "pointer": nil})
+		checks = append(checks, map[string]any{"check": name, "status": "pass", "message": nil, "pointer": nil, "sample": nil, "field": nil})
 	}
 	return map[string]any{"valid": len(problems) == 0, "checks": checks}
 }

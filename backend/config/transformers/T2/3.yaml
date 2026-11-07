@@ -7,7 +7,6 @@
 transformer: T2
 version: 3
 kind: request
-capability: events.track@v1
 docs_url: https://developer.clevertap.com/docs/upload-events-api
 vendor_endpoint: clevertap.upload@1
 request:

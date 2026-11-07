@@ -1,6 +1,5 @@
 integration: int_evt_brandB_min
 owner_tenant: orders-service
-capability: events.track@v1
 grants: []
 active_version: 1
 description: Brand B events with the minimal response (DESIGN §3.4 without the dev-less failover)

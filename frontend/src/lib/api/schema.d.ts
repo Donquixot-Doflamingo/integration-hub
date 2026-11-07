@@ -39,7 +39,9 @@ export interface paths {
         put?: never;
         /**
          * Create a vendor definition
-         * @description Creates a vendor (base URLs per region, auth scheme shape, defaults). Endpoints are added with `createVendorEndpoint`. Egress is restricted to the hosts declared here.
+         * @description Creates a vendor (base URLs per region, auth scheme shape, defaults). Endpoints are added with
+         *     `createVendorEndpoint`. Egress is restricted to the hosts declared here. Use auth scheme
+         *     `none` (since 2.0.0) for public APIs that need no credentials: its accounts carry none.
          */
         post: operations["createVendor"];
         delete?: never;
@@ -99,7 +101,20 @@ export interface paths {
         put?: never;
         /**
          * Add an endpoint or a new endpoint version
-         * @description Creates `<name>@<n+1>`, or `<name>@1` if the name is new. Existing endpoint versions are immutable.
+         * @description Creates `<name>@<n+1>`, or `<name>@1` if the name is new. Existing endpoint versions are
+         *     immutable.
+         *
+         *     `request_schema` is required (since 2.0.0): the request this endpoint version accepts, as JSON
+         *     Schemas (2020-12) of the path parameters, the query parameters, the non-credential headers
+         *     and the body. Each key is optional, and `{}` means the endpoint takes nothing besides its
+         *     method and path. Request transformer samples are checked against it when a transformer is
+         *     created (`createTransformerVersion`) and when an integration version is validated or
+         *     published; live calls are never checked against it. Credential headers and query values set
+         *     from `creds.*` are not part of the checked request, so never declare them here.
+         *     `response_schema` is optional and informational: the Hub never enforces it.
+         *
+         *     A schema that is not a valid JSON Schema 2020-12 document gives 400 `VALIDATION_FAILED` with
+         *     a `pointer` into `request_schema` or `response_schema`.
          */
         post: operations["createVendorEndpoint"];
         delete?: never;
@@ -128,7 +143,7 @@ export interface paths {
         };
         /**
          * Get one endpoint version
-         * @description One immutable endpoint version.
+         * @description One immutable endpoint version, with its `request_schema` and optional `response_schema`.
          */
         get: operations["getVendorEndpoint"];
         put?: never;
@@ -157,7 +172,15 @@ export interface paths {
         put?: never;
         /**
          * Create an account
-         * @description Creates an account in state `active`. Initial credentials (write-only) become the `active` slot at cred version 1.
+         * @description Creates an account in state `active`. Initial credentials (write-only) become the `active`
+         *     slot at cred version 1.
+         *
+         *     `credentials` is required unless the vendor's auth scheme is `none` (since 2.0.0). For a
+         *     `none` vendor it must be omitted or `{}`: the account has no credential slots
+         *     (`credentials: []`, `active_cred_version: null`), and the credential operations
+         *     (`addNextCredential`, `promoteNextCredential`, `deleteOldCredential`) answer 409 `CONFLICT`.
+         *     Missing credentials for any other scheme, or non-empty credentials for `none`, give 400
+         *     `VALIDATION_FAILED` (pointer `/credentials`).
          */
         post: operations["createAccount"];
         delete?: never;
@@ -336,88 +359,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/capabilities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List capabilities
-         * @description One row per capability major (`events.track@v1`), showing its latest minor.
-         */
-        get: operations["listCapabilities"];
-        put?: never;
-        /**
-         * Create a capability or a new major
-         * @description Creates `<name>@v<major>` at minor 0. A new major is how a breaking change is made. Callers adopt it through a new integration ID (D11).
-         */
-        post: operations["createCapability"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/capabilities/{capability}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /**
-                 * @description Capability key `<name>@v<major>`.
-                 * @example events.track@v1
-                 */
-                capability: components["parameters"]["CapabilityKey"];
-            };
-            cookie?: never;
-        };
-        /**
-         * Get a capability (latest minor, full schemas)
-         * @description The latest minor of the given major, with full schemas.
-         */
-        get: operations["getCapability"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/capabilities/{capability}/versions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /**
-                 * @description Capability key `<name>@v<major>`.
-                 * @example events.track@v1
-                 */
-                capability: components["parameters"]["CapabilityKey"];
-            };
-            cookie?: never;
-        };
-        /**
-         * List minors of a capability major
-         * @description All immutable minor versions, newest first.
-         */
-        get: operations["listCapabilityVersions"];
-        put?: never;
-        /**
-         * Create a new (additive) minor version
-         * @description Adds minor `n+1`. The Hub checks that the change is additive (no removed or renamed fields, no
-         *     tightened constraints, no removed operations, `interactive` unchanged). It returns 422
-         *     `PUBLISH_VALIDATION_FAILED` with details if not.
-         */
-        post: operations["createCapabilityVersion"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/transformers": {
         parameters: {
             query?: never;
@@ -449,9 +390,14 @@ export interface paths {
         put?: never;
         /**
          * Run a transformer (stored or draft) without sending anything
-         * @description For a request transformer: canonical input -> exact vendor request (secrets redacted). For a
-         *     response transformer: vendor response -> canonical response or canonical error. Give
-         *     either `ref` (a stored version) or `draft` (unsaved YAML), not both. It is non-mutating.
+         * @description For a request transformer: the caller's input (`input` body and `input_headers`) -> exact
+         *     vendor request (secrets redacted). For a response transformer: vendor response -> its
+         *     output, or a canonical error from its `errors` rules. Give either `ref` (a stored version) or
+         *     `draft` (unsaved YAML), not both. It is non-mutating.
+         *
+         *     For a request transformer the produced request is also checked against the vendor
+         *     endpoint's `request_schema`. Violations are listed in `schema_errors` (the same check as
+         *     `endpoint_schema` on samples). They do not make `ok` false here, because nothing is stored.
          */
         post: operations["dryRunTransformer"];
         delete?: never;
@@ -470,8 +416,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Run golden fixtures for a stored or draft transformer
-         * @description Runs every fixture (`input -> expected_request`, `vendor_response -> expected_response`) and reports per-fixture diffs. Publishing runs the same check. Non-mutating.
+         * Run the samples (golden fixtures) of a stored or draft transformer
+         * @description Runs every sample and reports per-sample results. Non-mutating. `createTransformerVersion`
+         *     runs the same checks and refuses the version if any sample fails:
+         *
+         *     * Request samples: `input` (+ `input_headers`) -> the produced request must equal
+         *       `expected_request` (`diff` lists the differences) and must fit the vendor endpoint's
+         *       `request_schema` (`schema_errors` lists each violation with the JSON pointer of the field).
+         *     * Response samples: `vendor_response` -> the output must equal `expected_response`, or the
+         *       canonical error must equal `expected_error`.
+         *
+         *     A sample passes only when `diff` and `schema_errors` are both empty and `error` is null.
          */
         post: operations["runTransformerGoldens"];
         delete?: never;
@@ -527,10 +482,29 @@ export interface paths {
         put?: never;
         /**
          * Create a new immutable transformer version
-         * @description Creates version `n+1` (or version 1 with a new transformer id). Compile, type-check against the
-         *     capability schema, budget checks and **all goldens must pass**. Otherwise it returns 422
-         *     `PUBLISH_VALIDATION_FAILED`, so a transformer with failing goldens cannot exist (AGENTS §3.4).
-         *     At least one fixture is required. Production transformers must cite `docs_url`.
+         * @description Creates version `n+1` (or version 1 with a new transformer id). The YAML must compile, pass
+         *     the budget checks and **every sample (golden fixture) must pass**. Otherwise it returns 422
+         *     `PUBLISH_VALIDATION_FAILED` and nothing is stored, so a transformer with failing samples
+         *     cannot exist (AGENTS §3.4). Production transformers must cite `docs_url`.
+         *
+         *     * **`kind: request`**: `vendor_endpoint` is required. At least one sample is required. Each
+         *       sample is `input` (the caller body) + optional `input_headers` + `expected_request`. The
+         *       Hub runs the transformer on the sample and refuses the version with check `goldens_pass`
+         *       when the produced request differs from `expected_request`, and with check
+         *       `endpoint_schema` when the produced request (path parameters, query, non-credential
+         *       headers, body) breaks the endpoint's `request_schema` (a required field missing, a wrong
+         *       type). Each failing check names the sample (`sample`) and the JSON pointer of the field in
+         *       the produced request (`field`, e.g. `/query/name`), in `error.details[]` and in
+         *       `error.meta.report.checks[]`.
+         *     * **`kind: response`**: `vendor_endpoint` must be absent (or null): a response transformer
+         *       stands alone. At least one sample is required. Each sample is `vendor_response`
+         *       (`status`, `headers`, `body`) + `expected_response` or `expected_error`; check
+         *       `goldens_pass`. The output is not checked against any schema.
+         *     * **`kind: inbound`**: unchanged; `vendor_endpoint` is required.
+         *
+         *     A transformer no longer knows a caller schema. Its field references (`req.x`, `hdr.X`) and
+         *     its samples' inputs are checked against the operation's `request_schema` when an
+         *     integration version that uses it is validated or published (`validateIntegrationVersion`).
          */
         post: operations["createTransformerVersion"];
         delete?: never;
@@ -558,7 +532,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get one transformer version (YAML + fixtures)
+         * Get one transformer version (YAML + samples)
          * @description One immutable version.
          */
         get: operations["getTransformerVersion"];
@@ -588,7 +562,16 @@ export interface paths {
         put?: never;
         /**
          * Create an integration (no active version yet)
-         * @description Creates the stable ID, owner tenant, capability binding and grants. Invocations return 503 `INTEGRATION_PAUSED` (reason `no_active_version`) until a first version is published.
+         * @description Creates the stable ID, owner tenant, grants and the integration-level flags `interactive` and
+         *     `moves_money_or_quota`. Invocations return 503 `INTEGRATION_PAUSED` (reason
+         *     `no_active_version`) until a first version is published. The operations and their request
+         *     schemas live in the versions (`createIntegrationDraft`), so they go through draft, validate,
+         *     publish, diff and the change log.
+         *
+         *     `interactive` (default false) means the operations are steps of one session that a person
+         *     is waiting on: step 1 returns `X-Hub-Session` and later steps send it. Interactive
+         *     integrations may only use `sync` delivery (check `interactive_sync_only`). It is fixed at
+         *     creation; changing it would break callers, so create a new integration ID instead.
          */
         post: operations["createIntegration"];
         delete?: never;
@@ -622,7 +605,7 @@ export interface paths {
         head?: never;
         /**
          * Update integration metadata and grants
-         * @description Merge-patch of `description`, `grants` and `moves_money_or_quota`. Routing and policy change only through versions.
+         * @description Merge-patch of `description`, `grants` and `moves_money_or_quota`. Operations, request schemas, routing and policy change only through versions. `interactive` cannot be changed.
          */
         patch: operations["updateIntegration"];
         trace?: never;
@@ -648,7 +631,15 @@ export interface paths {
         put?: never;
         /**
          * Create a draft version
-         * @description Creates draft version `n+1` from a full spec. Omit `spec` to copy `based_on` (default is the active version). Drafts are editable until published. Only one draft may exist at a time (409 `CONFLICT`).
+         * @description Creates draft version `n+1` from a full spec. Omit `spec` to copy `based_on` (default is the
+         *     active version). Drafts are editable until published. Only one draft may exist at a time
+         *     (409 `CONFLICT`).
+         *
+         *     Since 2.0.0 the spec carries `operations` (required, at least one): the operation names
+         *     callers invoke (`default` for a single-operation integration) and, per operation, the
+         *     caller's `request_schema` (`body`, optional `headers`), `idempotent` and `validate_input`.
+         *     A draft is stored even when a schema does not compile or a sample does not fit it; those
+         *     problems are reported by `validateIntegrationVersion` and block `publishIntegrationVersion`.
          */
         post: operations["createIntegrationDraft"];
         delete?: never;
@@ -714,7 +705,25 @@ export interface paths {
         put?: never;
         /**
          * Run the publish validation without publishing
-         * @description Runs every DESIGN §6.4 check and returns a report. It is non-mutating, so the request body is empty.
+         * @description Runs every DESIGN §6.4 check and returns a report. It is non-mutating, so the request body is
+         *     empty. `publishIntegrationVersion` runs the same checks. Since 2.0.0 (ADR-0023) they include:
+         *
+         *     * `schemas_compile`: every operation's `request_schema` compiles as JSON Schema 2020-12, and
+         *       every field reference of the request transformers (`req.x`, `hdr.X`) exists in the
+         *       operation's `request_schema` (`body` for `req.*`, `headers` for `hdr.*`). Pointer
+         *       `/operations/<op>/request_schema/...` or the target's transformer pair.
+         *     * `input_schema`: every sample input of each request transformer used by an operation
+         *       (`input` and `input_headers`) fits that operation's `request_schema`. The check names the
+         *       `sample` and the `field` (`/body/firstName`, `/headers/X-Request-Source`).
+         *     * `goldens_pass` and `endpoint_schema`: the same sample checks as `createTransformerVersion`
+         *       (the produced request equals `expected_request` and fits the vendor endpoint's
+         *       `request_schema`), run again for every referenced transformer.
+         *     * `operations_have_transformers`: every key of a target's `operations` is declared in
+         *       `spec.operations`.
+         *     * `interactive_sync_only`: an `interactive` integration uses `sync` delivery.
+         *
+         *     Response transformers are optional (`response: null` = pass-through) and their output is not
+         *     checked against any schema.
          */
         post: operations["validateIntegrationVersion"];
         delete?: never;
@@ -798,7 +807,7 @@ export interface paths {
         };
         /**
          * Diff two versions
-         * @description Structured diff (RFC 6902-style operations on the spec) plus a unified YAML diff for display.
+         * @description Structured diff (RFC 6902-style operations on the spec, including `operations` and their request schemas) plus a unified YAML diff for display. Show it before publishing, so a schema change that breaks callers is seen (D11 guidance - use a new integration ID for that).
          */
         get: operations["diffIntegrationVersions"];
         put?: never;
@@ -1640,8 +1649,7 @@ export interface components {
         ChangeId: string;
         RequestIdValue: string;
         KeyIdValue: string;
-        CapabilityKeyValue: string;
-        CapabilityName: string;
+        /** @description Operation name callers invoke (`POST /v1/integrations/{id}/invoke/{operation}`). Single-operation integrations use `default`. */
         OperationName: string;
         TransformerIdValue: string;
         /** @description `<transformer_id>@<version>`. */
@@ -1667,7 +1675,7 @@ export interface components {
         /** @enum {string} */
         BreakerState: "closed" | "open" | "half_open";
         /** @enum {string} */
-        ObjectType: "vendor" | "vendor_endpoint" | "account" | "capability" | "transformer" | "integration" | "tenant" | "api_key" | "registrar_endpoint" | "breaker" | "dlq" | "request" | "snapshot";
+        ObjectType: "vendor" | "vendor_endpoint" | "account" | "transformer" | "integration" | "tenant" | "api_key" | "registrar_endpoint" | "breaker" | "dlq" | "request" | "snapshot";
         Pagination: {
             next_cursor: string | null;
         };
@@ -1682,9 +1690,21 @@ export interface components {
             retryable: boolean;
             retry_after_ms?: number | null;
             details?: {
+                /** @description JSON pointer into the submitted document (the request body, or the integration spec for publish checks). */
                 pointer?: string;
+                /** @description Failing JSON Schema keyword, or the failing check name for PUBLISH_VALIDATION_FAILED. */
                 keyword?: string;
                 message: string;
+                /** @description Sample (golden fixture) name, for sample checks (`goldens_pass`, `endpoint_schema`, `input_schema`). Since 2.0.0. */
+                sample?: string | null;
+                /**
+                 * @description JSON pointer of the offending field inside the checked object, for sample checks.
+                 *     `endpoint_schema` and `goldens_pass`: the produced vendor request
+                 *     `{path, query, headers, body}` (e.g. `/query/name`, `/body/d/0/identity`; `path` holds
+                 *     the path parameters). `input_schema`: the sample input `{body, headers}` (e.g.
+                 *     `/body/firstName`, `/headers/X-Request-Source`). Since 2.0.0.
+                 */
+                field?: string | null;
             }[];
             /** @description Code-specific structured data (e.g. `report` for PUBLISH_VALIDATION_FAILED, reference counts for RETIRE_BLOCKED). */
             meta?: Record<string, unknown> | null;
@@ -1702,8 +1722,11 @@ export interface components {
             /** Format: date-time */
             token_expires_at?: string | null;
         };
-        /** @enum {string} */
-        AuthScheme: "static_headers" | "bearer" | "basic" | "query_param" | "hmac_signing" | "oauth2_client_credentials" | "mtls";
+        /**
+         * @description How the Hub authenticates to the vendor. `none` (since 2.0.0) is for public APIs; accounts of a `none` vendor have no credentials.
+         * @enum {string}
+         */
+        AuthScheme: "none" | "static_headers" | "bearer" | "basic" | "query_param" | "hmac_signing" | "oauth2_client_credentials" | "mtls";
         BreakerConfig: {
             window_ms?: number;
             min_calls?: number;
@@ -1778,6 +1801,29 @@ export interface components {
             change_id: components["schemas"]["ChangeId"];
             vendor: components["schemas"]["Vendor"];
         };
+        /**
+         * @description A JSON Schema 2020-12 document, as a JSON object. A field listed in `required` is required;
+         *     every other declared field is optional. Annotations such as `x-pii` are allowed. The Hub
+         *     compiles it; a document that does not compile is refused (or reported, for drafts).
+         */
+        JsonSchemaDocument: Record<string, unknown>;
+        /**
+         * @description The request a vendor endpoint version accepts (ADR-0023). Each key is optional; `{}` means the
+         *     endpoint takes nothing besides its method and path. Request transformer samples are checked
+         *     against it (`endpoint_schema`) at transformer creation and at integration validate/publish,
+         *     never on live calls. Credential headers and query values set from `creds.*` are not part of
+         *     the checked request: do not declare them.
+         */
+        EndpointRequestSchema: {
+            /** @description JSON Schema of the path parameters object (names from `{...}` in `path`). */
+            path?: components["schemas"]["JsonSchemaDocument"];
+            /** @description JSON Schema of the query parameters object. */
+            query?: components["schemas"]["JsonSchemaDocument"];
+            /** @description JSON Schema of the non-credential headers object (header names as keys). */
+            headers?: components["schemas"]["JsonSchemaDocument"];
+            /** @description JSON Schema of the body. Omit it for endpoints without a body. */
+            body?: components["schemas"]["JsonSchemaDocument"];
+        };
         VendorEndpointFields: {
             /** @enum {string} */
             method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -1790,6 +1836,10 @@ export interface components {
             batch_max?: number | null;
             /** @default false */
             stream?: boolean;
+            /** @description Required on create and always returned (since 2.0.0). */
+            request_schema?: components["schemas"]["EndpointRequestSchema"];
+            /** @description Optional JSON Schema of the vendor's response body. Informational only (console, docs); never enforced. Null when not given. Since 2.0.0. */
+            response_schema?: Record<string, unknown> | null;
         };
         VendorEndpointCreate: components["schemas"]["VendorEndpointFields"] & {
             name: string;
@@ -1823,7 +1873,7 @@ export interface components {
             /** Format: date-time */
             expires_at?: string | null;
         };
-        /** @description Secret values (scheme-specific keys). Write-only. Never echoed or logged. */
+        /** @description Secret values (scheme-specific keys). Write-only. Never echoed or logged. Empty only for accounts of an auth `none` vendor (`AccountCreate`). */
         Credentials: {
             [key: string]: string;
         };
@@ -1903,7 +1953,13 @@ export interface components {
             region: string;
             config: Record<string, unknown>;
             quota?: components["schemas"]["AccountQuota"];
-            credentials: components["schemas"]["Credentials"];
+            /**
+             * @description Initial credentials (the `active` slot, cred version 1). Required, with at least one key,
+             *     unless the vendor's auth scheme is `none`. For `none` it must be omitted or `{}`.
+             *     400 `VALIDATION_FAILED` (pointer `/credentials`) otherwise. Optional in the schema since
+             *     2.0.0.
+             */
+            credentials?: components["schemas"]["Credentials"];
             /** Format: date-time */
             credential_expires_at?: string | null;
             reason: components["schemas"]["Reason"];
@@ -1941,6 +1997,7 @@ export interface components {
             checked_at: string;
         };
         CredentialAddNext: {
+            /** @description At least one key. Accounts of an auth `none` vendor have no credentials (409 `CONFLICT`). */
             credentials: components["schemas"]["Credentials"];
             /** Format: date-time */
             expires_at?: string | null;
@@ -1963,85 +2020,39 @@ export interface components {
             target_state: components["schemas"]["AccountState"];
             reason: components["schemas"]["Reason"];
         };
-        CapabilityOperationDef: {
-            description?: string | null;
-            idempotent: boolean;
-            /** @description JSON Schema 2020-12 document. */
-            request_schema: Record<string, unknown>;
-            /** @description JSON Schema 2020-12 document. */
-            response_schema: Record<string, unknown>;
-        };
-        /** @description Operation name -> definition. Single-operation capabilities use the key `default`. */
-        CapabilityOperations: {
-            [key: string]: components["schemas"]["CapabilityOperationDef"];
-        };
-        CapabilityCreate: {
-            name: components["schemas"]["CapabilityName"];
-            major: number;
-            description?: string | null;
-            interactive: boolean;
-            operations: components["schemas"]["CapabilityOperations"];
-            reason: components["schemas"]["Reason"];
-        };
-        CapabilityVersionCreate: {
-            expected_latest_minor: number;
-            description?: string | null;
-            operations: components["schemas"]["CapabilityOperations"];
-            /** @description One-line change summary. */
-            summary?: string;
-            reason: components["schemas"]["Reason"];
-        };
-        CapabilityVersion: {
-            capability: components["schemas"]["CapabilityKeyValue"];
-            name: components["schemas"]["CapabilityName"];
-            major: number;
-            minor: number;
-            description?: string | null;
-            interactive: boolean;
-            operations: components["schemas"]["CapabilityOperations"];
-            author: string;
-            /** Format: date-time */
-            created_at: string;
-        };
-        CapabilitySummary: {
-            capability: components["schemas"]["CapabilityKeyValue"];
-            name: string;
-            major: number;
-            latest_minor: number;
-            interactive: boolean;
-            operations: components["schemas"]["OperationName"][];
-            integrations_using: number;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        CapabilityList: components["schemas"]["Pagination"] & {
-            items: components["schemas"]["CapabilitySummary"][];
-        };
-        CapabilityVersionSummary: {
-            capability: components["schemas"]["CapabilityKeyValue"];
-            minor: number;
-            author: string;
-            /** Format: date-time */
-            created_at: string;
-            summary?: string | null;
-        };
-        CapabilityVersionList: components["schemas"]["Pagination"] & {
-            items: components["schemas"]["CapabilityVersionSummary"][];
-        };
-        CapabilityVersionChange: {
-            change_id: components["schemas"]["ChangeId"];
-            capability_version: components["schemas"]["CapabilityVersion"];
-        };
         /** @enum {string} */
         TransformerKind: "request" | "response" | "inbound";
-        /** @description One golden fixture (DESIGN §7.6). Request transformers use input + expected_request. Response transformers use vendor_response + expected_response (or expected_error). */
+        /**
+         * @description One sample (golden fixture, DESIGN §7.6; the field keeps its historical name `fixtures`).
+         *     Samples prove a transformer before it can be stored or published.
+         *
+         *     * Request transformers: `input` (the caller's JSON body) + optional `input_headers` (the
+         *       caller headers, read as `hdr.*`) + `expected_request` (the vendor request the transformer
+         *       must produce: `method`, `path` (the resolved path), and optional `query`, `headers`
+         *       (non-credential headers only) and `body`). The produced request must equal
+         *       `expected_request` (check `goldens_pass`) and fit the vendor endpoint's `request_schema`
+         *       (check `endpoint_schema`). At integration validate and publish, `input` and
+         *       `input_headers` must also fit the operation's `request_schema` (check `input_schema`).
+         *     * Response transformers: `vendor_response` (`status`, `headers`, `body`) + `expected_response`
+         *       (the transformer's output) or `expected_error` (a canonical error from its `errors` rules).
+         */
         GoldenFixture: {
             name: string;
+            /** @description Caller body (request samples). */
             input?: Record<string, unknown>;
+            /** @description Caller headers (request samples), header name -> value. Optional. Since 2.0.0. */
+            input_headers?: {
+                [key: string]: string;
+            };
+            /** @description Non-secret account config injected as `account.config`. */
             account_config?: Record<string, unknown>;
+            /** @description Expected vendor request (request samples): method, path, query, headers, body. Credentials are never part of it. */
             expected_request?: Record<string, unknown>;
+            /** @description Vendor response (response samples): status, headers, body. */
             vendor_response?: Record<string, unknown>;
+            /** @description Expected transformer output (response samples). */
             expected_response?: Record<string, unknown>;
+            /** @description Expected canonical error (response samples). */
             expected_error?: Record<string, unknown>;
         };
         GoldensSummary: {
@@ -2049,15 +2060,24 @@ export interface components {
             total: number;
             failed: number;
         };
+        /** @description One JSON Schema violation found by a sample check (since 2.0.0). */
+        SchemaViolation: {
+            /** @description JSON pointer of the field in the checked object (produced request `{path, query, headers, body}`, or sample input `{body, headers}`). */
+            field: string;
+            /** @description Failing JSON Schema keyword (e.g. `required`, `type`, `minLength`). */
+            keyword?: string;
+            message: string;
+        };
         TransformerVersion: {
             transformer_id: components["schemas"]["TransformerIdValue"];
             version: number;
             ref: components["schemas"]["TransformerRef"];
             kind: components["schemas"]["TransformerKind"];
-            capability: components["schemas"]["CapabilityKeyValue"];
-            vendor_endpoint: components["schemas"]["VendorEndpointRef"];
+            /** @description The endpoint a request (or inbound) transformer targets. Null for response transformers. */
+            vendor_endpoint: components["schemas"]["VendorEndpointRef"] | null;
             /** @description Transformer DSL source (DESIGN §7). */
             yaml: string;
+            /** @description The samples. */
             fixtures: components["schemas"]["GoldenFixture"][];
             /** Format: uri */
             docs_url?: string | null;
@@ -2083,8 +2103,8 @@ export interface components {
         TransformerSummary: {
             transformer_id: components["schemas"]["TransformerIdValue"];
             kind: components["schemas"]["TransformerKind"];
-            capability: components["schemas"]["CapabilityKeyValue"];
-            vendor_endpoint: components["schemas"]["VendorEndpointRef"];
+            /** @description Null for response transformers. */
+            vendor_endpoint: components["schemas"]["VendorEndpointRef"] | null;
             latest_version: number;
             used_by_active_versions: number;
             /** Format: date-time */
@@ -2096,13 +2116,19 @@ export interface components {
         TransformerList: components["schemas"]["Pagination"] & {
             items: components["schemas"]["TransformerSummary"][];
         };
+        /**
+         * @description `vendor_endpoint` is required for `kind: request` (and `inbound`) and must be absent or null
+         *     for `kind: response`; 400 `VALIDATION_FAILED` (pointer `/vendor_endpoint`) otherwise. At
+         *     least one sample is required for every kind.
+         */
         TransformerVersionCreate: {
             kind: components["schemas"]["TransformerKind"];
-            capability: components["schemas"]["CapabilityKeyValue"];
-            vendor_endpoint: components["schemas"]["VendorEndpointRef"];
+            /** @description `<vendor_id>.<endpoint name>@<version>`. Required for request (and inbound) transformers; absent or null for response transformers. */
+            vendor_endpoint?: components["schemas"]["VendorEndpointRef"] | null;
             /** @description Omit or null for a new transformer id. */
             expected_latest_version?: number | null;
             yaml: string;
+            /** @description The samples (at least one). */
             fixtures: components["schemas"]["GoldenFixture"][];
             /** Format: uri */
             docs_url?: string | null;
@@ -2112,10 +2138,10 @@ export interface components {
             change_id: components["schemas"]["ChangeId"];
             transformer_version: components["schemas"]["TransformerVersion"];
         };
+        /** @description Unsaved transformer. `vendor_endpoint` follows the same rule as in `TransformerVersionCreate`. */
         TransformerDraft: {
             kind: components["schemas"]["TransformerKind"];
-            capability: components["schemas"]["CapabilityKeyValue"];
-            vendor_endpoint: components["schemas"]["VendorEndpointRef"];
+            vendor_endpoint?: components["schemas"]["VendorEndpointRef"] | null;
             yaml: string;
         };
         /** @description Exactly one of `ref` or `draft`. */
@@ -2124,10 +2150,10 @@ export interface components {
             draft?: components["schemas"]["TransformerDraft"];
             /** @description Account whose non-secret config and credentials (redacted) are injected. */
             account_id?: components["schemas"]["Slug"];
-            /** @description Canonical request (request transformers). */
+            /** @description Caller body (request transformers). */
             input?: Record<string, unknown>;
-            /** @description Caller headers (`hdr`). */
-            headers?: {
+            /** @description Caller headers (`hdr.*`, request transformers). Replaces `headers` (2.0.0). */
+            input_headers?: {
                 [key: string]: string;
             };
             session?: Record<string, unknown>;
@@ -2152,8 +2178,12 @@ export interface components {
             ok: boolean;
             kind: components["schemas"]["TransformerKind"];
             vendor_request?: components["schemas"]["VendorRequestPreview"] | null;
+            /** @description Response transformer output, exactly what the caller would receive. */
             canonical_response?: Record<string, unknown> | null;
+            /** @description Canonical error produced by the response transformer `errors` rules. */
             canonical_error?: Record<string, unknown> | null;
+            /** @description Request transformers only. Violations of the vendor endpoint's `request_schema` by the produced request (empty when it fits, or for other kinds). Since 2.0.0. */
+            schema_errors?: components["schemas"]["SchemaViolation"][];
             compile_errors: {
                 path?: string;
                 line?: number;
@@ -2165,6 +2195,7 @@ export interface components {
         GoldensRunRequest: {
             ref?: components["schemas"]["TransformerRef"];
             draft?: components["schemas"]["TransformerDraft"];
+            /** @description The samples to run with the draft. */
             fixtures?: components["schemas"]["GoldenFixture"][];
         };
         GoldensRunResult: {
@@ -2172,37 +2203,88 @@ export interface components {
             total: number;
             failed: number;
             results: {
+                /** @description Sample name. */
                 fixture: string;
                 passed: boolean;
+                /** @description Differences between the produced output and the expected one (`goldens_pass`). */
                 diff: components["schemas"]["DiffOp"][];
+                /** @description Request samples only. Violations of the vendor endpoint's `request_schema` by the produced request (`endpoint_schema`). Since 2.0.0. */
+                schema_errors?: components["schemas"]["SchemaViolation"][];
                 error?: string | null;
             }[];
             duration_ms?: number;
         };
-        /** @description The request and response transformers a target uses for one operation (or, as `transformer`, for every operation not listed in `operations`). */
+        /**
+         * @description The caller's input for one operation (ADR-0023). Built in the console from a pasted sample,
+         *     each field marked required or optional.
+         */
+        OperationRequestSchema: {
+            /**
+             * @description JSON Schema 2020-12 of the caller's JSON body. Required for every operation; use
+             *     `{type: object}` when a call has no fields. Fields listed in `required` are required,
+             *     every other field is optional. `x-pii` tags (see contracts/README.md) drive audit masking
+             *     and sealing. Request transformers read the body as `req.*`.
+             */
+            body: components["schemas"]["JsonSchemaDocument"];
+            /**
+             * @description Optional JSON Schema 2020-12 of the caller headers object (header names as keys, matched
+             *     case-insensitively). It is the allowlist of caller headers the request transformer may
+             *     read as `hdr.*`; other caller headers are not visible to it. The Hub's own headers
+             *     (`Authorization`, `Idempotency-Key`, `Prefer`, `X-Request-Deadline`, `X-Hub-Session`,
+             *     `traceparent`) can never be declared here.
+             */
+            headers?: components["schemas"]["JsonSchemaDocument"];
+        };
+        /** @description One operation callers invoke. Part of the integration version, so a change goes through draft, validate, publish, diff and the change log. */
+        IntegrationOperation: {
+            /** @description Caller-facing description (shown in discovery). No vendor, account or version in it. */
+            description?: string | null;
+            /** @description Repeating the operation has no extra side effect. Allows an immediate sync retry on timeout and `failover` without an `Idempotency-Key` (DESIGN §5.3, §10.2). */
+            idempotent: boolean;
+            /**
+             * @description `true` (default): live calls are checked against `request_schema` (body and headers)
+             *     before anything else runs, and a mismatch gives 400 `VALIDATION_FAILED` with one
+             *     `details[]` entry per violation. `false`: live calls are not checked (the samples are
+             *     still checked at publish). The Hub always returns the effective value.
+             * @default true
+             */
+            validate_input?: boolean;
+            request_schema: components["schemas"]["OperationRequestSchema"];
+        };
+        /** @description Operation name -> definition. At least one. Single-operation integrations use the key `default`. */
+        IntegrationOperations: {
+            [key: string]: components["schemas"]["IntegrationOperation"];
+        };
+        /**
+         * @description The request and response transformers a target uses for one operation (or, as `transformer`,
+         *     for every operation not listed in `operations`). `request` is required and names a `request`
+         *     transformer. `response` is optional: omitted or null means pass-through (the caller gets the
+         *     vendor's status and body unchanged, with only `Content-Type` and `Retry-After` vendor
+         *     headers, see hub-public). When set, it names a `response` transformer whose output is
+         *     returned to the caller unchanged, without a schema check.
+         */
         TransformerPair: {
             request: components["schemas"]["TransformerRef"];
-            response: components["schemas"]["TransformerRef"];
+            /** @description Response transformer, or null for pass-through. Optional since 2.0.0. */
+            response?: components["schemas"]["TransformerRef"] | null;
         };
         TargetRef: {
             vendor_id: components["schemas"]["Slug"];
             account_id: components["schemas"]["Slug"];
-            /** @description Default pair. Used for every operation of the capability that `operations` does not list (for a single-operation capability, the only pair). */
+            /** @description Default pair. Used for every operation in `spec.operations` that the target's `operations` does not list (for a single-operation integration, the only pair). */
             transformer: components["schemas"]["TransformerPair"];
             /**
-             * @description Optional per-operation pairs for a multi-operation capability whose operations go to
-             *     different vendor endpoints (DESIGN §3.1, e.g. `kyc.aadhaar_otp@v1` with `generate` and
-             *     `verify`). Keys are operation names of the integration's capability. The pair of a listed
-             *     operation replaces `transformer` for that operation, both request and response; operations
-             *     not listed use `transformer`. The same selection applies wherever the target is used:
-             *     weighted targets, the failover chain, shadow, sync/wait/async delivery, session steps and
-             *     dry-run. Omit it for single-operation capabilities. Listing every operation is allowed;
-             *     `transformer` is still required and must still reference existing transformers of the
-             *     capability. Validation and publish fail check `operations_have_transformers` (pointer
-             *     `/targets/<i>/operations/<operation>`, or `/targets/<i>/transformer` for a defaulted
-             *     operation; `/failover/<i>/...` and `/shadow/target/...` likewise) for a key the
-             *     capability does not declare, and for any operation whose selected pair is compiled for
-             *     another operation. Added in 1.2.0.
+             * @description Optional per-operation pairs for an integration whose operations go to different vendor
+             *     endpoints (e.g. an OTP flow with `generate` and `verify`). Keys are operation names
+             *     declared in `spec.operations`. The pair of a listed operation replaces `transformer` for
+             *     that operation, both request and response; operations not listed use `transformer`. The
+             *     same selection applies wherever the target is used: weighted targets, the failover chain,
+             *     shadow, sync/wait/async delivery, session steps and dry-run. Omit it for single-operation
+             *     integrations. Listing every operation is allowed; `transformer` is still required and
+             *     must still reference existing transformers. Validation and publish fail check
+             *     `operations_have_transformers` (pointer `/targets/<i>/operations/<operation>`;
+             *     `/failover/<i>/...` and `/shadow/target/...` likewise) for a key that `spec.operations`
+             *     does not declare. Added in 1.2.0.
              */
             operations?: {
                 [key: string]: components["schemas"]["TransformerPair"];
@@ -2217,6 +2299,7 @@ export interface components {
             mode: components["schemas"]["DeliveryMode"];
             /** @default 3000 */
             wait_ms?: number | null;
+            /** @description How long an accepted request may wait for delivery. Omitted or null: the Hub default TTL. */
             ttl_ms?: number | null;
             /**
              * @default fail_fast
@@ -2261,8 +2344,10 @@ export interface components {
             /** @default 1 */
             sample_ratio?: number;
         };
-        /** @description Content of an integration version (DESIGN §3.4). Durations are in ms. */
+        /** @description Content of an integration version (DESIGN §3.4, ADR-0023). Durations are in ms. */
         IntegrationSpec: {
+            /** @description The operations callers invoke, each with the caller's `request_schema`. Required since 2.0.0. */
+            operations: components["schemas"]["IntegrationOperations"];
             targets: components["schemas"]["Target"][];
             failover?: components["schemas"]["TargetRef"][];
             delivery: components["schemas"]["DeliveryPolicy"];
@@ -2313,10 +2398,11 @@ export interface components {
         Integration: {
             integration_id: components["schemas"]["Slug"];
             owner_tenant: components["schemas"]["Slug"];
-            capability: components["schemas"]["CapabilityKeyValue"];
             description?: string | null;
             /** @description Other tenants allowed to invoke. */
             grants: components["schemas"]["Slug"][];
+            /** @description The operations are steps of one session a person is waiting on (`X-Hub-Session`). Only `sync` delivery is allowed. Set at creation and never changed. Since 2.0.0. */
+            interactive: boolean;
             /** @description Requires Idempotency-Key from callers and confirmation in MCP tools. */
             moves_money_or_quota: boolean;
             active_version: number | null;
@@ -2334,8 +2420,11 @@ export interface components {
         IntegrationSummary: {
             integration_id: components["schemas"]["Slug"];
             owner_tenant: components["schemas"]["Slug"];
-            capability: components["schemas"]["CapabilityKeyValue"];
             description?: string | null;
+            /** @description See `Integration.interactive`. Since 2.0.0. */
+            interactive: boolean;
+            /** @description Operation names of the active version (empty when there is none). Since 2.0.0. */
+            operations: components["schemas"]["OperationName"][];
             active_version: number | null;
             latest_version: number | null;
             has_draft: boolean;
@@ -2355,9 +2444,13 @@ export interface components {
         IntegrationCreate: {
             integration_id: components["schemas"]["Slug"];
             owner_tenant: components["schemas"]["Slug"];
-            capability: components["schemas"]["CapabilityKeyValue"];
             description?: string | null;
             grants?: components["schemas"]["Slug"][];
+            /**
+             * @description Operations are steps of one session using `X-Hub-Session`; only `sync` delivery is allowed. Cannot be changed later. Since 2.0.0.
+             * @default false
+             */
+            interactive?: boolean;
             /** @default false */
             moves_money_or_quota?: boolean;
             reason: components["schemas"]["Reason"];
@@ -2383,13 +2476,24 @@ export interface components {
             reason: components["schemas"]["Reason"];
         };
         ValidationCheck: {
-            /** @description Known: schemas_compile, expressions_typecheck, goldens_pass, response_conforms, references_exist, accounts_not_retired, interactive_sync_only, weights_sum_100, delivery_path_declared, failover_requires_idempotency, supports_features, operations_have_transformers (1.2.0). Clients must tolerate unknown check names. */
+            /**
+             * @description Known: schemas_compile, expressions_typecheck, goldens_pass, input_schema (2.0.0),
+             *     endpoint_schema (2.0.0), references_exist, accounts_not_retired, interactive_sync_only,
+             *     weights_sum_100, delivery_path_declared, failover_requires_idempotency,
+             *     supports_features, operations_have_transformers (1.2.0). `response_conforms` was removed
+             *     in 2.0.0 (response transformer output is not checked against a schema). Clients must
+             *     tolerate unknown check names.
+             */
             check: string;
             /** @enum {string} */
             status: "pass" | "fail" | "warn" | "skipped";
             message?: string | null;
-            /** @description JSON pointer into the spec. */
+            /** @description JSON pointer into the submitted document (the spec, or the TransformerVersionCreate body). */
             pointer?: string | null;
+            /** @description Sample (golden fixture) name, for goldens_pass, endpoint_schema and input_schema. Since 2.0.0. */
+            sample?: string | null;
+            /** @description JSON pointer of the offending field in the checked object (see AdminError details `field`). Since 2.0.0. */
+            field?: string | null;
         };
         ValidationReport: {
             valid: boolean;
@@ -2632,7 +2736,6 @@ export interface components {
             request_id: components["schemas"]["RequestIdValue"];
             tenant_id: components["schemas"]["Slug"];
             integration_id: components["schemas"]["Slug"];
-            capability: components["schemas"]["CapabilityKeyValue"];
             operation: components["schemas"]["OperationName"];
             mode: components["schemas"]["DeliveryMode"];
             status: components["schemas"]["RequestState"];
@@ -2663,8 +2766,8 @@ export interface components {
             payload_policy: "full" | "masked" | "sealed" | "metadata_only";
             sealed: boolean;
             timings?: components["schemas"]["Timings"];
-            /** @description Canonical result (subject to payload policy). */
-            result?: Record<string, unknown> | null;
+            /** @description Response body returned to the caller (response transformer output, or the vendor body in pass-through), subject to the payload policy. Null until succeeded. */
+            result?: unknown;
             /** @description Canonical error object (public CanonicalError shape). */
             error?: Record<string, unknown> | null;
             snapshot_version?: number | null;
@@ -3053,7 +3156,7 @@ export interface components {
                  *           {
                  *             "pointer": "/delivery/mode",
                  *             "keyword": "interactive_sync_only",
-                 *             "message": "interactive capability requires mode 'sync'"
+                 *             "message": "interactive integration requires mode 'sync'"
                  *           }
                  *         ],
                  *         "meta": {
@@ -3069,7 +3172,7 @@ export interface components {
                  *               {
                  *                 "check": "interactive_sync_only",
                  *                 "status": "fail",
-                 *                 "message": "interactive capability requires mode 'sync'",
+                 *                 "message": "interactive integration requires mode 'sync'",
                  *                 "pointer": "/delivery/mode"
                  *               }
                  *             ]
@@ -3162,11 +3265,6 @@ export interface components {
          * @example ct-brandA-in
          */
         AccountId: components["schemas"]["Slug"];
-        /**
-         * @description Capability key `<name>@v<major>`.
-         * @example events.track@v1
-         */
-        CapabilityKey: components["schemas"]["CapabilityKeyValue"];
         /**
          * @description Transformer id.
          * @example T1
@@ -3336,43 +3434,6 @@ export interface operations {
         };
         requestBody: {
             content: {
-                /**
-                 * @example {
-                 *       "vendor_id": "clevertap",
-                 *       "display_name": "CleverTap",
-                 *       "auth_scheme": "static_headers",
-                 *       "regions": {
-                 *         "in": "https://in1.api.clevertap.com",
-                 *         "us": "https://us1.api.clevertap.com"
-                 *       },
-                 *       "defaults": {
-                 *         "rate_limit": {
-                 *           "per_account_rps": 50
-                 *         },
-                 *         "breaker": {
-                 *           "window_ms": 30000,
-                 *           "min_calls": 20,
-                 *           "failure_ratio": 0.5,
-                 *           "consecutive_timeouts": 5,
-                 *           "open_ms": 30000,
-                 *           "open_max_ms": 600000,
-                 *           "half_open_probes": 3
-                 *         },
-                 *         "health_probe": {
-                 *           "endpoint": "upload@1",
-                 *           "dry": true,
-                 *           "every_ms": 30000
-                 *         }
-                 *       },
-                 *       "webhook_verification": {
-                 *         "scheme": "hmac_sha256",
-                 *         "header": "X-CleverTap-Signature",
-                 *         "max_skew_ms": 300000
-                 *       },
-                 *       "docs_url": "https://developer.clevertap.com/docs/upload-events-api",
-                 *       "reason": "Onboard CleverTap for brand A/B engagement events"
-                 *     }
-                 */
                 "application/json": components["schemas"]["VendorCreate"];
             };
         };
@@ -3506,6 +3567,33 @@ export interface operations {
                      *           "connect_timeout_ms": 500,
                      *           "idempotent": true,
                      *           "batch_max": 1000,
+                     *           "request_schema": {
+                     *             "headers": {
+                     *               "type": "object",
+                     *               "required": [
+                     *                 "Content-Type"
+                     *               ],
+                     *               "properties": {
+                     *                 "Content-Type": {
+                     *                   "const": "application/json"
+                     *                 }
+                     *               }
+                     *             },
+                     *             "body": {
+                     *               "type": "object",
+                     *               "required": [
+                     *                 "d"
+                     *               ],
+                     *               "properties": {
+                     *                 "d": {
+                     *                   "type": "array",
+                     *                   "minItems": 1,
+                     *                   "maxItems": 1000
+                     *                 }
+                     *               }
+                     *             }
+                     *           },
+                     *           "response_schema": null,
                      *           "created_at": "2026-10-31T09:01:00Z"
                      *         }
                      *       ],
@@ -3674,6 +3762,33 @@ export interface operations {
                      *           "connect_timeout_ms": 500,
                      *           "idempotent": true,
                      *           "batch_max": 1000,
+                     *           "request_schema": {
+                     *             "headers": {
+                     *               "type": "object",
+                     *               "required": [
+                     *                 "Content-Type"
+                     *               ],
+                     *               "properties": {
+                     *                 "Content-Type": {
+                     *                   "const": "application/json"
+                     *                 }
+                     *               }
+                     *             },
+                     *             "body": {
+                     *               "type": "object",
+                     *               "required": [
+                     *                 "d"
+                     *               ],
+                     *               "properties": {
+                     *                 "d": {
+                     *                   "type": "array",
+                     *                   "minItems": 1,
+                     *                   "maxItems": 1000
+                     *                 }
+                     *               }
+                     *             }
+                     *           },
+                     *           "response_schema": null,
                      *           "created_at": "2026-10-31T09:01:00Z"
                      *         }
                      *       ],
@@ -3704,18 +3819,6 @@ export interface operations {
         };
         requestBody: {
             content: {
-                /**
-                 * @example {
-                 *       "name": "upload",
-                 *       "method": "POST",
-                 *       "path": "/1/upload",
-                 *       "timeout_ms": 3000,
-                 *       "connect_timeout_ms": 500,
-                 *       "idempotent": true,
-                 *       "batch_max": 1000,
-                 *       "reason": "Upload events endpoint"
-                 *     }
-                 */
                 "application/json": components["schemas"]["VendorEndpointCreate"];
             };
         };
@@ -3740,6 +3843,33 @@ export interface operations {
                      *         "connect_timeout_ms": 500,
                      *         "idempotent": true,
                      *         "batch_max": 1000,
+                     *         "request_schema": {
+                     *           "headers": {
+                     *             "type": "object",
+                     *             "required": [
+                     *               "Content-Type"
+                     *             ],
+                     *             "properties": {
+                     *               "Content-Type": {
+                     *                 "const": "application/json"
+                     *               }
+                     *             }
+                     *           },
+                     *           "body": {
+                     *             "type": "object",
+                     *             "required": [
+                     *               "d"
+                     *             ],
+                     *             "properties": {
+                     *               "d": {
+                     *                 "type": "array",
+                     *                 "minItems": 1,
+                     *                 "maxItems": 1000
+                     *               }
+                     *             }
+                     *           }
+                     *         },
+                     *         "response_schema": null,
                      *         "created_at": "2026-10-31T09:01:00Z"
                      *       }
                      *     }
@@ -3792,6 +3922,33 @@ export interface operations {
                      *       "connect_timeout_ms": 500,
                      *       "idempotent": true,
                      *       "batch_max": 1000,
+                     *       "request_schema": {
+                     *         "headers": {
+                     *           "type": "object",
+                     *           "required": [
+                     *             "Content-Type"
+                     *           ],
+                     *           "properties": {
+                     *             "Content-Type": {
+                     *               "const": "application/json"
+                     *             }
+                     *           }
+                     *         },
+                     *         "body": {
+                     *           "type": "object",
+                     *           "required": [
+                     *             "d"
+                     *           ],
+                     *           "properties": {
+                     *             "d": {
+                     *               "type": "array",
+                     *               "minItems": 1,
+                     *               "maxItems": 1000
+                     *             }
+                     *           }
+                     *         }
+                     *       },
+                     *       "response_schema": null,
                      *       "created_at": "2026-10-31T09:01:00Z"
                      *     }
                      */
@@ -3907,27 +4064,6 @@ export interface operations {
         };
         requestBody: {
             content: {
-                /**
-                 * @example {
-                 *       "account_id": "ct-brandA-in",
-                 *       "vendor_id": "clevertap",
-                 *       "region": "in",
-                 *       "config": {
-                 *         "project_id": "4RW-XXX-XXXX",
-                 *         "brand_code": "A"
-                 *       },
-                 *       "quota": {
-                 *         "rps": 50,
-                 *         "daily": 5000000
-                 *       },
-                 *       "credentials": {
-                 *         "account_id": "4RW-XXX-XXXX",
-                 *         "passcode": "example-passcode-not-real"
-                 *       },
-                 *       "credential_expires_at": null,
-                 *       "reason": "Brand A India workspace"
-                 *     }
-                 */
                 "application/json": components["schemas"]["AccountCreate"];
             };
         };
@@ -4454,385 +4590,6 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    listCapabilities: {
-        parameters: {
-            query?: {
-                /**
-                 * @description Case-insensitive substring match on id and display name.
-                 * @example brand
-                 */
-                q?: components["parameters"]["Q"];
-                /**
-                 * @description Opaque cursor from a previous page's `next_cursor`.
-                 * @example eyJrIjoiMTIzIn0
-                 */
-                cursor?: components["parameters"]["Cursor"];
-                /**
-                 * @description Page size.
-                 * @example 50
-                 */
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description A page of capabilities. */
-            200: {
-                headers: {
-                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example {
-                     *       "items": [
-                     *         {
-                     *           "capability": "events.track@v1",
-                     *           "name": "events.track",
-                     *           "major": 1,
-                     *           "latest_minor": 0,
-                     *           "interactive": false,
-                     *           "operations": [
-                     *             "default"
-                     *           ],
-                     *           "integrations_using": 3,
-                     *           "updated_at": "2026-10-31T09:00:00Z"
-                     *         }
-                     *       ],
-                     *       "next_cursor": null
-                     *     }
-                     */
-                    "application/json": components["schemas"]["CapabilityList"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            500: components["responses"]["InternalError"];
-        };
-    };
-    createCapability: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                /**
-                 * @example {
-                 *       "name": "events.track",
-                 *       "major": 1,
-                 *       "description": "Track a user event with an engagement/analytics tool.",
-                 *       "interactive": false,
-                 *       "operations": {
-                 *         "default": {
-                 *           "description": "Track a single event for a user.",
-                 *           "idempotent": true,
-                 *           "request_schema": {
-                 *             "$schema": "https://json-schema.org/draft/2020-12/schema",
-                 *             "type": "object",
-                 *             "required": [
-                 *               "user",
-                 *               "event"
-                 *             ]
-                 *           },
-                 *           "response_schema": {
-                 *             "$schema": "https://json-schema.org/draft/2020-12/schema",
-                 *             "type": "object",
-                 *             "required": [
-                 *               "status"
-                 *             ]
-                 *           }
-                 *         }
-                 *       },
-                 *       "reason": "First capability for the CleverTap pilot"
-                 *     }
-                 */
-                "application/json": components["schemas"]["CapabilityCreate"];
-            };
-        };
-        responses: {
-            /** @description Created. */
-            201: {
-                headers: {
-                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example {
-                     *       "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0MY",
-                     *       "capability_version": {
-                     *         "capability": "events.track@v1",
-                     *         "name": "events.track",
-                     *         "major": 1,
-                     *         "minor": 0,
-                     *         "description": "Track a user event with an engagement/analytics tool.",
-                     *         "interactive": false,
-                     *         "operations": {
-                     *           "default": {
-                     *             "description": "Track a single event for a user.",
-                     *             "idempotent": true,
-                     *             "request_schema": {
-                     *               "$schema": "https://json-schema.org/draft/2020-12/schema",
-                     *               "type": "object",
-                     *               "required": [
-                     *                 "user",
-                     *                 "event"
-                     *               ]
-                     *             },
-                     *             "response_schema": {
-                     *               "$schema": "https://json-schema.org/draft/2020-12/schema",
-                     *               "type": "object",
-                     *               "required": [
-                     *                 "status"
-                     *               ]
-                     *             }
-                     *           }
-                     *         },
-                     *         "author": "priya@example.com",
-                     *         "created_at": "2026-10-31T09:00:00Z"
-                     *       }
-                     *     }
-                     */
-                    "application/json": components["schemas"]["CapabilityVersionChange"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["PublishValidationFailed"];
-            500: components["responses"]["InternalError"];
-        };
-    };
-    getCapability: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /**
-                 * @description Capability key `<name>@v<major>`.
-                 * @example events.track@v1
-                 */
-                capability: components["parameters"]["CapabilityKey"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Capability version. */
-            200: {
-                headers: {
-                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example {
-                     *       "capability": "events.track@v1",
-                     *       "name": "events.track",
-                     *       "major": 1,
-                     *       "minor": 0,
-                     *       "description": "Track a user event with an engagement/analytics tool.",
-                     *       "interactive": false,
-                     *       "operations": {
-                     *         "default": {
-                     *           "description": "Track a single event for a user.",
-                     *           "idempotent": true,
-                     *           "request_schema": {
-                     *             "$schema": "https://json-schema.org/draft/2020-12/schema",
-                     *             "type": "object",
-                     *             "required": [
-                     *               "user",
-                     *               "event"
-                     *             ]
-                     *           },
-                     *           "response_schema": {
-                     *             "$schema": "https://json-schema.org/draft/2020-12/schema",
-                     *             "type": "object",
-                     *             "required": [
-                     *               "status"
-                     *             ]
-                     *           }
-                     *         }
-                     *       },
-                     *       "author": "priya@example.com",
-                     *       "created_at": "2026-10-31T09:00:00Z"
-                     *     }
-                     */
-                    "application/json": components["schemas"]["CapabilityVersion"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
-    };
-    listCapabilityVersions: {
-        parameters: {
-            query?: {
-                /**
-                 * @description Opaque cursor from a previous page's `next_cursor`.
-                 * @example eyJrIjoiMTIzIn0
-                 */
-                cursor?: components["parameters"]["Cursor"];
-                /**
-                 * @description Page size.
-                 * @example 50
-                 */
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path: {
-                /**
-                 * @description Capability key `<name>@v<major>`.
-                 * @example events.track@v1
-                 */
-                capability: components["parameters"]["CapabilityKey"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description A page of capability versions (schemas omitted; fetch one with getCapability). */
-            200: {
-                headers: {
-                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example {
-                     *       "items": [
-                     *         {
-                     *           "capability": "events.track@v1",
-                     *           "minor": 0,
-                     *           "author": "priya@example.com",
-                     *           "created_at": "2026-10-31T09:00:00Z",
-                     *           "summary": "Initial"
-                     *         }
-                     *       ],
-                     *       "next_cursor": null
-                     *     }
-                     */
-                    "application/json": components["schemas"]["CapabilityVersionList"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
-    };
-    createCapabilityVersion: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /**
-                 * @description Capability key `<name>@v<major>`.
-                 * @example events.track@v1
-                 */
-                capability: components["parameters"]["CapabilityKey"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                /**
-                 * @example {
-                 *       "expected_latest_minor": 0,
-                 *       "operations": {
-                 *         "default": {
-                 *           "description": "Track a single event for a user.",
-                 *           "idempotent": true,
-                 *           "request_schema": {
-                 *             "$schema": "https://json-schema.org/draft/2020-12/schema",
-                 *             "type": "object",
-                 *             "required": [
-                 *               "user",
-                 *               "event"
-                 *             ]
-                 *           },
-                 *           "response_schema": {
-                 *             "$schema": "https://json-schema.org/draft/2020-12/schema",
-                 *             "type": "object",
-                 *             "required": [
-                 *               "status"
-                 *             ]
-                 *           }
-                 *         }
-                 *       },
-                 *       "summary": "Add optional context.campaign",
-                 *       "reason": "Brand B needs campaign attribution"
-                 *     }
-                 */
-                "application/json": components["schemas"]["CapabilityVersionCreate"];
-            };
-        };
-        responses: {
-            /** @description Created. */
-            201: {
-                headers: {
-                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example {
-                     *       "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0MZ",
-                     *       "capability_version": {
-                     *         "capability": "events.track@v1",
-                     *         "name": "events.track",
-                     *         "major": 1,
-                     *         "minor": 1,
-                     *         "description": "Track a user event with an engagement/analytics tool.",
-                     *         "interactive": false,
-                     *         "operations": {
-                     *           "default": {
-                     *             "description": "Track a single event for a user.",
-                     *             "idempotent": true,
-                     *             "request_schema": {
-                     *               "$schema": "https://json-schema.org/draft/2020-12/schema",
-                     *               "type": "object",
-                     *               "required": [
-                     *                 "user",
-                     *                 "event"
-                     *               ]
-                     *             },
-                     *             "response_schema": {
-                     *               "$schema": "https://json-schema.org/draft/2020-12/schema",
-                     *               "type": "object",
-                     *               "required": [
-                     *                 "status"
-                     *               ]
-                     *             }
-                     *           }
-                     *         },
-                     *         "author": "priya@example.com",
-                     *         "created_at": "2026-10-31T10:00:00Z"
-                     *       }
-                     *     }
-                     */
-                    "application/json": components["schemas"]["CapabilityVersionChange"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["PublishValidationFailed"];
-            500: components["responses"]["InternalError"];
-        };
-    };
     listTransformers: {
         parameters: {
             query?: {
@@ -4842,12 +4599,7 @@ export interface operations {
                  */
                 kind?: components["schemas"]["TransformerKind"];
                 /**
-                 * @description Filter by capability key.
-                 * @example events.track@v1
-                 */
-                capability?: components["schemas"]["CapabilityKeyValue"];
-                /**
-                 * @description Filter by the vendor of the endpoint the transformer targets.
+                 * @description Filter by the vendor of the endpoint the transformer targets. Response transformers name no endpoint (since 2.0.0), so this filter never matches them.
                  * @example clevertap
                  */
                 vendor_id?: components["schemas"]["Slug"];
@@ -4886,7 +4638,6 @@ export interface operations {
                      *         {
                      *           "transformer_id": "T1",
                      *           "kind": "request",
-                     *           "capability": "events.track@v1",
                      *           "vendor_endpoint": "clevertap.upload@1",
                      *           "latest_version": 7,
                      *           "used_by_active_versions": 1,
@@ -4895,8 +4646,7 @@ export interface operations {
                      *         {
                      *           "transformer_id": "R1",
                      *           "kind": "response",
-                     *           "capability": "events.track@v1",
-                     *           "vendor_endpoint": "clevertap.upload@1",
+                     *           "vendor_endpoint": null,
                      *           "latest_version": 2,
                      *           "used_by_active_versions": 1,
                      *           "updated_at": "2026-10-20T08:00:00Z"
@@ -4938,6 +4688,9 @@ export interface operations {
                  *             "order_id": "ord_8821"
                  *           }
                  *         }
+                 *       },
+                 *       "input_headers": {
+                 *         "X-Request-Source": "checkout"
                  *       }
                  *     }
                  */
@@ -4980,6 +4733,7 @@ export interface operations {
                      *       },
                      *       "canonical_response": null,
                      *       "canonical_error": null,
+                     *       "schema_errors": [],
                      *       "compile_errors": [],
                      *       "duration_us": 142
                      *     }
@@ -5019,26 +4773,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    /**
-                     * @example {
-                     *       "passed": true,
-                     *       "total": 2,
-                     *       "failed": 0,
-                     *       "results": [
-                     *         {
-                     *           "fixture": "order_placed",
-                     *           "passed": true,
-                     *           "diff": []
-                     *         },
-                     *         {
-                     *           "fixture": "no_timestamp",
-                     *           "passed": true,
-                     *           "diff": []
-                     *         }
-                     *       ],
-                     *       "duration_ms": 12
-                     *     }
-                     */
                     "application/json": components["schemas"]["GoldensRunResult"];
                 };
             };
@@ -5075,7 +4809,6 @@ export interface operations {
                      * @example {
                      *       "transformer_id": "T1",
                      *       "kind": "request",
-                     *       "capability": "events.track@v1",
                      *       "vendor_endpoint": "clevertap.upload@1",
                      *       "latest_version": 7,
                      *       "used_by_active_versions": 1,
@@ -5085,7 +4818,6 @@ export interface operations {
                      *         "version": 7,
                      *         "ref": "T1@7",
                      *         "kind": "request",
-                     *         "capability": "events.track@v1",
                      *         "vendor_endpoint": "clevertap.upload@1",
                      *         "yaml": "transformer: T1\nversion: 7\nkind: request\n...",
                      *         "fixtures": [
@@ -5098,6 +4830,9 @@ export interface operations {
                      *               "event": {
                      *                 "name": "order_placed"
                      *               }
+                     *             },
+                     *             "input_headers": {
+                     *               "X-Request-Source": "checkout"
                      *             },
                      *             "expected_request": {
                      *               "method": "POST",
@@ -5208,45 +4943,6 @@ export interface operations {
         };
         requestBody: {
             content: {
-                /**
-                 * @example {
-                 *       "kind": "request",
-                 *       "capability": "events.track@v1",
-                 *       "vendor_endpoint": "clevertap.upload@1",
-                 *       "expected_latest_version": 7,
-                 *       "yaml": "transformer: T1\nkind: request\ncapability: events.track@v1\nvendor_endpoint: clevertap.upload@1\nrequest:\n  method: POST\n  path: /1/upload\n",
-                 *       "fixtures": [
-                 *         {
-                 *           "name": "order_placed",
-                 *           "input": {
-                 *             "user": {
-                 *               "id": "u_48213"
-                 *             },
-                 *             "event": {
-                 *               "name": "order_placed",
-                 *               "timestamp": "2026-10-31T09:15:00Z"
-                 *             }
-                 *           },
-                 *           "expected_request": {
-                 *             "method": "POST",
-                 *             "path": "/1/upload",
-                 *             "body": {
-                 *               "d": [
-                 *                 {
-                 *                   "identity": "u_48213",
-                 *                   "type": "event",
-                 *                   "evtName": "order_placed",
-                 *                   "ts": 1793438100
-                 *                 }
-                 *               ]
-                 *             }
-                 *           }
-                 *         }
-                 *       ],
-                 *       "docs_url": "https://developer.clevertap.com/docs/upload-events-api",
-                 *       "reason": "Map context.campaign"
-                 *     }
-                 */
                 "application/json": components["schemas"]["TransformerVersionCreate"];
             };
         };
@@ -5266,7 +4962,6 @@ export interface operations {
                      *         "version": 8,
                      *         "ref": "T1@8",
                      *         "kind": "request",
-                     *         "capability": "events.track@v1",
                      *         "vendor_endpoint": "clevertap.upload@1",
                      *         "yaml": "transformer: T1\nkind: request\n...",
                      *         "fixtures": [
@@ -5279,6 +4974,9 @@ export interface operations {
                      *               "event": {
                      *                 "name": "order_placed"
                      *               }
+                     *             },
+                     *             "input_headers": {
+                     *               "X-Request-Source": "checkout"
                      *             },
                      *             "expected_request": {
                      *               "method": "POST",
@@ -5305,7 +5003,21 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
-            422: components["responses"]["PublishValidationFailed"];
+            /**
+             * @description A check failed and nothing was stored, for example `expressions_typecheck`,
+             *     `goldens_pass` (a sample's output differs from what it expects) or `endpoint_schema` (a
+             *     request sample's produced request breaks the endpoint's `request_schema`). `details[]` and `meta.report.checks[]`
+             *     name the sample and the JSON pointer of the field.
+             */
+            422: {
+                headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminErrorEnvelope"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };
@@ -5342,7 +5054,6 @@ export interface operations {
                      *       "version": 7,
                      *       "ref": "T1@7",
                      *       "kind": "request",
-                     *       "capability": "events.track@v1",
                      *       "vendor_endpoint": "clevertap.upload@1",
                      *       "yaml": "transformer: T1\nversion: 7\nkind: request\n...",
                      *       "fixtures": [
@@ -5390,11 +5101,6 @@ export interface operations {
                  * @example orders-service
                  */
                 tenant_id?: components["parameters"]["TenantFilter"];
-                /**
-                 * @description Filter by capability key.
-                 * @example events.track@v1
-                 */
-                capability?: components["schemas"]["CapabilityKeyValue"];
                 /**
                  * @description Integrations whose active version targets this vendor (primary or failover).
                  * @example clevertap
@@ -5461,8 +5167,11 @@ export interface operations {
                      *         {
                      *           "integration_id": "int_evt_brandA",
                      *           "owner_tenant": "orders-service",
-                     *           "capability": "events.track@v1",
                      *           "description": "Brand A product analytics events",
+                     *           "interactive": false,
+                     *           "operations": [
+                     *             "default"
+                     *           ],
                      *           "active_version": 7,
                      *           "latest_version": 8,
                      *           "has_draft": true,
@@ -5503,9 +5212,9 @@ export interface operations {
                  * @example {
                  *       "integration_id": "int_evt_brandA",
                  *       "owner_tenant": "orders-service",
-                 *       "capability": "events.track@v1",
                  *       "description": "Brand A product analytics events",
                  *       "grants": [],
+                 *       "interactive": false,
                  *       "moves_money_or_quota": false,
                  *       "reason": "CleverTap pilot for brand A"
                  *     }
@@ -5528,9 +5237,9 @@ export interface operations {
                      *       "integration": {
                      *         "integration_id": "int_evt_brandA",
                      *         "owner_tenant": "orders-service",
-                     *         "capability": "events.track@v1",
                      *         "description": "Brand A product analytics events",
                      *         "grants": [],
+                     *         "interactive": false,
                      *         "moves_money_or_quota": false,
                      *         "active_version": null,
                      *         "latest_version": null,
@@ -5580,9 +5289,9 @@ export interface operations {
                      * @example {
                      *       "integration_id": "int_evt_brandA",
                      *       "owner_tenant": "orders-service",
-                     *       "capability": "events.track@v1",
                      *       "description": "Brand A product analytics events",
                      *       "grants": [],
+                     *       "interactive": false,
                      *       "moves_money_or_quota": false,
                      *       "active_version": 7,
                      *       "latest_version": 8,
@@ -5594,6 +5303,71 @@ export interface operations {
                      *         "version": 7,
                      *         "state": "published",
                      *         "spec": {
+                     *           "operations": {
+                     *             "default": {
+                     *               "description": "Track a single event for a user.",
+                     *               "idempotent": true,
+                     *               "validate_input": true,
+                     *               "request_schema": {
+                     *                 "body": {
+                     *                   "type": "object",
+                     *                   "required": [
+                     *                     "user",
+                     *                     "event"
+                     *                   ],
+                     *                   "properties": {
+                     *                     "user": {
+                     *                       "type": "object",
+                     *                       "required": [
+                     *                         "id"
+                     *                       ],
+                     *                       "properties": {
+                     *                         "id": {
+                     *                           "type": "string",
+                     *                           "x-pii": "identifier"
+                     *                         }
+                     *                       }
+                     *                     },
+                     *                     "event": {
+                     *                       "type": "object",
+                     *                       "required": [
+                     *                         "name"
+                     *                       ],
+                     *                       "properties": {
+                     *                         "name": {
+                     *                           "type": "string"
+                     *                         },
+                     *                         "timestamp": {
+                     *                           "type": "string",
+                     *                           "format": "date-time"
+                     *                         },
+                     *                         "properties": {
+                     *                           "type": "object",
+                     *                           "x-pii": "free_text"
+                     *                         }
+                     *                       }
+                     *                     },
+                     *                     "context": {
+                     *                       "type": "object",
+                     *                       "properties": {
+                     *                         "campaign": {
+                     *                           "type": "string"
+                     *                         }
+                     *                       }
+                     *                     }
+                     *                   }
+                     *                 },
+                     *                 "headers": {
+                     *                   "type": "object",
+                     *                   "properties": {
+                     *                     "X-Request-Source": {
+                     *                       "type": "string"
+                     *                     }
+                     *                   }
+                     *                 }
+                     *               }
+                     *             }
+                     *           },
                      *           "targets": [
                      *             {
                      *               "vendor_id": "clevertap",
@@ -5697,11 +5471,11 @@ export interface operations {
                      *       "integration": {
                      *         "integration_id": "int_evt_brandA",
                      *         "owner_tenant": "orders-service",
-                     *         "capability": "events.track@v1",
                      *         "description": "Brand A product analytics events",
                      *         "grants": [
                      *           "checkout-service"
                      *         ],
+                     *         "interactive": false,
                      *         "moves_money_or_quota": false,
                      *         "active_version": 7,
                      *         "latest_version": 8,
@@ -5836,6 +5610,71 @@ export interface operations {
                      *         "version": 8,
                      *         "state": "draft",
                      *         "spec": {
+                     *           "operations": {
+                     *             "default": {
+                     *               "description": "Track a single event for a user.",
+                     *               "idempotent": true,
+                     *               "validate_input": true,
+                     *               "request_schema": {
+                     *                 "body": {
+                     *                   "type": "object",
+                     *                   "required": [
+                     *                     "user",
+                     *                     "event"
+                     *                   ],
+                     *                   "properties": {
+                     *                     "user": {
+                     *                       "type": "object",
+                     *                       "required": [
+                     *                         "id"
+                     *                       ],
+                     *                       "properties": {
+                     *                         "id": {
+                     *                           "type": "string",
+                     *                           "x-pii": "identifier"
+                     *                         }
+                     *                       }
+                     *                     },
+                     *                     "event": {
+                     *                       "type": "object",
+                     *                       "required": [
+                     *                         "name"
+                     *                       ],
+                     *                       "properties": {
+                     *                         "name": {
+                     *                           "type": "string"
+                     *                         },
+                     *                         "timestamp": {
+                     *                           "type": "string",
+                     *                           "format": "date-time"
+                     *                         },
+                     *                         "properties": {
+                     *                           "type": "object",
+                     *                           "x-pii": "free_text"
+                     *                         }
+                     *                       }
+                     *                     },
+                     *                     "context": {
+                     *                       "type": "object",
+                     *                       "properties": {
+                     *                         "campaign": {
+                     *                           "type": "string"
+                     *                         }
+                     *                       }
+                     *                     }
+                     *                   }
+                     *                 },
+                     *                 "headers": {
+                     *                   "type": "object",
+                     *                   "properties": {
+                     *                     "X-Request-Source": {
+                     *                       "type": "string"
+                     *                     }
+                     *                   }
+                     *                 }
+                     *               }
+                     *             }
+                     *           },
                      *           "targets": [
                      *             {
                      *               "vendor_id": "clevertap",
@@ -5955,6 +5794,71 @@ export interface operations {
                 /**
                  * @example {
                  *       "spec": {
+                 *         "operations": {
+                 *           "default": {
+                 *             "description": "Track a single event for a user.",
+                 *             "idempotent": true,
+                 *             "validate_input": true,
+                 *             "request_schema": {
+                 *               "body": {
+                 *                 "type": "object",
+                 *                 "required": [
+                 *                   "user",
+                 *                   "event"
+                 *                 ],
+                 *                 "properties": {
+                 *                   "user": {
+                 *                     "type": "object",
+                 *                     "required": [
+                 *                       "id"
+                 *                     ],
+                 *                     "properties": {
+                 *                       "id": {
+                 *                         "type": "string",
+                 *                         "x-pii": "identifier"
+                 *                       }
+                 *                     }
+                 *                   },
+                 *                   "event": {
+                 *                     "type": "object",
+                 *                     "required": [
+                 *                       "name"
+                 *                     ],
+                 *                     "properties": {
+                 *                       "name": {
+                 *                         "type": "string"
+                 *                       },
+                 *                       "timestamp": {
+                 *                         "type": "string",
+                 *                         "format": "date-time"
+                 *                       },
+                 *                       "properties": {
+                 *                         "type": "object",
+                 *                         "x-pii": "free_text"
+                 *                       }
+                 *                     }
+                 *                   },
+                 *                   "context": {
+                 *                     "type": "object",
+                 *                     "properties": {
+                 *                       "campaign": {
+                 *                         "type": "string"
+                 *                       }
+                 *                     }
+                 *                   }
+                 *                 }
+                 *               },
+                 *               "headers": {
+                 *                 "type": "object",
+                 *                 "properties": {
+                 *                   "X-Request-Source": {
+                 *                     "type": "string"
+                 *                   }
+                 *                 }
+                 *               }
+                 *             }
+                 *           }
+                 *         },
                  *         "targets": [
                  *           {
                  *             "vendor_id": "clevertap",
@@ -6016,6 +5920,71 @@ export interface operations {
                      *         "version": 8,
                      *         "state": "draft",
                      *         "spec": {
+                     *           "operations": {
+                     *             "default": {
+                     *               "description": "Track a single event for a user.",
+                     *               "idempotent": true,
+                     *               "validate_input": true,
+                     *               "request_schema": {
+                     *                 "body": {
+                     *                   "type": "object",
+                     *                   "required": [
+                     *                     "user",
+                     *                     "event"
+                     *                   ],
+                     *                   "properties": {
+                     *                     "user": {
+                     *                       "type": "object",
+                     *                       "required": [
+                     *                         "id"
+                     *                       ],
+                     *                       "properties": {
+                     *                         "id": {
+                     *                           "type": "string",
+                     *                           "x-pii": "identifier"
+                     *                         }
+                     *                       }
+                     *                     },
+                     *                     "event": {
+                     *                       "type": "object",
+                     *                       "required": [
+                     *                         "name"
+                     *                       ],
+                     *                       "properties": {
+                     *                         "name": {
+                     *                           "type": "string"
+                     *                         },
+                     *                         "timestamp": {
+                     *                           "type": "string",
+                     *                           "format": "date-time"
+                     *                         },
+                     *                         "properties": {
+                     *                           "type": "object",
+                     *                           "x-pii": "free_text"
+                     *                         }
+                     *                       }
+                     *                     },
+                     *                     "context": {
+                     *                       "type": "object",
+                     *                       "properties": {
+                     *                         "campaign": {
+                     *                           "type": "string"
+                     *                         }
+                     *                       }
+                     *                     }
+                     *                   }
+                     *                 },
+                     *                 "headers": {
+                     *                   "type": "object",
+                     *                   "properties": {
+                     *                     "X-Request-Source": {
+                     *                       "type": "string"
+                     *                     }
+                     *                   }
+                     *                 }
+                     *               }
+                     *             }
+                     *           },
                      *           "targets": [
                      *             {
                      *               "vendor_id": "clevertap",
@@ -6125,13 +6094,19 @@ export interface operations {
                      *           "pointer": null
                      *         },
                      *         {
+                     *           "check": "input_schema",
+                     *           "status": "pass",
+                     *           "message": null,
+                     *           "pointer": null
+                     *         },
+                     *         {
                      *           "check": "goldens_pass",
                      *           "status": "pass",
                      *           "message": null,
                      *           "pointer": null
                      *         },
                      *         {
-                     *           "check": "response_conforms",
+                     *           "check": "endpoint_schema",
                      *           "status": "pass",
                      *           "message": null,
                      *           "pointer": null
@@ -6162,6 +6137,12 @@ export interface operations {
                      *         },
                      *         {
                      *           "check": "delivery_path_declared",
+                     *           "status": "pass",
+                     *           "message": null,
+                     *           "pointer": null
+                     *         },
+                     *         {
+                     *           "check": "operations_have_transformers",
                      *           "status": "pass",
                      *           "message": null,
                      *           "pointer": null
@@ -6351,6 +6332,14 @@ export interface operations {
                      *             },
                      *             "weight": 10
                      *           }
+                     *         },
+                     *         {
+                     *           "op": "add",
+                     *           "path": "/operations/default/request_schema/body/properties/context/properties/channel",
+                     *           "before": null,
+                     *           "after": {
+                     *             "type": "string"
+                     *           }
                      *         }
                      *       ],
                      *       "unified": "--- v7\n+++ v8\n@@ targets @@\n-  weight: 100\n+  weight: 90\n+- vendor_id: clevertap\n+  account_id: ct-brandA-in-v2\n"
@@ -6403,9 +6392,9 @@ export interface operations {
                      *       "integration": {
                      *         "integration_id": "int_evt_brandA",
                      *         "owner_tenant": "orders-service",
-                     *         "capability": "events.track@v1",
                      *         "description": "Brand A product analytics events",
                      *         "grants": [],
+                     *         "interactive": false,
                      *         "moves_money_or_quota": false,
                      *         "active_version": 7,
                      *         "latest_version": 8,
@@ -6465,9 +6454,9 @@ export interface operations {
                      *       "integration": {
                      *         "integration_id": "int_evt_brandA",
                      *         "owner_tenant": "orders-service",
-                     *         "capability": "events.track@v1",
                      *         "description": "Brand A product analytics events",
                      *         "grants": [],
+                     *         "interactive": false,
                      *         "moves_money_or_quota": false,
                      *         "active_version": 7,
                      *         "latest_version": 8,
@@ -7639,7 +7628,6 @@ export interface operations {
                      * @example {
                      *       "version": 413,
                      *       "tenants": {},
-                     *       "capabilities": {},
                      *       "vendors": {},
                      *       "accounts": {},
                      *       "transformers": {},
@@ -7739,7 +7727,6 @@ export interface operations {
                      *           "request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T6",
                      *           "tenant_id": "orders-service",
                      *           "integration_id": "int_evt_brandA",
-                     *           "capability": "events.track@v1",
                      *           "operation": "default",
                      *           "mode": "wait",
                      *           "status": "succeeded",
@@ -7793,7 +7780,6 @@ export interface operations {
                      *       "request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T6",
                      *       "tenant_id": "orders-service",
                      *       "integration_id": "int_evt_brandA",
-                     *       "capability": "events.track@v1",
                      *       "operation": "default",
                      *       "mode": "wait",
                      *       "status": "succeeded",
@@ -7889,7 +7875,8 @@ export interface operations {
                      *           "type": "request.validated",
                      *           "at": "2026-10-31T09:15:00.002Z",
                      *           "payload": {
-                     *             "schema_id": "urn:hub:capability:events.track@v1:default:request",
+                     *             "operation": "default",
+                     *             "validate_input": true,
                      *             "warnings": []
                      *           },
                      *           "payload_ref": null,

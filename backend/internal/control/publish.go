@@ -73,8 +73,7 @@ func (p *Publisher) now() time.Time {
 
 // tree is a mutable copy of a config tree.
 type tree struct {
-	files     map[string][]byte
-	contracts fs.FS
+	files map[string][]byte
 	// base is the snapshot the edit started from (account draining compares against it).
 	base *registry.Snapshot
 }
@@ -84,7 +83,7 @@ func (t *tree) sources() registry.Sources {
 	for name, b := range t.files {
 		m[name] = &fstest.MapFile{Data: b}
 	}
-	return registry.Sources{Config: m, Contracts: t.contracts}
+	return registry.Sources{Config: m}
 }
 
 // Current returns the tree nodes should run: the latest archived snapshot's, else Bootstrap.
@@ -102,7 +101,7 @@ func (p *Publisher) load(ctx context.Context) (*tree, *registry.Snapshot, error)
 	if err != nil {
 		return nil, nil, err
 	}
-	t := &tree{files: map[string][]byte{}, contracts: src.Contracts, base: snap}
+	t := &tree{files: map[string][]byte{}, base: snap}
 	err = fs.WalkDir(src.Config, ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -483,7 +482,7 @@ func versionDoc(spec []byte, integration string, n int, author, reason string) (
 	if m == nil {
 		return nil, errors.New("publish: empty version document")
 	}
-	for _, k := range []string{"owner_tenant", "grants", "capability"} { // header copies of integration.yaml
+	for _, k := range []string{"owner_tenant", "grants"} { // header copies of integration.yaml
 		delete(m, k)
 	}
 	m["integration"], m["version"] = integration, n

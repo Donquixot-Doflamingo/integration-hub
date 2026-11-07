@@ -5,8 +5,9 @@
 	import StatusBadge from '../StatusBadge.svelte';
 
 	/**
-	 * `dryRunTransformer` output (HUB-269): for a request transformer the exact vendor request as
-	 * method, URL, headers and body; for a response transformer the canonical response or error;
+	 * `dryRunTransformer` output (HUB-269, HUB-436): for a request transformer the exact vendor
+	 * request as method, URL, headers and body, and the fields that break the endpoint's request
+	 * schema (`schema_errors`); for a response transformer its output or error;
 	 * compile errors with their line. Secrets arrive redacted (`***`) and are shown exactly so; values
 	 * under secret-looking keys that are not masked are hidden too (second line of defence). Nothing
 	 * here is logged or stored.
@@ -99,15 +100,33 @@
 		</div>
 	{/if}
 
+	{#if result.schema_errors?.length}
+		<div class="errors" role="group" aria-label="Endpoint schema violations">
+			<p>
+				<strong>The produced request breaks the endpoint's request schema</strong> (a sample like this
+				would refuse the transformer):
+			</p>
+			<ul>
+				{#each result.schema_errors as v, i (i)}
+					<li>
+						<code>{v.field}</code>
+						{#if v.keyword}<span class="where">({v.keyword})</span>{/if}
+						{v.message}
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
+
 	{#if result.canonical_response}
-		<p class="part">Canonical response</p>
+		<p class="part">Output (what the caller gets, unchanged)</p>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-		<pre tabindex="0" aria-label="Canonical response">{json(result.canonical_response)}</pre>
+		<pre tabindex="0" aria-label="Output">{json(result.canonical_response)}</pre>
 	{/if}
 	{#if result.canonical_error}
-		<p class="part">Canonical error</p>
+		<p class="part">Error (from the errors rules)</p>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-		<pre tabindex="0" aria-label="Canonical error">{json(result.canonical_error)}</pre>
+		<pre tabindex="0" aria-label="Error">{json(result.canonical_error)}</pre>
 	{/if}
 	{#if !request && !result.canonical_response && !result.canonical_error && !result.compile_errors.length}
 		<p class="muted">The transformer produced no output.</p>

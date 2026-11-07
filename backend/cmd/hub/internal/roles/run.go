@@ -92,6 +92,9 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 		dp.start(ctx)
 		defer dp.shutdown() // after the listeners closed (deferred calls run before st.close)
 	}
+	if cfg.Role == Admin {
+		reg.upgradeLegacy(ctx, st.pg)
+	}
 	reg.load(ctx)
 	checks := append(append(st.checks(), reg.check()), opts.ExtraChecks...)
 

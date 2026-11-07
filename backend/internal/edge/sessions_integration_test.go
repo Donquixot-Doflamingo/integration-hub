@@ -29,6 +29,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/contract"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/mockvendor"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/trackops"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/migrations"
 )
@@ -45,7 +46,6 @@ func reqTransformer(id string) string {
 transformer: ` + id + `
 version: 1
 kind: request
-capability: events.track@v1
 docs_url: https://developer.clevertap.com/docs/upload-events-api
 vendor_endpoint: clevertap.upload@1
 request:
@@ -87,7 +87,6 @@ func respTransformer(id string) string {
 transformer: ` + id + `
 version: 1
 kind: response
-capability: events.track@v1
 docs_url: https://developer.clevertap.com/docs/upload-events-api
 response:
   status:     '"ok"'
@@ -122,7 +121,7 @@ func sesVersion(n int, account, req, resp string, mode registry.Mode) string {
 	if mode != registry.ModeSync {
 		d += "  polling: true\n"
 	}
-	return "integration: int_ses\nversion: " + strconv.Itoa(n) + "\ntargets:\n  - vendor: clevertap\n    account: " + account +
+	return "integration: int_ses\nversion: " + strconv.Itoa(n) + "\n" + trackops.Block + "targets:\n  - vendor: clevertap\n    account: " + account +
 		"\n    transformer: { request: " + req + ", response: " + resp + " }\n    weight: 100\ndelivery:\n" + d +
 		"audit: { payloads: masked, retention: 30d }\npublish: { author: itest, reason: \"HUB-183 v" + strconv.Itoa(n) + "\" }\n"
 }
@@ -156,7 +155,7 @@ func sessionOverlay(t *testing.T, active int, mode registry.Mode) fs.FS {
 			add("transformers/"+id+"/fixtures/"+k, v)
 		}
 	}
-	add("integrations/int_ses/integration.yaml", "integration: int_ses\nowner_tenant: orders-service\ncapability: events.track@v1\ngrants: []\nactive_version: "+strconv.Itoa(active)+"\ndescription: HUB-183 two-step test\n")
+	add("integrations/int_ses/integration.yaml", "integration: int_ses\nowner_tenant: orders-service\ngrants: []\nactive_version: "+strconv.Itoa(active)+"\ndescription: HUB-183 two-step test\n")
 	add("integrations/int_ses/versions/7.yaml", sesVersion(7, "ct-brandA-in", "TA@1", "RA@1", mode))
 	add("integrations/int_ses/versions/8.yaml", sesVersion(8, "ct-brandB-us", "TB@1", "RB@1", mode))
 	return m
@@ -165,7 +164,7 @@ func sessionOverlay(t *testing.T, active int, mode registry.Mode) fs.FS {
 // sessionSnapshot builds the overlay with every vendor region pointed at mockvendor.
 func sessionSnapshot(t *testing.T, vendorURL string, active int, mode registry.Mode) *registry.Snapshot {
 	t.Helper()
-	snap, err := registry.Build(registry.Sources{Config: sessionOverlay(t, active, mode), Contracts: os.DirFS("../../../contracts")}, time.Now())
+	snap, err := registry.Build(registry.Sources{Config: sessionOverlay(t, active, mode)}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -45,6 +45,7 @@ describe('the form model', () => {
 		const spec = forForm(active as never);
 		expect(spec).toMatchObject(active);
 		expect(forForm({})).toEqual({
+			operations: {},
 			targets: [],
 			delivery: { mode: 'wait' },
 			audit: { payloads: 'masked' }
@@ -54,9 +55,20 @@ describe('the form model', () => {
 		);
 	});
 
-	it('starts interactive capabilities in sync mode', () => {
+	it('starts interactive integrations in sync mode, with one operation "default"', () => {
 		expect(starterSpec(true).delivery.mode).toBe('sync');
 		expect(starterSpec(false).delivery).toMatchObject({ mode: 'wait', wait_ms: 3000 });
+		expect(starterSpec(false).operations).toEqual({
+			default: {
+				idempotent: false,
+				validate_input: true,
+				request_schema: { body: { type: 'object', properties: {} } }
+			}
+		});
+	});
+
+	it('a new target has no response transformer (pass-through)', () => {
+		expect(emptyTarget(100).transformer).toEqual({ request: '', response: null });
 	});
 
 	it('parses a retry schedule', () => {
@@ -69,6 +81,12 @@ describe('the form model', () => {
 describe('console checks', () => {
 	it.each<[string, (s: IntegrationSpec) => void, string, RegExp]>([
 		['no target', (s) => (s.targets = []), '/targets', /at least one target/],
+		[
+			'request transformer',
+			(s) => (s.targets[0]!.transformer.request = ''),
+			'/targets/0/transformer/request',
+			/Pick the request transformer/
+		],
 		['vendor', (s) => (s.targets[0]!.vendor_id = ''), '/targets/0/vendor_id', /Pick the vendor/],
 		['weight', (s) => (s.targets[0]!.weight = 101), '/targets/0/weight', /0 to 100/],
 		[
@@ -79,9 +97,9 @@ describe('console checks', () => {
 		],
 		[
 			'operation pair',
-			(s) => (s.targets[0]!.operations!.verify_otp!.response = ''),
+			(s) => (s.targets[0]!.operations!.verify_otp!.response = 'R1'),
 			'/targets/0/operations/verify_otp/response',
-			/Pick the response transformer/
+			/or empty to pass the vendor body through/
 		],
 		[
 			'unknown operation',
@@ -100,6 +118,17 @@ describe('console checks', () => {
 		change(spec);
 		const found = formProblems(spec, OPS).find((p) => p.pointer === pointer);
 		expect(found?.message).toMatch(message);
+	});
+
+	it('accepts no response transformer (pass-through) and wants at least one operation', () => {
+		const spec = structuredClone(AADHAAR);
+		spec.targets[0]!.transformer.response = null;
+		delete spec.targets[0]!.operations!.verify_otp!.response;
+		expect(formProblems(spec, OPS)).toEqual([]);
+		expect(formProblems(spec, [])).toContainEqual({
+			pointer: '/operations',
+			message: 'Add at least one operation.'
+		});
 	});
 
 	it('knows unknown operations and the weights total', () => {
@@ -142,5 +171,11 @@ describe('transformer options', () => {
 			)
 		).toBe(true);
 		expect(transformerOptions(list, 'request', 'someone-else')).toEqual([]);
+	});
+	it('offers every response transformer: they stand alone, without a vendor endpoint', () => {
+		const res = list.filter((t) => t.kind === 'response');
+		expect(transformerOptions(list, 'response', 'someone-else')).toHaveLength(
+			res.reduce((n, t) => n + Math.min(3, t.latest_version), 0)
+		);
 	});
 });

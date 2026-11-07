@@ -61,9 +61,9 @@ func tagCode(ctx context.Context, code string) {
 // startEnqueue starts hub.queue.enqueue (producer) under the edge span. The envelope stores
 // this span's context, so the worker's attempt links back to the accepting trace (DESIGN §11.3).
 // Without a tracer provider upstream of the edge the span is a no-op and nothing is stored.
-func startEnqueue(ctx context.Context, capability string) (context.Context, trace.Span) {
+func startEnqueue(ctx context.Context) (context.Context, trace.Span) {
 	return trace.SpanFromContext(ctx).TracerProvider().Tracer(tracerName).Start(ctx, "hub.queue.enqueue",
-		trace.WithSpanKind(trace.SpanKindProducer), trace.WithAttributes(attribute.String("hub.pool", queue.PoolFor(capability))))
+		trace.WithSpanKind(trace.SpanKindProducer), trace.WithAttributes(attribute.String("hub.pool", queue.PoolMessaging)))
 }
 
 // endEnqueue ends the enqueue span, marking a failed persist (the error text stays in the log).

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RequestCompletedEvent",
-  "description": "Sent once when a wait/async/async_callback request reaches `succeeded`. `data.result` is the canonical response body (capability response schema), identical to what GET /v1/requests/{request_id} returns in `result`.",
+  "description": "Sent once when a wait/async/async_callback request reaches `succeeded`. `data.result` is the response body, identical to what GET /v1/requests/{request_id} returns in `result`.",
   "allOf": [
     { "$ref": "envelope.json" },
     {
@@ -14,8 +14,7 @@
           "properties": {
             "status": { "type": "string", "const": "succeeded" },
             "result": {
-              "description": "Canonical response body for the capability operation. Shape: GET /v1/capabilities/{capability} -> operations[].response_schema.",
-              "type": "object"
+              "description": "Response body: the response transformer's output, or in pass-through (no response transformer) the vendor's JSON body unchanged (a non-JSON vendor body is given as a JSON string). Any JSON value; no schema is enforced (ADR-0023)."
             },
             "attempts": { "description": "Number of delivery attempts made.", "type": "integer", "minimum": 1 },
             "completed_at": { "type": "string", "format": "date-time" },

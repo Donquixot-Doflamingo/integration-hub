@@ -1,6 +1,7 @@
 package adminapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -40,7 +41,7 @@ func (s *Server) registerVendors() {
 	s.handle("getVendorEndpoint", RoleViewer, false, "GET /vendors/{vendor_id}/endpoints/{endpoint_ref}", s.getVendorEndpoint)
 }
 
-// ---- shared registry helpers (vendors, capabilities, transformers) ----
+// ---- shared registry helpers (vendors, transformers) ----
 
 // currentCache keeps the sources and snapshot of the latest archive version, so reads that need
 // files (fixtures, admin metadata) do not rebuild the snapshot on every request.
@@ -213,7 +214,7 @@ func vendorMetaFile(id string) string { return "admin/vendors/" + id + ".json" }
 // authAliases maps older registry spellings to the contract's AuthScheme names.
 var authAliases = map[string]string{"query": "query_param", "hmac": "hmac_signing", "oauth2_cc": "oauth2_client_credentials"}
 
-var authSchemes = []string{"static_headers", "bearer", "basic", "query_param", "hmac_signing", "oauth2_client_credentials", "mtls"}
+var authSchemes = []string{"none", "static_headers", "bearer", "basic", "query_param", "hmac_signing", "oauth2_client_credentials", "mtls"}
 
 type breakerMS struct {
 	WindowMS            *int     `json:"window_ms,omitempty"`
@@ -443,11 +444,66 @@ func endpointView(name string, ep registry.Endpoint, created time.Time) map[stri
 	if ep.BatchMax > 0 {
 		batch = ep.BatchMax
 	}
+	var response any
+	if ep.ResponseSchema != nil {
+		response = ep.ResponseSchema
+	}
 	return map[string]any{
 		"endpoint_ref": name, "name": base, "version": version, "method": ep.Method, "path": ep.Path,
 		"timeout_ms": ep.TimeoutMS, "connect_timeout_ms": ep.ConnectTimeoutMS, "idempotent": ep.Idempotent,
-		"batch_max": batch, "created_at": created.UTC(),
+		"batch_max": batch, "request_schema": requestSchemaView(ep.RequestSchema), "response_schema": response,
+		"created_at": created.UTC(),
 	}
+}
+
+// requestSchemaView is the contract's EndpointRequestSchema: the parts the endpoint declares.
+func requestSchemaView(rs *registry.EndpointRequestSchema) map[string]any {
+	out := map[string]any{}
+	if rs == nil {
+		return out
+	}
+	for name, s := range map[string]*registry.JSONSchema{"path": rs.Path, "query": rs.Query, "headers": rs.Headers, "body": rs.Body} {
+		if s != nil {
+			out[name] = s.Doc
+		}
+	}
+	return out
+}
+
+// endpointRequestSchema reads the contract's EndpointRequestSchema (required, ADR-0023): each
+// part must be a JSON Schema object that compiles (400 at its pointer otherwise).
+func endpointRequestSchema(raw json.RawMessage) (*registry.EndpointRequestSchema, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, badRequest("/request_schema", "request_schema is required ({} when the endpoint takes nothing besides method and path)")
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var in struct {
+		Path    map[string]any `json:"path"`
+		Query   map[string]any `json:"query"`
+		Headers map[string]any `json:"headers"`
+		Body    map[string]any `json:"body"`
+	}
+	if err := dec.Decode(&in); err != nil {
+		return nil, badRequest("/request_schema", "request_schema must be an object with optional path, query, headers and body schemas: "+err.Error())
+	}
+	rs := &registry.EndpointRequestSchema{}
+	for _, part := range []struct {
+		name string
+		doc  map[string]any
+		dst  **registry.JSONSchema
+	}{{"path", in.Path, &rs.Path}, {"query", in.Query, &rs.Query}, {"headers", in.Headers, &rs.Headers}, {"body", in.Body, &rs.Body}} {
+		if part.doc == nil {
+			continue
+		}
+		s := registry.NewJSONSchema(part.doc)
+		if err := s.Compile("request_schema/" + part.name); err != nil {
+			return nil, &Error{Status: http.StatusBadRequest, Code: CodeValidationFailed, Message: "request_schema." + part.name + " does not compile",
+				Details: []Detail{{Pointer: "/request_schema/" + part.name, Keyword: registry.CheckSchemasCompile, Message: err.Error()}}}
+		}
+		*part.dst = s
+	}
+	return rs, nil
 }
 
 // endpointOrder sorts endpoint refs by name, then version.
@@ -722,15 +778,17 @@ func (s *Server) getVendorEndpoint(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createVendorEndpoint(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name             string `json:"name"`
-		Method           string `json:"method"`
-		Path             string `json:"path"`
-		TimeoutMS        *int   `json:"timeout_ms"`
-		ConnectTimeoutMS *int   `json:"connect_timeout_ms"`
-		Idempotent       *bool  `json:"idempotent"`
-		BatchMax         *int   `json:"batch_max"`
-		Stream           bool   `json:"stream"`
-		Reason           string `json:"reason"`
+		Name             string          `json:"name"`
+		Method           string          `json:"method"`
+		Path             string          `json:"path"`
+		TimeoutMS        *int            `json:"timeout_ms"`
+		ConnectTimeoutMS *int            `json:"connect_timeout_ms"`
+		Idempotent       *bool           `json:"idempotent"`
+		BatchMax         *int            `json:"batch_max"`
+		Stream           bool            `json:"stream"`
+		RequestSchema    json.RawMessage `json:"request_schema"`
+		ResponseSchema   json.RawMessage `json:"response_schema"`
+		Reason           string          `json:"reason"`
 	}
 	if err := decode(w, r, &body); err != nil {
 		s.fail(w, r, err)
@@ -759,6 +817,14 @@ func (s *Server) createVendorEndpoint(w http.ResponseWriter, r *http.Request) {
 		err = badRequest("/batch_max", "batch_max must be at least 1")
 	case body.Stream:
 		err = badRequest("/stream", "streaming endpoints are not supported by this build")
+	}
+	if err == nil {
+		ep.RequestSchema, err = endpointRequestSchema(body.RequestSchema)
+	}
+	if err == nil && len(body.ResponseSchema) > 0 && string(body.ResponseSchema) != "null" {
+		if err = json.Unmarshal(body.ResponseSchema, &ep.ResponseSchema); err != nil || ep.ResponseSchema == nil {
+			err = badRequest("/response_schema", "response_schema must be a JSON Schema object or null")
+		}
 	}
 	if err != nil {
 		s.fail(w, r, err)

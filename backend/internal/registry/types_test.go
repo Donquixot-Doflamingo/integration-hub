@@ -42,7 +42,7 @@ func roundTrip(t *testing.T, v, out any) {
 func TestDesignIntegrationVersionRoundTrips(t *testing.T) {
 	var v IntegrationVersion
 	decodeFile(t, "testdata/design/3.4-integration-version.yaml", &v)
-	if v.Integration != "int_evt_brandB_min" || v.Version != 3 || v.Capability != "events.track@v1" {
+	if v.Integration != "int_evt_brandB_min" || v.Version != 3 || v.Op("default") == nil || !v.Op("default").Idempotent {
 		t.Fatalf("header %+v", v)
 	}
 	tg := v.Targets[0]
@@ -84,7 +84,7 @@ func TestDesignVendorAndAccountRoundTrip(t *testing.T) {
 	}
 	var vb Vendor
 	roundTrip(t, v, &vb)
-	if vb.Endpoints["upload@1"] != ep || vb.Defaults.Breaker != b {
+	if !reflect.DeepEqual(vb.Endpoints["upload@1"], ep) || vb.Defaults.Breaker != b {
 		t.Fatalf("vendor round trip: %+v", vb)
 	}
 

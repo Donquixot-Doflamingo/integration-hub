@@ -125,11 +125,15 @@ func (e *MissError) Error() string {
 // Unwrap lets errors.Is(err, ErrCacheMiss) match.
 func (e *MissError) Unwrap() error { return ErrCacheMiss }
 
-// AccountIDs returns the accounts of snap that need credentials (every state except retired),
+// AccountIDs returns the accounts of snap that need credentials (every state except retired;
+// accounts of an auth none vendor have none),
 // sorted. Call Cache.Warm with it before the snapshot is swapped in.
 func AccountIDs(snap *registry.Snapshot) []string {
 	ids := make([]string, 0, len(snap.Accounts))
 	for id, a := range snap.Accounts {
+		if v := snap.Vendors[a.Vendor]; v != nil && !NeedsCredentials(v.Auth) {
+			continue // auth none: nothing to load
+		}
 		if a.State != registry.AccountRetired {
 			ids = append(ids, id)
 		}

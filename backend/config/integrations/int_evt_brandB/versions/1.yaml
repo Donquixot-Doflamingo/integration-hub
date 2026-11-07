@@ -1,5 +1,34 @@
 integration: int_evt_brandB
 version: 1
+operations:
+  default:
+    description: Track a single event for a user.
+    idempotent: true
+    request_schema:
+      body:
+        type: object
+        required: [user, event]
+        additionalProperties: false
+        properties:
+          user:
+            type: object
+            required: [id]
+            additionalProperties: false
+            properties:
+              id: { type: string, minLength: 1, maxLength: 256, x-pii: identifier, description: Stable identifier of the end user in the caller's system. }
+          event:
+            type: object
+            required: [name]
+            additionalProperties: false
+            properties:
+              name: { type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z][A-Za-z0-9_.:-]*$' }
+              timestamp: { type: string, format: date-time, description: When the event happened (RFC 3339). Defaults to the Hub receive time. }
+              properties: { type: object, maxProperties: 256, x-pii: free_text, description: Free-form event properties. }
+          context:
+            type: object
+            additionalProperties: false
+            properties:
+              campaign: { type: string, maxLength: 128 }
 targets:
   - vendor: clevertap
     account: ct-brandB-us

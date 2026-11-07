@@ -5,7 +5,10 @@ import {
 	createBody,
 	draftKey,
 	emptyValues,
+	expectedRequestSkeleton,
 	fieldsFor,
+	findingsFromError,
+	findingsFromRun,
 	problems,
 	rowsFromJson,
 	valuesFromVersion,
@@ -17,7 +20,6 @@ const latest = contractMocks.getTransformer.example.latest;
 const filled = (over: Partial<FormValues> = {}): FormValues => ({
 	...emptyValues(),
 	transformer_id: 'T9',
-	capability: 'events.track@v1',
 	vendor_endpoint: 'clevertap.upload@1',
 	yaml: 'transformer: T9\nkind: request\n',
 	fixtures: [
@@ -36,24 +38,78 @@ describe('transformer authoring form', () => {
 		expect(v).toMatchObject({
 			transformer_id: 'T1',
 			kind: 'request',
-			capability: 'events.track@v1',
 			vendor_endpoint: 'clevertap.upload@1',
 			yaml: latest.yaml
 		});
 		expect(v.fixtures[0]!.name).toBe('order_placed');
 		expect(JSON.parse(v.fixtures[0]!.json.input!)).toEqual(latest.fixtures[0]!.input);
+		if (latest.fixtures[0]!.input_headers)
+			expect(JSON.parse(v.fixtures[0]!.json.input_headers!)).toEqual(
+				latest.fixtures[0]!.input_headers
+			);
 		expect(problems(v, 'version')).toEqual({});
 	});
 
 	it.each<[string, Partial<FormValues>, string, RegExp]>([
 		['id', { transformer_id: '9T' }, '/transformer_id', /starting with a letter/],
-		['capability', { capability: '' }, '/capability', /Pick the capability/],
 		['endpoint', { vendor_endpoint: 'upload@1' }, '/vendor_endpoint', /clevertap.upload@1/],
 		['source', { yaml: ' ' }, '/yaml', /Write the transformer source/],
 		['docs', { docs_url: 'ftp://x' }, '/docs_url', /http\(s\)/],
 		['no fixtures', { fixtures: [] }, '/fixtures', /at least one/]
 	])('%s', (_n, over, ptr, msg) => {
 		expect(problems(filled(over), 'new')[ptr]).toMatch(msg);
+	});
+
+	it('a response transformer needs no vendor endpoint and sends none', () => {
+		const v = filled({
+			kind: 'response',
+			vendor_endpoint: '',
+			fixtures: [
+				{
+					name: 'known_name',
+					outcome: 'response',
+					json: {
+						vendor_response: '{"status": 200, "body": {"age": 57}}',
+						expected_response: '{"age": 57}'
+					}
+				}
+			]
+		});
+		expect(problems(v, 'new')).toEqual({});
+		const r = createBody(v, 'new', null, 'Return only the age');
+		expect(r.ok && 'vendor_endpoint' in r.body).toBe(false);
+		expect(problems(filled({ vendor_endpoint: '' }), 'new')['/vendor_endpoint']).toMatch(
+			/clevertap.upload@1/
+		);
+	});
+
+	it('request samples carry optional caller headers as strings', () => {
+		const ok = buildFixtures(
+			[
+				{
+					name: 'with_source',
+					outcome: 'response',
+					json: {
+						input: '{"firstName": "Mich"}',
+						input_headers: '{"X-Request-Source": "checkout"}',
+						expected_request: '{"method": "GET"}'
+					}
+				}
+			],
+			'request'
+		);
+		expect(ok.ok && ok.fixtures[0]!.input_headers).toEqual({ 'X-Request-Source': 'checkout' });
+		const bad = buildFixtures(
+			[
+				{
+					name: 'bad',
+					outcome: 'response',
+					json: { input: '{}', input_headers: '{"X-N": 1}', expected_request: '{}' }
+				}
+			],
+			'request'
+		);
+		expect(!bad.ok && bad.fields['/fixtures/0/input_headers']).toMatch(/must be a string/);
 	});
 
 	it('checks each fixture field as a JSON object, by pointer', () => {
@@ -124,7 +180,6 @@ describe('transformer authoring form', () => {
 			ok: true,
 			body: {
 				kind: 'request',
-				capability: 'events.track@v1',
 				vendor_endpoint: 'clevertap.upload@1',
 				yaml: 'transformer: T9\nkind: request\n',
 				expected_latest_version: null,
@@ -148,5 +203,43 @@ describe('transformer authoring form', () => {
 		expect(rowsFromJson('[{"name":"a","outcome":"x","json":{"input":"{}","evil":"1"}}]')).toEqual([
 			{ name: 'a', outcome: 'response', json: { input: '{}' } }
 		]);
+	});
+});
+
+describe('sample findings (HUB-436)', () => {
+	it('a run: schema violations and diffs by sample, on their field', () => {
+		const failed = contractMocks.runTransformerGoldens.named!.response!.failed!;
+		expect(findingsFromRun(failed)).toEqual({
+			empty_last_name: [
+				{
+					check: 'endpoint_schema',
+					field: '/query/name',
+					message: 'must NOT have fewer than 1 characters (minLength)'
+				},
+				{ check: 'goldens_pass', field: '/query/name', message: 'expected "Michael", produced ""' }
+			]
+		});
+	});
+
+	it.each(['endpoint_schema', 'goldens_pass'])('a 422 %s refusal: sample and field', (name) => {
+		const env = contractMocks.createTransformerVersion.named!.errors!['422']![name]!;
+		const plain = { ...env.error, details: env.error.details ?? [], meta: env.error.meta ?? null };
+		const f = findingsFromError(plain as never);
+		const [sample] = Object.keys(f);
+		expect(f[sample!]).toEqual([expect.objectContaining({ check: name, field: '/query/name' })]);
+	});
+
+	it("an expected request skeleton from the endpoint's request schema", () => {
+		const e = contractMocks.getVendor.example.endpoints[0]!;
+		expect(
+			expectedRequestSkeleton({
+				...e,
+				method: 'GET',
+				path: '/',
+				request_schema: {
+					query: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } }
+				}
+			})
+		).toEqual({ method: 'GET', path: '/', query: { name: '' } });
 	});
 });

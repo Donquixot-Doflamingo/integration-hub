@@ -19,11 +19,11 @@ func write(t *testing.T, root, rel, content string) {
 	}
 }
 
-// configWithT1 copies the dev capability + T1 transformer into a temp config with one fixture.
+// configWithT1 copies the dev vendor + T1 transformer into a temp config with one fixture.
 func configWithT1(t *testing.T, expectedTS string) string {
 	t.Helper()
 	dir := t.TempDir()
-	for _, rel := range []string{"capabilities/events.track.v1.yaml", "transformers/T1/7.yaml"} {
+	for _, rel := range []string{"vendors/clevertap.yaml", "transformers/T1/7.yaml"} {
 		b, err := os.ReadFile(filepath.Join("../../config", rel))
 		if err != nil {
 			t.Fatal(err)
@@ -45,11 +45,22 @@ func TestTransformTestExitCodes(t *testing.T) {
 	}{
 		{"all pass", "1793438100", 0, "1 passed, 0 failed (1 transformers)"},
 		{"golden fails", "42", 1, "/body/d/0/ts: expected 42, got 1793438100"},
+		// ADR-0023: the produced request must also fit the endpoint's request_schema.
+		{"endpoint schema fails", "breaks-endpoint", 1, "endpoint_schema /query/name: missing property 'name'"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var out, errOut bytes.Buffer
-			code := run([]string{"transform", "test", "-config-dir", configWithT1(t, tt.ts), "-contracts-dir", "../../../contracts"}, &out, &errOut)
+			dir := configWithT1(t, tt.ts)
+			if tt.ts == "breaks-endpoint" {
+				dir = configWithT1(t, "1793438100")
+				v, err := os.ReadFile(filepath.Join(dir, "vendors/clevertap.yaml"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				write(t, dir, "vendors/clevertap.yaml", strings.Replace(string(v), "    request_schema:\n", "    request_schema:\n      query: { type: object, required: [name] }\n", 1))
+			}
+			code := run([]string{"transform", "test", "-config-dir", dir}, &out, &errOut)
 			if code != tt.code || !strings.Contains(out.String(), tt.out) {
 				t.Fatalf("exit %d, want %d\nstdout: %s\nstderr: %s", code, tt.code, out.String(), errOut.String())
 			}
@@ -63,11 +74,11 @@ func TestUsageAndFilters(t *testing.T) {
 		t.Fatalf("no args: %d %s", code, errOut.String())
 	}
 	dir := configWithT1(t, "1793438100")
-	if code := run([]string{"transform", "test", "-config-dir", dir, "-contracts-dir", "../../../contracts", "R9"}, &out, &errOut); code != 2 {
+	if code := run([]string{"transform", "test", "-config-dir", dir, "R9"}, &out, &errOut); code != 2 {
 		t.Fatalf("unknown filter exit %d", code)
 	}
 	out.Reset()
-	if code := run([]string{"transform", "test", "-config-dir", dir, "-contracts-dir", "../../../contracts", "-v", "T1@7"}, &out, &errOut); code != 0 || !strings.Contains(out.String(), "PASS T1@7 minimal") {
+	if code := run([]string{"transform", "test", "-config-dir", dir, "-v", "T1@7"}, &out, &errOut); code != 0 || !strings.Contains(out.String(), "PASS T1@7 minimal") {
 		t.Fatalf("filter T1@7: %d %s", code, out.String())
 	}
 }

@@ -22,8 +22,8 @@ var errNotResponse = errors.New("not a response transformer")
 
 // MapResponse maps a vendor response to the canonical response or a canonical error (DESIGN §7.4).
 // Error rules run first, in order, and the first match wins. A 4xx/5xx that no rule matches is
-// classified by status, so a vendor error is never mapped as success. A mapped response must
-// match the capability response schema. Any failure of the transformer itself is an *EvalError
+// classified by status, so a vendor error is never mapped as success. The mapped output is any
+// JSON value, returned to the caller as it is (ADR-0023: no response schema). Any failure of the transformer itself is an *EvalError
 // (TRANSFORM_FAILED). The returned CanonicalError has no RequestID; the caller sets it.
 func (p *Program) MapResponse(resp core.VendorResponse, in Input) (any, *core.CanonicalError, error) {
 	out, _, ce, err := p.MapResponseSession(resp, in)
@@ -104,7 +104,7 @@ func (p *Program) mapResponse(resp core.VendorResponse, in Input) (any, *core.Ca
 		return nil, ce, nil
 	}
 	if status >= 400 {
-		return nil, classify(status), nil
+		return nil, Classify(status), nil
 	}
 	if p.response == nil {
 		return nil, nil, nil
@@ -119,16 +119,13 @@ func (p *Program) mapResponse(resp core.VendorResponse, in Input) (any, *core.Ca
 	if err := p.checkTime("response", start); err != nil {
 		return nil, nil, err
 	}
-	if p.validateResponse != nil {
-		if err := p.validateResponse(out); err != nil {
-			return nil, nil, &EvalError{Transformer: p.ref, Path: "response", Err: fmt.Errorf("mapped response does not match the capability response schema: %s", firstLine(err.Error()))}
-		}
-	}
 	return out, nil, nil
 }
 
-// classify is the fallback for vendor errors no rule matched (DESIGN §10.2).
-func classify(status int) *core.CanonicalError {
+// Classify is the default classification of a vendor error status (DESIGN §10.2): the fallback
+// for statuses no error rule matched, and the classification of pass-through responses, which
+// have no response transformer (ADR-0023). Only 429 and 5xx are retryable.
+func Classify(status int) *core.CanonicalError {
 	code, retryable := core.CodeUpstreamRejected, false
 	switch {
 	case status == 401 || status == 403:

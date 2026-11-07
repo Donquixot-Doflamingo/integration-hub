@@ -1,6 +1,5 @@
 integration: int_evt_brandA
 owner_tenant: orders-service
-capability: events.track@v1
 grants: []
 active_version: 2
 description: Brand A engagement events

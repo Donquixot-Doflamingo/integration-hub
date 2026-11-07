@@ -60,7 +60,7 @@ func newRegistry(cfg Config, m *telemetry.Metrics, log *slog.Logger, pool *pgxpo
 		return nil, err
 	}
 	r := &roleRegistry{
-		src: registry.Sources{Config: os.DirFS(cfg.ConfigDir), Contracts: os.DirFS(cfg.ContractsDir)},
+		src: registry.Sources{Config: os.DirFS(cfg.ConfigDir)},
 		cfg: cfg, log: log, archive: control.NewArchive(pool, blobs), rdb: rdb,
 		version: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "snapshot_version", Help: "Archive version (hub.config_snapshots) of the config snapshot this node serves; 0 until the node knows its content is archived (DESIGN §16.2, HUB-401).",
@@ -115,6 +115,28 @@ func (r *roleRegistry) load(ctx context.Context) {
 	}
 	r.log.WarnContext(ctx, "booted from the local snapshot cache", slog.String("path", r.cachePath()))
 	r.adopt(ctx, src, snap, "cache")
+}
+
+// upgradeLegacy is the admin role's one-time move of a pre-ADR-0023 archive (and its drafts and
+// pending integrations) to the current layout (control.UpgradeLegacyArchive). A failure is
+// logged and the role goes on: Unpack upgrades a legacy blob in memory on every load anyway.
+func (r *roleRegistry) upgradeLegacy(ctx context.Context, pool *pgxpool.Pool) {
+	if pool == nil {
+		return
+	}
+	actx, cancel := context.WithTimeout(ctx, 4*archiveTimeout)
+	defer cancel()
+	v, skipped, err := control.UpgradeLegacyArchive(actx, pool, r.archive, timeNow())
+	switch {
+	case err != nil:
+		r.failures.WithLabelValues("archive_error").Inc()
+		r.log.ErrorContext(ctx, "legacy snapshot not upgraded", slog.String("error", err.Error()))
+	case v > 0:
+		r.log.InfoContext(ctx, "legacy snapshot upgraded and archived (ADR-0023)", slog.Int64("archive_version", v), slog.Int("drafts_skipped", len(skipped)))
+	}
+	for _, id := range skipped {
+		r.log.WarnContext(ctx, "legacy draft not upgraded: edit it to declare operations", slog.String("integration", id))
+	}
 }
 
 // adopt publishes snap locally, refreshes the local cache and, on the admin role, archives it.

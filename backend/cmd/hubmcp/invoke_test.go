@@ -57,7 +57,7 @@ func TestInvoke(t *testing.T) {
 			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "idempotency_key": "order-8821-created",
 				"prefer_async": true, "deadline_ms": 1500, "session": "ses_01J9Z3K8X2V7Q4M6N8P0R2S4T6"},
 			replies: func(h *fakeHub) {
-				h.on("invokeIntegration", withHeader(h.pub("invokeIntegration", 200, "events.track@v1"), leakHeaders))
+				h.on("invokeIntegration", withHeader(h.pub("invokeIntegration", 200, "transformed"), leakHeaders))
 			},
 			want: want{outcome: "completed", httpStatus: 200.0, invokes: 1},
 			check: func(t *testing.T, h *fakeHub, out toolOutcome) {
@@ -76,7 +76,7 @@ func TestInvoke(t *testing.T) {
 			name: "idempotent replay and session returned",
 			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "idempotency_key": "k1"},
 			replies: func(h *fakeHub) {
-				h.on("invokeIntegration", withHeader(h.pub("invokeIntegration", 200, "events.track@v1"),
+				h.on("invokeIntegration", withHeader(h.pub("invokeIntegration", 200, "transformed"),
 					map[string]string{"X-Hub-Idempotent-Replay": "true", "X-Hub-Session": "ses_01J9Z3K8X2V7Q4M6N8P0R2S4T6"}))
 			},
 			want: want{outcome: "completed", httpStatus: 200.0, invokes: 1},
@@ -111,7 +111,7 @@ func TestInvoke(t *testing.T) {
 			name: "named operation uses invokeIntegrationOperation",
 			args: map[string]any{"integration_id": "int_evt_brandA", "operation": "send", "body": trackBody},
 			replies: func(h *fakeHub) {
-				h.on("invokeIntegrationOperation", h.pub("invokeIntegrationOperation", 200, "events.track@v1"))
+				h.on("invokeIntegrationOperation", h.pub("invokeIntegrationOperation", 200, "transformed"))
 			},
 			want: want{outcome: "completed", httpStatus: 200.0, invokes: 1},
 			check: func(t *testing.T, h *fakeHub, _ toolOutcome) {
@@ -138,7 +138,7 @@ func TestInvoke(t *testing.T) {
 			name: "retryable error with key and short wait: retried once",
 			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "idempotency_key": "k2"},
 			replies: func(h *fakeHub) {
-				h.on("invokeIntegration", h.pub("invokeIntegration", 504, ""), h.pub("invokeIntegration", 200, "events.track@v1"))
+				h.on("invokeIntegration", h.pub("invokeIntegration", 504, ""), h.pub("invokeIntegration", 200, "transformed"))
 			},
 			want: want{outcome: "completed", httpStatus: 200.0, invokes: 2, retryWaits: 1},
 			check: func(t *testing.T, h *fakeHub, _ toolOutcome) {
@@ -225,6 +225,66 @@ func TestInvoke(t *testing.T) {
 			},
 		},
 		{
+			name: "declared caller header is forwarded",
+			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "headers": map[string]any{"x-request-source": "checkout"}},
+			replies: func(h *fakeHub) {
+				h.on("invokeIntegration", h.pub("invokeIntegration", 200, "transformed"))
+			},
+			want: want{outcome: "completed", httpStatus: 200.0, invokes: 1},
+			check: func(t *testing.T, h *fakeHub, _ toolOutcome) {
+				if got := h.callsTo("invokeIntegration")[0].Header.Get("X-Request-Source"); got != "checkout" {
+					t.Errorf("X-Request-Source = %q, want checkout", got)
+				}
+			},
+		},
+		{
+			name: "undeclared caller header is refused locally",
+			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "headers": map[string]any{"X-Vendor-Account": "ct-brandA-in"}},
+			want: want{outcome: "error", code: "VALIDATION_FAILED"},
+			check: func(t *testing.T, _ *fakeHub, out toolOutcome) {
+				if msg, _ := out.field(t, "error", "message").(string); !strings.Contains(msg, "not declared") {
+					t.Errorf("message: %s", out.json)
+				}
+			},
+		},
+		{
+			name: "a Hub header in headers is refused locally",
+			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "headers": map[string]any{"Idempotency-Key": "k"}},
+			want: want{outcome: "error", code: "VALIDATION_FAILED"},
+			check: func(t *testing.T, _ *fakeHub, out toolOutcome) {
+				if msg, _ := out.field(t, "error", "message").(string); !strings.Contains(msg, "dedicated input") {
+					t.Errorf("message: %s", out.json)
+				}
+			},
+		},
+		{
+			name: "pass-through success is completed with the third party's body",
+			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody},
+			replies: func(h *fakeHub) {
+				h.on("invokeIntegration", reply{status: 200, body: []byte("age=29"),
+					header: map[string]string{"X-Hub-Pass-Through": "true", "Content-Type": "text/plain"}})
+			},
+			want: want{outcome: "completed", httpStatus: 200.0, invokes: 1},
+			check: func(t *testing.T, _ *fakeHub, out toolOutcome) {
+				if out.field(t, "pass_through") != true || out.field(t, "result") != "age=29" {
+					t.Errorf("pass-through result: %s", out.json)
+				}
+			},
+		},
+		{
+			name: "pass-through vendor error is an error without a canonical error",
+			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "idempotency_key": "k6"},
+			replies: func(h *fakeHub) {
+				h.on("invokeIntegration", reply{status: 404, body: []byte(`{"message":"no such user"}`), header: map[string]string{"X-Hub-Pass-Through": "true"}})
+			},
+			want: want{outcome: "error", httpStatus: 404.0, invokes: 1},
+			check: func(t *testing.T, _ *fakeHub, out toolOutcome) {
+				if out.field(t, "pass_through") != true || out.field(t, "error") != nil || out.field(t, "result", "message") != "no such user" {
+					t.Errorf("pass-through error: %s", out.json)
+				}
+			},
+		},
+		{
 			name: "vendor-selecting argument is refused locally",
 			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "vendor": "clevertap"},
 			want: want{outcome: "error", code: "VALIDATION_FAILED"},
@@ -276,7 +336,7 @@ func TestInvoke(t *testing.T) {
 func TestInvokePreCheckIsCachedAtMost60s(t *testing.T) {
 	hub := newFakeHub(t)
 	hub.on("getIntegration", hub.pub("getIntegration", 200, ""))
-	hub.on("invokeIntegration", hub.pub("invokeIntegration", 200, "events.track@v1"))
+	hub.on("invokeIntegration", hub.pub("invokeIntegration", 200, "transformed"))
 	a := testApp(t, hub.srv.URL, false, nil)
 	now := time.Unix(1_800_000_000, 0)
 	var mu sync.Mutex

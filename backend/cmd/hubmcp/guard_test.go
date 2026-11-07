@@ -41,7 +41,7 @@ func TestConfirmGuard(t *testing.T) {
 			} else {
 				hub.on("getIntegration", hub.pub("getIntegration", 200, ""))
 			}
-			hub.on("invokeIntegration", hub.pub("invokeIntegration", 200, "events.track@v1"))
+			hub.on("invokeIntegration", hub.pub("invokeIntegration", 200, "transformed"))
 			cs := connect(t, testApp(t, hub.srv.URL, false, nil))
 			args := map[string]any{"integration_id": "int_evt_brandA", "body": payoutBody}
 			for k, v := range tt.args {

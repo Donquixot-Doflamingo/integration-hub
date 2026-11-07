@@ -60,7 +60,7 @@ func TestBreakerBoardAndHolds(t *testing.T) {
 	// A parked envelope on this breaker.
 	ensurePartitions(t, a.s.d.Pool)
 	now := time.Now().UTC()
-	env := core.Envelope{RequestID: "req_" + core.NewULID(now), Tenant: "orders-service", IntegrationID: "int_evt_brandA", Capability: "events.track@v1",
+	env := core.Envelope{RequestID: "req_" + core.NewULID(now), Tenant: "orders-service", IntegrationID: "int_evt_brandA",
 		Operation: "default", Mode: "async", Canonical: json.RawMessage(`{}`), NextAttemptAt: now, ExpiresAt: now.Add(time.Hour), CreatedAt: now.Add(-time.Minute)}
 	if err := pgx.BeginFunc(t.Context(), a.s.d.Pool, func(tx pgx.Tx) error {
 		return (&queue.Outbox{}).EnqueueParked(t.Context(), tx, env, brandAUpload.Account, brandAUpload.Endpoint)

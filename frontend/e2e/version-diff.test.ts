@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { expectNoSeriousA11yViolations, signIn } from './helpers';
 
-// HUB-258: version diff on MSW (contract example: v7 -> v8).
+// HUB-258: version diff on MSW (contract example: v7 -> v8, incl. an operation's input field).
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -26,7 +26,7 @@ test('pick two versions in the history and compare them', async ({ page }) => {
 	await expect(split.getByRole('columnheader')).toHaveText(['v7', 'v8']);
 	await expect(split).toContainText('weight: 100');
 	await expect(split).toContainText('weight: 90');
-	await expect(page.getByText('2 paths differ (1 added, 1 changed)')).toBeVisible();
+	await expect(page.getByText('3 paths differ (2 added, 1 changed)')).toBeVisible();
 	await expect(
 		page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').last()
 	).toHaveText('Compare');
@@ -50,10 +50,14 @@ test('switches to the path list by keyboard, and the URL keeps the view', async 
 	await page.keyboard.press('Enter');
 	await expect(page).toHaveURL('/integrations/int_evt_brandA/diff?from=7&to=8&view=paths');
 	const paths = page.getByRole('region', { name: 'Changed paths' });
-	await expect(paths.getByRole('rowheader')).toHaveCount(2);
+	await expect(paths.getByRole('rowheader')).toHaveCount(3);
 	await expect(paths.getByRole('row').nth(1)).toContainText('targets[0].weight');
 	await expect(paths.getByRole('row').nth(1)).toContainText('Changed');
 	await expect(paths.getByRole('row').nth(2)).toContainText('Added');
+	await expect(paths.getByRole('row').nth(3)).toContainText(
+		'operations.default.request_schema.body.properties.context.properties.channel'
+	);
+	await expect(paths.getByRole('row').nth(3)).toContainText('Added');
 	await page.reload();
 	await expect(page.getByRole('region', { name: 'Changed paths' })).toBeVisible();
 });

@@ -28,8 +28,11 @@ func TestPackUnpackRoundTrip(t *testing.T) {
 	if got.Checksum != snap.Checksum || len(got.Integrations) != len(snap.Integrations) {
 		t.Fatalf("rebuilt snapshot differs: %s vs %s", got.Checksum, snap.Checksum)
 	}
-	if got.Capabilities["events.track@v1"].Operations["default"].Request == nil {
-		t.Fatal("capability schema not compiled from the blob")
+	if got.Integrations["int_evt_brandA"].Active().Op("default").RequestSchema.Body.Compiled() == nil {
+		t.Fatal("operation schema not compiled from the blob")
+	}
+	if got.Legacy != nil {
+		t.Fatal("a current blob is not legacy")
 	}
 }
 

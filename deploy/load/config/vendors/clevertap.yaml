@@ -8,7 +8,7 @@ regions:
   in: http://127.0.0.1:28799
   us: http://127.0.0.1:28799
 endpoints:
-  upload@1: { method: POST, path: /1/upload, timeout_ms: 3000, connect_timeout_ms: 500, idempotent: true, batch_max: 1000 }
+  upload@1: { method: POST, path: /1/upload, timeout_ms: 3000, connect_timeout_ms: 500, idempotent: true, batch_max: 1000, request_schema: {} }
 defaults:
   rate_limit: { per_account_rps: 100000 }
   breaker: { window_s: 30, min_calls: 20, failure_ratio: 0.5, consecutive_timeouts: 5, open_s: 30, open_max_s: 600, half_open_probes: 3 }

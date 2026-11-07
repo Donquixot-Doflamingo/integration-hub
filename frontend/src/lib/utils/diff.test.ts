@@ -90,7 +90,7 @@ describe('pointerToPath', () => {
 describe('summarize', () => {
 	it('counts and lists the changed paths', () => {
 		expect(summarize(example.changes)).toBe(
-			'2 paths differ (1 added, 1 changed): targets[0].weight, targets[1]'
+			'3 paths differ (2 added, 1 changed): targets[0].weight, targets[1], operations.default.request_schema.body.properties.context.properties.channel'
 		);
 		expect(summarize([])).toBe('No differences.');
 	});

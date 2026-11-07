@@ -7,7 +7,6 @@
 transformer: R2
 version: 1
 kind: response
-capability: events.track@v1
 docs_url: https://developer.clevertap.com/docs/upload-events-api
 response:
   # Expressions containing ": " (the ternary) must be quoted to be valid YAML.

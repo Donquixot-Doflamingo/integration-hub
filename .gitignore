@@ -7,6 +7,12 @@
 
 # Go
 backend/bin/
+# `go build ./cmd/<name>` run from backend/ drops the binary there
+/backend/hub
+/backend/hubctl
+/backend/hubmcp
+/backend/hubload
+/backend/mockvendor
 backend/dist/
 *.test
 *.out

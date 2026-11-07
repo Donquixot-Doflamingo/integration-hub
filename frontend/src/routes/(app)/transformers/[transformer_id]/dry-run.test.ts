@@ -53,19 +53,24 @@ function neverCalled() {
 	);
 }
 
-const bodyField = () => screen.getByLabelText(/^Canonical input \(JSON\)/) as HTMLTextAreaElement;
+const bodyField = () => screen.getByLabelText(/^Caller input \(JSON body\)/) as HTMLTextAreaElement;
 const setBody = async (text: string) => {
 	await fireEvent.input(bodyField(), { target: { value: text } });
 };
 
 describe('dry run', () => {
-	it('starts from the first fixture and renders method, URL, headers and body', async () => {
+	it('starts from the first sample (body and caller headers) and renders the request', async () => {
 		const seen = capture();
 		const user = await renderPage();
 		expect(JSON.parse(bodyField().value)).toEqual(fixtureInput);
+		expect(
+			JSON.parse((screen.getByLabelText(/^Caller headers/) as HTMLTextAreaElement).value)
+		).toEqual({ 'X-Request-Source': 'checkout' });
 		await user.click(screen.getByRole('button', { name: 'Dry-run T1@7' }));
 		const result = await screen.findByRole('region', { name: /Dry run of T1@7/ });
-		expect(seen).toEqual([{ ref: 'T1@7', input: fixtureInput }]);
+		expect(seen).toEqual([
+			{ ref: 'T1@7', input: fixtureInput, input_headers: { 'X-Request-Source': 'checkout' } }
+		]);
 		const req = within(result).getByRole('group', { name: 'Vendor request' });
 		expect(req).toHaveTextContent('Method POST');
 		expect(req).toHaveTextContent('URL https://in1.api.clevertap.com/1/upload');
@@ -85,6 +90,25 @@ describe('dry run', () => {
 		expect(result).toHaveTextContent('Transformed');
 	});
 
+	it('lists the fields of the produced request that break the endpoint schema', async () => {
+		capture({
+			...contractMocks.dryRunTransformer.example,
+			schema_errors: [
+				{
+					field: '/query/name',
+					keyword: 'minLength',
+					message: 'must NOT have fewer than 1 characters'
+				}
+			]
+		});
+		const user = await renderPage();
+		await user.click(screen.getByRole('button', { name: 'Dry-run T1@7' }));
+		const v = await screen.findByRole('group', { name: 'Endpoint schema violations' });
+		expect(v).toHaveTextContent(
+			/\/query\/name\s*\(minLength\)\s*must NOT have fewer than 1 characters/
+		);
+	});
+
 	it('sends the account and caller headers when given', async () => {
 		const seen = capture();
 		const user = await renderPage();
@@ -98,7 +122,7 @@ describe('dry run', () => {
 			ref: 'T1@7',
 			account_id: 'ct-brandA-in',
 			input: fixtureInput,
-			headers: { 'X-Request-Source': 'checkout' }
+			input_headers: { 'X-Request-Source': 'checkout' }
 		});
 	});
 
@@ -224,9 +248,7 @@ describe('dry run', () => {
 		expect(JSON.parse(field.value)).toEqual(vendor_response);
 		expect(screen.queryByLabelText(/^Caller headers/)).toBeNull();
 		await userEvent.click(screen.getByRole('button', { name: 'Dry-run R1@2' }));
-		expect(await screen.findByLabelText('Canonical response')).toHaveTextContent(
-			'"vendor_ref": "ct-123"'
-		);
+		expect(await screen.findByLabelText('Output')).toHaveTextContent('"vendor_ref": "ct-123"');
 		expect(seen[0]).toEqual({ ref: 'R1@2', vendor_response });
 	});
 

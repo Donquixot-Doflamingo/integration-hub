@@ -222,7 +222,7 @@ func TestNewIdempotencyKey(t *testing.T) {
 
 	t.Run("accepted by the contract", func(t *testing.T) {
 		t.Parallel()
-		hub := newHub(t, true, reply{status: 200, body: componentExample(t, "InvokeOk", "events.track@v1")})
+		hub := newHub(t, true, reply{status: 200, body: componentExample(t, "InvokeOk", "transformed")})
 		k := hubclient.NewIdempotencyKey()
 		if _, err := hub.client.Invoke(t.Context(), "int_evt_brandA", trackEvent(), hubclient.WithIdempotencyKey(k)); err != nil {
 			t.Fatal(err)

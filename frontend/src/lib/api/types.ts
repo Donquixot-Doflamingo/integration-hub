@@ -20,6 +20,13 @@ export type OperationResponse<Op extends keyof operations> =
 			}[keyof R]
 		: never;
 
+/** JSON request body of an operation, by operationId (never for operations without a body). */
+export type OperationRequestBody<Op extends keyof operations> = operations[Op] extends {
+	requestBody?: { content: { 'application/json': infer B } };
+}
+	? B
+	: never;
+
 export type Me = Schemas['Me'];
 export type Role = Schemas['Role'];
 export type BreakerState = Schemas['BreakerState'];
@@ -154,8 +161,6 @@ export type LifecycleTransition = Schemas['LifecycleTransition'];
 export type ListAccountsQuery = NonNullable<Operations['listAccounts']['parameters']['query']>;
 
 // Integration authoring (HUB-292).
-export type CapabilitySummary = Schemas['CapabilitySummary'];
-export type CapabilityVersion = Schemas['CapabilityVersion'];
 export type IntegrationCreate = Schemas['IntegrationCreate'];
 export type TargetRef = Schemas['TargetRef'];
 export type Target = Schemas['Target'];
@@ -163,6 +168,15 @@ export type TransformerPair = Schemas['TransformerPair'];
 export type DeliveryPolicy = Schemas['DeliveryPolicy'];
 export type DeliveryMode = Schemas['DeliveryMode'];
 export type AuditPolicy = Schemas['AuditPolicy'];
+
+// Schema registry (HUB-436, ADR-0023): operations with the caller's request schema, endpoint
+// request schemas, sample checks.
+export type IntegrationOperation = Schemas['IntegrationOperation'];
+export type IntegrationOperations = Schemas['IntegrationOperations'];
+export type OperationRequestSchema = Schemas['OperationRequestSchema'];
+export type EndpointRequestSchema = Schemas['EndpointRequestSchema'];
+export type JsonSchemaDocument = Schemas['JsonSchemaDocument'];
+export type SchemaViolation = Schemas['SchemaViolation'];
 
 // Transformer authoring (HUB-293).
 export type TransformerVersionCreate = Schemas['TransformerVersionCreate'];

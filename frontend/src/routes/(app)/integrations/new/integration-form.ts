@@ -4,28 +4,29 @@ import type { IntegrationCreate } from '$lib/api/types';
 /**
  * Create integration form (HUB-292), checked against `IntegrationCreate` before sending. The id is
  * what callers put in the path (`POST /v1/integrations/{id}/invoke`) and never changes; vendors,
- * accounts and versions stay behind it (D1, D12). Errors are keyed by JSON pointer.
+ * accounts and versions stay behind it (D1, D12). `interactive` is fixed at creation too. The
+ * operations and their request schemas belong to versions (ADR-0023): the first draft sets them. Errors are keyed by JSON pointer.
  */
 export const SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/;
-export const CAPABILITY = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$/;
 export const DESCRIPTION_MAX = 1024;
 
 export interface FormValues {
 	integration_id: string;
 	owner_tenant: string;
-	capability: string;
 	description: string;
 	/** Comma- or space-separated tenant ids. */
 	grants: string;
+	/** Operations are steps of one session (`X-Hub-Session`), sync only. Fixed at creation. */
+	interactive: boolean;
 	moves_money_or_quota: boolean;
 }
 
 export const POINTERS = [
 	'/integration_id',
 	'/owner_tenant',
-	'/capability',
 	'/description',
 	'/grants',
+	'/interactive',
 	'/moves_money_or_quota'
 ] as const;
 
@@ -33,9 +34,9 @@ export function emptyValues(): FormValues {
 	return {
 		integration_id: '',
 		owner_tenant: '',
-		capability: '',
 		description: '',
 		grants: '',
+		interactive: false,
 		moves_money_or_quota: false
 	};
 }
@@ -45,14 +46,14 @@ export function valuesFromForm(form: FormData): FormValues {
 		const v = form.get(n);
 		return typeof v === 'string' ? v : '';
 	};
+	const on = (n: string) => get(n) === 'on' || get(n) === 'true';
 	return {
 		integration_id: get('integration_id'),
 		owner_tenant: get('owner_tenant'),
-		capability: get('capability'),
 		description: get('description'),
 		grants: get('grants'),
-		moves_money_or_quota:
-			get('moves_money_or_quota') === 'on' || get('moves_money_or_quota') === 'true'
+		interactive: on('interactive'),
+		moves_money_or_quota: on('moves_money_or_quota')
 	};
 }
 
@@ -75,9 +76,6 @@ export function problems(v: FormValues): FieldErrors {
 		out['/integration_id'] =
 			'3 to 64 characters: letters, digits, "_" or "-", starting with a letter or digit.';
 	if (!v.owner_tenant) out['/owner_tenant'] = 'Pick the tenant that owns it.';
-	if (!v.capability) out['/capability'] = 'Pick the capability.';
-	else if (!CAPABILITY.test(v.capability))
-		out['/capability'] = 'A capability key such as events.track@v1.';
 	if (v.description.length > DESCRIPTION_MAX)
 		out['/description'] = `Use at most ${DESCRIPTION_MAX} characters.`;
 	const bad = grantList(v.grants).find((g) => !SLUG.test(g));
@@ -98,9 +96,9 @@ export function createBody(
 		body: {
 			integration_id: v.integration_id.trim(),
 			owner_tenant: v.owner_tenant,
-			capability: v.capability,
 			description: v.description.trim() || null,
 			grants: grantList(v.grants),
+			interactive: v.interactive,
 			moves_money_or_quota: v.moves_money_or_quota,
 			reason
 		}

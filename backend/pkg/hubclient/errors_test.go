@@ -21,7 +21,7 @@ import (
 var allCodes = []hubclient.Code{
 	hubclient.CodeValidationFailed, hubclient.CodeIdempotencyKeyRequired, hubclient.CodeUnauthorized,
 	hubclient.CodeForbidden, hubclient.CodeIntegrationNotFound, hubclient.CodeOperationNotFound,
-	hubclient.CodeCapabilityNotFound, hubclient.CodeRequestNotFound, hubclient.CodeSessionNotFound,
+	hubclient.CodeRequestNotFound, hubclient.CodeSessionNotFound,
 	hubclient.CodeIdempotencyConflict, hubclient.CodeIdempotentReplay, hubclient.CodePayloadTooLarge,
 	hubclient.CodeTransformFailed, hubclient.CodeInternalError, hubclient.CodeUpstreamTimeout,
 	hubclient.CodeUpstreamUnavailable, hubclient.CodeUpstreamRateLimited, hubclient.CodeUpstreamRejected,

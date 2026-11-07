@@ -21,7 +21,7 @@ session:
 
 func compileSession(t *testing.T, src string) (*Program, error) {
 	t.Helper()
-	return Compile(specFromYAML(t, src), Options{RequestSchema: eventsSchema(t), ValidateResponse: responseValidator(t)})
+	return Compile(specFromYAML(t, src), Options{})
 }
 
 func TestSessionSectionCompileErrors(t *testing.T) {
@@ -31,12 +31,10 @@ func TestSessionSectionCompileErrors(t *testing.T) {
 		{"creds in session", respHead + "response:\n  status: '\"ok\"'\nsession:\n  key: creds.passcode\n", "session.key: creds.* is never allowed in session"},
 		{"hdr in session", respHead + "response:\n  status: '\"ok\"'\nsession:\n  k: hdr.idempotency_key\n", "session.k: hdr is not available in session mapping"},
 		{"session reads session", respHead + "response:\n  status: '\"ok\"'\nsession:\n  k: session.txn\n", "session.k: session is not available in session mapping"},
-		{"req path checked", respHead + "response:\n  status: '\"ok\"'\nsession:\n  k: req.user.idd\n", `session.k: req.user.idd: field "user.idd" is not in the capability schema`},
 		{"not a mapping", respHead + "response:\n  status: '\"ok\"'\nsession: res.body\n", "session: must be a non-empty mapping of session fields"},
 		{"empty mapping", respHead + "response:\n  status: '\"ok\"'\nsession: {}\n", "session: must be a non-empty mapping of session fields"},
 		{"syntax", respHead + "response:\n  status: '\"ok\"'\nsession:\n  k: res.status ==\n", "session.k: syntax:"},
 		{"in a request transformer", reqHead + "  body:\n    id: req.user.id\nsession:\n  k: req.user.id\n", "session: not allowed in a request transformer"},
-		{"req still not in response", respHead + "response:\n  status: req.user.id\nsession:\n  k: req.user.id\n", "response.status: req is not available in response mapping"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

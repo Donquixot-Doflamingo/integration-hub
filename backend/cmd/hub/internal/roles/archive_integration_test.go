@@ -77,7 +77,7 @@ func TestArchiveRefusesCorruptBlobAndPrunes(t *testing.T) {
 	}
 	a := control.NewArchive(pool, blobs)
 	cfg := testConfig(t, Admin)
-	src := registry.Sources{Config: os.DirFS(cfg.ConfigDir), Contracts: os.DirFS(cfg.ContractsDir)}
+	src := registry.Sources{Config: os.DirFS(cfg.ConfigDir)}
 	snap, err := registry.Build(src, time.Now())
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +110,7 @@ func TestArchiveRefusesCorruptBlobAndPrunes(t *testing.T) {
 	// Publish two more versions, age all rows past 90 days: prune removes rows and blobs except the newest.
 	for _, rps := range []string{"61", "62"} {
 		dir := copyConfig(t, cfg.ConfigDir, rps)
-		s2 := registry.Sources{Config: os.DirFS(dir), Contracts: src.Contracts}
+		s2 := registry.Sources{Config: os.DirFS(dir)}
 		sn, err := registry.Build(s2, time.Now())
 		if err != nil {
 			t.Fatal(err)

@@ -17,8 +17,13 @@ describe('checkLabel', () => {
 			join(process.cwd(), '..', 'contracts', 'openapi', 'hub-admin.v1.yaml'),
 			'utf8'
 		);
-		const known = /Known: ([a-z0-9_, ]+?)(?: \(|\. )/.exec(yaml)?.[1] ?? '';
-		const names = known.split(/,\s*/).filter(Boolean);
+		// "Known: a, b (2.0.0), c, ... d (1.2.0). ..." over several lines of the check description.
+		const flat = yaml.replace(/\s+/g, ' ').replace(/\(\d+\.\d+\.\d+\)/g, '');
+		const known = /Known: ([^.]+?)\./.exec(flat)?.[1] ?? '';
+		const names = known
+			.split(/,\s*/)
+			.map((n) => n.trim())
+			.filter(Boolean);
 		expect(names.length).toBeGreaterThan(10);
 		for (const n of names) expect([n, checkLabel(n)]).not.toEqual([n, n]);
 	});

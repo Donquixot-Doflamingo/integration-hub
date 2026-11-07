@@ -2,8 +2,6 @@
 transformer: TS-VERIFY-REQ
 version: 1
 kind: request
-capability: test.two_step@v1
-operation: verify
 vendor_endpoint: stepvendor.verify@1
 request:
   method: POST

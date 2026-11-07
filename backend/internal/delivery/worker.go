@@ -410,9 +410,12 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 	}
 
 	account := res.Target.Account
-	hdr := map[string]any{}
+	hdr := make(map[string]any, len(env.Headers)+1) // the declared caller headers (ADR-0023)
+	for k, v := range env.Headers {
+		hdr[k] = v
+	}
 	if env.IdempotencyKey != nil {
-		hdr["idempotency_key"] = *env.IdempotencyKey
+		hdr[registry.HdrIdempotencyKey] = *env.IdempotencyKey
 	}
 	queueWait := w.now().Sub(env.CreatedAt)
 	// Per-target isolation (HUB-412): the attempt takes one of its (account, endpoint)'s slots
@@ -502,10 +505,8 @@ func (w *Worker) trail(snap *registry.Snapshot, env core.Envelope, attempt int) 
 	var pii []registry.PIIPath
 	if in, ok := snap.Integrations[env.IntegrationID]; ok {
 		policy = in.Active().Audit.Payloads
-		if c := snap.Capabilities[env.Capability]; c != nil {
-			if op := c.Operations[env.Operation]; op != nil {
-				pii = op.PII
-			}
+		if op := in.Active().Op(env.Operation); op != nil {
+			pii = op.PII // x-pii tags of the operation's request schema (ADR-0023)
 		}
 	}
 	var canonical map[string]any

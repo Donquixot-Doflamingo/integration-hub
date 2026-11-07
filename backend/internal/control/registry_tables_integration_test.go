@@ -20,7 +20,7 @@ import (
 )
 
 var registryTables = []string{
-	"tenants", "api_keys", "vendors", "vendor_endpoints", "accounts", "account_credentials", "capabilities",
+	"tenants", "api_keys", "vendors", "vendor_endpoints", "accounts", "account_credentials",
 	"transformers", "integrations", "integration_versions", "integration_grants", "registrar_endpoints", "config_snapshots",
 }
 
@@ -90,10 +90,10 @@ func TestVersionsAndTransformersRejectUpdate(t *testing.T) {
 		}
 	}
 	must(q.UpsertTenant(ctx, db.UpsertTenantParams{TenantID: "orders-service", Status: "active", RateLimitRps: 100, RateLimitBurst: 200}))
-	must(q.InsertIntegration(ctx, db.InsertIntegrationParams{IntegrationID: "int_evt_test", OwnerTenant: "orders-service", Capability: "events.track@v1", ActiveVersion: 1}))
+	must(q.InsertIntegration(ctx, db.InsertIntegrationParams{IntegrationID: "int_evt_test", OwnerTenant: "orders-service", ActiveVersion: 1}))
 	must(q.InsertIntegrationVersion(ctx, db.InsertIntegrationVersionParams{IntegrationID: "int_evt_test", Version: 1, Spec: []byte(`{"targets":[]}`), Author: "test", Reason: "v1"}))
 	must(q.InsertIntegrationVersion(ctx, db.InsertIntegrationVersionParams{IntegrationID: "int_evt_test", Version: 2, Spec: []byte(`{"targets":[]}`), Author: "test", Reason: "v2"}))
-	must(q.InsertTransformer(ctx, db.InsertTransformerParams{TransformerID: "T1", Version: 7, Kind: "request", Capability: "events.track@v1", Yaml: "transformer: T1", Fixtures: []byte(`{}`)}))
+	must(q.InsertTransformer(ctx, db.InsertTransformerParams{TransformerID: "T1", Version: 7, Kind: "request", Yaml: "transformer: T1", Fixtures: []byte(`{}`)}))
 
 	// The active pointer moves (cutover / rollback); versions themselves never change.
 	if n, err := q.SetActiveVersion(ctx, db.SetActiveVersionParams{IntegrationID: "int_evt_test", ActiveVersion: 2}); err != nil || n != 1 {

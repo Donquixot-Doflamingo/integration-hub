@@ -41,7 +41,9 @@ describe('transformers list', () => {
 			limit: '50'
 		});
 		expect(
-			screen.getByRole('link', { name: 'Remove filter Kind: Request (canonical to vendor)' })
+			screen.getByRole('link', {
+				name: 'Remove filter Kind: Request (caller input to vendor request)'
+			})
 		).toHaveAttribute('href', '/transformers?vendor_id=clevertap');
 		expect(within(table).getByRole('link', { name: 'T1' })).toHaveAttribute(
 			'href',

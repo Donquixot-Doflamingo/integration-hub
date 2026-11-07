@@ -23,14 +23,10 @@
 		metadata_only: 'Metadata only (no bodies)'
 	};
 	/** Result and error objects follow the same policy as the events. */
-	const objectView = (
-		v: Record<string, unknown> | null | undefined,
-		sealed: boolean,
-		policy: string
-	) =>
+	const objectView = (v: unknown, sealed: boolean, policy: string) =>
 		sealed
 			? ({ kind: 'sealed' } as const)
-			: v
+			: v !== null && v !== undefined
 				? ({ kind: 'shown', value: v } as const)
 				: policy === 'metadata_only'
 					? ({ kind: 'metadata_only' } as const)
@@ -68,8 +64,8 @@
 					</dd>
 				</div>
 				<div>
-					<dt>Capability</dt>
-					<dd><code>{r.capability}</code> {r.operation}</dd>
+					<dt>Operation</dt>
+					<dd><code>{r.operation}</code></dd>
 				</div>
 				<div>
 					<dt>Mode</dt>

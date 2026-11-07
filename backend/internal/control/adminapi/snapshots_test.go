@@ -17,7 +17,8 @@ func TestChangedObjects(t *testing.T) {
 		"capabilities/events.track.v1.yaml": "c2", "registrar/reg_cb.yaml": "r", "README.md": "ignored",
 	}
 	got := fmt.Sprint(changedObjects(prev, cur))
-	want := "[map[change:deleted object_id:ct-a object_type:account] map[change:updated object_id:events.track@v1 object_type:capability] " +
+	// capabilities/ of a pre-ADR-0023 snapshot is no registry object any more: not reported.
+	want := "[map[change:deleted object_id:ct-a object_type:account] " +
 		"map[change:updated object_id:int_x object_type:integration] map[change:created object_id:reg_cb object_type:registrar_endpoint]]"
 	if got != want {
 		t.Fatalf("got  %s\nwant %s", got, want)

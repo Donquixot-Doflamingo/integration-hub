@@ -64,7 +64,7 @@ type requestFilter struct {
 	Limit       int
 }
 
-const summaryColumns = `r.request_id, r.tenant_id, r.integration_id, r.capability, r.operation, r.mode, r.status, r.error_code,
+const summaryColumns = `r.request_id, r.tenant_id, r.integration_id, r.operation, r.mode, r.status, r.error_code,
 	COALESCE(la.integration_version, r.integration_version), la.account_id, r.attempts, r.created_at, r.completed_at, r.hub_overhead_ms`
 
 // lastAttempt joins the latest attempt of each request (vendor, account, version).
@@ -108,7 +108,6 @@ type requestSummary struct {
 	RequestID     string     `json:"request_id"`
 	TenantID      string     `json:"tenant_id"`
 	IntegrationID string     `json:"integration_id"`
-	Capability    string     `json:"capability"`
 	Operation     string     `json:"operation"`
 	Mode          string     `json:"mode"`
 	Status        string     `json:"status"`
@@ -126,7 +125,7 @@ type requestSummary struct {
 func scanSummary(row pgx.Row, snap *registry.Snapshot) (requestSummary, error) {
 	var s requestSummary
 	var overhead *float64
-	if err := row.Scan(&s.RequestID, &s.TenantID, &s.IntegrationID, &s.Capability, &s.Operation, &s.Mode, &s.Status, &s.Code,
+	if err := row.Scan(&s.RequestID, &s.TenantID, &s.IntegrationID, &s.Operation, &s.Mode, &s.Status, &s.Code,
 		&s.FinalVersion, &s.AccountID, &s.Attempts, &s.CreatedAt, &s.CompletedAt, &overhead); err != nil {
 		return s, err
 	}
@@ -332,7 +331,7 @@ func (s *Server) loadRequest(ctx context.Context, r *http.Request, id string) (r
 		r.vendor_ms, r.queue_wait_ms
 FROM hub.requests r `+lastAttempt+`
 WHERE r.created_at BETWEEN $2 AND $3 AND r.request_id = $1`, id, from, to).Scan(
-		&row.RequestID, &row.TenantID, &row.IntegrationID, &row.Capability, &row.Operation, &row.Mode, &row.Status, &row.Code,
+		&row.RequestID, &row.TenantID, &row.IntegrationID, &row.Operation, &row.Mode, &row.Status, &row.Code,
 		&row.FinalVersion, &row.AccountID, &row.Attempts, &row.CreatedAt, &row.CompletedAt, &overhead,
 		&row.Policy, &row.IdempotencyKey, &row.SnapshotVersion, &row.TraceID, &row.VendorMS, &row.QueueWaitMS)
 	if errors.Is(err, pgx.ErrNoRows) {

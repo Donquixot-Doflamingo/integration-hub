@@ -216,12 +216,6 @@ func objectOf(path string) (objectType, id string, ok bool) {
 		return "vendor", base, true
 	case len(parts) == 2 && parts[0] == "accounts":
 		return "account", base, true
-	case len(parts) == 2 && parts[0] == "capabilities":
-		// events.track.v1.yaml → events.track@v1
-		if i := strings.LastIndex(base, ".v"); i > 0 {
-			return "capability", base[:i] + "@" + base[i+1:], true
-		}
-		return "capability", base, true
 	case len(parts) == 2 && parts[0] == "tenants":
 		return "tenant", base, true
 	case len(parts) == 2 && parts[0] == "registrar":

@@ -1,0 +1,16 @@
+integration: int_evt_brandA
+version: 2
+targets:
+  - vendor: clevertap
+    account: ct-brandA-in
+    transformer: { request: T1@7, response: R1@2 }
+    weight: 100
+delivery:
+  mode: wait
+  wait_ms: 3000
+  ttl: 6h
+  on_circuit_open: fail_fast
+  pending: re_resolve
+  polling: true
+audit: { payloads: masked, retention: 30d }
+publish: { author: platform-team, reason: "full response (R1) for support" }

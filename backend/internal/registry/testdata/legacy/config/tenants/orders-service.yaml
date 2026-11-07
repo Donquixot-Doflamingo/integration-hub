@@ -1,0 +1,9 @@
+# Dev tenant. API keys are stored only as sha256 hashes (DESIGN §16.5).
+# The matching dev key is a test value for local use only, documented in config/README.md.
+tenant: orders-service
+api_keys:
+  - key_id: key_01JDEV0RDERS0000000000000A
+    hash: sha256:2e61e481e789da46838628f9a07280a49207a62f4816ef4c132c34f831a40425
+    scopes: [invoke, dry_run, requests_read]
+    state: active
+rate_limit: { rps: 100, burst: 200 }

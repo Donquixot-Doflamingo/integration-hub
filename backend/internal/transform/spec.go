@@ -11,14 +11,13 @@ import (
 // Spec is one transformer as stored in config (backend/config/transformers/<id>/<version>.yaml).
 // The registry fills it from its TransformerFile; this package never reads files.
 type Spec struct {
-	ID         string
-	Version    int
-	Kind       string // request | response
-	Capability string
-	Request    yaml.Node
-	Response   yaml.Node
-	Errors     yaml.Node
-	Batch      yaml.Node
+	ID       string
+	Version  int
+	Kind     string // request | response
+	Request  yaml.Node
+	Response yaml.Node
+	Errors   yaml.Node
+	Batch    yaml.Node
 	// Session (response transformers only) maps the vendor session data a multi-step operation
 	// keeps between steps (DESIGN §3.1, §14): evaluated on success against res, req and account.
 	Session          yaml.Node
@@ -140,10 +139,8 @@ func parse(s Spec) (*parsed, *CompileError) {
 			}
 		}
 		if present(s.Response) {
+			// Any JSON value: the output goes back to the caller as it is (ADR-0023).
 			p.response = parseTmpl(&s.Response, "response", ce)
-			if p.response != nil && p.response.kind != nodeObject {
-				ce.add("response", "must be a mapping of canonical fields")
-			}
 		}
 		if present(s.Errors) {
 			p.parseErrors(&s.Errors, ce)
