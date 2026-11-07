@@ -26,6 +26,8 @@
 #   DEV_MOCKVENDOR_PORT (8099), DEV_MOCKVENDOR_CONTROL_PORT (8098), DEV_OPS_PORT_BASE (19190)
 #   DEV_SEED_TRAFFIC=0           do not send the sample requests
 #   DEV_SKIP_BUILD=1             reuse backend/bin and frontend/node_modules as they are
+#   DEV_RESET=1                  recreate the compose Postgres and Redis when the database holds
+#                                snapshots from an earlier run whose files are gone (HUB-430)
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -114,6 +116,39 @@ bin="$root/backend/bin"
 
 say "applying database migrations"
 "$bin/hub" migrate >"$state/logs/migrate.log" 2>&1 || { cat "$state/logs/migrate.log" >&2; die "migrations failed: is Postgres reachable at the HUB_PG_DSN you set?"; }
+
+# The snapshot archive is split in two: its index (hub.config_snapshots) lives in Postgres and the
+# snapshot files under $state/blobs. A database kept from an earlier run (the compose volume
+# survives a fresh clone or a deleted .dev-stack/) points at files that are gone, and every admin
+# page that reads the registry then fails with INTERNAL_ERROR (HUB-430). Check before starting.
+sql() { # sql <query>: one value from the dev database; fails when no client is available
+  if [ "$use_docker" = 1 ]; then
+    docker compose -f deploy/docker-compose.yml exec -T postgres psql -U hub -d hub -XAtqc "$1"
+  elif command -v psql >/dev/null 2>&1; then
+    psql "$HUB_PG_DSN" -XAtqc "$1"
+  else
+    return 1
+  fi
+}
+latest_ref="$(sql "SELECT blob_ref FROM hub.config_snapshots ORDER BY version DESC LIMIT 1" 2>/dev/null || true)"
+if [[ "$latest_ref" == file://* ]] && [ ! -f "${latest_ref#file://}" ]; then
+  if [ "$use_docker" = 1 ] && [ "${DEV_RESET:-0}" = 1 ]; then
+    say "DEV_RESET=1: recreating the compose Postgres and Redis (their volume is dropped)"
+    docker compose -f deploy/docker-compose.yml down -v
+    docker compose -f deploy/docker-compose.yml up -d --wait
+    rm -rf "$state/blobs" "$state"/data-*
+    "$bin/hub" migrate >"$state/logs/migrate.log" 2>&1 || { cat "$state/logs/migrate.log" >&2; die "migrations failed after the reset"; }
+  elif [ "$use_docker" = 1 ]; then
+    die "the dev database holds registry snapshots from an earlier run whose files are gone
+  (${latest_ref#file://}), so every admin page would fail with INTERNAL_ERROR.
+  Start from a clean dev database (drops only the docker compose Postgres and Redis volume):
+    DEV_RESET=1 make dev-up"
+  else
+    die "the database at HUB_PG_DSN holds registry snapshots from an earlier run whose files are gone
+  (${latest_ref#file://}), so every admin page would fail with INTERNAL_ERROR.
+  Point HUB_PG_DSN at an empty database, or restore that file. This script never drops your database."
+  fi
+fi
 
 # The registry seed: the dev config with its vendor regions and callback receiver pointed at this
 # stack's mockvendor (which answers 200 {} on any path). The admin archives it as the first

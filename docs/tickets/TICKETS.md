@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **273** · done: **204** · todo: **66** · other (in-progress/in-review/blocked): **3**
+Total tickets: **274** · done: **204** · todo: **66** · other (in-progress/in-review/blocked): **4**
 
 ## Epics
 
@@ -21,7 +21,7 @@ Total tickets: **273** · done: **204** · todo: **66** · other (in-progress/in
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 44 | 37 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 30 | 8 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 31 | 8 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3475,6 +3475,19 @@ Close out the work merged in #28 to #39: mark tickets done with their merge subj
 - [x] 31 tickets marked done with merge subjects
 - [x] Follow-ups HUB-319 to HUB-321 and HUB-422 to HUB-428 filed
 - [x] `docs/tech/LATENCY.md` carries the CI runner's numbers
+
+### HUB-430 — dev-up starts a stack whose admin pages all fail after a fresh clone
+- **Epic:** EP-13 · **Type:** fix · **Area:** infra
+- **Status:** in-review · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1906
+- **Branch:** `fix/HUB-430-dev-up-orphaned-snapshot`
+
+Found running `make dev-up` on macOS from a fresh clone: Integrations, Tenants, Vendors, Accounts and Transformers all showed `INTERNAL_ERROR` for every role. The snapshot archive index lives in Postgres (`hub.config_snapshots`, absolute `file://` blob refs) and the snapshot files in `.dev-stack/blobs/`. The compose Postgres volume kept the index from an earlier run while the new clone had no files, so the admin failed with `archive: read blob v1: no such file or directory` on every registry read. Requests and dead letters still loaded, and the gateway kept serving.
+
+**Acceptance criteria**
+- [x] `dev-up` checks, after migrations, that the latest snapshot's file exists and stops with the cause and the fix when it does not (compose: `DEV_RESET=1 make dev-up`; own `HUB_PG_DSN`: never dropped)
+- [x] `DEV_RESET=1` recreates the compose Postgres and Redis, clears the blobs and starts clean
+- [x] Reproduced here (fresh `.dev-stack/` over a used database: 5 pages fail for all 4 roles); with the fix the run stops with the explanation, and after `DEV_RESET=1` all pages load for all 4 roles (compose path exercised with a stand-in `docker` mapped to local Postgres)
+- [x] README troubleshooting line
 
 ## Parallel tracks
 
