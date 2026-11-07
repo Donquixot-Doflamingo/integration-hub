@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(skills)` · Update the backend skills for operations and endpoint schemas (HUB-437) · HUB-437 · F-23
+  - hub-transformers: no `capability` key; `req.*` checked against the operation's body schema and `hdr.*` against its declared headers; samples with input headers; the `endpoint_schema` check on every request sample; response transformer optional, pass-through otherwise
+  - dsl.md: the keys the registry really loads (`docs_url`, literal `path`, no `auth`/`stream`/`supports` yet), a table of what checks each reference, and the new refusal messages
+  - go-architecture, api-contract-backend, go-system-design and go-debugging: a new API is registry data, not a capability or a contract change
 - 2026-11-07 · `docs(skills)` · Rewrite hub-operator for the schema registry model (HUB-437) · HUB-437 · F-23
   - hub-operator teaches the ADR-0023 onboarding order: vendor, endpoint with its request schema from a sample, account (or none for a public API), request transformer proven by samples, optional response transformer, integration with operations and input schema, validate, publish; console clicks, hubmcp calls and admin API for each step
   - New worked walk-through: the agify age estimate (`references/onboard-an-api.md`), with what each refusal (`endpoint_schema`, `goldens_pass`, `input_schema`, `schemas_compile`) means
