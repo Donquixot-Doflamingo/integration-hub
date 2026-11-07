@@ -1,29 +1,10 @@
 import type { ApiResult } from '$lib/api/client';
 import { consoleApi } from '$lib/api/console';
 import { collectPages } from '$lib/api/list';
-import type {
-	AccountSummary,
-	Integration,
-	IntegrationVersion,
-	TransformerSummary,
-	VendorSummary,
-	VersionDiff
-} from '$lib/api/types';
+import type { Integration, IntegrationVersion, VersionDiff } from '$lib/api/types';
 import { can } from '$lib/auth/roles';
 import type { PageLoad } from './$types';
-
-/**
- * What the structured editor offers (HUB-292): vendors, accounts and transformers. Each list may
- * be empty when its call fails; the fields then take typed values. The operations come from the
- * spec itself (ADR-0023: the integration version owns them).
- */
-export interface Lookups {
-	vendors: VendorSummary[];
-	accounts: AccountSummary[];
-	transformers: TransformerSummary[];
-}
-
-export const NO_LOOKUPS: Lookups = { vendors: [], accounts: [], transformers: [] };
+import { NO_LOOKUPS, type Lookups } from './lookups';
 
 export interface PublishBase {
 	integration: Integration;

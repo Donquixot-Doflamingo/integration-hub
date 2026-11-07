@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(frontend)` · Keep the draft editor lookups out of the publish page module · HUB-436 · F-23
+  - The console builds again: the publish page's load module exported a constant SvelteKit refuses (`NO_LOOKUPS`), which stopped `npm run build` and the e2e server
+
 - 2026-11-07 · `test(frontend)` · Add an onboarding mock world for a public API · HUB-436 · F-23
   - Mock builds and e2e can select the scenario `onboarding`: a public vendor `agify` (auth none) with endpoint `estimate@1` (`GET /`, required query `name`), a credential-less account, request and response transformers proven by samples, and integration `int_age_estimate`, all from the contract's named examples
   - Create calls in that scenario answer with what was sent, so a flow that creates each object from the panel lands on pages that show it

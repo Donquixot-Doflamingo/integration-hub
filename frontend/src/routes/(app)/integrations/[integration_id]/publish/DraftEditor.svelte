@@ -29,7 +29,7 @@
 	import { formatUtc } from '$lib/utils/format';
 	import { parseSpecYaml, specToYaml } from '$lib/utils/spec-yaml';
 	import type { IntegrationSpec } from '$lib/api/types';
-	import { NO_LOOKUPS, type Lookups } from './+page';
+	import { NO_LOOKUPS, type Lookups } from './lookups';
 	import ChecksList from './ChecksList.svelte';
 	import SpecEditor from './SpecEditor.svelte';
 	import SpecForm from './SpecForm.svelte';
