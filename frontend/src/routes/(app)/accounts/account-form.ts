@@ -42,7 +42,12 @@ export interface FormValues {
 	credentials: CredentialRow[];
 	/** `datetime-local`, read as UTC. */
 	credential_expires_at: string;
+	/** The vendor's auth scheme; `none` (HUB-436): the account has no credentials. */
+	auth_scheme: string;
 }
+
+/** Accounts of an auth `none` vendor carry no credentials (contract `AccountCreate`). */
+export const needsCredentials = (v: Pick<FormValues, 'auth_scheme'>) => v.auth_scheme !== 'none';
 
 export function emptyValues(): FormValues {
 	return {
@@ -53,7 +58,8 @@ export function emptyValues(): FormValues {
 		rps: '',
 		daily: '',
 		credentials: [{ key: '', value: '' }],
-		credential_expires_at: ''
+		credential_expires_at: '',
+		auth_scheme: ''
 	};
 }
 
@@ -78,7 +84,8 @@ export function valuesFromForm(form: FormData): FormValues {
 		rps: get(form, 'rps'),
 		daily: get(form, 'daily'),
 		credentials: credentialsFromForm(form),
-		credential_expires_at: get(form, 'credential_expires_at')
+		credential_expires_at: get(form, 'credential_expires_at'),
+		auth_scheme: get(form, 'auth_scheme')
 	};
 }
 
@@ -144,10 +151,12 @@ export function problems(v: FormValues, now = Date.now()): FieldErrors {
 	const config = configProblem(v.config);
 	if (config) out['/config'] = config;
 	quotaProblems(v, out);
-	const creds = credentialProblem(v.credentials);
-	if (creds) out['/credentials'] = creds;
-	const exp = expiryProblem(v.credential_expires_at, now);
-	if (exp) out['/credential_expires_at'] = exp;
+	if (needsCredentials(v)) {
+		const creds = credentialProblem(v.credentials);
+		if (creds) out['/credentials'] = creds;
+		const exp = expiryProblem(v.credential_expires_at, now);
+		if (exp) out['/credential_expires_at'] = exp;
+	}
 	return out;
 }
 
@@ -182,12 +191,14 @@ export function createBody(v: FormValues, reason: string, now = Date.now()): Bui
 		vendor_id: v.vendor_id,
 		region: v.region,
 		config: objectOf(v.config),
-		credentials: credentials(v.credentials),
-		credential_expires_at: v.credential_expires_at.trim()
-			? normalizeTime(v.credential_expires_at)
-			: null,
 		reason
 	};
+	if (needsCredentials(v)) {
+		body.credentials = credentials(v.credentials);
+		body.credential_expires_at = v.credential_expires_at.trim()
+			? normalizeTime(v.credential_expires_at)
+			: null;
+	}
 	const q = quota(v);
 	if (q) body.quota = q;
 	return { ok: true, body };

@@ -82,6 +82,14 @@ describe('account create form', () => {
 		});
 	});
 
+	it('an account of an auth `none` vendor has no credentials and sends none', () => {
+		const v = filled({ auth_scheme: 'none', credentials: [{ key: '', value: '' }] });
+		expect(problems(v, NOW)).toEqual({});
+		const r = createBody(v, 'Public age estimate API', NOW);
+		expect(r.ok && 'credentials' in r.body).toBe(false);
+		expect(r.ok && 'credential_expires_at' in r.body).toBe(false);
+	});
+
 	it('pairs posted credential keys and values; lists the secret values to scrub', () => {
 		const form = new FormData();
 		form.append('cred_key', 'account_id');

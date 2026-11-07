@@ -13,7 +13,7 @@
 	import { blockersFrom } from '$lib/utils/form';
 	import type { PageData } from './$types';
 	import CredentialInputs from '../CredentialInputs.svelte';
-	import { emptyValues, problems } from '../account-form';
+	import { emptyValues, needsCredentials, problems } from '../account-form';
 
 	/**
 	 * Create an account with its first credentials (HUB-291, `createAccount`, admin). The secret
@@ -26,6 +26,23 @@
 	let values = $state({ ...emptyValues(), vendor_id: untrack(() => data.vendorId) });
 	let cleared = $state(false);
 	const blockers = $derived(blockersFrom(problems(values)));
+	// A vendor preselected by `?vendor_id=`: know its auth scheme once the vendors are loaded.
+	$effect(() => {
+		let live = true;
+		data.vendors.then((r) => {
+			if (!live || !r.ok || values.auth_scheme) return;
+			const v = r.data.items.find((x) => x.vendor_id === values.vendor_id);
+			if (v) values.auth_scheme = v.auth_scheme;
+		});
+		return () => {
+			live = false;
+		};
+	});
+	/** Remembers the picked vendor's auth scheme: `none` means no credentials (HUB-436). */
+	function pickVendor(scheme: string | undefined) {
+		values.region = '';
+		values.auth_scheme = scheme ?? '';
+	}
 
 	function forgetSecrets() {
 		for (const r of values.credentials) r.value = '';
@@ -35,7 +52,9 @@
 	async function onsuccess(d: ActionSuccessData) {
 		const a = (d.result as AccountChange).account;
 		setFlash({
-			message: `Created account ${a.account_id} (${a.vendor_id}, region ${a.region}) with credential v${a.credentials[0]?.cred_version ?? 1}. Test the connection before an integration targets it.`,
+			message: a.credentials.length
+				? `Created account ${a.account_id} (${a.vendor_id}, region ${a.region}) with credential v${a.credentials[0]?.cred_version ?? 1}. Test the connection before an integration targets it.`
+				: `Created account ${a.account_id} (${a.vendor_id}, region ${a.region}), without credentials (public API).`,
 			changeId: d.changeId,
 			requestId: d.requestId
 		});
@@ -97,7 +116,10 @@
 										id="{uid}-vendor"
 										name="vendor_id"
 										bind:value={values.vendor_id}
-										onchange={() => (values.region = '')}
+										onchange={(e) =>
+											pickVendor(
+												page.items.find((v) => v.vendor_id === e.currentTarget.value)?.auth_scheme
+											)}
 										aria-invalid={err(errors, attempted, '/vendor_id') ? 'true' : undefined}
 										aria-describedby="{uid}-vendor-error"
 									>
@@ -183,39 +205,46 @@
 							</div>
 						</fieldset>
 
-						<CredentialInputs
-							bind:rows={values.credentials}
-							error={errors['/credentials'] ?? null}
-							showProblems={attempted}
-						/>
-						{#if cleared}
-							<p class="fk-note" role="status">
-								The secret values were cleared when you submitted. Type them again to retry.
+						<input type="hidden" name="auth_scheme" value={values.auth_scheme} />
+						{#if !needsCredentials(values)}
+							<p class="fk-note" role="note">
+								{values.vendor_id} is a public API (auth scheme none): this account has no credentials.
 							</p>
-						{/if}
-						<div class="fk-group">
-							<div class="fk-field">
-								<label for="{uid}-exp">Credential expires (UTC)</label>
-								<input
-									id="{uid}-exp"
-									name="credential_expires_at"
-									type="datetime-local"
-									bind:value={values.credential_expires_at}
-									aria-invalid={err(errors, attempted, '/credential_expires_at')
-										? 'true'
-										: undefined}
-									aria-describedby="{uid}-exp-hint {uid}-exp-error"
-								/>
-								<p id="{uid}-exp-hint" class="fk-hint">
-									Optional. When the vendor will stop accepting these credentials, so the rotation
-									can happen first.
+						{:else}
+							<CredentialInputs
+								bind:rows={values.credentials}
+								error={errors['/credentials'] ?? null}
+								showProblems={attempted}
+							/>
+							{#if cleared}
+								<p class="fk-note" role="status">
+									The secret values were cleared when you submitted. Type them again to retry.
 								</p>
-								<FieldError
-									id="{uid}-exp-error"
-									message={err(errors, attempted, '/credential_expires_at')}
-								/>
+							{/if}
+							<div class="fk-group">
+								<div class="fk-field">
+									<label for="{uid}-exp">Credential expires (UTC)</label>
+									<input
+										id="{uid}-exp"
+										name="credential_expires_at"
+										type="datetime-local"
+										bind:value={values.credential_expires_at}
+										aria-invalid={err(errors, attempted, '/credential_expires_at')
+											? 'true'
+											: undefined}
+										aria-describedby="{uid}-exp-hint {uid}-exp-error"
+									/>
+									<p id="{uid}-exp-hint" class="fk-hint">
+										Optional. When the vendor will stop accepting these credentials, so the rotation
+										can happen first.
+									</p>
+									<FieldError
+										id="{uid}-exp-error"
+										message={err(errors, attempted, '/credential_expires_at')}
+									/>
+								</div>
 							</div>
-						</div>
+						{/if}
 					{/snippet}
 				</AuthoringForm>
 			{/if}

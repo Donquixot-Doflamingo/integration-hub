@@ -2,8 +2,7 @@
 	import { onMount } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import type { ActionSuccessData } from '$lib/api/actions';
-	import type { VendorEndpoint, VendorEndpointChange } from '$lib/api/types';
+	import type { VendorEndpoint } from '$lib/api/types';
 	import AsyncView from '$lib/components/AsyncView.svelte';
 	import ChangeNotice from '$lib/components/ChangeNotice.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -11,14 +10,14 @@
 	import { takeFlash, type Flash } from '$lib/stores/flash.svelte';
 	import { formatDurationMs, formatNumber, formatUtc } from '$lib/utils/format';
 	import type { PageData } from './$types';
-	import EndpointDialog from '../EndpointDialog.svelte';
-	import { latestByName, sortEndpoints } from '../endpoint-form';
+	import { latestByName, REQUEST_PARTS, sortEndpoints } from '../endpoint-form';
 	import { authSchemeLabels, breakerText, webhookSchemeLabels } from '../vendor-form';
 
 	/**
 	 * Vendor (HUB-290): its definition (regions, auth scheme, defaults, webhook verification) and
-	 * every endpoint version. Admins edit the definition (PUT with If-Match on its own page) and
-	 * add endpoints or endpoint versions (dialog; versions are immutable).
+	 * every endpoint version with the request parts it declares (HUB-436). Admins edit the
+	 * definition (PUT with If-Match on its own page) and add endpoints or endpoint versions (their
+	 * own page, with the request schema; versions are immutable).
 	 */
 	let { data }: { data: PageData } = $props();
 	const id = $derived(data.vendorId);
@@ -28,26 +27,17 @@
 		notice = takeFlash();
 	});
 
-	let endpointOpen = $state(false);
-	let endpointFrom = $state.raw<VendorEndpoint | null>(null);
-	function openEndpoint(from: VendorEndpoint | null) {
-		endpointFrom = from;
-		endpointOpen = true;
-	}
-	function onEndpointCreated(d: ActionSuccessData) {
-		const e = (d.result as VendorEndpointChange).endpoint;
-		notice = {
-			message: `Created endpoint ${e.endpoint_ref}: ${e.method} ${e.path}. Point a new transformer version at ${id}.${e.endpoint_ref} to use it.`,
-			changeId: d.changeId,
-			requestId: d.requestId,
-			link: {
-				href: resolve('/(app)/vendors/[vendor_id]/endpoints/[endpoint_ref]', {
-					vendor_id: id,
-					endpoint_ref: e.endpoint_ref
-				}),
-				label: `Open ${e.endpoint_ref}`
-			}
-		};
+	const newEndpointHref = $derived(
+		resolve('/(app)/vendors/[vendor_id]/endpoints/new', { vendor_id: id })
+	);
+	/** "query (1), body (3)": the request parts an endpoint version declares, with field counts. */
+	function declared(e: VendorEndpoint): string {
+		const parts = REQUEST_PARTS.filter((p) => e.request_schema?.[p] !== undefined).map((p) => {
+			const props = e.request_schema?.[p]?.properties;
+			const n = props && typeof props === 'object' ? Object.keys(props).length : 0;
+			return `${p} (${n})`;
+		});
+		return parts.length ? parts.join(', ') : 'Nothing besides method and path';
 	}
 	const endpointHref = (ref: string) =>
 		resolve('/(app)/vendors/[vendor_id]/endpoints/[endpoint_ref]', {
@@ -182,9 +172,7 @@
 				<div class="block-head">
 					<h2 id="endpoints-h">Endpoints</h2>
 					<RoleGate access={data.access} op="createVendorEndpoint">
-						<button type="button" class="btn" onclick={() => openEndpoint(null)}
-							>Add endpoint</button
-						>
+						<a class="btn" href={newEndpointHref}>Add endpoint</a>
 					</RoleGate>
 				</div>
 				<p class="fk-note">
@@ -205,6 +193,7 @@
 								<tr>
 									<th scope="col">Endpoint</th>
 									<th scope="col">Call</th>
+									<th scope="col">Request declares</th>
 									<th scope="col" class="num">Timeout</th>
 									<th scope="col">Idempotent</th>
 									<th scope="col" class="num">Batch limit</th>
@@ -221,6 +210,7 @@
 											{#if isLatest}<span class="tag">Latest</span>{/if}
 										</th>
 										<td><code>{e.method} {e.path}</code></td>
+										<td>{declared(e)}</td>
 										<td class="num">{formatDurationMs(e.timeout_ms)}</td>
 										<td>{e.idempotent ? 'Yes' : 'No'}</td>
 										<td class="num">{e.batch_max == null ? '-' : formatNumber(e.batch_max)}</td>
@@ -228,12 +218,11 @@
 										<td>
 											{#if isLatest}
 												<RoleGate access={data.access} op="createVendorEndpoint">
-													<button
-														type="button"
+													<a
 														class="btn btn-quiet"
-														onclick={() => openEndpoint(e)}
+														href="{newEndpointHref}?from={encodeURIComponent(e.name)}"
 														aria-label="New version of {e.name} (creates {e.name}@{e.version + 1})"
-														>New version</button
+														>New version</a
 													>
 												</RoleGate>
 											{/if}
@@ -247,13 +236,6 @@
 			</section>
 		{/snippet}
 	</AsyncView>
-
-	<EndpointDialog
-		bind:open={endpointOpen}
-		vendorId={id}
-		from={endpointFrom}
-		onsuccess={onEndpointCreated}
-	/>
 {/if}
 
 <style>

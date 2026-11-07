@@ -111,7 +111,9 @@
 				{#each AUTH_SCHEMES as s (s)}<option value={s}>{authSchemeLabels[s]}</option>{/each}
 			</select>
 			<p id="{fid('/auth_scheme')}-hint" class="fk-hint">
-				How accounts of this vendor authenticate. The secrets themselves go on each account.
+				{values.auth_scheme === 'none'
+					? 'A public API: the Hub sends no credentials and accounts of this vendor have none.'
+					: 'How accounts of this vendor authenticate. The secrets themselves go on each account.'}
 			</p>
 			<FieldError id="{fid('/auth_scheme')}-error" message={err('/auth_scheme')} />
 		</div>

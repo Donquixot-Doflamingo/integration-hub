@@ -16,6 +16,9 @@ import {
 	createEndpointBody,
 	emptyEndpoint,
 	endpointProblems,
+	endpointValuesFromForm,
+	pathParams,
+	pathSchemaFor,
 	latestByName,
 	sortEndpoints,
 	valuesFromEndpoint
@@ -189,9 +192,71 @@ describe('endpoint form', () => {
 				idempotent: true,
 				stream: false,
 				batch_max: 1000,
+				request_schema: e.request_schema,
 				reason: 'Upload v2 path'
 			}
 		});
+	});
+
+	it('checks each request part as a JSON Schema and the path parameters against the path', () => {
+		const base = { ...emptyEndpoint(), name: 'user', method: 'GET', path: '/users/{id}' };
+		expect(endpointProblems(base)['/request_schema/path']).toMatch(
+			'Declare the path parameter {id} of the path.'
+		);
+		expect(pathParams('/users/{id}/orders/{order_id}')).toEqual(['id', 'order_id']);
+		const fixed = { ...base, request_schema: { path: pathSchemaFor(base.path)! } };
+		expect(fixed.request_schema.path).toEqual({
+			type: 'object',
+			required: ['id'],
+			properties: { id: { type: 'string', minLength: 1 } }
+		});
+		expect(endpointProblems(fixed)).toEqual({});
+		expect(endpointProblems({ ...fixed, path: '/users' })['/request_schema/path']).toMatch(
+			'id is not in the path (/users).'
+		);
+		expect(
+			endpointProblems({
+				...fixed,
+				request_schema: { ...fixed.request_schema, query: { type: 'obj' } }
+			})['/request_schema/query']
+		).toMatch(/"type" must be one of/);
+		expect(
+			endpointProblems({ ...fixed, response_schema: { required: 'x' } })['/response_schema']
+		).toMatch(/"required" must be a list/);
+	});
+
+	it('sends only the request parts that are there, and the response schema when given', () => {
+		const query = { type: 'object', required: ['name'], properties: { name: { type: 'string' } } };
+		const r = createEndpointBody(
+			{
+				...emptyEndpoint(),
+				name: 'estimate',
+				method: 'GET',
+				path: '/',
+				idempotent: true,
+				request_schema: { query, body: {} },
+				response_schema: { type: 'object', properties: { age: { type: ['integer', 'null'] } } }
+			},
+			'Age estimate endpoint'
+		);
+		expect(r.ok && r.body.request_schema).toEqual({ query });
+		expect(r.ok && r.body.response_schema).toMatchObject({ type: 'object' });
+		const none = createEndpointBody(
+			{ ...emptyEndpoint(), name: 'ping', method: 'GET', path: '/' },
+			'Ping endpoint'
+		);
+		expect(none.ok && none.body.request_schema).toEqual({});
+		expect(none.ok && 'response_schema' in none.body).toBe(false);
+	});
+
+	it('reads the request and response schemas posted as JSON fields', () => {
+		const form = new FormData();
+		form.set('name', 'estimate');
+		form.set('request_schema', '{"query": {"type": "object"}}');
+		form.set('response_schema', 'not json');
+		const v = endpointValuesFromForm(form);
+		expect(v.request_schema).toEqual({ query: { type: 'object' } });
+		expect(v.response_schema).toBeNull();
 	});
 
 	it('knows the latest version per name and sorts newest first', () => {

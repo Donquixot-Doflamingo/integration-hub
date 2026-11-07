@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(frontend)` · Declare each vendor endpoint's request schema and support auth none · HUB-436 · F-23
+  - Adding an endpoint (or its next version) is now its own page: besides method, path and timeouts, the operator declares the request it accepts, part by part (path parameters, query parameters, non-credential headers, body), each from a sample with required or optional fields; an empty part is not sent, and path placeholders can be declared in one click
+  - An optional, informational response schema documents what the vendor answers
+  - The endpoint page shows each part as a field list; the vendor page shows what each endpoint version declares
+  - Accounts of an auth `none` vendor are created without credentials, and their page says there is nothing to rotate
 - 2026-11-07 · `feat(frontend)` · Edit operations and their request schemas in the draft form · HUB-436 · F-23
   - The draft form starts with an Operations section: add, rename or remove operations (`default` for one), each with a caller-facing description, idempotent and the "check live calls" switch (on by default: a call missing a required field gets 400 VALIDATION_FAILED)
   - Each operation's request body (required) and caller headers (optional, what the transformer may read as `hdr.*`) are built with the schema editor; renaming or removing an operation moves or drops the targets' transformer pairs for it

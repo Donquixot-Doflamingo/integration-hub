@@ -49,10 +49,14 @@
 		};
 	});
 	let endpoints = $state.raw<string[]>([]);
+	let noCredentials = $state(false);
 	$effect(() => {
 		let live = true;
 		data.endpoints.then((e) => {
 			if (live) endpoints = e;
+		});
+		data.authScheme.then((s) => {
+			if (live) noCredentials = s === 'none';
 		});
 		return () => {
 			live = false;
@@ -209,6 +213,7 @@
 			<CredentialsPanel
 				account={a}
 				{endpoints}
+				{noCredentials}
 				access={data.access}
 				onnotice={(n) => (notice = n)}
 			/>
