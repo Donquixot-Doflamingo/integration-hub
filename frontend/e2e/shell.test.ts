@@ -12,6 +12,8 @@ const SECTIONS = [
 	{ label: 'Requests', path: '/requests', row: 'req_01J9Z3K8X2V7Q4M6N8P0R2S4T6' },
 	{ label: 'DLQ', path: '/dlq', row: 'req_01J9Z3M1A5B7C9D1E3F5G7H9JK' },
 	{ label: 'Transformers', path: '/transformers', row: 'T1' },
+	{ label: 'Vendors', path: '/vendors', row: 'clevertap' },
+	{ label: 'Accounts', path: '/accounts', row: 'ct-brandA-in' },
 	{ label: 'Tenants', path: '/tenants', row: 'orders-service' },
 	{ label: 'Snapshots', path: '/snapshots', row: '413' },
 	{ label: 'Change log', path: '/change-log', row: 'chg_01J9Z4B2C3D4E5F6G7H8J9K0N5' }

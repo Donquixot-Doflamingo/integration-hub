@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(frontend)` · Cover the vendor and account sections in the shell e2e (HUB-291) · HUB-291 · F-19
+  - The shell e2e walks the Vendors and Accounts sections and their keyboard order in the sidebar
 - 2026-11-07 · `feat(frontend)` · Create transformer versions with goldens and dry run (HUB-293) · HUB-293 · F-19
   - Editors create a new transformer or the next version of one in the console from its YAML and golden fixtures; a new version starts from the latest one
   - "Run goldens on this draft" shows each fixture with its diff, and Create stays locked until the goldens of exactly that draft pass, as the Hub requires
