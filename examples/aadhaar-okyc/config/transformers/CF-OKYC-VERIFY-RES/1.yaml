@@ -21,8 +21,6 @@
 transformer: CF-OKYC-VERIFY-RES
 version: 1
 kind: response
-capability: demo.aadhaar_okyc@v1
-operation: verify_otp
 docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/submit-otp-to-verify-aadhaar
 response:
   status:        '"verified"'

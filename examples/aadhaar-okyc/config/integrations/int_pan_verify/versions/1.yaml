@@ -1,6 +1,29 @@
-# EXAMPLE ONLY (HUB-352).
+# EXAMPLE ONLY (HUB-352). The caller's request schema is declared here (ADR-0023).
 integration: int_pan_verify
 version: 1
+operations:
+  default:
+    description: Verify a PAN, optionally against the name the person entered.
+    idempotent: false
+    request_schema:
+      body:
+        type: object
+        required: [pan]
+        additionalProperties: false
+        properties:
+          pan:
+            type: string
+            pattern: '^[A-Z]{5}[0-9]{4}[A-Z]$'
+            x-pii: government_id
+            description: 'Permanent Account Number: five letters, four digits, one letter (upper case).'
+          name:
+            type: string
+            minLength: 1
+            maxLength: 100
+            x-pii: name
+            description: Name the person entered, for the name match.
+        examples:
+          - { pan: ABCPV1234D, name: John Doe }
 targets:
   - vendor: cashfree-sid
     account: cf-sid-test

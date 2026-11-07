@@ -19,8 +19,6 @@
 transformer: CF-OKYC-OTP-RES
 version: 1
 kind: response
-capability: demo.aadhaar_okyc@v1
-operation: send_otp
 docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/generate-otp-to-verify-aadhaar
 response:
   status:     '"otp_sent"'

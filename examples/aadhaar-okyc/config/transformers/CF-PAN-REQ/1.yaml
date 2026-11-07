@@ -8,7 +8,6 @@
 transformer: CF-PAN-REQ
 version: 1
 kind: request
-capability: demo.pan_verify@v1
 docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/pan/verify-pan-sync
 vendor_endpoint: cashfree-sid.pan_verify@1
 request:

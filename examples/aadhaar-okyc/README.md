@@ -7,7 +7,7 @@ You get someone's Aadhaar details for verification in two calls to **one integra
 
 You can run it in two ways: against **mockvendor** on your machine (no account needed, every error case on demand), or against a **real KYC provider's sandbox** (Cashfree Secure ID test mode). Ticket: HUB-351. PAN verification, the single-step sibling, is in [`../pan-verify/`](../pan-verify/README.md). Background on sessions: use case 6 of the [use-case catalogue](../../docs/use-cases/README.md#6-two-step-flows-otp-then-verify-then-bank-account).
 
-**Everything here is an example.** Nothing in this folder is production config (`backend/config/`) or a frozen contract (`contracts/`). The tests and `run.sh` merge this folder over both and refuse to overwrite any existing file.
+**Everything here is an example.** Nothing in this folder is production config (`backend/config/`). The tests and `run.sh` merge this folder over it and refuse to overwrite any existing file. Every schema lives inline in the config, as in `backend/config` (ADR-0023 in `docs/tech/adr/`): the caller's request schema per operation in the integration version, the request the provider accepts on each vendor endpoint.
 
 ## What is possible, and what is not
 
@@ -124,7 +124,7 @@ HUB_DEMO_TARGET=sandbox CASHFREE_CLIENT_ID=... CASHFREE_CLIENT_SECRET=... exampl
 examples/aadhaar-okyc/run.sh serve                        # add HUB_DEMO_TARGET=sandbox ... for the sandbox
 ```
 
-`run.sh` builds the binaries, merges this folder over `backend/config` and `contracts/` into `.demo/aadhaar-okyc/`, stores the credentials encrypted there (`hubctl creds set`), starts mockvendor on `:8099` (mock target only) and a gateway on `127.0.0.1:18080`, then makes the calls. `HUB_DEMO_TARGET=sandbox` changes only the account's region from `mock` to `sandbox`, which picks the vendor's sandbox base URL; nothing else changes, and nothing the caller sends or receives changes either. Override `HUB_PG_DSN`, `HUB_REDIS_ADDR`, `HUB_DEMO_HTTP`, `MOCKVENDOR_ADDR` if your ports differ. (`hubctl creds set` takes values as arguments, so the test secret is briefly visible in your process list: use test keys only.)
+`run.sh` builds the binaries, merges this folder over `backend/config` into `.demo/aadhaar-okyc/`, stores the credentials encrypted there (`hubctl creds set`), starts mockvendor on `:8099` (mock target only) and a gateway on `127.0.0.1:18080`, then makes the calls. `HUB_DEMO_TARGET=sandbox` changes only the account's region from `mock` to `sandbox`, which picks the vendor's sandbox base URL; nothing else changes, and nothing the caller sends or receives changes either. Override `HUB_PG_DSN`, `HUB_REDIS_ADDR`, `HUB_DEMO_HTTP`, `MOCKVENDOR_ADDR` if your ports differ. (`hubctl creds set` takes values as arguments, so the test secret is briefly visible in your process list: use test keys only.)
 
 ### With curl
 
@@ -221,15 +221,13 @@ Messages are fixed, vendor-neutral texts: the provider's own messages can name i
 
 | Path | What |
 | --- | --- |
-| `contracts/schemas/capabilities/demo.aadhaar_okyc.v1.*.json` | Example capability `demo.aadhaar_okyc@v1` (interactive): `send_otp` (`aadhaar_number` tagged `x-pii: government_id`, `consent: true`, `purpose` → `otp_sent`) and `verify_otp` (`otp` → minimal e-KYC) |
-| `config/capabilities/demo.aadhaar_okyc.v1.yaml` | Registry entry for it |
-| `config/vendors/cashfree-sid.yaml` | The provider: regions `mock` and `sandbox` (production is set by the control plane), static header auth, endpoints `okyc_otp@1`, `okyc_verify@1` (10 s timeouts), breaker, a health probe that sends `{}` without credentials (a 400, so no OTP and no charge) |
+| `config/vendors/cashfree-sid.yaml` | The provider: regions `mock` and `sandbox` (production is set by the control plane), static header auth, endpoints `okyc_otp@1` (body `aadhaar_number`), `okyc_verify@1` (body `otp`, `ref_id`; 10 s timeouts) with the `request_schema` every request sample must fit (the credential headers are never part of it), breaker, a health probe that sends `{}` without credentials (a 400, so no OTP and no charge) |
 | `config/accounts/cf-sid-test.yaml` | The test-mode account (region `mock`; `run.sh` switches it to `sandbox`) |
 | `config/tenants/kyc-onboarding.yaml` | The calling service; local test key `hk_test_example_kyc_onboarding_local_only` (stored as its sha256) |
-| `config/integrations/int_aadhaar_okyc/` | `sync`, `fail_fast`, `moves_money_or_quota: true`, audit `sealed` for `90d` (D6). `send_otp` uses the default pair, `verify_otp` its own |
-| `config/transformers/CF-OKYC-*` | Four transformers with goldens for success and every documented error (43 cases) |
+| `config/integrations/int_aadhaar_okyc/` | `interactive`, `sync`, `fail_fast`, `moves_money_or_quota: true`, audit `sealed` for `90d` (D6). Version 1 declares the operations and their request schemas: `send_otp` (`aadhaar_number` tagged `x-pii: government_id`, `consent: true`, `purpose`) and `verify_otp` (`otp`). `send_otp` uses the default pair, `verify_otp` its own |
+| `config/transformers/CF-OKYC-*` | Four transformers with goldens for success and every documented error (42 cases) |
 | `mockvendor/aadhaar-*.json` | Scenario files: the provider's two endpoints as mockvendor routes. `run.sh` and the integration test load the same files |
-| `config/integrations/int_pan_verify/`, `config/transformers/CF-PAN-*`, `mockvendor/pan-*.json`, `demo.pan_verify.v1.*` | PAN verification on the same vendor and account: see [`../pan-verify/`](../pan-verify/README.md) (HUB-352) |
+| `config/integrations/int_pan_verify/`, `config/transformers/CF-PAN-*`, `mockvendor/pan-*.json` | PAN verification on the same vendor and account: see [`../pan-verify/`](../pan-verify/README.md) (HUB-352) |
 | `run.sh`, `client/main.go` | The demo (curl) and the Go SDK client |
 
 ## Tests
@@ -245,6 +243,6 @@ go test -race -count=1 -tags integration -run TestExampleAadhaarOKYCFlow -v ./in
 
 ## Going to production
 
-- A production account of the same vendor (production keys, region set by the control plane), and the production capability `kyc.aadhaar_otp@v1` in `contracts/` through the contract-steward (HUB-334; see the change request in the HUB-351 report).
+- A production account of the same vendor (production keys, region set by the control plane), with its own integration (same operations and request schemas, its own audit policy review).
 - Compliance sign-off for the audit policy: `sealed` keeps an encrypted copy of the request, which contains the Aadhaar number. If even that is not acceptable, use `metadata_only` (open question in the use-case catalogue, HUB-337 for KMS-backed keys).
-- `verify_otp` without `X-Hub-Session` is treated as a first step and reaches the provider without a reference (it rejects it). Always send the session.
+- `verify_otp` without `X-Hub-Session` is treated as a first step and reaches the provider without a reference (it rejects it). Always send the session. For the same reason `CF-OKYC-VERIFY-REQ` has no sample without a session: `okyc_verify@1` requires `ref_id`, and the Hub refuses a sample that breaks its endpoint's `request_schema`.

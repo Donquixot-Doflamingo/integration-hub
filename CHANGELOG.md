@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `refactor(examples)` · Move the Aadhaar and PAN example schemas into integrations (HUB-435) · HUB-435 · F-23
+  - `examples/aadhaar-okyc` (and so `examples/pan-verify`) has no capability files or `contracts/` overlay: `int_aadhaar_okyc` declares `send_otp` and `verify_otp` (still `interactive`, `x-pii` tags kept for the sealed audit), `int_pan_verify` its `default` operation
+  - The Cashfree Secure ID endpoints declare the request they accept, from the provider's docs (body fields, `Content-Type`, `X-Api-Version`); the credential headers are never part of it
+  - `CF-OKYC-VERIFY-REQ` loses its sample without a session (it produced a request without the required `ref_id`); transformers name no capability or operation
+  - Both demos run offline as their READMEs say: every Aadhaar and PAN mock scenario and the Go client give the documented answers
 - 2026-11-07 · `refactor(examples)` · Move the OTP flow example's schemas into its integrations (HUB-435) · HUB-435 · F-23
   - `examples/otp-account-flow` has no capability files or `contracts/` overlay any more: `int_demo_otp` (both versions) declares `send_otp` and `verify_otp` with their request schemas, `int_demo_bank_verify` its `default` operation; both integrations are `interactive`
   - The `demo-kyc` endpoints declare the request they accept (headers and body); the sample of `DEMO-OTP-VERIFY-REQ` without a session is gone, since it produced a request without the required `txn_id`
