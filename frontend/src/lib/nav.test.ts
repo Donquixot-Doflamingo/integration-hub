@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { breadcrumbsFor, sectionFor, sections } from './nav';
 
 describe('sections', () => {
-	it('lists the eight console sections in order', () => {
+	it('lists the nine console sections in order', () => {
 		expect(sections.map((s) => s.label)).toEqual([
 			'Integrations',
 			'Health',
 			'Requests',
 			'DLQ',
 			'Transformers',
+			'Vendors',
 			'Tenants',
 			'Snapshots',
 			'Change log'
@@ -37,6 +38,15 @@ describe('breadcrumbsFor', () => {
 		{
 			path: '/integrations/int_evt_brandA/versions/8',
 			want: ['Console', 'Integrations', 'int_evt_brandA', 'v8']
+		},
+		{
+			path: '/vendors/clevertap/endpoints/upload@1',
+			want: ['Console', 'Vendors', 'clevertap', 'upload@1']
+		},
+		{ path: '/vendors/new', want: ['Console', 'Vendors', 'New'] },
+		{
+			path: '/transformers/T1/new-version',
+			want: ['Console', 'Transformers', 'T1', 'New version']
 		},
 		{
 			path: '/integrations/int_evt_brandA/diff',

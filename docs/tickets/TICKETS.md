@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **261** · done: **177** · todo: **62** · other (in-progress/in-review/blocked): **22**
+Total tickets: **261** · done: **177** · todo: **61** · other (in-progress/in-review/blocked): **23**
 
 ## Epics
 
@@ -2534,15 +2534,15 @@ Bugs found running the console against a real Hub, each fixed with a test. Backe
 
 ### HUB-290 — Console: vendors and vendor endpoints pages
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-19xx
-- **Branch:** `feat/HUB-290-console-vendors`
+- **Status:** in-review · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1907
+- **Branch:** `feat/HUB-290-console-vendors` (delivered on `feat/HUB-290-console-authoring` with HUB-291, HUB-292, HUB-293)
 
 Found writing the operator skill (HUB-316): the console has no vendor pages, so onboarding a vendor ('client') needs the admin API or MCP. Add list, detail, create and update for vendors (`listVendors`, `getVendor`, `createVendor`, `updateVendor`) and endpoints (`listVendorEndpoints`, `getVendorEndpoint`, `createVendorEndpoint`; endpoint versions are immutable).
 
 **Acceptance criteria**
-- [ ] List, detail, create and edit pages through the generated client, with ETag/If-Match on edits
-- [ ] Validation errors from the API shown on the field
-- [ ] Role gating per `x-required-role`; component and e2e tests
+- [x] List, detail, create and edit pages through the generated client, with ETag/If-Match on edits (`vendors/page.test.ts` "sends the whole definition with the loaded ETag as If-Match", "412: someone else changed it"; `e2e-real/vendors.test.ts` create, endpoint versions, stale tab)
+- [x] Validation errors from the API shown on the field (`vendors/page.test.ts` "puts an API validation error on its field"; `actions.test.ts` pointer mapping; e2e 409 on a taken id)
+- [x] Role gating per `x-required-role`; component and e2e tests (`vendors/page.test.ts` roles block, `e2e/phone-and-roles.test.ts`, `e2e-real/vendors.test.ts` editor / viewer / tenant viewer)
 
 ### HUB-291 — Console: accounts page with write-only credentials and rotation
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

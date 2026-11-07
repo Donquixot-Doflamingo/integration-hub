@@ -78,3 +78,37 @@ export function detailsToFields(
 	}
 	return { fields: out, rest };
 }
+
+/**
+ * Like `detailsToFields`, for forms whose fields sit deeper in the body (HUB-290+): each field is
+ * named by its JSON pointer (`/regions`, `/defaults/breaker/window_ms`), and a detail is blamed on
+ * the field whose pointer is the longest prefix of the detail's pointer (`/regions/in` lands on
+ * `/regions`). Details no field claims stay in `rest`, for the form's error summary.
+ */
+export function detailsToPointerFields(
+	details: PlainApiError['details'],
+	pointers: readonly string[]
+): { fields: FieldErrors; rest: PlainApiError['details'] } {
+	const out: FieldErrors = {};
+	const rest: PlainApiError['details'] = [];
+	for (const d of details) {
+		const field = claimingPointer(d.pointer, pointers);
+		if (field && !out[field]) out[field] = d.message;
+		else rest.push(d);
+	}
+	return { fields: out, rest };
+}
+
+/** The longest pointer in `pointers` that equals `pointer` or is a whole-token prefix of it. */
+export function claimingPointer(
+	pointer: string | undefined,
+	pointers: readonly string[]
+): string | null {
+	if (!pointer) return null;
+	let best: string | null = null;
+	for (const p of pointers) {
+		const hit = pointer === p || pointer.startsWith(p.endsWith('/') ? p : `${p}/`);
+		if (hit && (best === null || p.length > best.length)) best = p;
+	}
+	return best;
+}

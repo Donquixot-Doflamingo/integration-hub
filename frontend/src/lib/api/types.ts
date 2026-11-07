@@ -122,3 +122,50 @@ export type ObjectType = Schemas['ObjectType'];
 export type ListChangeLogQuery = NonNullable<Operations['listChangeLog']['parameters']['query']>;
 export type Snapshot = Schemas['Snapshot'];
 export type SnapshotDetail = Schemas['SnapshotDetail'];
+
+// Vendors and endpoints (HUB-290).
+export type AuthScheme = Schemas['AuthScheme'];
+export type VendorSummary = Schemas['VendorSummary'];
+export type Vendor = Schemas['Vendor'];
+export type VendorCreate = Schemas['VendorCreate'];
+export type VendorUpdate = Schemas['VendorUpdate'];
+export type VendorChange = Schemas['VendorChange'];
+export type VendorDefaults = Schemas['VendorDefaults'];
+export type BreakerConfig = Schemas['BreakerConfig'];
+export type WebhookVerification = Schemas['WebhookVerification'];
+export type VendorEndpoint = Schemas['VendorEndpoint'];
+export type VendorEndpointCreate = Schemas['VendorEndpointCreate'];
+export type VendorEndpointChange = Schemas['VendorEndpointChange'];
+/** Query parameters of `listVendors`. */
+export type ListVendorsQuery = NonNullable<Operations['listVendors']['parameters']['query']>;
+
+// Accounts and credentials (HUB-291).
+export type Account = Schemas['Account'];
+export type AccountCreate = Schemas['AccountCreate'];
+export type AccountUpdate = Schemas['AccountUpdate'];
+export type AccountChange = Schemas['AccountChange'];
+export type AccountQuota = Schemas['AccountQuota'];
+export type CredentialSlot = Schemas['CredentialSlot'];
+export type CredentialSlotsChange = Schemas['CredentialSlotsChange'];
+export type ConnectionTestRequest = Schemas['ConnectionTestRequest'];
+export type ConnectionTestResult = Schemas['ConnectionTestResult'];
+export type LifecycleTransition = Schemas['LifecycleTransition'];
+/** Query parameters of `listAccounts`. */
+export type ListAccountsQuery = NonNullable<Operations['listAccounts']['parameters']['query']>;
+
+// Integration authoring (HUB-292).
+export type CapabilitySummary = Schemas['CapabilitySummary'];
+export type CapabilityVersion = Schemas['CapabilityVersion'];
+export type IntegrationCreate = Schemas['IntegrationCreate'];
+export type TargetRef = Schemas['TargetRef'];
+export type Target = Schemas['Target'];
+export type TransformerPair = Schemas['TransformerPair'];
+export type DeliveryPolicy = Schemas['DeliveryPolicy'];
+export type DeliveryMode = Schemas['DeliveryMode'];
+export type AuditPolicy = Schemas['AuditPolicy'];
+
+// Transformer authoring (HUB-293).
+export type TransformerVersionCreate = Schemas['TransformerVersionCreate'];
+export type TransformerVersionChange = Schemas['TransformerVersionChange'];
+export type TransformerDraft = Schemas['TransformerDraft'];
+export type GoldensRunRequest = Schemas['GoldensRunRequest'];

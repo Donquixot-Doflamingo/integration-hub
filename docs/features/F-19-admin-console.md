@@ -38,6 +38,7 @@ On-call and integration admins cannot run incidents or cutovers efficiently from
 - [US-1904](../product/USER_STORIES.md) — DLQ console
 - [US-1905](../product/USER_STORIES.md) — Transformer viewer with dry-run and goldens
 - [US-1906](../product/USER_STORIES.md) — Tenants, keys, registrar, change log
+- [US-1907](../product/USER_STORIES.md) — Vendors and vendor endpoints in the console (HUB-290)
 
 ## UX / API surface
 - Typed client generated from `contracts/openapi/hub-admin.v1.yaml` (`npm run gen:api`); no hand-written API types (AGENTS.md §4.6).
@@ -146,6 +147,7 @@ Why not upgrade now: Kit 3 needs TypeScript 6, but `openapi-typescript` 7.13.0 (
 | HUB-289 | Bug bash against a running Hub: `ConfirmDialog conflictIsStale` (409 = state, not a race, for create and delete), `keyName` (key id when the prefix is empty), dev `http://` endpoint URLs not re-checked on edit, attempts and timeline rows keyed by position (replays repeat `attempt_no` and `seq`), `checkLabel` for every contract check name, "Publish draft" label |
 | HUB-288 | Destructive and mutating controls render only for roles that satisfy the operation's `x-required-role`: `scripts/extract-roles.mjs` (part of `gen:api`, CI freshness check) writes `src/lib/api/roles.gen.ts`; `can(access, op)` and `RoleGate op= / ops=` read it. Covered per role and screen in `routes/(app)/destructive-controls.test.ts` (DLQ, health, integration detail, tenants, tenant detail, transformer version). The 403 handling in dialogs stays |
 | HUB-286 | One-command local stack (`scripts/dev-up.sh`, `make dev-up`): Postgres/Redis (compose or env), migrations, seed, mockvendor, hub admin (dev OIDC), gateway, worker, scheduler, console. Console: same-origin `/admin/v1` proxy with the session token (`admin-proxy.ts`), dev sign-in through the admin's dev issuer, SSR serialization of `x-hub-request-id` / `etag` |
+| HUB-290 | Vendors `/vendors` (`listVendors`, search and paging in the URL; admins: "Create vendor"), `/vendors/new` (`createVendor`), `/vendors/{id}` (`getVendor`: regions, defaults, webhook verification, every endpoint version with "Latest" marked), `/vendors/{id}/edit` (`updateVendor` PUT of every mutable field with the loaded ETag as `If-Match`; 412 offers a reload and keeps the edits; an unchanged form is refused) and `/vendors/{id}/endpoints/{ref}` (`getVendorEndpoint`). Endpoint versions are immutable: "Add endpoint" and "New version" (from the latest version, name fixed) both call `createVendorEndpoint`. `vendors/vendor-form.ts` / `endpoint-form.ts` check the bodies in the browser and again in the actions; errors are keyed by JSON pointer so API `VALIDATION_FAILED` details land on their field (`detailsToPointerFields`). Shared `AuthoringForm` (full-page form: mandatory reason, problems summary, error panel, reload prompt) and `fk-*` form styles. The admin proxy now answers `cache-control: no-store` (a vendor's ETag follows its revision, not its endpoints, and SvelteKit answers a matching `If-None-Match` with 304, so the browser showed a stale endpoint list). Admin only for changes (`x-required-role`); tenant viewers get a note and no call |
 | HUB-254 | App shell: sidebar (8 sections), breadcrumbs, `/me` user menu, light/dark/system theme, mock-mode band, drawer below 1024 px; each section loads its list operation with loading/empty/error states |
 
 CCR-004 (2026-11-01, HUB-272): an example of the registrar SSRF refusal (pointer `/url`), example-only; requested.
@@ -193,3 +195,4 @@ Contract gaps found while building (see `frontend/CCR-NOTES.md`): CCR-001 (`X-Hu
 | 2026-11-07 | HUB-288: controls gated by the contract's x-required-role | frontend-engineer |
 | 2026-11-07 | HUB-289: bugs found against a running Hub | frontend-engineer |
 | 2026-11-07 | HUB-287: visual polish against the real stack | frontend-engineer |
+| 2026-11-07 | HUB-290: vendor and endpoint pages, `AuthoringForm`, US-1907 | frontend-engineer |

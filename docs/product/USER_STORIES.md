@@ -517,6 +517,14 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 **As a** platform engineer, **I want** screens for tenants, API keys, registrar endpoints and the change log, **so that** onboarding needs no CLI. · **Should**
 - **Given** I create an API key, **when** it is returned, **then** it is shown once with a copy button and never again.
 
+### US-1907 — Vendors and vendor endpoints in the console
+**As a** platform engineer, **I want** to create and edit vendors and add endpoint versions in the console, **so that** onboarding a vendor needs neither the admin API nor MCP. · **Should**
+- **Given** the admin role, **when** I create a vendor with regions, auth scheme and defaults and a reason, **then** it is created and its page shows the change log id.
+- **Given** a vendor page loaded at revision N, **when** someone else saves first and I save, **then** the console sends the ETag as If-Match, the API answers 412 and I am offered a reload instead of overwriting.
+- **Given** an endpoint `upload@1`, **when** I change it, **then** the console creates `upload@2` (versions are immutable) and `upload@1` stays as it was.
+- **Given** an API validation error, **when** it comes back, **then** it is shown on the field its pointer names.
+- **Given** the editor, viewer or tenant viewer role, **when** I open vendors, **then** no create or edit control is rendered (tenant viewers see no vendors).
+
 ## F-20 Hub MCP server (`hubmcp`)
 
 ### US-2001 — Discover integrations from Claude

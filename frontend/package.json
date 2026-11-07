@@ -18,6 +18,7 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"test:e2e": "playwright test",
+		"test:e2e:real": "playwright test -c playwright.real.config.ts",
 		"gen:api": "openapi-typescript ../contracts/openapi/hub-admin.v1.yaml -o src/lib/api/schema.d.ts --empty-objects-unknown --default-non-nullable=false && node scripts/extract-examples.mjs && node scripts/extract-roles.mjs",
 		"dev:mock": "HUB_API_MOCKING=true vite dev",
 		"build:mock": "HUB_API_MOCKING=true vite build"

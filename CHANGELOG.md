@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(frontend)` · Add vendor and vendor endpoint pages to the console (HUB-290) · HUB-290 · F-19
+  - Admins create and edit vendors (regions, auth scheme, defaults, webhook verification) in the console; edits send the loaded ETag, so a concurrent change offers a reload instead of being overwritten
+  - Endpoint versions are added from the vendor page; "New version" starts from the latest version and creates the next one, older versions stay as they were
+  - API validation errors appear on the field they name; editors, viewers and tenant viewers see no create or edit controls
+  - The console's admin proxy tells the browser not to cache admin answers, which had shown a stale endpoint list after adding an endpoint
 - 2026-11-07 · `docs(tickets)` · File the backend bugs the console bug bash found (HUB-289) · HUB-289 · F-19
   - New todo tickets HUB-417 to HUB-421: account DLQ counts, seeded version times, replayed request timelines, DLQ replay filter, dev registrar URL
 - 2026-11-07 · `docs(tickets)` · Mark the console real-backend tickets in review (HUB-286) · HUB-286 · F-19

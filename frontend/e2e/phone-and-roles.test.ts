@@ -15,6 +15,11 @@ const PAGES = [
 	'/dlq/req_01J9Z3M1A5B7C9D1E3F5G7H9JK',
 	'/transformers',
 	'/transformers/T1',
+	'/vendors',
+	'/vendors/new',
+	'/vendors/clevertap',
+	'/vendors/clevertap/edit',
+	'/vendors/clevertap/endpoints/upload@1',
 	'/tenants',
 	'/tenants/orders-service',
 	'/snapshots',
@@ -59,7 +64,9 @@ const DESTRUCTIVE: { path: string; name: RegExp; min: Role }[] = [
 	{ path: '/integrations/int_evt_brandA', name: /Pause integration/, min: 'editor' },
 	{ path: '/tenants/orders-service', name: /^Delete reg_/, min: 'admin' },
 	{ path: '/tenants/orders-service', name: /^Revoke hk_/, min: 'admin' },
-	{ path: '/tenants/orders-service', name: /^Disable tenant$/, min: 'admin' }
+	{ path: '/tenants/orders-service', name: /^Disable tenant$/, min: 'admin' },
+	{ path: '/vendors/clevertap', name: /^Add endpoint$/, min: 'admin' },
+	{ path: '/vendors/clevertap', name: /^New version of upload/, min: 'admin' }
 ];
 const RANK: Record<Role, number> = { tenant_viewer: 0, viewer: 1, editor: 2, admin: 3 };
 
