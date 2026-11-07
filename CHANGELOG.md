@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(control)` · Prove a pre-ADR-0023 archive, drafts and pending upgrade at boot (HUB-434) · HUB-434 · F-23
+  - A database written before capabilities were removed (format-1 snapshot blob, drafts without operations, a pending integration naming its capability) is upgraded by the admin's first boot, and the upgraded drafts pass publish validation; a second boot changes nothing
+  - Checked by hand as well: a dev database and `.dev-stack` built by the pre-ADR-0023 `dev-up` come up with today's `scripts/dev-up.sh`; the queued request, the open draft and the pending integration all work
+  - HUB-440 filed: the audit partition maintenance race seen in the dev-up logs (before and after this change)
 - 2026-11-07 · `test(roles)` · Make the ADR-0023 integration tests lint-clean (HUB-438) · HUB-438 · F-23
   - The agify and migration tests close every response and pass their context; `make lint` is back to 0 issues
 - 2026-11-07 · `fix(adminapi)` · Create auth none accounts without a credential store (HUB-438) · HUB-438 · F-23

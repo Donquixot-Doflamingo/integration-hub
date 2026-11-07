@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **283** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **10**
+Total tickets: **284** · done: **204** · todo: **70** · other (in-progress/in-review/blocked): **10**
 
 ## Epics
 
@@ -21,7 +21,7 @@ Total tickets: **283** · done: **204** · todo: **69** · other (in-progress/in
 | EP-10 | Admin console (SvelteKit) | parallel to M0–M7 | F-19 | HUB-250–HUB-299 | 44 | 37 |
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
-| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 31 | 8 |
+| EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
 | EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 9 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
@@ -3489,6 +3489,17 @@ Found running `make dev-up` on macOS from a fresh clone: Integrations, Tenants, 
 - [x] `DEV_RESET=1` recreates the compose Postgres and Redis, clears the blobs and starts clean
 - [x] Reproduced here (fresh `.dev-stack/` over a used database: 5 pages fail for all 4 roles); with the fix the run stops with the explanation, and after `DEV_RESET=1` all pages load for all 4 roles (compose path exercised with a stand-in `docker` mapped to local Postgres)
 - [x] README troubleshooting line
+
+### HUB-440 — Audit partition maintenance fails when two roles create the same partition
+- **Epic:** EP-13 · **Type:** fix · **Area:** backend
+- **Status:** todo · **Depends on:** — · **Feature:** F-18 · **Stories:** US-18xx
+- **Branch:** `fix/HUB-440-audit-partition-race`
+
+Found running `scripts/dev-up.sh` for HUB-433 (seen with the code before and after ADR-0023): the worker logs `ERROR audit partition maintenance failed ... relation "request_events_p20261106" already exists (SQLSTATE 42P07)` on boot. `audit.PGStore.EnsurePartitions` runs `CREATE TABLE IF NOT EXISTS ... PARTITION OF` from every role at once; Postgres can still raise 42P07 (or a unique violation on `pg_type`) when two sessions create the same table concurrently. The partitions end up created, but the error is noisy and a failing pass may skip later days.
+
+**Acceptance criteria**
+- [ ] Concurrent `EnsurePartitions` calls never fail for a partition another session created (serialise with an advisory lock, or treat 42P07/23505 on the partition as success and go on with the next day)
+- [ ] Integration test running it from several goroutines at once
 
 ## EP-14 — Remove capabilities: schema registry on the integration and the endpoint (ADR-0023)
 
