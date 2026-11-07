@@ -162,3 +162,94 @@ already were in the contract.
 - **Error codes**: none new
 - **Rollout**: contract PR first; the console needs no code change, only the mock preset swaps to the example
 - **Status**: requested (2026-11-01)
+
+### CCR-005: credential keys a vendor's accounts need
+- **Requested by**: frontend-engineer (ticket HUB-291)
+- **Why**: HUB-291 (F-19, US-1908) lets admins create accounts and rotate credentials in the console. The
+  contract's `Credentials` is "scheme-specific keys" (`additionalProperties: string`), and nothing says which
+  keys a vendor's transformers read (`creds.account_id`, `creds.passcode` for CleverTap). The console therefore
+  asks the operator to type each key name; a typo is only found when a call fails with UPSTREAM_AUTH_FAILED
+  (the connection test catches it earlier, not at create time). Nothing is blocked: free-form keys work today.
+- **Document**: `hub-admin.v1.yaml`
+- **Operation / schema**: `VendorFields` (so `createVendor`, `updateVendor`, `getVendor`)
+- **Before**:
+  ```yaml
+  VendorFields:
+    properties:
+      auth_scheme: { $ref: '#/components/schemas/AuthScheme' }
+      # no list of credential keys
+  ```
+- **After** (proposal):
+  ```yaml
+  VendorFields:
+    properties:
+      credential_keys:
+        description: Keys every account of this vendor must provide in `credentials` (what transformers read as `creds.<key>`). createAccount and addNextCredential answer 400 VALIDATION_FAILED (pointer `/credentials/<key>`) when one is missing.
+        type: array
+        items: { type: string, pattern: '^[A-Za-z_][A-Za-z0-9_]{0,63}$' }
+        example: [account_id, passcode]
+  ```
+- **Breaking?**: no (additive optional property; the 400 applies only when the vendor declares keys) -> minor bump
+- **Consumers affected**: backend vendor store and account validation, frontend accounts create / rotate (prefill
+  the key rows, mark missing ones), vendor form, hubmcp (none: credentials are not exposed there)
+- **Error codes**: none new
+- **Rollout**: contract PR first
+- **Status**: requested (2026-11-07)
+
+### CCR-006: declare `DeliveryPolicy.polling`
+- **Requested by**: frontend-engineer (ticket HUB-292)
+- **Why**: the publish check `delivery_path_declared` refuses `wait`, `async` and `async_callback` integrations
+  without "polling: true or a webhook subscription" (DESIGN §5, the Hub's message), and the dev seed's
+  `int_evt_brandA` carries `delivery.polling: true`. `DeliveryPolicy` in hub-admin has no `polling`, so the
+  console's form editor cannot offer it (contract fields only): an operator on the form gets the check failure
+  at `/delivery` and has to add `polling: true` in the YAML tab, which works only because the schema does not
+  forbid unknown properties. The backend contract tests do not cover the field either.
+- **Document**: `hub-admin.v1.yaml`
+- **Operation / schema**: `DeliveryPolicy` (all integration version operations)
+- **Before**:
+  ```yaml
+  DeliveryPolicy:
+    properties:
+      mode: ...
+      wait_ms: ...
+      # no polling
+  ```
+- **After** (proposal):
+  ```yaml
+      polling:
+        description: The caller fetches results by polling (`GET /v1/requests/{id}`). One of `polling` or a webhook subscription is required for `wait`, `async` and `async_callback` (publish check `delivery_path_declared`).
+        type: boolean
+        default: false
+  ```
+- **Breaking?**: no (additive optional property) -> minor bump
+- **Consumers affected**: backend contract tests, frontend form editor (a "Callers poll for results" checkbox in
+  Delivery), hubmcp (none)
+- **Error codes**: none new
+- **Rollout**: contract PR first
+- **Status**: requested (2026-11-07)
+
+### CCR-007: expected vendor session in golden fixtures
+- **Requested by**: frontend-engineer (tickets HUB-292, HUB-293)
+- **Why**: a response transformer that opens a vendor session (the Aadhaar `send_otp` response keeps the
+  provider's `ref_id` in `session:`) is checked by goldens that expect the session too: the config tree stores
+  `{"response": ..., "session": {...}}` in `<name>.expected_response.json`. `GoldenFixture` has no field for the
+  session, so through `createTransformerVersion` (console or MCP) such a fixture always fails ("golden mismatch:
+  /session: unexpected") and the transformer can only be created with its session fixtures removed. The example
+  `examples/aadhaar-okyc` (`CF-OKYC-OTP-RES`, fixtures `otp_sent`, `otp_sent_string_ref`) hits it; the
+  real-stack e2e drops those two fixtures for that reason.
+- **Document**: `hub-admin.v1.yaml`
+- **Operation / schema**: `GoldenFixture` (`createTransformerVersion`, `getTransformerVersion`, `runTransformerGoldens`)
+- **After** (proposal):
+  ```yaml
+  GoldenFixture:
+    properties:
+      expected_session:
+        description: Response transformers that open or update a vendor session (DESIGN §14) - the session values the transformer must produce. Compared like expected_response.
+        type: object
+  ```
+- **Breaking?**: no (additive optional property) -> minor bump
+- **Consumers affected**: backend fixture files mapping (`fixtureFiles` / `readFixtures`), frontend fixture editor
+  (one more JSON field for response fixtures), hubmcp (none)
+- **Error codes**: none new
+- **Rollout**: contract PR first
+- **Status**: requested (2026-11-07)

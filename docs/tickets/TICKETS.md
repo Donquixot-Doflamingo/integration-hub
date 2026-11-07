@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **262** · done: **177** · todo: **60** · other (in-progress/in-review/blocked): **25**
+Total tickets: **262** · done: **177** · todo: **56** · other (in-progress/in-review/blocked): **29**
 
 ## Epics
 
@@ -2534,51 +2534,51 @@ Bugs found running the console against a real Hub, each fixed with a test. Backe
 
 ### HUB-290 — Console: vendors and vendor endpoints pages
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-19xx
-- **Branch:** `feat/HUB-290-console-vendors`
+- **Status:** in-review · **Depends on:** HUB-286 · **Feature:** F-19 · **Stories:** US-1907
+- **Branch:** `feat/HUB-290-console-vendors` (delivered on `feat/HUB-290-console-authoring` with HUB-291, HUB-292, HUB-293)
 
 Found writing the operator skill (HUB-316): the console has no vendor pages, so onboarding a vendor ('client') needs the admin API or MCP. Add list, detail, create and update for vendors (`listVendors`, `getVendor`, `createVendor`, `updateVendor`) and endpoints (`listVendorEndpoints`, `getVendorEndpoint`, `createVendorEndpoint`; endpoint versions are immutable).
 
 **Acceptance criteria**
-- [ ] List, detail, create and edit pages through the generated client, with ETag/If-Match on edits
-- [ ] Validation errors from the API shown on the field
-- [ ] Role gating per `x-required-role`; component and e2e tests
+- [x] List, detail, create and edit pages through the generated client, with ETag/If-Match on edits (`vendors/page.test.ts` "sends the whole definition with the loaded ETag as If-Match", "412: someone else changed it"; `e2e-real/vendors.test.ts` create, endpoint versions, stale tab)
+- [x] Validation errors from the API shown on the field (`vendors/page.test.ts` "puts an API validation error on its field"; `actions.test.ts` pointer mapping; e2e 409 on a taken id)
+- [x] Role gating per `x-required-role`; component and e2e tests (`vendors/page.test.ts` roles block, `e2e/phone-and-roles.test.ts`, `e2e-real/vendors.test.ts` editor / viewer / tenant viewer)
 
 ### HUB-291 — Console: accounts page with write-only credentials and rotation
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
-- **Branch:** `feat/HUB-291-console-accounts`
+- **Status:** in-review · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1908
+- **Branch:** `feat/HUB-291-console-accounts` (delivered on `feat/HUB-290-console-authoring`)
 
 Accounts (a vendor's credentials and quota) can only be created by calling the admin API today, yet the MCP contract and the operator skill send people to the console for anything with secrets. Add list, detail, create (`createAccount`), config and quota edit (`updateAccount`), test connection, and credential rotation (`addNextCredential`, `promoteNextCredential`; `deleteOldCredential` only for roles that have it). Secrets are write-only: never shown after submit.
 
 **Acceptance criteria**
-- [ ] Create an account with credentials from the console; values never rendered again or kept in client state after submit
-- [ ] Rotation flow add next → test → promote; delete-old hidden without the role
-- [ ] Lifecycle actions (retire) role-gated; tests per role
+- [x] Create an account with credentials from the console; values never rendered again or kept in client state after submit (`accounts/page.test.ts` "posts the credentials once, clears them right away", "on an API error the secret is gone"; `server/actions.test.ts` scrubSecrets; `e2e-real/accounts.test.ts` DOM/inputs/storage/URL/history/request URLs)
+- [x] Rotation flow add next → test → promote; delete-old hidden without the role (`accounts/page.test.ts` "rotates: add next ... delete old" and the roles matrix; `e2e-real/accounts.test.ts` rotation and editor checks)
+- [x] Lifecycle actions (retire) role-gated; tests per role (`accounts/page.test.ts` roles matrix admin / editor / viewer / tenant viewer, RETIRE_BLOCKED; `e2e/phone-and-roles.test.ts`; `e2e-real/accounts.test.ts` drain and retire, in-use refusal, roles)
 
 ### HUB-292 — Console: create an integration, edit drafts, validate and publish
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
-- **Branch:** `feat/HUB-292-console-integration-authoring`
+- **Status:** in-review · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1909
+- **Branch:** `feat/HUB-292-console-integration-authoring` (delivered on `feat/HUB-290-console-authoring`)
 
 The console shows integrations and versions but cannot create one or edit a draft. Add create integration, a draft editor (targets, per-operation transformers, delivery, weights), validate with the report shown inline, a diff against the active version, and publish/rollback with a reason.
 
 **Acceptance criteria**
-- [ ] Create integration and draft, edit, validate (errors inline), diff, publish with reason
-- [ ] Per-operation targets (`TargetRef.operations`) editable
-- [ ] e2e against the real stack (`scripts/dev-up.sh`)
+- [x] Create integration and draft, edit, validate (errors inline), diff, publish with reason (`integrations/new/page.test.ts`; `publish/form-editor.test.ts` "shows the validation report at the field its pointer names", weights; `e2e-real/integrations.test.ts` create, inline `/delivery` check, publish, diff, rollback)
+- [x] Per-operation targets (`TargetRef.operations`) editable (`publish/spec-form.test.ts` Aadhaar round trip, `form-editor.test.ts` int_aadhaar_okyc; `e2e-real/aadhaar.test.ts` verify_otp on its own pair, wrong pair caught by `operations_have_transformers` on that field)
+- [x] e2e against the real stack (`scripts/dev-up.sh`) (`e2e-real/integrations.test.ts` 5, `e2e-real/aadhaar.test.ts` 1; `npm run test:e2e:real`)
 
 ### HUB-293 — Console: create transformer versions and run goldens
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
-- **Branch:** `feat/HUB-293-console-transformer-authoring`
+- **Status:** in-review · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1910
+- **Branch:** `feat/HUB-293-console-transformer-authoring` (delivered on `feat/HUB-290-console-authoring`)
 
 Transformer pages are read-only. Add create transformer version (YAML editor plus golden fixtures), run goldens with diffs, and dry-run, using `createTransformerVersion`, `runTransformerGoldens` and `dryRunTransformer`.
 
 **Acceptance criteria**
-- [ ] Create a version from the console; publish blocked while goldens fail (as the API enforces)
-- [ ] Golden diffs rendered per case; dry-run output masked
-- [ ] Tests
+- [x] Create a version from the console; publish blocked while goldens fail (as the API enforces) (`transformers/authoring-page.test.ts` "create stays locked until goldens of this draft pass", 422 in the dialog; `e2e-real/transformers.test.ts` T1 next version and a new id)
+- [x] Golden diffs rendered per case; dry-run output masked (`authoring-page.test.ts` failing case diff, dry run `***`; e2e-real failing fixture `/1/wrong` and `X-CleverTap-Passcode` `***`)
+- [x] Tests (`transformers/authoring.test.ts`, `authoring-page.test.ts` incl. viewer / tenant viewer, `e2e/authoring.test.ts` axe light and dark, `e2e-real/transformers.test.ts`)
 
 ## EP-11 — MCP server + consumer skill + SDK
 

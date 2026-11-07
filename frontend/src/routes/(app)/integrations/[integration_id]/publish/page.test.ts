@@ -22,13 +22,16 @@ const integration = contractMocks.getIntegration.example;
 beforeEach(() => useActions(actions, { params: { integration_id: ID } }));
 
 async function renderPublish(access: Access = accessFromRoles(['editor'])) {
-	const data = load({
+	const data = (await load({
 		fetch,
 		url: new URL(`http://console.test/integrations/${ID}/publish`),
-		params: { integration_id: ID }
-	} as never) as object;
+		params: { integration_id: ID },
+		parent: async () => ({ access })
+	} as never)) as object;
 	render(Page, { props: { data: { access, ...data } as never } });
 	const user = userEvent.setup();
+	// These tests drive the YAML editor (the form editor has its own tests, HUB-292).
+	await user.click(await screen.findByRole('button', { name: 'YAML' }));
 	const editor = await screen.findByLabelText(/^Spec/);
 	return { user, editor: editor as HTMLTextAreaElement };
 }
@@ -244,11 +247,12 @@ describe('publish page', () => {
 	});
 
 	it('is read only for viewers', async () => {
-		const data = load({
+		const data = (await load({
 			fetch,
 			url: new URL(`http://console.test/integrations/${ID}/publish`),
-			params: { integration_id: ID }
-		} as never) as object;
+			params: { integration_id: ID },
+			parent: async () => ({ access: accessFromRoles(['viewer']) })
+		} as never)) as object;
 		render(Page, { props: { data: { access: accessFromRoles(['viewer']), ...data } as never } });
 		expect(
 			screen.getByText(/Read only\. Editing and publishing versions needs the Editor role/)

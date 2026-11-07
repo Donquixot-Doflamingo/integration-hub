@@ -10,6 +10,10 @@ export const icons = {
 	dlq: 'M3 12l2-7h10l2 7v4H3zM3 12h4l1 2h4l1-2h4M8 8h4',
 	// bracket -> bracket transform
 	transformers: 'M7 4L3 10l4 6M13 4l4 6-4 6M11 6l-2 8',
+	// plug: a vendor API the Hub connects to
+	vendors: 'M7 3v4M13 3v4M5 7h10v3a5 5 0 0 1-10 0zM10 15v3',
+	// key: a credentialed account
+	accounts: 'M7.5 12.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM10.5 9H17M14 9v3M16.5 9v2',
 	// two people
 	tenants:
 		'M7 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM2.5 16c.5-3 2.3-4.5 4.5-4.5s4 1.5 4.5 4.5M13.5 8.5a2 2 0 1 0 0-4M14 11.5c1.8.3 3 1.7 3.5 4.5',

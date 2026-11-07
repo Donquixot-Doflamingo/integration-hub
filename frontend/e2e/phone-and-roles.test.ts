@@ -8,6 +8,8 @@ import { expectNoSeriousA11yViolations, signIn, type Role } from './helpers';
 const PAGES = [
 	'/integrations',
 	'/integrations/int_evt_brandA',
+	'/integrations/new',
+	'/integrations/int_evt_brandA/publish',
 	'/health',
 	'/requests',
 	'/requests/req_01J9Z3K8X2V7Q4M6N8P0R2S4T6',
@@ -15,6 +17,16 @@ const PAGES = [
 	'/dlq/req_01J9Z3M1A5B7C9D1E3F5G7H9JK',
 	'/transformers',
 	'/transformers/T1',
+	'/transformers/new',
+	'/transformers/T1/new-version',
+	'/vendors',
+	'/vendors/new',
+	'/vendors/clevertap',
+	'/vendors/clevertap/edit',
+	'/vendors/clevertap/endpoints/upload@1',
+	'/accounts',
+	'/accounts/new',
+	'/accounts/ct-brandA-in',
 	'/tenants',
 	'/tenants/orders-service',
 	'/snapshots',
@@ -59,7 +71,12 @@ const DESTRUCTIVE: { path: string; name: RegExp; min: Role }[] = [
 	{ path: '/integrations/int_evt_brandA', name: /Pause integration/, min: 'editor' },
 	{ path: '/tenants/orders-service', name: /^Delete reg_/, min: 'admin' },
 	{ path: '/tenants/orders-service', name: /^Revoke hk_/, min: 'admin' },
-	{ path: '/tenants/orders-service', name: /^Disable tenant$/, min: 'admin' }
+	{ path: '/tenants/orders-service', name: /^Disable tenant$/, min: 'admin' },
+	{ path: '/vendors/clevertap', name: /^Add endpoint$/, min: 'admin' },
+	{ path: '/vendors/clevertap', name: /^New version of upload/, min: 'admin' },
+	{ path: '/accounts/ct-brandA-in', name: /^Add next credential$/, min: 'admin' },
+	{ path: '/accounts/ct-brandA-in', name: /^Start draining$/, min: 'admin' },
+	{ path: '/accounts/ct-brandA-in', name: /^Test connection$/, min: 'editor' }
 ];
 const RANK: Record<Role, number> = { tenant_viewer: 0, viewer: 1, editor: 2, admin: 3 };
 

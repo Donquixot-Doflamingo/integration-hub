@@ -50,8 +50,17 @@
 					{#each spec.targets as t, i (i)}
 						<tr>
 							<th scope="row"><code>{t.vendor_id}/{t.account_id}</code></th>
-							<td><code>{t.transformer.request}</code></td>
-							<td><code>{t.transformer.response}</code></td>
+							{#each ['request', 'response'] as const as kind (kind)}
+								<td>
+									<code>{t.transformer[kind]}</code>
+									<!-- Per-operation pairs (TargetRef.operations, hub-admin 1.2.0, HUB-292). -->
+									{#each Object.entries(t.operations ?? {}) as [op, pair] (op)}
+										<div class="op">
+											<span class="muted">{op}:</span> <code>{pair[kind]}</code>
+										</div>
+									{/each}
+								</td>
+							{/each}
 							<td class="numeric">{t.weight}%</td>
 							<td
 								>{#if t.params}<code>{json(t.params)}</code>{:else}<span class="muted">None</span
@@ -211,6 +220,9 @@
 </div>
 
 <style>
+	.op {
+		font-size: var(--text-xs);
+	}
 	.spec {
 		display: grid;
 		gap: var(--space-5);

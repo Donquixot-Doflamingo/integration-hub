@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import type { Pathname } from '$app/types';
 	import { breadcrumbsFor } from '$lib/nav';
 	import Icon from './Icon.svelte';
 
@@ -8,7 +7,9 @@
 
 	const crumbs = $derived(breadcrumbsFor(pathname));
 	// Deeper crumbs are sub-paths of the current URL, so they are real pathnames of this app.
-	const href = (p: string) => resolve(p as Pathname);
+	// Typed as one static route: `resolve` only prefixes the base path for a plain pathname, and
+	// TypeScript cannot check a call against the union of every route (more than 25 members).
+	const href = (p: string) => resolve(p as '/');
 </script>
 
 <nav class="crumbs" aria-label="Breadcrumb">

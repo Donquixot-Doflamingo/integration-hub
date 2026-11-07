@@ -4,6 +4,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import ListView from '$lib/components/ListView.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import RoleGate from '$lib/components/RoleGate.svelte';
 	import Pager from '$lib/components/Pager.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { sectionFor } from '$lib/nav';
@@ -49,6 +50,12 @@
 </script>
 
 <PageHeader title={section.label} summary={section.summary} />
+
+<RoleGate access={data.access} op="createIntegration">
+	<p class="create">
+		<a class="btn btn-primary" href={resolve('/(app)/integrations/new')}>Create integration</a>
+	</p>
+</RoleGate>
 
 <form class="filters" method="GET" action={base} {onsubmit} aria-label="Filter integrations">
 	<div class="field grow">
@@ -244,6 +251,9 @@
 </ListView>
 
 <style>
+	.create {
+		margin: 0 0 var(--space-3);
+	}
 	.filters {
 		display: flex;
 		flex-wrap: wrap;

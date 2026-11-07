@@ -173,8 +173,12 @@ describe('every console page uses the shared states', () => {
 		import: 'default',
 		eager: true
 	}) as Record<string, string>;
-	// The home page is a static index of sections; it loads nothing.
-	const STATIC = new Set(['/src/routes/(app)/+page.svelte']);
+	// The home page is a static index of sections, and create pages are forms: they load nothing.
+	const STATIC = new Set([
+		'/src/routes/(app)/+page.svelte',
+		'/src/routes/(app)/vendors/new/+page.svelte',
+		'/src/routes/(app)/accounts/new/+page.svelte'
+	]);
 
 	it('finds the pages', () => {
 		expect(Object.keys(pages).length).toBeGreaterThanOrEqual(9);

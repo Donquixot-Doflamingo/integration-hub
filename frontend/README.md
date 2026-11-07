@@ -24,6 +24,7 @@ npm ci
 | `npm run build:mock` | Production build with mocks on (used by `test:e2e`) |
 | `npm test` | Vitest unit and component tests (jsdom, Testing Library) |
 | `npm run test:e2e` | Playwright e2e in `e2e/` against `build:mock` + preview (needs `npx playwright install chromium` once) |
+| `npm run test:e2e:real` | Playwright e2e in `e2e-real/` against a running stack (`scripts/dev-up.sh`; set `HUB_E2E_BASE_URL` to its console URL, default `http://localhost:5173`). Each run creates its own vendors, accounts, transformers and integrations with a unique suffix. `HUB_E2E_SHOTS=<dir>` also saves desktop and 390 px screenshots of every authoring page |
 
 ## API access
 All `/admin/v1` calls go through `adminClient()` in `src/lib/api/client.ts` (openapi-fetch + generated `paths`):

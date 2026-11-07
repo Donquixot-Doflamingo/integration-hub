@@ -6,6 +6,27 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `ci(frontend)` · Give the console e2e job 15 minutes for the authoring flows (HUB-290) · HUB-290 · F-19
+  - The Playwright e2e job no longer hits its 8 minute limit now that the vendor, account, integration and transformer authoring flows are covered (109 tests on one worker)
+- 2026-11-07 · `test(frontend)` · Cover the vendor and account sections in the shell e2e (HUB-291) · HUB-291 · F-19
+  - The shell e2e walks the Vendors and Accounts sections and their keyboard order in the sidebar
+- 2026-11-07 · `feat(frontend)` · Create transformer versions with goldens and dry run (HUB-293) · HUB-293 · F-19
+  - Editors create a new transformer or the next version of one in the console from its YAML and golden fixtures; a new version starts from the latest one
+  - "Run goldens on this draft" shows each fixture with its diff, and Create stays locked until the goldens of exactly that draft pass, as the Hub requires
+  - "Dry run this draft" shows the vendor request or canonical response with credentials masked
+- 2026-11-07 · `feat(frontend)` · Create integrations and edit drafts in a form editor (HUB-292) · HUB-292 · F-19
+  - Editors create an integration in the console and land on its first draft
+  - Drafts open in a form beside the YAML editor: targets with vendor, account, weight and transformers, a transformer pair per operation for multi-operation capabilities (for example Aadhaar send_otp and verify_otp), delivery and audit; the weights total is shown live
+  - Publish check failures appear on the field they concern; the integration page lists per-operation transformers
+- 2026-11-07 · `feat(frontend)` · Add account pages with write-only credentials and rotation (HUB-291) · HUB-291 · F-19
+  - Admins create vendor accounts with their credentials in the console; secret values are typed in password fields, cleared from the page as soon as the form is sent and never shown again
+  - Credential rotation is a guided flow: add the next credential, test it, promote it, then delete the previous one (admins only); editors can test an account's connection
+  - Admins edit an account's config and quota (only the changes are sent, with the loaded ETag) and drain, reactivate or retire it with the account id typed; refusals show the Hub's reason
+- 2026-11-07 · `feat(frontend)` · Add vendor and vendor endpoint pages to the console (HUB-290) · HUB-290 · F-19
+  - Admins create and edit vendors (regions, auth scheme, defaults, webhook verification) in the console; edits send the loaded ETag, so a concurrent change offers a reload instead of being overwritten
+  - Endpoint versions are added from the vendor page; "New version" starts from the latest version and creates the next one, older versions stay as they were
+  - API validation errors appear on the field they name; editors, viewers and tenant viewers see no create or edit controls
+  - The console's admin proxy tells the browser not to cache admin answers, which had shown a stale endpoint list after adding an endpoint
 - 2026-11-07 · `docs(tickets)` · File the backend bugs the console bug bash found (HUB-289) · HUB-289 · F-19
   - New todo tickets HUB-417 to HUB-421: account DLQ counts, seeded version times, replayed request timelines, DLQ replay filter, dev registrar URL
 - 2026-11-07 · `docs(tickets)` · Mark the console real-backend tickets in review (HUB-286) · HUB-286 · F-19

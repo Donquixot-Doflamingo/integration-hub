@@ -158,6 +158,16 @@ describe('forwardToAdmin', () => {
 		expect(res.headers.get('server')).toBeNull();
 	});
 
+	it('tells the browser not to keep admin answers (no stale copy behind an unchanged ETag)', async () => {
+		const res = await forwardToAdmin(event('/admin/v1/vendors/acme'), UPSTREAM, upstreamOk());
+		expect(res.headers.get('cache-control')).toBe('no-store');
+		const cached = vi.fn<typeof fetch>(async () =>
+			Response.json({}, { headers: { 'cache-control': 'max-age=5' } })
+		);
+		const kept = await forwardToAdmin(event('/admin/v1/snapshots/latest'), UPSTREAM, cached);
+		expect(kept.headers.get('cache-control')).toBe('max-age=5');
+	});
+
 	it('keeps the API status and body (errors pass through unchanged)', async () => {
 		const envelope = { error: { code: 'FORBIDDEN', message: 'needs admin' } };
 		const f = vi.fn<typeof fetch>(async () => Response.json(envelope, { status: 403 }));

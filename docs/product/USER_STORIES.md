@@ -516,11 +516,41 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 
 ### US-1905 — Transformer viewer with dry-run and goldens
 **As a** platform engineer, **I want** to view a transformer version, run its goldens and dry-run a body, **so that** I can debug mappings in the browser. · **Should**
-- **Given** T1@7, **when** I run goldens, **then** pass/fail per fixture with diffs is shown; editing is not offered (Release 2).
+- **Given** T1@7, **when** I run goldens, **then** pass/fail per fixture with diffs is shown. Creating versions is US-1910 (pulled forward from Release 2 by HUB-293).
 
 ### US-1906 — Tenants, keys, registrar, change log
 **As a** platform engineer, **I want** screens for tenants, API keys, registrar endpoints and the change log, **so that** onboarding needs no CLI. · **Should**
 - **Given** I create an API key, **when** it is returned, **then** it is shown once with a copy button and never again.
+
+### US-1907 — Vendors and vendor endpoints in the console
+**As a** platform engineer, **I want** to create and edit vendors and add endpoint versions in the console, **so that** onboarding a vendor needs neither the admin API nor MCP. · **Should**
+- **Given** the admin role, **when** I create a vendor with regions, auth scheme and defaults and a reason, **then** it is created and its page shows the change log id.
+- **Given** a vendor page loaded at revision N, **when** someone else saves first and I save, **then** the console sends the ETag as If-Match, the API answers 412 and I am offered a reload instead of overwriting.
+- **Given** an endpoint `upload@1`, **when** I change it, **then** the console creates `upload@2` (versions are immutable) and `upload@1` stays as it was.
+- **Given** an API validation error, **when** it comes back, **then** it is shown on the field its pointer names.
+- **Given** the editor, viewer or tenant viewer role, **when** I open vendors, **then** no create or edit control is rendered (tenant viewers see no vendors).
+
+### US-1908 — Accounts with write-only credentials and rotation in the console
+**As a** platform engineer, **I want** to create vendor accounts with their credentials and rotate them in the console, **so that** secrets never need the admin API, a script or MCP (which may not touch them). · **Must**
+- **Given** the admin role, **when** I create an account with credentials, **then** the values are typed in password fields, sent once, cleared from the page as soon as I submit and never shown again (not in the page, a URL, storage, logs or an error message).
+- **Given** an account, **when** I rotate, **then** the console walks me through add next → test → promote, and offers "delete the previous credential" only to roles that may call `deleteOldCredential`.
+- **Given** a draining account, **when** I retire it, **then** I type its id and give a reason; a `RETIRE_BLOCKED` refusal shows the Hub's reason.
+- **Given** the editor role, **when** I open an account, **then** I can test its connection but see no rotation, edit or lifecycle control; viewers only read; tenant viewers see no accounts.
+
+### US-1909 — Create an integration and edit its draft in a form
+**As an** integration admin, **I want** to create an integration and build its draft in a form (targets, per-operation transformers, delivery, weights), **so that** I do not hand-write YAML for routine changes. · **Must**
+- **Given** the editor role, **when** I create an integration with a reason, **then** its first draft opens and shows the change log id.
+- **Given** a multi-operation capability such as the Aadhaar example (`send_otp`, `verify_otp`), **when** I edit a target, **then** I can keep an operation on the default transformer pair or give it its own (`TargetRef.operations`).
+- **Given** a saved draft, **when** a publish check fails with a JSON pointer, **then** the message shows on the field the pointer names (or in a summary for parts only the YAML tab edits).
+- **Given** the targets, **when** I change a weight, **then** the total is shown live and a draft whose weights do not total 100 is not saved.
+- **Given** a valid draft, **when** I publish, **then** I see the diff against the active version and confirm with a reason; rollback stays one dialog with a reason.
+
+### US-1910 — Create transformer versions in the console
+**As a** platform engineer, **I want** to write a transformer version (YAML plus golden fixtures), run its goldens and dry-run it before creating it, **so that** mapping changes need neither a repository change nor the admin API. · **Should**
+- **Given** a transformer, **when** I start a new version, **then** the form starts from the latest version's source and fixtures.
+- **Given** a draft, **when** I run the goldens, **then** each fixture shows pass or fail with its diff, and "Create" stays locked until a run of this exact draft passed (the Hub refuses failing goldens with 422 anyway).
+- **Given** a draft, **when** I dry-run it with an account, **then** I see the vendor request or canonical response with credentials masked as the API returns them.
+- **Given** the viewer or tenant viewer role, **when** I open transformers, **then** no authoring control is rendered.
 
 ## F-20 Hub MCP server (`hubmcp`)
 

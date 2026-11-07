@@ -96,6 +96,11 @@ export async function forwardToAdmin(
 		const v = res.headers.get(name);
 		if (v !== null) out.set(name, v);
 	}
+	// Admin answers are per user and change under the browser (an endpoint added to a vendor keeps
+	// the vendor's ETag, which follows its revision): never let the browser keep one and revalidate
+	// it. SvelteKit answers a matching If-None-Match with 304 by itself, so a cached copy would
+	// otherwise come back stale (HUB-290).
+	if (!out.has('cache-control')) out.set('cache-control', 'no-store');
 	return new Response(res.body, { status: res.status, statusText: res.statusText, headers: out });
 }
 

@@ -39,6 +39,7 @@
 		extra,
 		oneTimeSecret = false,
 		conflictIsStale = true,
+		onsubmitted,
 		onsuccess,
 		onfailure
 	}: {
@@ -77,7 +78,16 @@
 		 * shows the API's message instead (HUB-289). 412 `PRECONDITION_FAILED` is always a race.
 		 */
 		conflictIsStale?: boolean;
-		onsuccess?: (data: ActionSuccessData) => void;
+		/**
+		 * Runs right after the browser captured the form data, before the request goes out (a valid
+		 * submit only): secret inputs are cleared here (HUB-291), whatever the outcome.
+		 */
+		onsubmitted?: () => void;
+		/**
+		 * Gets the action's data. Returning a promise (e.g. a `goto` to the created object) means the
+		 * caller navigates: the dialog then waits for it and does not reload the current page.
+		 */
+		onsuccess?: (data: ActionSuccessData) => void | Promise<void>;
 		/** The action's failure data, e.g. to mark publish problems on the spec editor. */
 		onfailure?: (data: ActionFailureData) => void;
 	} = $props();
@@ -163,13 +173,16 @@
 		submitting = true;
 		error = null;
 		fieldErrors = {};
+		onsubmitted?.();
 		return async ({ result, update }) => {
 			try {
 				if (result.type === 'success') {
 					open = false;
-					onsuccess?.(result.data as ActionSuccessData);
-					// Reload the page data so the new state (active version, pause) shows.
-					if (oneTimeSecret) await invalidateAll();
+					const navigating = onsuccess?.(result.data as ActionSuccessData);
+					// Reload the page data so the new state (active version, pause) shows, unless the
+					// caller is moving to another page (reloading would cancel that navigation).
+					if (navigating) await navigating;
+					else if (oneTimeSecret) await invalidateAll();
 					else await update({ reset: false });
 				} else if (result.type === 'failure') {
 					const data = result.data as ActionFailureData | undefined;

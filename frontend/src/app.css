@@ -197,3 +197,190 @@ code,
 	font-style: italic;
 	opacity: 1;
 }
+
+/*
+ * Authoring forms (vendors, accounts, integrations, transformers; HUB-290+). One set of global
+ * classes so every create/edit page has the same field rhythm: label above input, hint under it,
+ * the error last and tied to the input with aria-describedby. Prefixed `fk-` so they never clash
+ * with the scoped `.field` classes of older screens.
+ */
+.fk-form {
+	display: grid;
+	gap: var(--space-5);
+	max-width: 60rem;
+}
+.fk-group {
+	display: grid;
+	gap: var(--space-3);
+	margin: 0;
+	padding: var(--space-4);
+	border: 1px solid var(--rule);
+	border-radius: var(--radius-md);
+	background: var(--surface);
+	min-width: 0;
+}
+.fk-group > legend,
+.fk-group > h2,
+.fk-group > h3 {
+	padding: 0 var(--space-1);
+	font-size: var(--text-md);
+	font-weight: 700;
+}
+.fk-group > h2,
+.fk-group > h3 {
+	padding: 0;
+	margin: 0;
+}
+.fk-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+	gap: var(--space-3) var(--space-4);
+	align-items: start;
+}
+.fk-field {
+	display: grid;
+	gap: 0.25rem;
+	min-width: 0;
+	align-content: start;
+}
+.fk-field.wide {
+	grid-column: 1 / -1;
+}
+.fk-field > label,
+.fk-label {
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+.fk-req {
+	color: var(--ink-muted);
+	font-weight: 400;
+}
+.fk-field input:not([type='checkbox']):not([type='radio']),
+.fk-field select,
+.fk-field textarea,
+.fk-input {
+	min-height: 2.125rem;
+	width: 100%;
+	padding: 0.3rem 0.55rem;
+	border: 1px solid var(--rule-strong);
+	border-radius: var(--radius-sm);
+	background: var(--surface);
+	color: var(--ink);
+	font: inherit;
+	font-size: var(--text-sm);
+}
+.fk-field textarea,
+textarea.fk-input {
+	line-height: 1.5;
+	resize: vertical;
+}
+/* Code, JSON and lists of addresses: monospace, no wrapping surprises. */
+.fk-field textarea.fk-mono,
+textarea.fk-input.fk-mono {
+	font-family: var(--font-id);
+	tab-size: 2;
+}
+.fk-check {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	font-size: var(--text-sm);
+}
+.fk-check input {
+	width: 1rem;
+	height: 1rem;
+	accent-color: var(--signal);
+}
+[aria-invalid='true'].fk-input,
+.fk-field [aria-invalid='true'] {
+	border-color: var(--status-danger);
+}
+.fk-hint {
+	margin: 0;
+	color: var(--ink-muted);
+	font-size: var(--text-xs);
+}
+.fk-error {
+	display: flex;
+	align-items: center;
+	white-space: pre-line;
+	gap: 0.3rem;
+	margin: 0;
+	color: var(--status-danger);
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+.fk-summary {
+	padding: var(--space-3);
+	border: 1px solid var(--status-danger);
+	border-left-width: 4px;
+	border-radius: var(--radius-md);
+	background: var(--status-danger-wash);
+	font-size: var(--text-sm);
+}
+.fk-summary p {
+	margin: 0 0 var(--space-1);
+	font-weight: 700;
+}
+.fk-summary ul {
+	margin: 0;
+	padding-left: var(--space-4);
+}
+.fk-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2);
+}
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
+	min-height: 2.125rem;
+	padding: 0 0.9rem;
+	border: 1px solid var(--rule-strong);
+	border-radius: var(--radius-sm);
+	background: var(--surface);
+	color: var(--ink);
+	font: inherit;
+	font-size: var(--text-sm);
+	font-weight: 700;
+	text-decoration: none;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.btn-primary {
+	border-color: var(--signal);
+	background: var(--signal);
+	color: var(--surface);
+}
+.btn-danger {
+	border-color: var(--status-danger);
+	color: var(--status-danger);
+}
+.btn-quiet {
+	min-height: 1.75rem;
+	padding: 0 0.5rem;
+	font-size: var(--text-xs);
+}
+.btn:disabled,
+.btn[aria-disabled='true'] {
+	cursor: not-allowed;
+	opacity: 0.55;
+}
+.fk-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: var(--space-3);
+	margin-bottom: var(--space-3);
+	max-width: 72rem;
+}
+.fk-note {
+	margin: 0;
+	color: var(--ink-muted);
+	font-size: var(--text-sm);
+	max-width: 46rem;
+}

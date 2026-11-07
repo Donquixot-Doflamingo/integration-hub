@@ -3,7 +3,9 @@ import type { ApiResult } from '$lib/api/client';
 import { consoleApi } from '$lib/api/console';
 import {
 	detailsToFields,
+	detailsToPointerFields,
 	toPlainError,
+	type PlainApiError,
 	type ActionFailureData,
 	type ActionSuccessData,
 	type FieldErrors
@@ -32,13 +34,19 @@ export function requireSession(event: RequestEvent): void {
  */
 export const ENHANCED_HEADER = 'x-sveltekit-action';
 
-export function requireEnhanced(op: string, event: RequestEvent) {
+export function requireEnhanced(
+	op: string,
+	event: RequestEvent,
+	message = 'This action needs JavaScript: the new secret is shown once, in a dialog.'
+) {
 	return event.request.headers.get(ENHANCED_HEADER) === 'true'
 		? null
-		: invalid(op, {
-				reason: 'This action needs JavaScript: the new secret is shown once, in a dialog.'
-			});
+		: invalid(op, { reason: message });
 }
+
+/** `requireEnhanced` text for forms that carry credentials (HUB-291). */
+export const CREDENTIALS_NEED_JS =
+	'This form needs JavaScript: credentials are sent in the background and cleared from the page right away.';
 
 /** The admin client for an action (SvelteKit `fetch`, token attached by `handleFetch`). */
 export function actionApi(event: RequestEvent) {
@@ -91,4 +99,43 @@ export function finish<T extends object>(
 	const { fields } = detailsToFields(error.details, fieldNames);
 	// Status 0 (network) is not a valid HTTP status for `fail`; answer 502 (bad gateway).
 	return fail(res.status >= 400 ? res.status : 502, { op, error, fields });
+}
+
+/**
+ * `finish` for forms whose fields are named by JSON pointer (HUB-290+, see
+ * `detailsToPointerFields`). `secrets` are values the request carried that must never come back
+ * to the browser (credentials, HUB-291): any error text that contains one is replaced, so even a
+ * misbehaving upstream cannot echo a secret into the page.
+ */
+export function finishByPointer<T extends object>(
+	op: string,
+	res: ApiResult<T>,
+	pointers: readonly string[],
+	secrets: readonly string[] = []
+): ActionSuccessData<T> | ActionFailure<ActionFailureData> {
+	if (res.ok) return finish(op, res, []);
+	const error = scrubSecrets(toPlainError(res.error), secrets);
+	const { fields } = detailsToPointerFields(error.details, ['/reason', ...pointers]);
+	return fail(res.status >= 400 ? res.status : 502, { op, error, fields });
+}
+
+const REDACTED = '[redacted]';
+
+/** Replaces every occurrence of a secret value in the error's texts (message, details, meta). */
+export function scrubSecrets(error: PlainApiError, secrets: readonly string[]): PlainApiError {
+	const live = secrets.filter((s) => s.length > 0);
+	if (!live.length) return error;
+	const scrub = (s: string) => live.reduce((acc, secret) => acc.split(secret).join(REDACTED), s);
+	const meta = error.meta == null ? error.meta : JSON.parse(scrub(JSON.stringify(error.meta)));
+	return {
+		...error,
+		message: scrub(error.message),
+		details: error.details.map((d) => ({
+			...d,
+			message: scrub(d.message),
+			...(d.pointer ? { pointer: scrub(d.pointer) } : {}),
+			...(d.keyword ? { keyword: scrub(d.keyword) } : {})
+		})),
+		meta
+	};
 }
