@@ -7,7 +7,7 @@ test.use({ viewport: { width: 1280, height: 900 } });
 
 test('list -> transformer: docs link, source, versions, run goldens', async ({ page }) => {
 	await signIn(page, { role: 'editor', next: '/transformers' });
-	await page.getByLabel('Kind').selectOption({ label: 'Request (canonical to vendor)' });
+	await page.getByLabel('Kind').selectOption({ label: 'Request (caller input to vendor request)' });
 	await page.getByRole('button', { name: 'Apply' }).click();
 	await expect(page).toHaveURL('/transformers?kind=request');
 	await page.getByRole('link', { name: 'T1', exact: true }).click();
@@ -52,7 +52,7 @@ for (const scheme of ['light', 'dark'] as const) {
 		await expectNoSeriousA11yViolations(page);
 		await page.goto('/transformers/T1');
 		await page.getByRole('button', { name: 'Run samples for T1@7' }).click();
-		await expect(page.getByText(/samples pass/)).toBeVisible();
+		await expect(page.getByText('T1@7: 2 of 2 samples pass (12 ms)')).toBeVisible();
 		await page.getByText('order_placed', { exact: true }).first().click();
 		await expectNoSeriousA11yViolations(page);
 	});

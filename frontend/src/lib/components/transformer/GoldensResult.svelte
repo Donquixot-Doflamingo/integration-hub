@@ -169,6 +169,9 @@
 		margin: 0 0 var(--space-2);
 		font-size: var(--text-sm);
 	}
+	.diff-summary {
+		overflow-wrap: anywhere;
+	}
 	.muted {
 		color: var(--ink-muted);
 	}

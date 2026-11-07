@@ -339,7 +339,7 @@
 		<section class="diff" aria-labelledby="draft-diff-h">
 			<h2 id="draft-diff-h">Changes against the active version</h2>
 			{#if d.ok}
-				<p class="meta" role="status">
+				<p class="meta changes" role="status">
 					v{d.data.from} to v{d.data.to}: {summarize(d.data.changes)}
 				</p>
 				<DiffSplit
@@ -400,7 +400,10 @@
 			The published version can never be edited.
 		</p>
 		{#await diff then d}
-			{#if d?.ok}<p><strong>Changes:</strong> {summarize(d.data.changes)}</p>{/if}
+			{#if d?.ok}<p class="changes">
+					<strong>Changes:</strong>
+					{summarize(d.data.changes)}
+				</p>{/if}
 		{/await}
 		{#snippet fields()}
 			<input type="hidden" name="version" value={version} />
@@ -530,9 +533,15 @@
 		justify-items: start;
 	}
 	.diff {
+		/* One column that may shrink below the diff's longest line; DiffSplit scrolls inside. */
+		grid-template-columns: minmax(0, 1fr);
 		justify-items: stretch;
 	}
 	h2 {
 		font-size: var(--text-lg);
+	}
+	/* Change summaries list the changed paths; long dotted paths must wrap on phones. */
+	.changes {
+		overflow-wrap: anywhere;
 	}
 </style>

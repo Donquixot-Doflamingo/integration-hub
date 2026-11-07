@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(frontend)` · Wrap long schema paths in diffs and bring the e2e up to date · HUB-436 · F-23
+  - On a 390 px phone, the publish page and the version diff no longer scroll sideways when a change touches an operation's request schema (long paths such as `operations.default.request_schema.body.properties.context.properties.channel` wrap, and the draft's diff scrolls inside its frame)
+  - Change summaries in sample results and change log entries wrap the same way
+  - The e2e suite follows the schema registry: request-kind label, sample results, endpoint pages opened from links, and the diff example's third path
+
 - 2026-11-07 · `fix(frontend)` · Keep the draft editor lookups out of the publish page module · HUB-436 · F-23
   - The console builds again: the publish page's load module exported a constant SvelteKit refuses (`NO_LOOKUPS`), which stopped `npm run build` and the e2e server
 
