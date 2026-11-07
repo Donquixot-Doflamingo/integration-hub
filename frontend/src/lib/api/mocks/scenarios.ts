@@ -2,6 +2,7 @@ import type { HttpHandler } from 'msw';
 import type { OperationResponse } from '../types';
 import { contractMocks } from './contract.gen';
 import { mockError, mockOperation } from './handlers';
+import { onboardingHandlers } from './onboarding';
 import type { OperationId } from './types';
 
 /**
@@ -42,6 +43,12 @@ export const SSRF_DETAIL = {
 };
 
 export const presets: Record<string, () => HttpHandler[]> = {
+	/**
+	 * Onboarding a public API from the panel (HUB-436): vendor `agify` (auth none), endpoint,
+	 * account, request and response transformers, integration `int_age_estimate`, from the
+	 * contract's named examples (onboarding.ts).
+	 */
+	onboarding: onboardingHandlers,
 	/** After publishing the draft: rollback (to v7) and weights (two targets) have something to do. */
 	'v8-active': () => [
 		mockOperation('getIntegration', {

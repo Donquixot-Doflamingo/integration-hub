@@ -1,7 +1,7 @@
 import { delay, http, HttpResponse, type HttpHandler } from 'msw';
 import { REQUEST_ID_HEADER } from '../client';
 import type { AdminErrorEnvelope } from '../errors';
-import type { OperationResponse, SessionUser } from '../types';
+import type { OperationRequestBody, OperationResponse, SessionUser } from '../types';
 import { contractMocks } from './contract.gen';
 import type { OperationId } from './types';
 
@@ -75,6 +75,28 @@ export function mockOperation<Op extends OperationId>(
 		const value =
 			typeof body === 'function' ? body(params as Record<string, string>) : (body ?? m.example);
 		return respond(value, init.status ?? m.status, { ...m.headers, ...init.headers });
+	});
+}
+
+/**
+ * A handler for one operation whose answer is built from the path parameters and the JSON body
+ * that was sent (create calls that echo what they stored, HUB-436 scenario `onboarding`).
+ * `build` returns undefined to fall back to the contract example.
+ */
+export function mockEcho<Op extends OperationId>(
+	op: Op,
+	build: (
+		params: Record<string, string>,
+		body: OperationRequestBody<Op>
+	) => OperationResponse<Op> | undefined,
+	init: HandlerOptions = {}
+): HttpHandler {
+	const m = contractMocks[op];
+	return http[m.method](mswPath(m.path), async ({ params, request }) => {
+		if (init.latencyMs) await delay(init.latencyMs);
+		const body = (await request.json().catch(() => ({}))) as OperationRequestBody<Op>;
+		const value = build(params as Record<string, string>, body) ?? m.example;
+		return respond(value, m.status, { ...m.headers });
 	});
 }
 
