@@ -4,8 +4,9 @@
 # not clash with `make run` / `make mockvendor`. Source it; do not run it.
 #
 #   source "$root/examples/lib/local-hub.sh"
-#   hub_setup <state-dir> <overlay-dir>     # build, merge config + contracts, migrate, dev key
-#   hub_set_creds <account> KEY=VALUE...    # encrypted local credential file (hubctl creds set)
+#   hub_setup <state-dir> <overlay-dir>     # build, merge config, migrate, dev key
+#   hub_set_creds <account> KEY=VALUE...    # encrypted local credential file (hubctl creds set;
+#                                           # not needed for an auth none vendor)
 #   hub_start [--mockvendor]                # start the gateway (and mockvendor), wait until ready
 #   mock_scenario <file.json>               # program mockvendor with a scenario file
 #
@@ -57,10 +58,12 @@ hub_setup() {
   "$_hub_bin/hub" migrate >/dev/null 2>"$state/migrate.log" ||
     hub_die "cannot migrate $HUB_PG_DSN (is Postgres up? docker compose -f deploy/docker-compose.yml up -d); see $state/migrate.log"
   rm -rf "$state/config" "$state/contracts" "$state/data"
+  # Every schema lives in the config tree (ADR-0023): the overlay is config only.
+  if [ -d "$overlay/contracts" ]; then
+    hub_die "$overlay/contracts is the pre-ADR-0023 layout; schemas live in the config"
+  fi
   cp -R "$_hub_root/backend/config" "$state/config"
-  cp -R "$_hub_root/contracts" "$state/contracts"
   _merge_overlay "$overlay/config" "$state/config"
-  _merge_overlay "$overlay/contracts" "$state/contracts"
   # Point every mock region at the mockvendor this script starts.
   if [ "$MOCKVENDOR_ADDR" != "127.0.0.1:8099" ]; then
     find "$state/config/vendors" -name '*.yaml' -exec sed -i.bak "s#http://127.0.0.1:8099#http://$MOCKVENDOR_ADDR#g" {} +
@@ -105,7 +108,7 @@ hub_start() {
     _wait_url "http://$MOCKVENDOR_CONTROL_ADDR/__control/healthz" mockvendor
   fi
   "$_hub_bin/hub" gateway -http-addr "$HUB_DEMO_HTTP" -ops-addr "$HUB_DEMO_OPS" \
-    -config-dir "$HUB_DEMO_STATE/config" -contracts-dir "$HUB_DEMO_STATE/contracts" \
+    -config-dir "$HUB_DEMO_STATE/config" \
     -data-dir "$HUB_DEMO_STATE/data" -blob-url "file://$HUB_DEMO_STATE/data/blobs" \
     -ready-drain 100ms -log-level "${HUB_LOG_LEVEL:-warn}" 2>"$HUB_DEMO_STATE/gateway.log" &
   _hub_pids+=("$!")

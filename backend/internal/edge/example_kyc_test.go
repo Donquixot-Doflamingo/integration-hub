@@ -25,8 +25,8 @@ const kycExampleDir = "../../../examples/aadhaar-okyc"
 // (examples/aadhaar-okyc/config/tenants/kyc-onboarding.yaml).
 const kycKey = "hk_test_example_kyc_onboarding_local_only"
 
-// overlaySources is backend/config with the overlay folder dir merged over it (upgraded while
-// the example keeps the pre-ADR-0023 layout, see exampleTree); the overlay may only add files.
+// overlaySources is backend/config with the overlay folder dir merged over it (see exampleTree);
+// the overlay may only add files.
 func overlaySources(t testing.TB, dir string) registry.Sources {
 	t.Helper()
 	return registry.Sources{Config: exampleTree(t, dir)}

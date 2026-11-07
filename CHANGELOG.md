@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `refactor(edge)` · Load the examples without the legacy upgrade (HUB-435) · HUB-435 · F-23
+  - The example tests merge each example over `backend/config` as it is: the in-memory capability upgrade (ADR-0025) is no longer used for examples, and an example that brings back `config/capabilities` or a `contracts/` overlay fails its test
+  - `examples/lib/local-hub.sh` copies only config (no `contracts/` merge, no `-contracts-dir`) and refuses a `contracts/` overlay; the legacy upgrade itself stays in the code for stored archives
 - 2026-11-07 · `refactor(examples)` · Run the latency demo on auth none without capabilities (HUB-435) · HUB-435 · F-23
   - `examples/latency-demo` has no capability files or `contracts/` overlay: `int_latency_echo` declares its `default` operation and request schema, endpoint `echo@1` its request schema
   - Postman Echo uses the auth scheme `none`: the fake `client_tag` credential, the `X-Hub-Demo-Client` header and the `hubctl creds set` step are gone; the account has no credentials
