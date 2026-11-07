@@ -26,6 +26,11 @@ func TestCheck(t *testing.T) {
 		{"undeclared status", exchange(t, "GET", "/healthz", 418, `{}`), []string{"response 418"}},
 		{"unknown operation", exchange(t, "GET", "/v1/nope", 200, `{}`), []string{"not an operation"}},
 		{"readyz 503 missing request_id", withHeader(exchange(t, "GET", "/readyz", 503, `{"error":{"code":"NOT_READY","message":"x","retryable":true}}`), "X-Hub-Request-Id", "req_01J9Z3M1A5B7C9D1E3F5G7H9JN"), []string{"request_id"}},
+		{"pass-through vendor 404 JSON", passThrough(t, 404, "application/json", `{"error":"no such user"}`), nil},
+		{"pass-through vendor 503 HTML", passThrough(t, 503, "text/html", "<html>down</html>"), nil},
+		{"pass-through 200 non-JSON", passThrough(t, 200, "text/plain; charset=utf-8", "age=29"), nil},
+		{"vendor body without the pass-through header", withoutHeader(passThrough(t, 404, "application/json", `{"error":"no such user"}`), "X-Hub-Pass-Through"), []string{"response 404"}},
+		{"pass-through where none is contracted", withHeader(withHeader(exchange(t, "GET", "/healthz", 503, "down"), "Content-Type", "text/plain"), "X-Hub-Pass-Through", "true"), []string{"not contracted"}},
 		{"readyz 503 missing header", exchange(t, "GET", "/readyz", 503, `{"error":{"code":"NOT_READY","message":"x","retryable":true,"request_id":"req_01J9Z3M1A5B7C9D1E3F5G7H9JN"}}`), []string{"X-Hub-Request-Id"}},
 	}
 	for _, tt := range tests {
@@ -92,4 +97,20 @@ func TestOperationIDAndExample(t *testing.T) {
 			t.Errorf("example is not a JSON object: %s", ex)
 		}
 	}
+}
+
+// passThrough is an invoke answer passed through from the vendor (ADR-0023).
+func passThrough(t *testing.T, status int, contentType, body string) Exchange {
+	t.Helper()
+	ex := exchange(t, "POST", "/v1/integrations/int_age_estimate/invoke", status, body)
+	ex.InvalidRequest = true // only the response matters here
+	ex.Header.Set("Content-Type", contentType)
+	ex.Header.Set("X-Hub-Request-Id", "req_01J9Z3M1A5B7C9D1E3F5G7H9JN")
+	ex.Header.Set("X-Hub-Pass-Through", "true")
+	return ex
+}
+
+func withoutHeader(ex Exchange, k string) Exchange {
+	ex.Header.Del(k)
+	return ex
 }

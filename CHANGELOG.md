@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(edge)` · Cover pass-through on the gateway, worker and hubmcp (HUB-433) · HUB-433 · F-23
+  - Gateway (wait mode): vendor status and body unchanged for 2xx, 4xx and non-JSON 5xx, only `Content-Type` and `Retry-After` from the vendor, `X-Hub-Pass-Through: true`, retries as with a response transformer; every answer contract-validated against the `default` PassThrough response
+  - Worker: a queued pass-through stores a JSON body as it is, other bodies as a JSON string and an empty body as null; vendor errors keep `UPSTREAM_*` and the retry classification
+  - hubmcp: declared caller headers are forwarded, undeclared ones and the Hub's own headers are refused locally; pass-through results and third-party errors (no canonical error) are returned as the contract says
+  - Contract test harness: a non-JSON pass-through body is accepted only when the operation's default response has the `*/*` media type
 - 2026-11-07 · `test(control)` · Prove a pre-ADR-0023 archive, drafts and pending upgrade at boot (HUB-434) · HUB-434 · F-23
   - A database written before capabilities were removed (format-1 snapshot blob, drafts without operations, a pending integration naming its capability) is upgraded by the admin's first boot, and the upgraded drafts pass publish validation; a second boot changes nothing
   - Checked by hand as well: a dev database and `.dev-stack` built by the pre-ADR-0023 `dev-up` come up with today's `scripts/dev-up.sh`; the queued request, the open draft and the pending integration all work

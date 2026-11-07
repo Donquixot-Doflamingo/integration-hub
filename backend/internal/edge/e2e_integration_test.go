@@ -76,6 +76,12 @@ type e2e struct {
 
 func startE2E(t *testing.T) *e2e {
 	t.Helper()
+	return startE2EWith(t, nil)
+}
+
+// startE2EWith is startE2E with the snapshot changed by edit (nil: unchanged).
+func startE2EWith(t *testing.T, edit func(*registry.Snapshot) *registry.Snapshot) *e2e {
+	t.Helper()
 	dsn := os.Getenv("HUB_PG_DSN")
 	if dsn == "" {
 		t.Fatal("HUB_PG_DSN not set; run via `make itest`")
@@ -104,6 +110,9 @@ func startE2E(t *testing.T) *e2e {
 		t.Fatal(err)
 	}
 	snap := e2eSnapshot(t, mv.VendorURL)
+	if edit != nil {
+		snap = edit(snap)
+	}
 	if err := cache.Warm(t.Context(), creds.AccountIDs(snap)); err != nil {
 		t.Fatal(err)
 	}
