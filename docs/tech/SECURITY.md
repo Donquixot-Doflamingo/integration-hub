@@ -52,6 +52,8 @@ flowchart LR
 | Stolen/guessed tenant key | S | 256-bit random keys, stored as SHA-256 hash (high-entropy keys do not need a slow KDF), constant-time lookup via hash map; shown once; rotation with overlap; optional mTLS identity (DESIGN §4.2) |
 | Tenant invokes another tenant's integration | E | grant check on every request (owner or `integration_grants`) before validation; returns 403 `FORBIDDEN`, and 404 for integrations the tenant cannot see in discovery (no existence oracle) |
 | Caller learns vendor/account/version | I | contract scanner (TESTING §4.1), D12; the one documented exception is `dryRunIntegration` (exact upstream request, secrets `***`), gated by key scope `dry_run` that is not granted by default (PRD DV-6); `X-Hub-Integration-Version` debug header **disabled in prod** by default; error envelope `upstream` carries only numeric status/code; vendor error messages passed through for `UPSTREAM_REJECTED` are a leak risk → transformers must map them to canonical text where they name the vendor (review checklist) |
+| Pass-through body names the vendor (ADR-0023) | I | An operation without a response transformer returns the vendor's status and body unchanged (`X-Hub-Pass-Through: true`). Headers are filtered: only the vendor's `Content-Type` and `Retry-After` pass, plus the Hub's own, so no header names a vendor, account or version. **The body is not filtered**: whatever the vendor writes about itself (name, links, echoed input) reaches the caller. Accepting that is the integration owner's choice when they skip the response transformer; the hub-operator skill tells operators to warn the owner, and a response transformer is the fix. Pass-through applies to sync answers only; requests completed after a 202 keep canonical `UPSTREAM_*` codes |
+| Caller sends headers the transformer should not see | I/T | Only headers declared in the operation's `request_schema.headers` reach the transformer as `hdr.*`; the Hub's own headers (`Authorization`, `Idempotency-Key`, `Prefer`, `X-Request-Deadline`, `X-Hub-Session`, `traceparent`) can never be declared; hubmcp refuses them in `headers` |
 | Body bombs / slowloris | D | body limit 1 MB (4 MB LLM) (DESIGN §16.5; `TestBodyLimitsAtTheEdge`: declared and chunked bodies, 413 `PAYLOAD_TOO_LARGE` before validation or any vendor call), `ReadHeaderTimeout` 5 s, read timeout and max header bytes (not set yet: HUB-249), global in-flight limit, tenant token buckets |
 | Replay of side-effecting calls | T | `Idempotency-Key` mandatory for integrations with `moves_money_or_quota: true` (DESIGN §4.2), enforced at the edge with 400 `IDEMPOTENCY_KEY_REQUIRED` |
 | Request smuggling | T | single HTTP parser (Go), ingress normalises; reject ambiguous `Content-Length`/`Transfer-Encoding` |
@@ -85,6 +87,8 @@ flowchart LR
 | DoS via expensive expression | D | no loops (only `map`/`filter`), `MaxNodes`, max depth, memory budget, max output size, runtime budget (ADR-0002); compile once at snapshot build |
 | Sandbox escape (network, disk) | E | expr env exposes only the stdlib in DESIGN §7.3; no reflection on arbitrary Go values; env built from plain maps |
 | Malicious transformer PR from another team | T | D7: PRs gated by goldens + CODEOWNERS review by the platform team; publish validation |
+| Transformer authored in the console sends a wrong or oversized vendor request | T | ADR-0023: creation needs `editor`, is recorded in the change log, and is refused unless every sample produces exactly its expected request and fits the vendor endpoint's `request_schema` (`endpoint_schema`); field reads are checked against the operation at publish. Live vendor requests are not re-checked (egress allowlist and body limits still apply) |
+| Public API accounts (auth `none`) | I | No credentials are stored or sent; credentials posted for such a vendor are refused (400 at `/credentials`), credential operations answer 409. MCP still cannot create any account (`createAccount` is forbidden there) |
 
 ### 2.5 MCP server (`hubmcp`, B6)
 | Threat | STRIDE | Mitigation |
@@ -116,7 +120,7 @@ flowchart LR
 | `sealed` | raw bytes, field-level encrypted with a per-tenant key | only through audited **unseal** (`admin`) | bureau, Aadhaar, PAN, AA (D6); 90 d |
 | `metadata_only` | no bodies; sha256 + size only | `viewer`+ | LLM prompts (DESIGN §15) |
 
-Always: SHA-256 + byte size of every payload, so losslessness is verifiable (DESIGN §13.3). Aadhaar numbers are never stored, even sealed, in vendor sessions (DESIGN §14). Publish validation rejects `full` on a capability whose schema has `x-pii` fields of class `regulated`.
+Always: SHA-256 + byte size of every payload, so losslessness is verifiable (DESIGN §13.3). Aadhaar numbers are never stored, even sealed, in vendor sessions (DESIGN §14). `x-pii` tags live in each operation's `request_schema` (ADR-0023; they used to come from the capability schema); a `full` policy on an integration whose operation schemas tag regulated data (government ids, financial) should be refused at publish (rule kept from DESIGN §13.2).
 
 ### 4.1 Subject erasure (DESIGN §16.5, HUB-233, ADR-0012)
 `hub erase-subject -tenant T -actor WHO -reason TEXT [-since RFC3339] [-until RFC3339] [-dry-run] < identifier` purges every stored body of the tenant's requests that hold a data subject's identifier, and keeps hashes, sizes, timelines and metadata.
@@ -163,9 +167,8 @@ Legend: **R** read · **W** create/update · **X** execute action · — denied.
 | accounts: test-connection | X | X | — | — |
 | accounts: rotate credentials / promote `next` | X | — | — | — |
 | accounts: lifecycle (drain, retire) | X | — | — | — |
-| capabilities | R W | R W | R | R |
 | transformers | R W | R W | R | — |
-| transformers: dry-run, run-goldens | X | X | X | — |
+| transformers: dry-run, run samples | X | X | X | — |
 | integrations, versions, diff | R W | R W | R | R (own) |
 | integrations: publish, rollback, weights | X | X | — | — |
 | integrations: pause / resume | X | X | — | — |

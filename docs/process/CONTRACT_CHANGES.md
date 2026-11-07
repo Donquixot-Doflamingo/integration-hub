@@ -3,7 +3,7 @@
 Rules: AGENTS §4; rationale: ADR-0004. Actors: `contract-steward` (sole editor of `contracts/`), `backend-engineer`, `frontend-engineer`, plus the MCP server and consumer skill owners as consumers.
 
 ## 1. When a CCR is needed
-Any change to: an endpoint, path/query parameter, header, request or response field, status code, error code, example, capability or event JSON Schema, or MCP tool definition in `contracts/`. If you are about to code against something that is not in `contracts/`, stop and file a CCR (backend/AGENTS.md, frontend/AGENTS.md).
+Any change to: an endpoint, path/query parameter, header, request or response field, status code, error code, example, event JSON Schema, or MCP tool definition in `contracts/`. Not a CCR: an integration operation's request schema or a vendor endpoint's request schema. Those are registry data, edited in the console and versioned with the integration or endpoint (ADR-0023). If you are about to code against something that is not in `contracts/`, stop and file a CCR (backend/AGENTS.md, frontend/AGENTS.md).
 
 ## 2. Flow
 ```mermaid
@@ -31,7 +31,7 @@ Copy into the ticket description (`docs/tickets/TICKETS.md`):
 ### CCR: <short title>
 - **Requested by**: backend-engineer | frontend-engineer | hubmcp | skill  (ticket HUB-###)
 - **Why**: <user story / feature (US-xxx, F-XX) and the problem>
-- **Document**: hub-public.v1.yaml | hub-admin.v1.yaml | schemas/capabilities/... | schemas/events/... | mcp tools
+- **Document**: hub-public.v1.yaml | hub-admin.v1.yaml | schemas/events/... | mcp tools
 - **Operation / schema**: <operationId or schema $id>, <METHOD /path>
 - **Before**:
   ```yaml
@@ -49,13 +49,13 @@ Copy into the ticket description (`docs/tickets/TICKETS.md`):
 
 ## 4. Steward review checklist
 - [ ] **No vendor leakage**: nothing in `/v1` (including discovery, errors, headers, examples) names a vendor, account, transformer or version (D12, ADR-0007). Debug header `X-Hub-Integration-Version` stays documented as debug-only.
-- [ ] **Versioning**: `info.version` bumped — additive = minor, breaking = major, docs/examples only = patch. Caller-breaking → rejected; propose a new integration ID / capability major instead (D11). Admin-breaking → user approval recorded in the ticket.
+- [ ] **Versioning**: `info.version` bumped — additive = minor, breaking = major, docs/examples only = patch. Caller-breaking → rejected; propose a new integration ID instead (D11). Admin-breaking → user approval recorded in the ticket.
 - [ ] **Examples updated**: every new/changed response has an example; examples validate against their schemas (they feed MSW mocks and contract tests).
 - [ ] **Error codes canonical**: all errors use the single envelope (DESIGN §4.3) and codes from DESIGN §4.4; a new code needs a DESIGN/ADR reference.
 - [ ] `operationId` unique, stable, camelCase; tags consistent.
 - [ ] All `$ref`s resolve; spec lints clean.
 - [ ] Pagination, filtering and auth (tenant key vs OIDC role) declared; RBAC role noted in the operation description (SECURITY §7).
-- [ ] PII: `x-pii` annotations on capability fields where applicable; not returned to callers if stripped by policy.
+- [ ] PII: `x-pii` annotations on any personal data in contract examples (operation request schemas carry their own tags, ADR-0023); not returned to callers if stripped by policy.
 - [ ] `contracts/CHANGELOG.md` entry written.
 
 ## 5. Commit order

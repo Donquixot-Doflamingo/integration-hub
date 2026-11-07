@@ -308,7 +308,7 @@ Each alert's `runbook_url` points at `docs/runbooks/<AlertName>.md`; the index i
 
 ### 9.1 High Hub overhead (`HubOverheadP99High`)
 1. Platform dashboard → "Overhead by stage": which `hub_stage_duration_ms{stage}` moved?
-2. `validate` up → a new or larger capability schema / payload size shift (check `http_request_size_bytes`). `idempotency` up → Redis latency (`redis_op_duration_seconds`). `audit` up → audit channel near full (`audit_buffer_fill_ratio`). `admission` up → breaker or limiter cost; the limiter serves from a local lease, so a rise means calls are waiting for lease replies (Redis slow: `redis_op_duration_seconds{op="limiter_lease"}`), never for tokens (those are in `hub_wait_ms`).
+2. `validate` up → a new or larger operation request schema (or `validate_input` switched on) / payload size shift (check `http_request_size_bytes`). `idempotency` up → Redis latency (`redis_op_duration_seconds`). `audit` up → audit channel near full (`audit_buffer_fill_ratio`). `admission` up → breaker or limiter cost; the limiter serves from a local lease, so a rise means calls are waiting for lease replies (Redis slow: `redis_op_duration_seconds{op="limiter_lease"}`), never for tokens (those are in `hub_wait_ms`).
 3. Check GC: `go_gc_duration_seconds`, GC CPU; check `go_sched_latencies_seconds` (CPU throttling → raise limits or replicas).
 4. Grab a 30 s CPU profile from one hot pod: `go tool pprof http://localhost:9090/debug/pprof/profile?seconds=30`.
 5. Compare with the last release's benchmarks (`benchstat`).

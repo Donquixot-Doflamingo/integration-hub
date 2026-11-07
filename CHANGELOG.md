@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(tech)` · Describe the schema registry in TECH_SPEC and the tech docs (HUB-437) · HUB-437 · F-23
+  - TECH_SPEC: layout, registry tables, outbox pool, what the snapshot holds (compiled operation and endpoint schemas, blob formats), registry files, `HUB_CONTRACTS_DIR` unused, console routes for vendors, endpoints, accounts, transformers and drafts, MCP results and tool counts, and new extension points (onboard an API without code; changing what callers send)
+  - SECURITY: the pass-through body caveat, the caller header allowlist, console-authored transformers and auth `none` accounts in the threat model; RBAC without capabilities
+  - TESTING_STRATEGY, ISOLATION, OBSERVABILITY, the HubOverheadP99High and SnapshotBehind runbooks, the use-case catalogue, the contract-change and git workflow docs and the root README follow ADR-0023; ADR-0004 is marked superseded by ADR-0023
 - 2026-11-07 · `docs(features)` · Update feature docs for the schema registry model (HUB-437) · HUB-437 · F-23
   - F-03, F-04, F-05, F-06, F-08, F-09, F-10, F-14, F-16, F-17: operations on integration versions and request schemas on endpoints instead of capabilities; samples checked against both; `validate_input`; pass-through; Hub default TTL; the 1 MB body limit until HUB-439
   - F-14 explains how per-operation pairs are checked now that transformers name no operation (HUB-345 is caught by the sample check)

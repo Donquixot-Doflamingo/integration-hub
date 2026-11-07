@@ -63,6 +63,7 @@ flowchart TB
 - Comparison is semantic JSON equality with a stable diff output; volatile values (`now()`, `uuid()`) are pinned by a fake clock and seeded uuid in the expr env.
 - **Secret grep (M3)**: goldens use fixture credentials registered with the redactor; the test asserts the expected request contains them **only** in header/query/auth targets and that the `request.transformed` audit form contains `***`.
 - **Role-log secret grep (HUB-234)**: every role started by the `cmd/hub/internal/roles` tests logs through the production logger into one capture; `TestMain` fails the package if any secret a test declared with `forbid` appears in it, and `TestRoleLogsCarryNoSecrets` drives gateway + worker + scheduler + admin through every secret-handling path on the encrypted credential source (SECURITY.md §9).
+- **Schema checks on samples (ADR-0023)**: `hubctl transform test` and the snapshot build check every request sample's produced request against its vendor endpoint's `request_schema` (`endpoint_schema`, credential headers and query left out), and, per operation using the transformer, its input against the operation (`input_schema`) and the transformer's `req.*`/`hdr.*` reads (`schemas_compile`). `_context.hdr` carries a sample's caller headers. Admin `createTransformerVersion` runs the same checks and refuses with the sample and field.
 - `-update` flag regenerates expected files; CI rejects runs with `-update`.
 
 ## 4. Contract tests
@@ -98,6 +99,7 @@ Contract change → `contracts/` commit → backend contract tests fail until im
   - Cutover (§6.3): the six request situations × (account, vendor, transformer) change; retire refused while pinned requests or sessions exist; rollback = new version, history linear.
   - Snapshot: publish → Redis ping → node swap; admin down → node boots from object-storage fallback (local filesystem blob store in tests).
   - Admin: every mutation writes `change_log`; `hubctl apply` idempotent; `plan` shows exact diffs (M7).
+  - Schema registry (ADR-0023, F-23): `TestAgifyOnboardedWithoutCapabilities` onboards a public API through the admin API alone (auth `none`, endpoint request schema, credential-less account, `endpoint_schema` and `goldens_pass` refusals, response transformer output, pass-through, `validate_input` on and off, discovery without vendor); `TestE2EPassThrough` (gateway, contract-validated) and `TestWorkerPassThrough` (async); `TestAuthNoneAccounts`; `TestRemoveCapabilitiesMigration` (00011 up/down over old data); `TestUpgradeLegacyArchive` (format-1 archive, drafts and pending upgraded once at admin boot).
 
 ## 6. Chaos tests (mockvendor, DESIGN §19 M5)
 `mockvendor` control API sets per-route behaviour: latency (fixed/random), status codes, error ratio, 429 + `Retry-After`, hard down (connection refused), slow drip, malformed body; records received requests. Tests run the hub roles in-process (gateway, worker, scheduler) with real Postgres/Redis and a fake clock where possible (breaker windows, drain ramp) or shortened config windows where real time is needed.
@@ -127,7 +129,7 @@ Contract change → `contracts/` commit → backend contract tests fail until im
 | --- | --- | --- | --- |
 | `FuzzTransformerDSL` | `transform` | all transformer YAMLs in `config/` | parse/compile never panics; compile either errors or yields a program that respects `MaxNodes` |
 | `FuzzTransformEval` | `transform` | golden inputs | evaluation of compiled T1/T2/R1/R2 on mutated inputs never panics, never exceeds output size/time budget, never places `creds` values outside allowed targets |
-| `FuzzSchemaValidate` | `edge` | capability examples | validator never panics; accept ⇒ body re-marshals and re-validates |
+| `FuzzSchemaValidate` | `edge` | operation request schema examples (seed config, examples) | validator never panics; accept ⇒ body re-marshals and re-validates |
 | `FuzzEnvelopeDecode` | `queue` | sample envelopes | decode/encode round trip stable |
 | `FuzzSignatureHeader` | `callbacks`, `webhooks` | valid headers | parser rejects malformed without panic; timing-safe compare |
 | `FuzzRedactor` | `telemetry` | secrets + text | no registered secret survives redaction |

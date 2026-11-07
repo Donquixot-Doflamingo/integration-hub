@@ -24,7 +24,7 @@
 | Cause | How you know | Fix |
 | --- | --- | --- |
 | Node cannot read the archive | No new `snapshot.applied` lines; `fetch_error` failures; node cannot reach Postgres (`hub.config_snapshots`) or the blob store (`HUB_BLOB_URL`) | Restore connectivity from that node. Nodes check the archive on every `hub:snapshot` Redis ping and every 5 s, so it catches up by itself once reachable. |
-| Snapshot does not compile on this node | `invalid_config` / `build_error`, `config problem` lines | Usually a node on an older build during a rolling deploy, or a different `HUB_CONTRACTS_DIR`. Finish the rollout or align the contracts directory. The node keeps the last good snapshot meanwhile. |
+| Snapshot does not compile on this node | `invalid_config` / `build_error`, `config problem` lines | Usually a node on an older build during a rolling deploy (since ADR-0023 every schema is in the snapshot itself; `HUB_CONTRACTS_DIR` is unused). Finish the rollout. The node keeps the last good snapshot meanwhile. |
 | Node booted from the local cache, or from its config directory, and cannot reach the archive | `snapshot_version` 0; `snapshot_origin{origin="cache"} == 1` and `booted from the local snapshot cache`, or `origin="config"` | It started while the archive was unreadable and cannot confirm what it serves. Fix the archive path above; it then reports the archive version, or adopts the newest snapshot. |
 
 ## Escalate when

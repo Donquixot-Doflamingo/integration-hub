@@ -44,15 +44,15 @@ Tests: make test (race) ok; chaos C1 ok; BenchmarkBreakerRecord 41 ns/op
 Refs: HUB-052
 ```
 ```
-contract(public): add GET /v1/capabilities/{capability} (HUB-040)
+contract(admin): add operations to integration versions (HUB-432)
 
-Why: hubmcp and the consumer skill need canonical schemas (ADR-0007).
+Why: integrations own their request schema once capabilities are gone (ADR-0023).
 What:
-- new operation getCapability with examples
-- info.version 1.1.0 -> 1.2.0; contracts/CHANGELOG.md entry
-Tests: spectral lint ok; examples validate
+- IntegrationSpec.operations with request_schema and validate_input
+- info.version 1.2.0 -> 2.0.0 (owner-approved break); contracts/CHANGELOG.md entry
+Tests: redocly lint ok; examples validate
 
-Refs: HUB-040
+Refs: HUB-432
 ```
 
 ### Bad
