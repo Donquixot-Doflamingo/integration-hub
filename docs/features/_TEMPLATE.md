@@ -41,7 +41,7 @@ Numbered, testable rules. State defaults and limits. Reference DESIGN sections.
 Tables / columns / indexes added or changed (DESIGN §18.2). Migrations needed.
 
 ## Config impact
-New or changed fields in capability / vendor / account / transformer / integration / tenant YAML. Defaults and validation.
+New or changed fields in vendor (endpoints, request schemas) / account / transformer / integration (operations) / tenant YAML. Defaults and validation.
 
 ## Observability
 | Kind | Name | Notes |

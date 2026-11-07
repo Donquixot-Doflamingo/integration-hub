@@ -2,7 +2,7 @@
 
 **Question teams ask:** "Aadhaar e-KYC is two steps: get an OTP, then verify it. Is that two calls on one integration?"
 
-**Yes. One integration id, one capability with two operations, two calls.** The caller calls `POST /v1/integrations/{id}/invoke/send_otp`, gets an `X-Hub-Session` header back, and sends it on `POST /v1/integrations/{id}/invoke/verify_otp`. The Hub keeps the vendor's transaction id in that session for 10 minutes and routes step 2 to **the same account and integration version** that sent the OTP, even if you publish a new version in between (DESIGN §6.3, §14).
+**Yes. One integration id with two operations, two calls.** The caller calls `POST /v1/integrations/{id}/invoke/send_otp`, gets an `X-Hub-Session` header back, and sends it on `POST /v1/integrations/{id}/invoke/verify_otp`. The Hub keeps the vendor's transaction id in that session for 10 minutes and routes step 2 to **the same account and integration version** that sent the OTP, even if you publish a new version in between (DESIGN §6.3, §14).
 
 The Hub handles each call; **the calling backend owns the journey** (which screen the user is on, when to resend). The Hub is not a workflow engine (PRD non-goal).
 
@@ -17,78 +17,112 @@ The Hub handles each call; **the calling backend owns the journey** (which scree
 
 ## What the operator configures
 
-| Piece | Example (`examples/otp-account-flow/`) | Notes |
+| Piece | Example (`examples/aadhaar-okyc/`, `int_aadhaar_okyc`) | Notes |
 | --- | --- | --- |
-| Capability with operations | `demo.mobile_otp@v1`: `send_otp` (`mobile` → `otp_sent`), `verify_otp` (`mobile`, `otp` → `verified`), flagged `interactive` | A request and a response schema per operation. Production capabilities live in `contracts/` and are added by the contract-steward (the Aadhaar one, `kyc.aadhaar_otp@v1`, is HUB-334) |
-| One vendor endpoint per step | `demo-kyc.otp_send@1` (`POST /v1/otp/send`), `demo-kyc.otp_verify@1` (`POST /v1/otp/verify`) | [vendors-and-accounts.md](vendors-and-accounts.md#add-or-change-an-endpoint) |
-| One transformer pair per operation | `DEMO-OTP-SEND-REQ/RES@1` (`operation: send_otp`), `DEMO-OTP-VERIFY-REQ/RES@1` (`operation: verify_otp`) | Step 1's response transformer has a `session:` section; step 2's request transformer reads `session.*` |
-| Integration | `int_demo_otp`, `sync`, `on_circuit_open: fail_fast`, `moves_money_or_quota: true` | Interactive capabilities must be `sync` (a 202 is never an answer to a person waiting); an OTP costs quota, so callers must send `Idempotency-Key` |
-| Audit | `masked` in the demo; **`sealed`** for Aadhaar, PAN, bureau (D6) | Compliance may require `metadata_only` for Aadhaar (open question in `docs/use-cases/README.md` §6) |
+| Integration, created with `interactive: true` | `int_aadhaar_okyc`, `moves_money_or_quota: true` | `interactive` is fixed at creation (console checkbox **Interactive**, MCP `hub_admin_create_integration {"interactive": true}`). Interactive integrations must be `sync` (a 202 is never an answer to a person waiting); an OTP costs quota, so callers must send `Idempotency-Key` |
+| Two operations on the integration version, each with its request schema | `send_otp` (`aadhaar_number`, `consent`, `purpose`, all required), `verify_otp` (`otp`, required) | Built in the draft form (**Add operation**, then **Paste a sample** → **Generate fields** per operation). Response schemas do not exist: each step returns what its response transformer produces |
+| One vendor endpoint per step, each with its request schema | `cashfree-sid.okyc_otp@1` (`POST /offline-aadhaar/otp`, body `aadhaar_number` required), `cashfree-sid.okyc_verify@1` (`POST /offline-aadhaar/verify`, body `otp` and `ref_id` required) | [vendors-and-accounts.md](vendors-and-accounts.md#add-or-change-an-endpoint) |
+| One transformer pair per operation | `CF-OKYC-OTP-REQ/RES@1` (step 1), `CF-OKYC-VERIFY-REQ/RES@1` (step 2) | Transformers name no operation: the target's pairs decide which runs where. Step 1's response transformer has a `session:` section; step 2's request transformer reads `session.*` |
+| Audit | **`sealed`**, 90 days (D6: Aadhaar, PAN, bureau); `masked` in the `otp-account-flow` demo | Compliance may require `metadata_only` for Aadhaar (open question in `docs/use-cases/README.md` §6) |
 
 ## The transformers
 
-Step 1 response (`DEMO-OTP-SEND-RES@1`): map the answer and keep **only** the vendor txn id in the session.
+Step 1 request (`CF-OKYC-OTP-REQ@1`): reads `req.aadhaar_number`, which `send_otp`'s request schema must declare. `consent` and `purpose` stay in the Hub (sealed audit): the provider has no field for them.
 
 ```yaml
-transformer: DEMO-OTP-SEND-RES
+transformer: CF-OKYC-OTP-REQ
+version: 1
+kind: request
+docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/generate-otp-to-verify-aadhaar
+vendor_endpoint: cashfree-sid.okyc_otp@1
+request:
+  method: POST
+  path: /offline-aadhaar/otp
+  headers:
+    Content-Type:    '"application/json"'
+    X-Client-Id:     creds.client_id
+    X-Client-Secret: creds.client_secret
+  body:
+    aadhaar_number: req.aadhaar_number
+```
+
+Step 1 response (`CF-OKYC-OTP-RES@1`): map the answer and keep **only** the provider's reference id in the session.
+
+```yaml
+transformer: CF-OKYC-OTP-RES
 version: 1
 kind: response
-capability: demo.mobile_otp@v1
-operation: send_otp
 response:
-  status:       '"otp_sent"'
-  expires_in_s: res.body.expires_in
-  vendor_ref:   res.body.ref
+  status:     '"otp_sent"'
+  vendor_ref: 'replace(toJSON(res.body.ref_id), "\"", "")'
 session:
-  vendor_txn_id: res.body.txn_id      # opens the session; evaluated on success only
+  vendor_txn_id: 'replace(toJSON(res.body.ref_id), "\"", "")'   # opens the session; evaluated on success only
 errors: [...]
 ```
 
-Step 2 request (`DEMO-OTP-VERIFY-REQ@1`): read the txn id back from the session.
+Step 2 request (`CF-OKYC-VERIFY-REQ@1`): reads `req.otp` (declared by `verify_otp`) and the reference id back from the session. The caller never sees or sends it.
 
 ```yaml
-transformer: DEMO-OTP-VERIFY-REQ
+transformer: CF-OKYC-VERIFY-REQ
 version: 1
 kind: request
-capability: demo.mobile_otp@v1
-operation: verify_otp
-vendor_endpoint: demo-kyc.otp_verify@1
+docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/submit-otp-to-verify-aadhaar
+vendor_endpoint: cashfree-sid.okyc_verify@1
 request:
   method: POST
-  path: /v1/otp/verify
+  path: /offline-aadhaar/verify
   headers:
-    Content-Type: '"application/json"'
-    X-Client-Id:  account.config.client_id
+    Content-Type:    '"application/json"'
+    X-Client-Id:     creds.client_id
+    X-Client-Secret: creds.client_secret
   body:
-    mobile: req.mobile
-    txn_id: session.vendor_txn_id
     otp:    req.otp
+    ref_id: session.vendor_txn_id
 ```
 
-Step 2 response (`DEMO-OTP-VERIFY-RES@1`) maps wrong and expired OTPs to `UPSTREAM_REJECTED` with fixed, vendor-neutral messages (`"The OTP does not match"`, `"The OTP has expired; request a new one"`); it has no `session:` section (later steps never open a session). A transformer error rule cannot set the machine-readable `reason` yet (HUB-346), so callers tell wrong from expired only by `message`.
+(The response transformers above are shortened; the example's files hold the full error rules.) Step 2's response transformer maps wrong and expired OTPs to `UPSTREAM_REJECTED` with fixed, vendor-neutral messages (`"The OTP does not match"`, `"The OTP has expired; request a new one"`); it has no `session:` section (later steps never open a session). A transformer error rule cannot set the machine-readable `reason` yet (HUB-346), so callers tell wrong from expired only by `message`.
 
 The `session:` section may read `res`, `req` and `account`, never `creds`. The session store refuses anything that looks like an Aadhaar number (12 digits, with or without spaces or hyphens): such a call fails with `TRANSFORM_FAILED` and opens no session. Keep the session to the vendor txn id.
 
 ## The integration version
 
-Each target has a **default pair** (`transformer`, used by every operation not listed) and a pair per listed operation (`operations`, admin contract 1.2.0):
+The version declares both **operations** with their request schemas. Each target has a **default pair** (`transformer`, used by every operation not listed) and a pair per listed operation (`operations`):
 
 ```json
+"operations": {
+  "send_otp": {
+    "description": "Send an OTP to the mobile number linked to the Aadhaar number. Opens a session (X-Hub-Session).",
+    "idempotent": false,
+    "request_schema": { "body": {
+      "type": "object", "required": ["aadhaar_number", "consent", "purpose"], "additionalProperties": false,
+      "properties": {
+        "aadhaar_number": { "type": "string", "pattern": "^[2-9][0-9]{11}$", "x-pii": "government_id" },
+        "consent":        { "type": "boolean", "const": true },
+        "purpose":        { "type": "string", "minLength": 3, "maxLength": 200 } } } }
+  },
+  "verify_otp": {
+    "description": "Verify the OTP inside the session send_otp opened and return the minimal e-KYC data.",
+    "idempotent": false,
+    "request_schema": { "body": {
+      "type": "object", "required": ["otp"], "additionalProperties": false,
+      "properties": { "otp": { "type": "string", "pattern": "^[0-9]{6}$", "x-pii": "free_text" } } } }
+  }
+},
 "targets": [{
-  "vendor_id": "demo-kyc", "account_id": "demo-kyc-a",
-  "transformer": { "request": "DEMO-OTP-SEND-REQ@1",   "response": "DEMO-OTP-SEND-RES@1" },
-  "operations":  { "verify_otp": { "request": "DEMO-OTP-VERIFY-REQ@1", "response": "DEMO-OTP-VERIFY-RES@1" } },
+  "vendor_id": "cashfree-sid", "account_id": "cf-sid-test",
+  "transformer": { "request": "CF-OKYC-OTP-REQ@1",    "response": "CF-OKYC-OTP-RES@1" },
+  "operations":  { "verify_otp": { "request": "CF-OKYC-VERIFY-REQ@1", "response": "CF-OKYC-VERIFY-RES@1" } },
   "weight": 100
 }],
 "delivery": { "mode": "sync", "on_circuit_open": "fail_fast" },
-"audit": { "payloads": "sealed" }
+"audit": { "payloads": "sealed", "retention_ms": 7776000000 }
 ```
 
-The same selection applies to failover targets, shadow, dry-run and queued work. Publish refuses a version where an operation would run a pair compiled for another operation (check `operations_have_transformers`), so step 2 can never silently run step 1's mapping. Create, validate and publish it with the loop in [cutover.md](cutover.md#draft-validate-diff-publish) (console, hubctl, or `hub_admin_create_integration` + `hub_admin_create_integration_draft` + `hub_admin_validate_integration_version` + `hub_admin_publish_integration_version`).
+`validate_input` is left at its default (`true`), so a missing `consent` or a malformed Aadhaar number is refused with 400 `VALIDATION_FAILED` before any vendor call. The same pair selection applies to failover targets, shadow, dry-run and queued work. Validate checks each pair against its own operation: step 2's request transformer may read only fields `verify_otp` declares (`schemas_compile`), its samples' inputs must fit `verify_otp` (`input_schema`), and a target `operations` key that the version does not declare fails `operations_have_transformers`. A pair with no response transformer would pass the vendor's answer through unchanged; for OTP flows keep response transformers, so wrong and expired OTPs map to canonical errors. Create, validate and publish it with the loop in [cutover.md](cutover.md#draft-validate-diff-publish) (console, hubctl, or `hub_admin_create_integration` with `interactive: true` + `hub_admin_create_integration_draft` + `hub_admin_validate_integration_version` + `hub_admin_publish_integration_version`).
 
 ## What the caller does
 
-Two calls, the session id carried between them (full caller guide: the consumer skill `clients/claude-skill/integration-hub/`, reference `examples.md`):
+Two calls, the session id carried between them (full caller guide: the consumer skill `clients/claude-skill/integration-hub/`, reference `examples.md`). The calls below use the demo flow of `examples/otp-account-flow/` (`int_demo_otp`, operations `send_otp` with `mobile` and `verify_otp` with `mobile` and `otp`); the Aadhaar flow is the same with its own bodies:
 
 ```http
 POST /v1/integrations/int_demo_otp/invoke/send_otp
@@ -131,13 +165,13 @@ X-Hub-Session: ses_01M6S0SYJAPG6N5XSV02NPW0ED
 
 ## Testing and dry-run
 
-- Goldens per transformer: step 2 request fixtures set `"_context": {"session": {"vendor_txn_id": "..."}}`; step 1 response fixtures expect `{"response": ..., "session": {...}}`.
-- Transformer dry-run with a session: `hub_admin_dry_run_transformer {"ref": "DEMO-OTP-VERIFY-REQ@1", "account_id": "demo-kyc-a", "input": {"mobile": "+919812345678", "otp": "482913"}, "session": {"vendor_txn_id": "dk_txn_7f3a"}}`.
+- Samples per transformer: step 2 request samples set `"_context": {"session": {"vendor_txn_id": "..."}}`; step 1 response samples expect `{"response": ..., "session": {...}}`. Each request sample's input must be a valid input of the operation the transformer serves.
+- Transformer dry-run with a session: `hub_admin_dry_run_transformer {"ref": "CF-OKYC-VERIFY-REQ@1", "account_id": "cf-sid-test", "input": {"otp": "111000"}, "session": {"vendor_txn_id": "1234567"}}`.
 - Caller dry-run of one operation: `POST /v1/integrations/int_demo_otp/dry-run?operation=verify_otp` with `X-Hub-Session` shows the request the pinned account would get (MCP: `hub_dry_run` with `operation` and `session`).
 - Never test with a real Aadhaar number or phone; use `mockvendor` or the provider's sandbox.
 
 ## Runnable examples
 
 - `examples/otp-account-flow/`: OTP send → verify → bank account check, through the real gateway against `mockvendor`, with every failure case (test `TestExampleOTPAccountFlow`).
-- `examples/aadhaar-okyc/`: Aadhaar OTP e-KYC (`int_aadhaar_okyc`, operations `send_otp` and `verify_otp`) against a sandbox provider played by `mockvendor`.
+- `examples/aadhaar-okyc/`: Aadhaar OTP e-KYC (`int_aadhaar_okyc`, operations `send_otp` and `verify_otp` on the integration) against a sandbox provider played by `mockvendor`.
 - `docs/use-cases/README.md` §6: the UX journey, sequence diagram and failure table.

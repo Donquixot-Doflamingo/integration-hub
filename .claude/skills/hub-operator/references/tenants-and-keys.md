@@ -37,7 +37,7 @@ A new tenant has no keys and owns no integrations.
 
 | Scope | Allows | Give it to |
 | --- | --- | --- |
-| `invoke` | Invoke, request status, discovery (`/v1/integrations`, `/v1/capabilities/...`) | Every service key |
+| `invoke` | Invoke, request status, discovery (`/v1/integrations`, `/v1/integrations/{id}`: operations and their request schemas) | Every service key |
 | `dry_run` | `POST /v1/integrations/{id}/dry-run`: shows the vendor request (secrets `***`) | **Developer keys only, never production services.** It is the one place callers see what is behind an integration (PRD DV-6), so it is never granted by default |
 | `requests_read` | Defined for read-only request access (DESIGN §16.5, SECURITY.md); request status already works with `invoke` keys, so most tenants do not need it | Rarely needed |
 

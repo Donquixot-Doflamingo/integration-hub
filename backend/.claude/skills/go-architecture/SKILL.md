@@ -1,6 +1,6 @@
 ---
 name: go-architecture
-description: "Package boundaries, allowed import graph and wiring for the Integration Hub Go backend (DESIGN 18.1 and 18.3) - ports and adapters for Postgres, Redis and HTTP, where new code goes (new vendor, capability, auth scheme, middleware, role), shared role binaries, config loading, constructor injection and graceful shutdown order. Use whenever you create a package or file under backend/internal or backend/cmd, add an import between internal packages, wire a dependency in main, add a role or binary, or wonder where something belongs."
+description: "Package boundaries, allowed import graph and wiring for the Integration Hub Go backend (DESIGN 18.1 and 18.3) - ports and adapters for Postgres, Redis and HTTP, where new code goes (new vendor, new API or integration, auth scheme, middleware, role), shared role binaries, config loading, constructor injection and graceful shutdown order. Use whenever you create a package or file under backend/internal or backend/cmd, add an import between internal packages, wire a dependency in main, add a role or binary, or wonder where something belongs."
 ---
 
 # Go architecture for the Integration Hub
@@ -69,8 +69,8 @@ Adapters own their SQL/Redis keys; nobody else touches those tables or keys. Swa
 ## Where new code goes
 | Change | Where | Also |
 | --- | --- | --- |
-| New vendor | `config/vendors/<vendor>.yaml`, accounts in `config/accounts/`, transformers + fixtures in `config/transformers/` | **No Go code** unless it needs a new auth scheme or stdlib function. See `hub-transformers`. |
-| New capability | JSON Schema in `contracts/schemas/capabilities/` (via contract-steward), dev copy/ref in `config/capabilities/` | Interactive flag, operations; publish validation already generic |
+| New vendor | Shared environments: console or admin API (vendor, endpoints with `request_schema`, accounts, transformers with samples). Local dev: `config/vendors/<vendor>.yaml`, accounts in `config/accounts/`, transformers + fixtures in `config/transformers/` | **No Go code** unless it needs a new auth scheme or stdlib function. See `hub-transformers`. |
+| New API for callers (new integration or operation) | Registry data, not code or contracts (ADR-0023): operations with their `request_schema` in the integration version (`config/integrations/<id>/versions/<n>.yaml` locally) | `interactive` on the integration; publish validation already generic (`schemas_compile`, `input_schema`, `endpoint_schema`) |
 | New auth scheme | `internal/creds/auth/<scheme>.go` implementing the scheme interface, registered in the scheme table | Unit tests with fake creds; secrets only via `creds.*`; redaction registration |
 | New stdlib expression function | `internal/transform/stdlib/` | Pure, bounded, typed for the checker; platform code release only (§7.3) |
 | New HTTP middleware | `internal/edge/mw/` | Own duration metric, < 100 µs p99, bench, position in the §18.4 chain documented |

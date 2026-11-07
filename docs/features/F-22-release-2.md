@@ -1,4 +1,4 @@
-# F-22 — Release-2 capabilities
+# F-22 — Release-2 features
 
 ## Summary
 The DESIGN §19 "Phase 2" items that were not pulled into v1, grouped here as Release 2. Each item gets its own feature doc (new `F-XX`) when work starts; this doc fixes scope and pointers.
@@ -13,7 +13,7 @@ Lead (scoping); `backend-engineer` per item.
 Release 2 (after M8) · EP-12 · HUB-330–399.
 
 ## Problem
-v1 covers engagement-style traffic (CleverTap pilot). Lending capabilities (bureau, Aadhaar, PAN, AA, eSign, eNACH), payment partners and LLMs need extra auth schemes, multi-step flows, sealed audit and managed key storage (DESIGN §14, §15).
+v1 covers engagement-style traffic (CleverTap pilot). Lending integrations (bureau, Aadhaar, PAN, AA, eSign, eNACH), payment partners and LLMs need extra auth schemes, multi-step flows, sealed audit and managed key storage (DESIGN §14, §15).
 
 ## Goals / Non-goals
 **Goals** — items:
@@ -48,9 +48,9 @@ v1 covers engagement-style traffic (CleverTap pilot). Lending capabilities (bure
 | Admin | `POST /admin/v1/requests/{request_id}/unseal` | `contracts/openapi/hub-admin.v1.yaml#unsealRequest` |
 | Events | `message.delivered@v1`, `aa.fi_ready@v1` | Not in `contracts/schemas/events/` yet (missing — needs CCR, Release 2) |
 
-**Status of R2-5 (2026-11-06, HUB-342).** The vendor session store itself shipped in M6 (HUB-175, HUB-183): `X-Hub-Session`, pinning to version + account, 10-min expiry, Aadhaar-like data refused. Per-operation transformers shipped on 2026-11-07 (HUB-343, admin contract HUB-344, refusal of a single pair serving every operation HUB-345; see F-14): `generate` and `verify` can call different vendor endpoints, and the runnable example uses `send_otp` and `verify_otp` on two endpoints. What R2-5 still needs: a canonical `reason` for OTP rejections (HUB-346), and the production `kyc.aadhaar_otp@v1` capability with a licensed KUA/ASA (HUB-334). The caller's view, with a runnable example, is use case 6 of the [use-case catalogue](../use-cases/README.md#6-two-step-flows-otp-then-verify-then-bank-account).
+**Status of R2-5 (2026-11-06, HUB-342).** The vendor session store itself shipped in M6 (HUB-175, HUB-183): `X-Hub-Session`, pinning to version + account, 10-min expiry, Aadhaar-like data refused. Per-operation transformers shipped on 2026-11-07 (HUB-343, admin contract HUB-344, refusal of a single pair serving every operation HUB-345; see F-14): `generate` and `verify` can call different vendor endpoints, and the runnable example uses `send_otp` and `verify_otp` on two endpoints. What R2-5 still needs: a canonical `reason` for OTP rejections (HUB-346), and a production Aadhaar OTP integration with a licensed KUA/ASA (HUB-334; since ADR-0023 its operations and schemas are integration data, not a capability). The caller's view, with a runnable example, is use case 6 of the [use-case catalogue](../use-cases/README.md#6-two-step-flows-otp-then-verify-then-bank-account).
 
-**Runnable real-provider examples (2026-11-07, HUB-351).** [`examples/aadhaar-okyc/`](../../examples/aadhaar-okyc/README.md) runs R2-5 against a real KYC provider's documented API (Aadhaar OTP-based offline e-KYC through a licensed provider; UIDAI's own APIs need an AUA/KUA licence): one integration, `int_aadhaar_okyc`, operations `send_otp` and `verify_otp`, the provider's reference only in the vendor session, R2-8 `sealed` audit for 90 days, minimal response. A demo script switches from mockvendor to the provider's sandbox with `HUB_DEMO_TARGET=sandbox`. The capability is an example overlay (`demo.aadhaar_okyc@v1`); the production `kyc.aadhaar_otp@v1` stays HUB-334. No new metric, log or span: the example uses the existing session, audit and upstream telemetry.
+**Runnable real-provider examples (2026-11-07, HUB-351).** [`examples/aadhaar-okyc/`](../../examples/aadhaar-okyc/README.md) runs R2-5 against a real KYC provider's documented API (Aadhaar OTP-based offline e-KYC through a licensed provider; UIDAI's own APIs need an AUA/KUA licence): one integration, `int_aadhaar_okyc`, operations `send_otp` and `verify_otp`, the provider's reference only in the vendor session, R2-8 `sealed` audit for 90 days, minimal response. A demo script switches from mockvendor to the provider's sandbox with `HUB_DEMO_TARGET=sandbox`. Its operations and request schemas live on the integration version (ADR-0023); the production integration stays HUB-334. No new metric, log or span: the example uses the existing session, audit and upstream telemetry.
 
 **PAN verification example (2026-11-07, HUB-352).** [`examples/pan-verify/`](../../examples/pan-verify/README.md): the DESIGN §14 sync lookup on the same provider and account, `int_pan_verify` (`demo.pan_verify@v1`), sealed audit, masked PAN, invalid PAN as a business answer.
 
@@ -58,14 +58,14 @@ v1 covers engagement-style traffic (CleverTap pilot). Lending capabilities (bure
 Defined per item in DESIGN; key invariants carried into each item's doc:
 1. Inbound webhooks are vendor-scoped URLs but tenants only ever see canonical events (DESIGN §0).
 2. Sessions pin version + account; cutover never moves step 2 (DESIGN §6.3).
-3. Interactive capabilities stay sync; a 202 is never an answer to a person waiting (DESIGN §5.4).
+3. Interactive integrations stay sync; a 202 is never an answer to a person waiting (DESIGN §5.4).
 4. Unseal is itself audited (actor, reason, time) and visible in the change log.
 
 ## Data model impact
 `vendor_sessions`; consent artefact table (new); per-tenant seal keys; OAuth2 token cache (memory).
 
 ## Config impact
-Account webhook scheme; transformer `stream:`, `batch:`, `supports:`; capability `interactive`; integration `audit.payloads: sealed`.
+Account webhook scheme; transformer `stream:`, `batch:`, `supports:`; integration `interactive` (set at creation, ADR-0023); integration `audit.payloads: sealed`.
 
 ## Observability
 `llm_tokens_total`, `llm_cost_usd_total`, inbound webhook verification failures, session expiries, unseal count (new).
@@ -80,7 +80,7 @@ Per item doc.
 Chaos and golden coverage per item; mockvendor inbound webhook support (F-02 US-0203).
 
 ## Rollout & migration
-Order depends on PRD Q3 (first production capabilities after the CleverTap pilot) and Q7 (KMS vs Vault).
+Order depends on PRD Q3 (first production integrations after the CleverTap pilot) and Q7 (KMS vs Vault).
 
 ## Open questions
 - Which items gate the first lending vendor (likely R2-3, R2-5, R2-8, R2-9)?
@@ -96,3 +96,4 @@ HUB-330 – HUB-399.
 | 2026-11-06 | R2-5 status after HUB-342; R2-11 (HUB-347) and R2-12 (HUB-348) added; link to the use-case catalogue | backend-engineer |
 | 2026-11-07 | Runnable Aadhaar OTP e-KYC example on a real provider's sandbox (HUB-351) | backend-engineer |
 | 2026-11-07 | PAN verification example (HUB-352) | backend-engineer |
+| 2026-11-07 | Release-2 wording without capabilities; Aadhaar production integration (ADR-0023, HUB-437) | docs-keeper |

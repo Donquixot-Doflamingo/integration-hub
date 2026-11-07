@@ -1,7 +1,8 @@
 # Integration Hub consumer skill (any AI agent)
 
 A skill for developers on other teams who **use** the Integration Hub. It teaches their AI assistant
-to discover integrations, build canonical bodies, dry-run first, invoke with `Idempotency-Key`,
+to discover integrations and their operations' request schemas, build bodies from them, handle
+pass-through answers (`X-Hub-Pass-Through`), dry-run first, invoke with `Idempotency-Key`,
 handle `200` vs `202 Queued`, run two-step flows (OTP send then verify with `X-Hub-Session`), follow
 the retry rules, verify callback signatures, use the Go `hubclient` SDK and the `hubmcp` MCP tools,
 and never move money or quota without the user's confirmation.

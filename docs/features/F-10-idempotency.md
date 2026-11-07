@@ -1,7 +1,7 @@
 # F-10 — Idempotency
 
 ## Summary
-`Idempotency-Key` handling backed by Redis: the same key within 24 h returns the stored result of a completed request; concurrent duplicates make one vendor call. The key is mandatory for capabilities that move money or vendor quota (DESIGN §4.2, §5.1, §6.3).
+`Idempotency-Key` handling backed by Redis: the same key within 24 h returns the stored result of a completed request; concurrent duplicates make one vendor call. The key is mandatory for integrations that move money or vendor quota (DESIGN §4.2, §5.1, §6.3).
 
 ## Status
 `in-progress` — 2026-10-31. Store done (HUB-118, `backend/internal/idempotency`); edge wiring (400 `IDEMPOTENCY_KEY_REQUIRED` already enforced by HUB-088, replay/409 responses, Redis-down policy) is the lead's M4 edge work.
@@ -18,7 +18,7 @@ Callers retry on timeouts. Without idempotency, a retried bureau pull is billed 
 ## Goals / Non-goals
 **Goals**
 - Redis lookup after resolve, before transform (DESIGN §5.1 step 4), only when a key is sent (skipped otherwise; DESIGN §18.5.6).
-- Store final status + canonical response for 24 h; replay returns it with `X-Hub-Idempotent-Replay: true` (`IDEMPOTENT_REPLAY` semantics, 200/202).
+- Store final status + response (the integration's output, or the vendor's in pass-through, with its status and `X-Hub-Pass-Through`) for 24 h; replay returns it with `X-Hub-Idempotent-Replay: true` (`IDEMPOTENT_REPLAY` semantics, 200/202).
 - In-progress marker to collapse concurrent duplicates.
 - Mandatory key for integrations with `moves_money_or_quota: true`.
 - Weighted routing uses the key as the hash input, so a key always lands on the same target (DESIGN §5.1 step 3).
@@ -64,7 +64,7 @@ Callers retry on timeouts. Without idempotency, a retried bureau pull is billed 
 Redis keys only (TECH_SPEC §6.4): `hub:idem:<sha256(tenant, integration, key)>` hash; `requests.idempotency_key` column for search (proposed).
 
 ## Config impact
-Integration flag `moves_money_or_quota` (admin `createIntegration` / `updateIntegration`); it replaces the proposed capability flag `x-side-effects` (PRD Q9, resolved by the contract).
+Integration flag `moves_money_or_quota` (admin `createIntegration` / `updateIntegration`); it replaced the proposed schema flag `x-side-effects` (PRD Q9, resolved by the contract).
 
 ## Observability
 | Kind | Name | Notes |
@@ -80,8 +80,8 @@ Keys may embed business ids; they are stored hashed in Redis and shown in audit 
 ## Failure modes
 | Failure | Behaviour | Caller sees |
 | --- | --- | --- |
-| Redis unavailable, key present, money/quota capability | Fail closed | 500 `INTERNAL_ERROR` (retryable; contract catalogue) |
-| Redis unavailable, other capability | Proceed without dedupe, count metric | Normal |
+| Redis unavailable, key present, money/quota integration | Fail closed | 500 `INTERNAL_ERROR` (retryable; contract catalogue) |
+| Redis unavailable, other integration | Proceed without dedupe, count metric | Normal |
 | Two nodes race on same key | `SET NX` decides; loser treated as duplicate | One vendor call |
 
 ## Testing
@@ -107,3 +107,4 @@ HUB-110 – HUB-139 (EP-05, filter `feature: F-10`).
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-10-31 | Store implemented (HUB-118): implementation notes, lease, metrics, tests; status in-progress | backend-engineer |
+| 2026-11-07 | Integration wording; replayed pass-through answers (ADR-0023, HUB-437) | docs-keeper |

@@ -20,7 +20,7 @@ Callers need one contract, one error vocabulary and predictable timeouts across 
 - `POST /v1/integrations/{id}/invoke` and `/invoke/{op}` in `sync` mode.
 - Resolver: active version, weighted target (hash of idempotency key or request id), failover chain recorded (failover behaviour itself is F-12).
 - Upstream client per account: HTTP pool, `connect_timeout_ms` (500), `timeout_ms` (3000), `X-Request-Deadline` cap.
-- Error envelope and all codes of the caller error catalogue in `contracts/README.md` (DESIGN §4.4 plus the contract additions `IDEMPOTENCY_KEY_REQUIRED`, `OPERATION_NOT_FOUND`, `CAPABILITY_NOT_FOUND`, `REQUEST_NOT_FOUND`, `IDEMPOTENCY_CONFLICT`, `PAYLOAD_TOO_LARGE`, `INTERNAL_ERROR`, `NOT_READY`); outcome classification per DESIGN §10.2.
+- Error envelope and all codes of the caller error catalogue in `contracts/README.md` (DESIGN §4.4 plus the contract additions `IDEMPOTENCY_KEY_REQUIRED`, `OPERATION_NOT_FOUND`, `REQUEST_NOT_FOUND`, `IDEMPOTENCY_CONFLICT`, `PAYLOAD_TOO_LARGE`, `INTERNAL_ERROR`, `NOT_READY`); outcome classification per DESIGN §10.2 (`CAPABILITY_NOT_FOUND` was removed in hub-public 2.0.0). Without a response transformer the sync answer is pass-through: the vendor's status and body unchanged with `X-Hub-Pass-Through: true`, never the envelope; Hub-side failures, timeouts and open circuits still use the envelope ([F-23](F-23-schema-registry.md)).
 - One immediate retry on timeout only if the endpoint is idempotent or a key is present.
 - `X-Hub-Request-Id` on every response; debug-only `X-Hub-Integration-Version`.
 - `GET /v1/requests/{request_id}`; caller dry-run (`dryRunIntegration`), a documented, scope-gated exception to the no-vendor-leak rule (PRD DV-6).
@@ -119,3 +119,4 @@ HUB-080 – HUB-109 (EP-04, filter `feature: F-06`).
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-10-31 | HUB-086: upstream client section | backend-engineer |
+| 2026-11-07 | Pass-through answers and the error catalogue without `CAPABILITY_NOT_FOUND` (ADR-0023, HUB-437) | docs-keeper |

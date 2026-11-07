@@ -50,8 +50,9 @@ Rules:
   when part ships later, and say which part.
 - One testable statement per row. "Shall be fast" is not a requirement; "p99 <= 10 ms" is.
 - Source = DESIGN section, decision (`D1..D12`), deviation (`DV-N`) or open question.
-- Use the canonical vocabulary: integration, capability, version, account, tenant, canonical body,
-  `Queued`, error codes from DESIGN §4.4.
+- Use the canonical vocabulary: integration, operation, request schema, endpoint, transformer,
+  sample, pass-through, version, account, tenant, `Queued`, error codes from DESIGN §4.4
+  (ADR-0023: there is no shared canonical schema object).
 
 ## Goals vs non-goals
 - A goal is an outcome with a measure (`G2: accepted async work is never lost | 0 lost in soak test`).

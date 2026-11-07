@@ -22,14 +22,14 @@ AI assistants hallucinate vendor APIs and suggest calling vendors directly. Deve
 
 | Tool | Calls | Notes |
 | --- | --- | --- |
-| `hub_list_integrations` | `hub-public.v1.yaml#listIntegrations` | id, capability, operations, mode, paused, description |
-| `hub_describe_integration` | `#getIntegration` + `#getCapability` | request/response schemas per operation |
-| `hub_dry_run` | `#dryRunIntegration` | needs key scope `dry_run`; shows the upstream request (secrets `***`) by design; validation errors returned as structured content |
-| `hub_invoke` | `#invokeIntegration` / `#invokeIntegrationOperation` (+ `#getIntegration` for the flag) | `confirm: true` and `idempotency_key` required when `moves_money_or_quota` is true; `outcome` is `completed`, `queued`, `error` or `refused` |
+| `hub_list_integrations` | `hub-public.v1.yaml#listIntegrations` | id, operations (each with its `request_schema`), mode, interactive, paused, money flag, description |
+| `hub_describe_integration` | `#getIntegration` | delivery policy and each operation's `request_schema` (body, optional headers); no response schema |
+| `hub_dry_run` | `#dryRunIntegration` | needs key scope `dry_run`; shows the upstream request (secrets `***`) by design; validation errors returned as structured content; optional `headers` (declared caller headers only) |
+| `hub_invoke` | `#invokeIntegration` / `#invokeIntegrationOperation` (+ `#getIntegration` for the flag) | `confirm: true` and `idempotency_key` required when `moves_money_or_quota` is true; `outcome` is `completed`, `queued`, `error` or `refused`; optional `headers` forwards only header names the operation declares (the Hub's own headers are refused locally); `pass_through: true` marks the third party's own body in `result` (also on `error`, with `error` null) |
 | `hub_get_request` | `#getRequestStatus` | poll a 202 |
 
 - Admin tools (only registered when `HUB_ADMIN_TOKEN` is set). The full tables with operation, method, minimum role and `requires_confirm` are in `contracts/mcp/README.md`.
-  - 21 read and check tools on both transports, among them `hub_admin_search_requests`, `hub_admin_request_timeline` and `hub_admin_breaker_states`. The rest are get/list for tenants, vendors, endpoints, accounts, capabilities, transformers, integrations, versions, diff and registrar endpoints, plus the three non-mutating checks (`run_transformer_goldens`, `dry_run_transformer`, `validate_integration_version`).
+  - 20 read and check tools on both transports (contract 2.0.0 dropped `hub_admin_list_capabilities`), among them `hub_admin_search_requests`, `hub_admin_request_timeline` and `hub_admin_breaker_states`. The rest are get/list for tenants, vendors, endpoints, accounts, transformers, integrations, versions, diff and registrar endpoints, plus the three non-mutating checks (`run_transformer_goldens`, `dry_run_transformer`, `validate_integration_version`).
   - 16 write tools, **stdio only** (HUB-315): create/update tenant, create API key, create/update vendor, create vendor endpoint, update account, create transformer version, create integration, create/update draft, publish, set weights, rollback, create/update registrar endpoint.
 
 **Non-goals**
@@ -149,3 +149,4 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-20`).
 | 2026-11-07 | E2E against a running Hub (HUB-307); US-2003/US-2006 aligned with ADR-0018 | backend-engineer |
 | 2026-11-07 | Client setup for Claude Code, Claude Desktop, Codex CLI and Cursor, tenant vs admin profile: `clients/claude-skill/integration-hub/references/mcp-setup.md` (HUB-318) | docs agent |
 | 2026-11-07 | Admin write tools as the signed-in user, stdio only, no delete path (HUB-315, contract 1.1.0, ADR-0020) | backend-engineer |
+| 2026-11-07 | Contract 2.0.0: operations with request schemas in discovery, `headers` input, `pass_through` output, no capability tool (ADR-0023, HUB-437) | docs-keeper |

@@ -2,7 +2,7 @@
 
 One vendor-agnostic API through which every internal service talks to every third party: engagement tools, SMS/WhatsApp, credit bureaus, KYC, Account Aggregators, payment rails and LLMs.
 
-Callers send a **stable integration ID** and a **canonical body**. The Hub picks the vendor, the account and the transformer, applies delivery policy, rate limits and circuit breakers, calls the vendor now or via a durable queue, maps the response back, and keeps a lossless audit trail. Swapping a vendor or an account is a config publish. Callers change nothing.
+Callers send a **stable integration ID**, an operation and a **body that matches the operation's request schema**. The Hub picks the vendor, the account and the transformer, applies delivery policy, rate limits and circuit breakers, calls the vendor now or via a durable queue, maps the response back (or passes the vendor's answer through), and keeps a lossless audit trail. Operators onboard a new API from the admin console without code: the integration owns the caller's input schema, the vendor endpoint owns its request schema, and samples prove the transformer between them ([F-23](docs/features/F-23-schema-registry.md)). Swapping a vendor or an account is a config publish. Callers change nothing in their requests.
 
 **What can it do for my team?** See the [use-case catalogue](docs/use-cases/README.md): how a call flows, events, vendor swaps, outages, callbacks, retries, two-step OTP flows and the lending patterns, each with the exact requests and whether it works today or is planned.
 
@@ -26,7 +26,7 @@ make -C backend goldens     # transformer golden fixtures
 | [`docs/tech/`](docs/tech/) | Tech spec, observability plan, testing strategy, security, ADRs |
 | [`docs/tickets/TICKETS.md`](docs/tickets/TICKETS.md) | Ticket backlog (`HUB-###`) |
 | [`docs/process/`](docs/process/) | Git workflow, contract changes, releases |
-| [`contracts/`](contracts/) | Frozen OpenAPI 3.1 contracts, capability and event schemas, MCP tool contract |
+| [`contracts/`](contracts/) | Frozen OpenAPI 3.1 contracts, event schemas, MCP tool contract |
 | [`backend/`](backend/) | Go: `hub` (gateway, worker, scheduler, admin), `hubctl`, `mockvendor`, `hubmcp` |
 | [`frontend/`](frontend/) | SvelteKit admin console |
 | [`clients/claude-skill/`](clients/claude-skill/) | Claude skill for teams that use the Hub |

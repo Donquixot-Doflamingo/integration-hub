@@ -1,6 +1,6 @@
 # Integrations, versions and cutover
 
-**The integration id never changes; you publish a new version behind it** (DESIGN §6.1). Switching account (OpenAI account A → B), vendor (CleverTap → MoEngage) or transformer (`T1@7` → `T1@8`) are all a new integration version. Callers change nothing and deploy nothing.
+**The integration id never changes; you publish a new version behind it** (DESIGN §6.1). Switching account (OpenAI account A → B), vendor (CleverTap → MoEngage) or transformer (`T1@7` → `T1@8`), and changing an operation's request schema, are all a new integration version. Callers change nothing and deploy nothing, unless you change what they must send or what they get back.
 
 ## Contents
 - [The version spec](#the-version-spec)
@@ -20,6 +20,22 @@ Admin API / MCP / console form (JSON or YAML in the console editor; durations in
 
 ```json
 {
+  "operations": {
+    "default": {
+      "description": "Track a single event for a user.",
+      "idempotent": true,
+      "validate_input": true,
+      "request_schema": {
+        "body": { "type": "object", "required": ["user", "event"],
+                  "properties": { "user":  { "type": "object", "required": ["id"],
+                                             "properties": { "id": { "type": "string", "x-pii": "identifier" } } },
+                                  "event": { "type": "object", "required": ["name"],
+                                             "properties": { "name": { "type": "string" },
+                                                             "timestamp": { "type": "string", "format": "date-time" },
+                                                             "properties": { "type": "object", "x-pii": "free_text" } } } } }
+      }
+    }
+  },
   "targets": [
     { "vendor_id": "clevertap", "account_id": "ct-brandA-in",
       "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 100 }
@@ -33,35 +49,39 @@ Admin API / MCP / console form (JSON or YAML in the console editor; durations in
 }
 ```
 
+- **`operations`** (required, at least one): what callers invoke. Single-operation integrations use `default`. Each has `request_schema.body` (required; `{"type": "object"}` when a call has no fields), optional `request_schema.headers` (the caller headers the transformer may read as `hdr.*`), `idempotent`, a caller-facing `description` (no vendor, account or version in it) and `validate_input` (default `true`: live calls are checked against the schema, 400 `VALIDATION_FAILED`). Fields in `required` are required, the rest optional. `x-pii` tags drive audit masking.
+- **`targets[].transformer`**: `request` is required; `response` is optional (omit or `null` = pass-through, see [transformers.md](transformers.md#pass-through-no-response-transformer)).
+
 Registry YAML files (what `hubctl export` writes and `apply` reads) use slightly different keys: `vendor:` / `account:` instead of `vendor_id` / `account_id`, `endpoint:` in webhooks, durations like `ttl: 6h` and `retention: 30d`, and `polling: true` under `delivery` to declare polling. Example: `backend/config/integrations/int_evt_brandA/versions/2.yaml`.
 
-Rules the publish check enforces (DESIGN §6.4; check names from `validateIntegrationVersion`): schemas compile, expressions type-check, goldens pass, the response transformer's output conforms to the capability response schema, referenced accounts and transformers exist and are not retired, interactive capabilities (OTP, chat) only use `sync`, target weights sum to 100, a delivery path is declared (`wait`/`async` need polling or a webhook; `async_callback` needs a webhook), and every operation of a multi-operation capability has a transformer pair compiled for it (`operations_have_transformers`).
+Rules the publish check enforces (DESIGN §6.4, ADR-0023; check names from `validateIntegrationVersion`): the operation schemas compile and every `req.*` / `hdr.*` a transformer reads is declared in them (`schemas_compile`), expressions type-check, request and response samples pass (`goldens_pass`), request samples' inputs fit the operation's schema (`input_schema`) and their vendor requests fit the endpoint's schema (`endpoint_schema`), referenced accounts and transformers exist and are not retired, interactive integrations (OTP, chat) only use `sync`, target weights sum to 100, a delivery path is declared (`wait`/`async` need polling or a webhook; `async_callback` needs a webhook), and every key of a target's `operations` map names an operation the version declares (`operations_have_transformers`; operations not listed use the default pair). Failures carry `pointer`, `sample` and `field`. There is no response schema check.
 
 Choosing `delivery.mode`: `sync` when a person is waiting (OTP, bank check, chat); `wait` (default, 3 s) for most server-to-server calls; `async` for fire-and-forget; `async_callback` when the tenant wants a signed callback. `on_circuit_open` (sync only): `fail_fast` (default), `failover` (needs a failover chain and idempotent calls), `queue_if_allowed` (never for OTP, payments or chat). Audit `payloads`: `sealed` for bureau, Aadhaar and PAN (D6), `metadata_only` for LLM prompts, `masked` default.
 
 ## Create an integration and publish v1
 
-Role: `editor`. The capability must exist (`hub_admin_list_capabilities`), and so must the owner tenant, the account and the transformers.
+Role: `editor`. The owner tenant, the account and the transformers must exist. The operations and their request schemas go into the first draft, not into the integration itself. For a first onboarding from nothing, follow [onboard-an-api.md](onboard-an-api.md).
 
-1. **Create the id** (console and hubctl cannot create integrations yet):
+1. **Create the id** (hubctl cannot create integrations):
+   - **Console:** Integrations → **Create integration** → Integration id, Owner tenant, Description, grants, money flag, **Interactive** (only for steps of a session a person waits on; fixed at creation) → reason → **Create integration**. The console opens the first draft.
    - **MCP:**
      ```json
      hub_admin_create_integration {
        "integration_id": "int_evt_brandA", "owner_tenant": "orders-service",
-       "capability": "events.track@v1", "description": "Brand A engagement events",
-       "grants": [], "moves_money_or_quota": false, "reason": "Onboard brand A events, OPS-123"
+       "description": "Brand A engagement events", "grants": [],
+       "interactive": false, "moves_money_or_quota": false, "reason": "Onboard brand A events, OPS-123"
      }
      ```
-     Set `moves_money_or_quota: true` for OTPs, bureau pulls, penny drops, payments: callers then must send an `Idempotency-Key`. The capability (and so its schema) and owner are permanent; a breaking schema change means a new integration id (D11).
+     Set `moves_money_or_quota: true` for OTPs, bureau pulls, penny drops, payments: callers then must send an `Idempotency-Key`. Owner and `interactive` are permanent. A request schema change that breaks callers (a new required field, a removed field, a narrower type) should use a new integration id (D11, now guidance); publishing shows the schema diff and the change log records it.
    - **Admin API:** `POST /admin/v1/integrations` (`createIntegration`).
    Until v1 is published, invocations answer 503 `INTEGRATION_PAUSED` (reason `no_active_version`).
-2. **Draft v1** with the spec above, **validate**, then **publish** with `expected_active_version: null` (see the loop below).
+2. **Draft v1** with the spec above (operations with their request schemas, targets, delivery, audit), **validate**, then **publish** with `expected_active_version: null` (see the loop below). In the console's draft form, build each operation's **Request body** (and optional **Request headers**) with **Paste a sample** → **Generate fields**, tick or untick **required** per field, and keep **Check live calls against the request schema** on unless callers must reach the transformer with input the schema does not describe.
 
 ## Draft, validate, diff, publish
 
 The same loop for every change. Publishing changes live traffic within about 10 s.
 
-**Console:** Integrations → *id* → **Edit a new draft** (or **Review draft vN and publish**) → edit the spec (YAML or JSON) → reason → **Create draft** / **Save draft vN** → **Run publish checks on vN** (each check pass/fail with a pointer to the line) → read **Changes against the active version** → **Publish vN** → confirm with a reason.
+**Console:** Integrations → *id* → **Edit a new draft** (or **Review draft vN and publish**) → edit the operations, targets and the rest (form or YAML/JSON) → reason → **Create draft** / **Save draft vN** → **Run publish checks on vN** (each check pass/fail with a pointer to the line) → read **Changes against the active version** → **Publish vN** → confirm with a reason.
 
 **hubctl (config as code):**
 ```bash
@@ -95,10 +115,16 @@ Same vendor, same payload shape, different credentials (another brand, region or
 
 ## Switch to another vendor
 
-1. **Vendor + endpoints + account** for the new vendor ([vendors-and-accounts.md](vendors-and-accounts.md)).
-2. **Transformers** for the new vendor: a request transformer (canonical → new vendor request) and a response transformer (new vendor response → the **same canonical response**), with goldens, created as new transformer ids ([transformers.md](transformers.md)). For multi-operation capabilities, one pair per operation.
-3. **Prove the mapping** before any traffic: `hub_admin_dry_run_transformer {"ref": "MO1@1", "account_id": "mo-brandA", "input": {...canonical body...}}` (or `hubctl transform test MO1`), and compare with the vendor's documented example request.
-4. **Draft** with the new target (`vendor_id`, `account_id`, `transformer`), validate (watch `response_conforms` and `goldens_pass`), diff, publish. Safer: canary with weights or shadow first.
+The operations and their request schemas stay as they are: callers keep sending the same body. Only the target changes.
+
+1. **Vendor + endpoints (with their request schemas) + account** for the new vendor ([vendors-and-accounts.md](vendors-and-accounts.md)).
+2. **Request transformer** for the new vendor, written against the **same operation schema**: it may read only the `req.*` / `hdr.*` fields the operation declares, and its samples use real caller inputs of that operation (validate checks both). For multi-operation integrations, one pair per operation.
+3. **Response transformer**: decide what callers get.
+   - **Warn the owner first: there is no canonical output any more.** Without a response transformer that reproduces the old output, callers receive a different body after the switch (in pass-through, the new vendor's own body).
+   - To keep callers unchanged, write a new response transformer whose samples produce exactly the outputs the old one produced (reuse the old response samples' `expected_response` values as the new samples' expected outputs).
+   - If the old target was pass-through, callers were getting the old vendor's body; the new vendor's body will differ unless a response transformer rebuilds it.
+4. **Prove the mapping** before any traffic: `hub_admin_dry_run_transformer {"ref": "MO1@1", "account_id": "mo-brandA", "input": {...caller body...}}` (or `hubctl transform test MO1`), and compare with the vendor's documented example request.
+5. **Draft** with the new target (`vendor_id`, `account_id`, `transformer`), validate (watch `goldens_pass`, `endpoint_schema`, `input_schema`, `schemas_compile`), diff (compare the response samples of the old and new response transformers side by side), publish. Safer: canary with weights or shadow first, and tell the calling team if their output changes.
 
 ## Canary with weights
 
@@ -151,7 +177,7 @@ An emergency stop for one integration (not a rollback) is **Pause integration** 
 | --- | --- |
 | Completed before | Old version (its audit keeps it forever) |
 | In flight | Old version (nothing switches mid-call) |
-| Queued / parked in the outbox | **New version** with `re_resolve` (default: the envelope holds the canonical body, so it is re-transformed for the new target); **old version** with `pinned` |
+| Queued / parked in the outbox | **New version** with `re_resolve` (default: the envelope holds the caller's body, so it is re-transformed for the new target); **old version** with `pinned` |
 | Retry of a failed request with the same key | New version (a retry is a new attempt) |
 | First new request | New version |
 | Step 2 of a vendor session opened before | **Old version + old account, always** (sessions are pinned) |
@@ -162,4 +188,4 @@ Keep `re_resolve` unless the queued payload must reach the exact account that ac
 
 - Nodes switch within about 10 s; **Snapshots** shows the new snapshot, and a node that cannot fetch keeps the last good one.
 - Watch the **Health** board, **Requests** filtered by integration, and alerts (`docs/runbooks/`).
-- Tell the calling team nothing changed for them; if they want proof, the canonical response schema is identical (`hub_describe_integration`).
+- Tell the calling team what changed for them: nothing, if the operations' request schemas and the response output are the same (`hub_describe_integration` shows the request schemas; the response samples show the output). If the output changed, they must hear it before the publish.

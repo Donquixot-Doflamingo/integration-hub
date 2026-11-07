@@ -48,7 +48,7 @@ Side effects (callback enqueue, terminal audit record) are written **in the same
 - Key scope: `(tenant, integration_id, Idempotency-Key)`, 24 h (§4.2). Redis `SET key value NX PX` reserves; value = request id + state; completed results stored for replay with `X-Hub-Idempotent-Replay: true`.
 - Only **completed** requests short-circuit. A retry of a failed request is a new attempt and re-resolves (§6.3).
 - Concurrent duplicates: the loser of `NX` returns the in-progress request's 202/poll link (or waits within `wait_ms`), never a second vendor call.
-- Redis down: fail **closed** for integrations where money/quota moves (mandatory key) → 503 retryable; fail open elsewhere with a metric. Decide per capability; document in the feature doc.
+- Redis down: fail **closed** for integrations where money/quota moves (mandatory key) → 503 retryable; fail open elsewhere with a metric. Decide per integration; document in the feature doc.
 
 ## 4. Retries, backoff, retry budget
 - Async schedule §10.3: 1 s, 5 s, 30 s, 2 m, 10 m, 30 m, 1 h, 1 h → DLQ after 8 or at TTL. **Full jitter**: `delay = rand.N(schedule[n])`, then `max(delay, Retry-After)` for 429.

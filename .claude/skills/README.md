@@ -17,7 +17,7 @@ automatically for every contributor and agent. Folder-specific skills live next 
 | [`adr-writing`](adr-writing/SKILL.md) | repo | Recording a decision or deviation from `docs/DESIGN.md` in `docs/tech/adr/` |
 | [`contract-change`](contract-change/SKILL.md) | repo | Requesting or making a change in `contracts/` (CCR, OpenAPI edit, semver, notify) |
 | [`skill-creator`](skill-creator/SKILL.md) | vendored (see `LICENSE.txt`) | Creating or improving any skill, including evals and description tuning |
-| [`hub-operator`](hub-operator/SKILL.md) | repo | Operating the Hub: tenants and API keys, vendors and accounts, callback endpoints, cutover (publish, weights, rollback), transformers and goldens, multi-step flows; console, `hubctl` and `hubmcp` side by side |
+| [`hub-operator`](hub-operator/SKILL.md) | repo | Operating the Hub: tenants and API keys, onboarding an API from the panel (vendor, endpoint request schema, account or none, transformers proven by samples, integration operations), callback endpoints, cutover (publish, weights, rollback), pass-through, multi-step flows; console, `hubctl` and `hubmcp` side by side |
 
 `hub-operator` is also linked from `.agents/skills/hub-operator` (a symlink), where OpenAI Codex
 looks for repository skills; Cursor reads `.claude/skills/` directly. The same `SKILL.md` serves

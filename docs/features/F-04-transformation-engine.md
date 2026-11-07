@@ -1,7 +1,7 @@
 # F-04 — Transformation engine & golden fixtures
 
 ## Summary
-A declarative YAML mapping DSL with `expr-lang/expr` expressions, compiled and type-checked at snapshot build, that converts canonical requests to vendor requests and vendor responses/errors back to canonical form. Every transformer ships with golden fixtures that gate CI and publish (DESIGN §7, D8).
+A declarative YAML mapping DSL with `expr-lang/expr` expressions, compiled and type-checked at snapshot build, that converts the caller's input to vendor requests and, optionally, vendor responses/errors back to what the caller gets. Every transformer ships with samples (golden fixtures) that gate creation, CI and publish (DESIGN §7, D8; ADR-0023, [F-23](F-23-schema-registry.md)).
 
 ## Status
 `shipped` — 2026-10-31 (M2, HUB-060–071 on `phase-2/m2-transformers`; [M2 summary](../milestones/M2.md)). Notable: nil-safe field access, `res.text` for non-JSON bodies, budgets enforced by construction + post-run check.
@@ -20,7 +20,7 @@ Vendor mappings scattered in caller code are untested and diverge. Mappings in t
 - Parse → compile with typed env (`req`, `hdr`, `account`, `creds`, `session`, `res`, `now()`; DESIGN §7.2) → run.
 - Standard library from DESIGN §7.3, extended only by code releases.
 - Request mapping (method, path, headers, query, body), response mapping, `errors:` rules, dry-run.
-- Golden runner `hubctl transform test`; publish refuses failing or missing goldens.
+- Golden runner `hubctl transform test` (also checks each request sample against the vendor endpoint's `request_schema`); creation and publish refuse failing or missing samples.
 - Transformers T1, T2, R1, R2 with fixtures (DESIGN §7.4).
 
 **Non-goals**
@@ -43,7 +43,7 @@ Vendor mappings scattered in caller code are untested and diverge. Mappings in t
 
 ## Behaviour & rules
 1. Compile once per snapshot; never parse or compile per request (DESIGN §7.1).
-2. Type-check against the capability request schema (and vendor schema where available); unknown fields fail compile (DESIGN §7.6.4).
+2. Expressions type-check at compile. The transformer knows no caller schema (ADR-0023): its `req.*` / `hdr.*` reads (`Program.FieldRefs`) are checked at integration validate/publish against each operation that uses it (`schemas_compile`); request samples' produced requests are checked against the vendor endpoint's `request_schema` (`endpoint_schema`, credentials excluded) and their inputs against the operation (`input_schema`).
 3. Purity: no network, no disk, no loops beyond `map`/`filter`; limits on expression depth, output bytes and runtime per transform (exact values in TECH_SPEC).
 4. `creds.*` allowed only in header/query/auth targets unless `allow_creds_in_body: true` (DESIGN §7.2).
 5. Values that differ per account come from `account.config.*`; a new transformer only when shape changes (DESIGN §3.3).
@@ -51,10 +51,10 @@ Vendor mappings scattered in caller code are untested and diverge. Mappings in t
 7. A transformer version is immutable; references are `Name@version`.
 8. Each production transformer file cites the vendor API doc URL it was verified against (DESIGN §0).
 9. Benchmark `BenchmarkTransform4KB` ≤ 0.5 ms p99 (DESIGN §7.6.5).
-10. Response transformers may declare a `session:` section (HUB-175, F-14): a mapping of session fields evaluated on success only, against `res`, `req` and `account` (`creds`, `hdr` and `session` are rejected at compile; `req.*` paths are checked against the capability request schema). `Program.MapResponseSession` returns it (nil when every field is nil); it is bounded by `MaxSessionBytes` (16 KB) and the same time budget. Goldens pin it as `"session"` in `expected_response.json`; vendor-response fixtures may carry `_context.req`.
+10. Response transformers may declare a `session:` section (HUB-175, F-14): a mapping of session fields evaluated on success only, against `res`, `req` and `account` (`creds`, `hdr` and `session` are rejected at compile; `req.*` paths are checked against the operation's request schema). `Program.MapResponseSession` returns it (nil when every field is nil); it is bounded by `MaxSessionBytes` (16 KB) and the same time budget. Goldens pin it as `"session"` in `expected_response.json`; vendor-response fixtures may carry `_context.req`.
 
 ## Data model impact
-`transformers(transformer_id, version, kind, capability, endpoint_id, yaml, fixtures)` immutable (DESIGN §18.2).
+`transformers(transformer_id, version, kind, endpoint_id, yaml, fixtures)` immutable (DESIGN §18.2); the `capability` column was dropped by migration 00011 (ADR-0023). A response transformer has no endpoint and is optional in a target (pass-through without one).
 
 ## Config impact
 Transformer YAML schema (kind `request|response|inbound`, `vendor_endpoint`, `request`, `response`, `errors`, `session`, `batch`, `stream`, `supports`, `allow_creds_in_body`).
@@ -96,3 +96,4 @@ HUB-060 – HUB-079.
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-11-02 | `session:` section in response transformers (HUB-175) | backend-engineer |
+| 2026-11-07 | No capability binding: field reads checked against operations, samples against endpoint schemas, response transformer optional (ADR-0023, HUB-437) | docs-keeper |

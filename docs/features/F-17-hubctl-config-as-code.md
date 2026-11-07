@@ -54,7 +54,7 @@ Plan: 1 to publish, 1 to create, 0 unchanged.
 ```
 
 ## Behaviour & rules
-1. `apply` executes the plan in dependency order: capabilities → vendors → accounts → transformers → tenants/registrar → integrations.
+1. `apply` executes the plan in dependency order: vendors → accounts → transformers → tenants/registrar → integrations. Since M7 it applies only account config/quota, tenant settings, integration metadata and pause, and new integration versions; new vendors, endpoints, accounts, transformers and integrations are refused (console or admin API). `hubctl transform test` also checks request samples against the vendor endpoint's `request_schema` (ADR-0023).
 2. Nothing in Git is a secret; apply refuses any YAML containing a key named like a credential value outside `credentials_ref` (lint).
 3. `apply` stops at the first rejected publish and reports all validation errors for that object.
 4. `replay` prints the match count and requires `--yes` or interactive confirmation.
@@ -65,7 +65,7 @@ Plan: 1 to publish, 1 to create, 0 unchanged.
 None (client).
 
 ## Config impact
-Repo layout `backend/config/{capabilities,vendors,accounts,transformers,integrations,tenants}/` (DESIGN §18.1).
+Repo layout `backend/config/{vendors,accounts,transformers,integrations,tenants,registrar}/` (DESIGN §18.1); `capabilities/` was removed by ADR-0023 (schemas live in integration versions and vendor endpoints).
 
 ## Observability
 | Kind | Name | Notes |
@@ -101,3 +101,4 @@ HUB-200 – HUB-229 (EP-08, filter `feature: F-17`).
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-11-02 | Shipped in M7 (see docs/milestones/M7.md) | backend-engineer |
+| 2026-11-07 | No capabilities directory or apply step; transform test checks endpoint schemas (ADR-0023, HUB-437) | docs-keeper |
