@@ -9,12 +9,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/trackops"
 )
 
-// devSources is backend/config plus the repo-root contracts/ directory.
+// devSources is backend/config.
 func devSources(t testing.TB) Sources {
 	t.Helper()
-	return Sources{Config: os.DirFS("../../config"), Contracts: os.DirFS("../../../contracts")}
+	return Sources{Config: os.DirFS("../../config")}
 }
 
 // TestDevConfigBuilds is the HUB-046 acceptance: the dev registry loads and validates with zero
@@ -42,14 +44,26 @@ func TestDevConfigBuilds(t *testing.T) {
 	}
 }
 
-// Capability schemas live only in contracts/ (ADR-0004, TECH_SPEC §8.2).
-func TestNoSchemaCopiesUnderBackend(t *testing.T) {
+// trackops.Block is the dev integrations' operations block, for test overlays: keep it in sync.
+func TestTrackOpsMatchesDevConfig(t *testing.T) {
+	b, err := os.ReadFile("../../config/integrations/int_evt_brandA/versions/1.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), trackops.Block) {
+		t.Fatal("internal/testkit/trackops.Block differs from the operations of backend/config int_evt_brandA v1: copy it over")
+	}
+}
+
+// Schemas live inline in their integration version or vendor file (ADR-0023): the only JSON
+// files of the registry are golden fixtures.
+func TestNoSchemaFilesUnderConfig(t *testing.T) {
 	err := filepath.WalkDir("../../config", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if !d.IsDir() && strings.HasSuffix(p, ".json") && !strings.Contains(p, "/fixtures/") {
-			t.Errorf("%s: capability schemas must stay in contracts/, not backend/config", p)
+			t.Errorf("%s: schemas live inline in the integration version or vendor file (ADR-0023)", p)
 		}
 		return nil
 	})
@@ -83,7 +97,7 @@ func TestLoadOverlayConfigBuilds(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s, err := Build(Sources{Config: os.DirFS(dir), Contracts: os.DirFS("../../../contracts")}, time.Now())
+	s, err := Build(Sources{Config: os.DirFS(dir)}, time.Now())
 	if err != nil {
 		t.Fatalf("load overlay config: %v", err)
 	}

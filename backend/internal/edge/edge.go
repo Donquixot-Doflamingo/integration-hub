@@ -110,7 +110,6 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) routes() {
 	s.mux.Handle("GET /v1/integrations", s.authenticate(http.HandlerFunc(s.listIntegrations)))
 	s.mux.Handle("GET /v1/integrations/{integration_id}", s.authenticate(http.HandlerFunc(s.getIntegration)))
-	s.mux.Handle("GET /v1/capabilities/{capability}", s.authenticate(http.HandlerFunc(s.getCapability)))
 	s.mux.Handle("POST /v1/integrations/{integration_id}/dry-run", s.authenticate(http.HandlerFunc(s.dryRun)))
 	s.mux.Handle("POST /v1/integrations/{integration_id}/invoke", s.authenticate(http.HandlerFunc(s.invoke)))
 	s.mux.Handle("POST /v1/integrations/{integration_id}/invoke/{operation}", s.authenticate(http.HandlerFunc(s.invoke)))

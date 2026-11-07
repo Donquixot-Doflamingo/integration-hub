@@ -63,7 +63,7 @@ func writeAtomic(t *testing.T, path string, b []byte) {
 
 func TestWatchSwapsValidEditsAndKeepsLastGoodOnInvalid(t *testing.T) {
 	dir := copyDevConfig(t)
-	src := Sources{Config: os.DirFS(dir), Contracts: os.DirFS("../../../contracts")}
+	src := Sources{Config: os.DirFS(dir)}
 	var store Store
 	first, err := Build(src, time.Now())
 	if err != nil {

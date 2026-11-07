@@ -24,10 +24,18 @@ type Outcome interface {
 	outcome()
 }
 
-// Result is a completed request (HTTP 200): the canonical response of the capability operation.
+// Result is a completed request: the integration's response (HTTP 200), or, in pass-through
+// (PassThrough true: the integration has no response transformer), the third party's own 2xx
+// answer returned unchanged.
 type Result struct {
-	// Body is the canonical response JSON, exactly as the Hub sent it.
+	// Body is the response body exactly as the Hub sent it: JSON from a response transformer;
+	// in pass-through, whatever the third party sent (check ContentType before decoding).
 	Body json.RawMessage
+	// PassThrough is true when the Hub returned the third party's status and body unchanged
+	// (X-Hub-Pass-Through: true). Status and ContentType then are the third party's.
+	PassThrough bool
+	Status      int
+	ContentType string
 	// RequestID is the Hub request id (X-Hub-Request-Id).
 	RequestID string
 	// IdempotentReplay is true when the Hub replayed the stored result of an earlier request with
@@ -38,7 +46,7 @@ type Result struct {
 	Session string
 }
 
-// Decode unmarshals the canonical response body into v.
+// Decode unmarshals the JSON response body into v.
 func (r *Result) Decode(v any) error {
 	if err := json.Unmarshal(r.Body, v); err != nil {
 		return fmt.Errorf("hubclient: decode result of request %s: %w", r.RequestID, err)
@@ -57,6 +65,21 @@ const (
 	StatusQueued   QueueStatus = "queued"    // parked because the upstream is unavailable
 	StatusInFlight QueueStatus = "in_flight" // wait window elapsed; a worker is finishing it
 )
+
+// PassThroughError is a third party's error answer the Hub returned unchanged (X-Hub-Pass-Through:
+// true, status >= 300): the integration has no response transformer, retries (if any) are
+// exhausted. Body is the third party's own body, never the Hub's error envelope.
+type PassThroughError struct {
+	Status      int
+	ContentType string
+	Body        []byte
+	RetryAfter  string // the third party's Retry-After, when it sent one
+	RequestID   string
+}
+
+func (e *PassThroughError) Error() string {
+	return fmt.Sprintf("hubclient: upstream answered HTTP %d (pass-through, request %s)", e.Status, e.RequestID)
+}
 
 // Queued is a request accepted for later delivery (HTTP 202). It is not a success: the outcome
 // is known only from GetRequest(ctx, RequestID) or a callback.
@@ -78,6 +101,7 @@ func (*Queued) outcome() {}
 type InvokeOption func(*invokeConfig)
 
 type invokeConfig struct {
+	headers        map[string]string
 	idempotencyKey string
 	operation      string
 	preferAsync    bool
@@ -94,7 +118,27 @@ func WithIdempotencyKey(key string) InvokeOption {
 	return func(c *invokeConfig) { c.idempotencyKey = key }
 }
 
-// WithOperation invokes one operation of a multi-operation capability
+// WithHeaders sends caller headers the operation declares in request_schema.headers (the request
+// transformer reads them as hdr.*; the Hub passes no other caller header on). The Hub's own
+// headers (Authorization, Idempotency-Key, Prefer, X-Request-Deadline, X-Hub-Session,
+// traceparent) are set by their own options and ignored here.
+func WithHeaders(h map[string]string) InvokeOption {
+	return func(c *invokeConfig) { c.headers = h }
+}
+
+// hubHeaders are the headers the client sets itself; WithHeaders never overrides them.
+var hubHeaders = map[string]bool{"Authorization": true, "Idempotency-Key": true, "Prefer": true, "X-Request-Deadline": true,
+	"X-Hub-Session": true, "Traceparent": true, "Content-Type": true, "Accept": true, "User-Agent": true}
+
+func (cfg invokeConfig) setHeaders(h http.Header) {
+	for k, v := range cfg.headers {
+		if name := http.CanonicalHeaderKey(k); !hubHeaders[name] {
+			h.Set(name, v)
+		}
+	}
+}
+
+// WithOperation invokes one operation of a multi-operation integration
 // (POST /v1/integrations/{id}/invoke/{op}); for DryRun it sets the operation query parameter.
 func WithOperation(op string) InvokeOption {
 	return func(c *invokeConfig) { c.operation = op }
@@ -169,6 +213,7 @@ func (c *Client) Invoke(ctx context.Context, integrationID string, body any, opt
 		return nil, err
 	}
 	h := http.Header{}
+	cfg.setHeaders(h)
 	if cfg.idempotencyKey != "" {
 		if !validIdempotencyKey(cfg.idempotencyKey) {
 			return nil, errors.New("hubclient: idempotency key must be 1 to 255 printable ASCII characters without spaces")
@@ -193,6 +238,15 @@ func (c *Client) Invoke(ctx context.Context, integrationID string, body any, opt
 		return nil, err
 	}
 	replay := resp.header.Get("X-Hub-Idempotent-Replay") == "true"
+	if resp.header.Get("X-Hub-Pass-Through") == "true" { // the third party's own answer (ADR-0023)
+		ct := resp.header.Get("Content-Type")
+		if resp.status >= 300 {
+			return nil, &PassThroughError{Status: resp.status, ContentType: ct, Body: resp.body,
+				RetryAfter: resp.header.Get("Retry-After"), RequestID: resp.requestID}
+		}
+		return &Result{Body: json.RawMessage(resp.body), PassThrough: true, Status: resp.status, ContentType: ct,
+			RequestID: resp.requestID, IdempotentReplay: replay, Session: resp.header.Get("X-Hub-Session")}, nil
+	}
 	switch resp.status {
 	case http.StatusOK:
 		if !json.Valid(resp.body) {
@@ -200,6 +254,8 @@ func (c *Client) Invoke(ctx context.Context, integrationID string, body any, opt
 		}
 		return &Result{
 			Body:             json.RawMessage(resp.body),
+			Status:           http.StatusOK,
+			ContentType:      resp.header.Get("Content-Type"),
 			RequestID:        resp.requestID,
 			IdempotentReplay: replay,
 			Session:          resp.header.Get("X-Hub-Session"),

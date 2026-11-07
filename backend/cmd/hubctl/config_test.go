@@ -15,7 +15,7 @@ import (
 // getLatestSnapshot and getSnapshotBlob) behind a fixed token.
 func fakeLive(t *testing.T, dir string) string {
 	t.Helper()
-	src := registry.Sources{Config: os.DirFS(dir), Contracts: os.DirFS("../../../contracts")}
+	src := registry.Sources{Config: os.DirFS(dir)}
 	snap, err := registry.Build(src, time.Now())
 	if err != nil {
 		t.Fatal(err)

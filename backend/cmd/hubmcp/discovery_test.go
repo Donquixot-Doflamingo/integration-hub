@@ -17,10 +17,10 @@ func TestListIntegrations(t *testing.T) {
 		wantCalls int
 	}{
 		{
-			name:      "first page with filter",
-			args:      map[string]any{"capability": "events.track@v1", "limit": 10},
+			name:      "first page",
+			args:      map[string]any{"limit": 10},
 			reply:     func(h *fakeHub) reply { return h.pub("listIntegrations", 200, "") },
-			wantQuery: url.Values{"capability": {"events.track@v1"}, "limit": {"10"}},
+			wantQuery: url.Values{"limit": {"10"}},
 			wantCalls: 1,
 		},
 		{
@@ -33,8 +33,8 @@ func TestListIntegrations(t *testing.T) {
 			wantCalls: 1,
 		},
 		{
-			name:      "hub rejects the filter",
-			args:      map[string]any{"capability": "events.track@v1"},
+			name:      "hub rejects the page",
+			args:      map[string]any{"cursor": "bad"},
 			reply:     func(h *fakeHub) reply { return h.pub("listIntegrations", 400, "VALIDATION_FAILED") },
 			wantError: "VALIDATION_FAILED",
 			wantCalls: 1,
@@ -48,7 +48,7 @@ func TestListIntegrations(t *testing.T) {
 		},
 		{name: "limit out of range is refused locally", args: map[string]any{"limit": 500}, wantError: "VALIDATION_FAILED"},
 		{name: "unknown argument is refused locally", args: map[string]any{"vendor": "clevertap"}, wantError: "VALIDATION_FAILED"},
-		{name: "malformed capability is refused locally", args: map[string]any{"capability": "Events"}, wantError: "VALIDATION_FAILED"},
+		{name: "the removed capability filter is refused locally", args: map[string]any{"capability": "events.track@v1"}, wantError: "VALIDATION_FAILED"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -74,8 +74,14 @@ func TestListIntegrations(t *testing.T) {
 			if got, _ := url.ParseQuery(calls[0].Query); got.Encode() != tt.wantQuery.Encode() {
 				t.Errorf("query %q, want %q", got.Encode(), tt.wantQuery.Encode())
 			}
-			if items, _ := out.field(t, "items").([]any); len(items) == 0 {
-				t.Errorf("no items: %s", out.json)
+			items, _ := out.field(t, "items").([]any)
+			if len(items) == 0 {
+				t.Fatalf("no items: %s", out.json)
+			}
+			// ADR-0023: each operation with the request schema to follow.
+			op, _ := items[0].(map[string]any)["operations"].([]any)[0].(map[string]any)
+			if rs, _ := op["request_schema"].(map[string]any); op["name"] != "default" || rs["body"] == nil {
+				t.Errorf("operation %v", op)
 			}
 		})
 	}
@@ -89,27 +95,15 @@ func TestDescribeIntegration(t *testing.T) {
 		wantOps   []string
 	}{
 		{
-			name: "integration and capability",
-			replies: func(h *fakeHub) {
-				h.on("getIntegration", h.pub("getIntegration", 200, ""))
-				h.on("getCapability", h.pub("getCapability", 200, ""))
-			},
-			wantOps: []string{"getIntegration", "getCapability"},
+			name:    "integration with its operations",
+			replies: func(h *fakeHub) { h.on("getIntegration", h.pub("getIntegration", 200, "")) },
+			wantOps: []string{"getIntegration"},
 		},
 		{
 			name:      "unknown integration",
 			replies:   func(h *fakeHub) { h.on("getIntegration", h.pub("getIntegration", 404, "")) },
 			wantError: "INTEGRATION_NOT_FOUND",
 			wantOps:   []string{"getIntegration"},
-		},
-		{
-			name: "capability missing",
-			replies: func(h *fakeHub) {
-				h.on("getIntegration", h.pub("getIntegration", 200, ""))
-				h.on("getCapability", h.pub("getCapability", 404, ""))
-			},
-			wantError: "CAPABILITY_NOT_FOUND",
-			wantOps:   []string{"getIntegration", "getCapability"},
 		},
 		{
 			name:      "not granted",
@@ -143,12 +137,15 @@ func TestDescribeIntegration(t *testing.T) {
 			if out.field(t, "integration", "integration_id") != "int_evt_brandA" {
 				t.Errorf("integration: %s", out.json)
 			}
-			ops0, _ := out.field(t, "capability", "operations").([]any)
+			ops0, _ := out.field(t, "integration", "operations").([]any)
 			if len(ops0) == 0 {
 				t.Fatalf("no operations: %s", out.json)
 			}
-			if rs, _ := ops0[0].(map[string]any)["request_schema"].(map[string]any); len(rs) == 0 {
-				t.Errorf("request_schema missing: %s", out.json)
+			if rs, _ := ops0[0].(map[string]any)["request_schema"].(map[string]any); rs["body"] == nil {
+				t.Errorf("request_schema.body missing: %s", out.json)
+			}
+			if out.field(t, "capability") != nil {
+				t.Errorf("capability in the output: %s", out.json)
 			}
 		})
 	}
@@ -176,11 +173,8 @@ func TestDiscoveryNeverLeaksVendorIdentity(t *testing.T) {
 	list.header = leakHeaders
 	get := hub.pub("getIntegration", 200, "", plantVendorIdentity)
 	get.header = leakHeaders
-	cp := hub.pub("getCapability", 200, "", plantVendorIdentity)
-	cp.header = leakHeaders
 	hub.on("listIntegrations", list)
 	hub.on("getIntegration", get)
-	hub.on("getCapability", cp)
 	cs := connect(t, testApp(t, hub.srv.URL, false, nil))
 	// callTool scans every output for the planted values and field names.
 	callTool(t, cs, toolListIntegrations, map[string]any{})

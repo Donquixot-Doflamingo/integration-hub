@@ -14,7 +14,7 @@ import (
 
 func TestInvoke_Result(t *testing.T) {
 	t.Parallel()
-	ok := componentExample(t, "InvokeOk", "events.track@v1")
+	ok := componentExample(t, "InvokeOk", "transformed")
 	tests := []struct {
 		name       string
 		header     http.Header
@@ -148,7 +148,7 @@ func TestOutcome_IsSealed(t *testing.T) {
 
 func TestInvoke_RequestHeaders(t *testing.T) {
 	t.Parallel()
-	ok := componentExample(t, "InvokeOk", "events.track@v1")
+	ok := componentExample(t, "InvokeOk", "transformed")
 	tests := []struct {
 		name     string
 		opts     []hubclient.InvokeOption
@@ -224,7 +224,7 @@ func TestInvoke_RequestHeaders(t *testing.T) {
 
 func TestInvoke_Bodies(t *testing.T) {
 	t.Parallel()
-	ok := componentExample(t, "InvokeOk", "events.track@v1")
+	ok := componentExample(t, "InvokeOk", "transformed")
 	raw := `{"user":{"id":"u_1"},"event":{"name":"signup"}}`
 	tests := []struct {
 		name string

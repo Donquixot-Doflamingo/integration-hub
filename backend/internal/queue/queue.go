@@ -29,15 +29,17 @@ var ErrLost = errors.New("queue: envelope not in the expected state or claimed b
 // ErrDuplicate means an envelope with this request id is already queued.
 var ErrDuplicate = errors.New("queue: request already queued")
 
-// Pools (DESIGN §17): LLM capabilities run in their own worker pool.
+// Pools (DESIGN §17). An envelope names its pool (Envelope.Pool, default messaging). The llm
+// pool used to be chosen from llm.* capability names, which ADR-0023 removed; until an explicit
+// integration setting exists (HUB-439, ADR-0024) the gateway queues every request as messaging.
 const (
 	PoolMessaging = "messaging"
 	PoolLLM       = "llm"
 )
 
-// PoolFor returns the worker pool of a capability key (Replay derives it the same way in SQL).
-func PoolFor(capability string) string {
-	if len(capability) >= 4 && capability[:4] == "llm." {
+// PoolOf is the worker pool of env (Replay derives it the same way in SQL).
+func PoolOf(env core.Envelope) string {
+	if env.Pool == PoolLLM {
 		return PoolLLM
 	}
 	return PoolMessaging
@@ -98,7 +100,7 @@ func (o *Outbox) enqueue(ctx context.Context, db DB, env core.Envelope, claimBy 
 	_, err = db.Exec(ctx, `INSERT INTO hub.outbox (request_id, status, pool, tenant_id, integration_id, attempt, next_attempt_at,
 			expires_at, ordering_key, claimed_by, claimed_until, envelope, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-		env.RequestID, string(status), PoolFor(env.Capability), env.Tenant, env.IntegrationID, env.Attempt, env.NextAttemptAt,
+		env.RequestID, string(status), PoolOf(env), env.Tenant, env.IntegrationID, env.Attempt, env.NextAttemptAt,
 		env.ExpiresAt, env.OrderingKey, claimedBy, claimedUntil, body, env.CreatedAt)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -459,7 +461,7 @@ func (o *Outbox) Replay(ctx context.Context, db DB, id string, expiresAt time.Ti
 				AND envelope->'canonical' IS DISTINCT FROM 'null'::jsonb
 			RETURNING request_id, tenant_id, integration_id, envelope)
 		INSERT INTO hub.outbox (request_id, status, pool, tenant_id, integration_id, attempt, next_attempt_at, expires_at, envelope, created_at)
-		SELECT request_id, 'accepted', CASE WHEN envelope->>'capability' LIKE 'llm.%' THEN 'llm' ELSE 'messaging' END,
+		SELECT request_id, 'accepted', CASE WHEN envelope->>'pool' = 'llm' THEN 'llm' ELSE 'messaging' END,
 			tenant_id, integration_id, 0, $2, $3, jsonb_set(envelope, '{attempt}', '0'), $2 FROM dl`,
 		id, now, expiresAt)
 	return guarded(tag, err, "replay", id)

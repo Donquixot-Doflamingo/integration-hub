@@ -7,7 +7,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -35,8 +34,22 @@ type Queueing struct {
 func (s *Server) queued() bool { return s.deps.Queueing != nil && s.deps.Queueing.DB != nil }
 
 func (s *Server) interactive(p *prepared) bool {
-	c := p.caller.Snap.Capabilities[p.integration.Capability]
-	return c != nil && c.Interactive // a person is waiting: never a 202 (DESIGN §5.4)
+	return p.integration.Interactive // a person is waiting: never a 202 (DESIGN §5.4)
+}
+
+// declaredHeaders is the hdr.* the worker gives the transformer back: the declared caller
+// headers (idempotency_key travels as Envelope.IdempotencyKey).
+func declaredHeaders(hdr map[string]any) map[string]string {
+	var out map[string]string
+	for k, v := range hdr {
+		if s, ok := v.(string); ok && k != registry.HdrIdempotencyKey {
+			if out == nil {
+				out = make(map[string]string, len(hdr))
+			}
+			out[k] = s
+		}
+	}
+	return out
 }
 
 // accepted is the contract Accepted body (202).
@@ -65,8 +78,8 @@ func (s *Server) envelope(ctx context.Context, r *http.Request, p *prepared) cor
 	now := p.timings.Start.UTC()
 	env := core.Envelope{
 		RequestID: RequestID(ctx), Tenant: p.caller.Tenant.Tenant, IntegrationID: p.integration.Integration,
-		ResolvedVersion: p.res.VersionNumber, Pinned: d.Pending == registry.Pinned, Capability: p.integration.Capability,
-		Operation: p.operation, Canonical: json.RawMessage(p.raw), Mode: string(d.Mode),
+		ResolvedVersion: p.res.VersionNumber, Pinned: d.Pending == registry.Pinned,
+		Operation: p.operation, Canonical: json.RawMessage(p.raw), Mode: string(d.Mode), Headers: declaredHeaders(p.hdr),
 		NextAttemptAt: now, ExpiresAt: now.Add(ttl), CreatedAt: now,
 	}
 	if k := r.Header.Get("Idempotency-Key"); k != "" {
@@ -83,7 +96,7 @@ func (s *Server) envelope(ctx context.Context, r *http.Request, p *prepared) cor
 func (s *Server) ledgerRecord(r *http.Request, p *prepared, status core.State) audit.Record {
 	return audit.Record{
 		RequestID: RequestID(r.Context()), CreatedAt: p.timings.Start.UTC(), TenantID: p.caller.Tenant.Tenant,
-		IntegrationID: p.integration.Integration, IntegrationVersion: p.res.VersionNumber, Capability: p.integration.Capability,
+		IntegrationID: p.integration.Integration, IntegrationVersion: p.res.VersionNumber,
 		Operation: p.operation, Mode: string(p.res.Delivery.Mode), Status: string(status), PayloadPolicy: string(p.trail.Policy()),
 		SnapshotVersion: p.caller.Snap.Version, IdempotencyKey: r.Header.Get("Idempotency-Key"), TraceID: traceID(r.Context()),
 	}
@@ -120,7 +133,7 @@ func (s *Server) emitEvents(p *prepared) {
 
 // accept is async / async_callback: persist, answer 202, a worker delivers (DESIGN §5.2).
 func (s *Server) accept(w http.ResponseWriter, r *http.Request, p *prepared) {
-	ctx, span := startEnqueue(r.Context(), p.integration.Capability)
+	ctx, span := startEnqueue(r.Context())
 	env := s.envelope(ctx, r, p)
 	err := s.persist(ctx, s.ledgerRecord(r, p, core.StateAccepted), env, 0)
 	endEnqueue(span, err)
@@ -160,7 +173,7 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 		}
 	}
 	claimFor := wait + endpointTimeout + 5*time.Second
-	ectx, span := startEnqueue(r.Context(), p.integration.Capability)
+	ectx, span := startEnqueue(r.Context())
 	env := s.envelope(ectx, r, p)
 	env.Attempt = 1
 	err := s.persist(ectx, s.ledgerRecord(r, p, core.StateInFlight), env, claimFor)
@@ -216,10 +229,11 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 			WriteError(w, r, persistFailed())
 		case o.state == core.StateSucceeded:
 			setSessionHeader(w, o.sessionID)
-			if s.deps.DebugHeaders {
-				w.Header().Set("X-Hub-Integration-Version", strconv.Itoa(p.res.VersionNumber))
+			s.hubHeaders(w, p, "primary")
+			if o.res.PassThrough != nil {
+				writePassThrough(w, o.res.PassThrough)
+				break
 			}
-			w.Header().Set("X-Hub-Served-By", "primary")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(append(o.res.Body, '\n'))
@@ -227,6 +241,9 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 			writeAccepted(w, env.RequestID, "accepted", "retry_scheduled")
 		case o.state == core.StateParked: // circuit open: nothing was sent (DESIGN §5.2)
 			writeAccepted(w, env.RequestID, "queued", "circuit_open")
+		case o.res.PassThrough != nil && o.res.Err != nil: // dead-lettered vendor error, pass-through
+			s.hubHeaders(w, p, "primary")
+			writePassThrough(w, o.res.PassThrough)
 		default: // dead-lettered within the window: the caller gets the canonical error
 			WriteError(w, r, o.res.Err)
 		}
@@ -239,7 +256,7 @@ func (s *Server) deliverWait(w http.ResponseWriter, r *http.Request, p *prepared
 // and answer 202 queued; the drain delivers it after recovery (DESIGN §5.3).
 func (s *Server) parkNow(w http.ResponseWriter, r *http.Request, p *prepared, res delivery.Result) *core.CanonicalError {
 	q := s.deps.Queueing
-	ctx, span := startEnqueue(r.Context(), p.integration.Capability)
+	ctx, span := startEnqueue(r.Context())
 	env, rec := s.envelope(ctx, r, p), s.ledgerRecord(r, p, core.StateParked)
 	err := pgx.BeginFunc(ctx, q.DB, func(tx pgx.Tx) error {
 		if err := q.Ledger.Insert(ctx, tx, rec); err != nil {

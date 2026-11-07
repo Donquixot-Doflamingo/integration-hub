@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,9 +15,11 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
 
-// HUB-342: examples/otp-account-flow is a registry overlay (config + example capability schemas)
-// kept out of backend/config (production config) and contracts/ (frozen contracts). The
-// overlay is merged over them in memory, the way sessionOverlay builds its test registry.
+// HUB-342: examples/otp-account-flow is a registry overlay kept out of backend/config
+// (production config). The overlay is merged over it in memory, the way sessionOverlay builds its
+// test registry. The examples still use the pre-ADR-0023 layout (capability schemas on a
+// contracts side) until HUB-435 rewrites them: the merged tree goes through
+// registry.UpgradeLegacy, which leaves an already-upgraded tree as it is.
 
 const exampleDir = "../../../examples/otp-account-flow"
 
@@ -40,22 +43,35 @@ func mergeInto(t testing.TB, m fstest.MapFS, src fs.FS) {
 	}
 }
 
-// exampleSources is backend/config + the example config, and contracts/ + the example schemas.
-// activeOTP picks the active version of int_demo_otp (the publish-equivalent).
+// exampleSources is backend/config + the example config (upgraded, see above). activeOTP picks
+// the active version of int_demo_otp (the publish-equivalent).
 func exampleSources(t testing.TB, activeOTP int) registry.Sources {
 	t.Helper()
-	cfg, contracts := fstest.MapFS{}, fstest.MapFS{}
-	mergeInto(t, cfg, os.DirFS("../../config"))
-	mergeInto(t, contracts, os.DirFS("../../../contracts"))
-	mergeOverlay(t, cfg, os.DirFS(exampleDir+"/config"))
-	mergeOverlay(t, contracts, os.DirFS(exampleDir+"/contracts"))
+	cfg := exampleTree(t, exampleDir)
 	const file = "integrations/int_demo_otp/integration.yaml"
 	in := string(cfg[file].Data)
 	if !strings.Contains(in, "active_version: 1\n") {
 		t.Fatalf("%s: want active_version: 1", file)
 	}
 	cfg[file] = &fstest.MapFile{Data: []byte(strings.Replace(in, "active_version: 1\n", "active_version: "+strconv.Itoa(activeOTP)+"\n", 1))}
-	return registry.Sources{Config: cfg, Contracts: contracts}
+	return registry.Sources{Config: cfg}
+}
+
+// exampleTree merges the example dir's config over backend/config and upgrades the result when
+// the example still holds capabilities (its schemas in dir/contracts).
+func exampleTree(t testing.TB, dir string) fstest.MapFS {
+	t.Helper()
+	cfg, contracts := fstest.MapFS{}, fstest.MapFS{}
+	mergeInto(t, cfg, os.DirFS("../../config"))
+	mergeOverlay(t, cfg, os.DirFS(dir+"/config"))
+	if _, err := os.Stat(dir + "/contracts"); err == nil {
+		mergeInto(t, contracts, os.DirFS(dir+"/contracts"))
+	}
+	up, _, err := registry.UpgradeLegacy(cfg, contracts)
+	if err != nil {
+		t.Fatalf("%s: %v", dir, err)
+	}
+	return up
 }
 
 // mergeOverlay merges an example overlay and refuses to overwrite a backend/config or contracts/
@@ -96,9 +112,9 @@ func TestExampleOTPConfigBuilds(t *testing.T) {
 				t.Errorf("%s: mode %s, moves_money_or_quota %v", id, in.Active().Delivery.Mode, in.MovesMoneyOrQuota)
 			}
 		}
-		for _, c := range []string{"demo.mobile_otp@v1", "demo.bank_account_verify@v1"} {
-			if capability := snap.Capabilities[c]; capability == nil || !capability.Interactive {
-				t.Errorf("capability %s missing or not interactive", c)
+		for _, id := range []string{"int_demo_otp", "int_demo_bank_verify"} {
+			if !snap.Integrations[id].Interactive {
+				t.Errorf("%s is not interactive", id)
 			}
 		}
 		target := snap.Integrations["int_demo_otp"].Active().Targets[0]
@@ -107,7 +123,7 @@ func TestExampleOTPConfigBuilds(t *testing.T) {
 		}
 		// HUB-343: each operation has its own pair, so its own vendor endpoint.
 		for op, endpoint := range map[string]string{"send_otp": "demo-kyc.otp_send@1", "verify_otp": "demo-kyc.otp_verify@1"} {
-			if tf := snap.Transformers[target.Pair(op).Request]; tf == nil || tf.VendorEndpoint != endpoint || tf.Operation != op {
+			if tf := snap.Transformers[target.Pair(op).Request]; tf == nil || tf.VendorEndpoint != endpoint {
 				t.Errorf("v%d %s: request transformer %+v, want endpoint %s", active, op, tf, endpoint)
 			}
 		}
@@ -115,21 +131,25 @@ func TestExampleOTPConfigBuilds(t *testing.T) {
 }
 
 // TestExampleOTPRefusesOnePairForBothOperations is HUB-345 on the example: without its
-// operations entry, verify_otp would run send_otp's transformers, and the build refuses that.
+// operations entry, verify_otp would run send_otp's transformers, whose samples do not fit
+// verify_otp's request schema (ADR-0023 input_schema), and the build refuses that.
 func TestExampleOTPRefusesOnePairForBothOperations(t *testing.T) {
 	src := exampleSources(t, 1)
 	cfg := src.Config.(fstest.MapFS)
 	const file = "integrations/int_demo_otp/versions/1.yaml"
-	const ops = "    operations:\n      verify_otp: { request: DEMO-OTP-VERIFY-REQ@1, response: DEMO-OTP-VERIFY-RES@1 }\n"
-	if !strings.Contains(string(cfg[file].Data), ops) {
+	// The first target's per-operation pair, whatever the layout of the file.
+	ops := regexp.MustCompile(`(?m)^ +operations:\n +verify_otp: \{ ?request: DEMO-OTP-VERIFY-REQ@1, response: DEMO-OTP-VERIFY-RES@1 ?\}\n`)
+	loc := ops.FindIndex(cfg[file].Data)
+	if loc == nil {
 		t.Fatalf("%s has no verify_otp pair", file)
 	}
-	cfg[file] = &fstest.MapFile{Data: []byte(strings.Replace(string(cfg[file].Data), ops, "", 1))}
+	doc := string(cfg[file].Data)
+	cfg[file] = &fstest.MapFile{Data: []byte(doc[:loc[0]] + doc[loc[1]:])}
 	_, err := registry.Build(src, time.Now())
 	var ps registry.ConfigErrors
 	if !errors.As(err, &ps) || !slices.ContainsFunc(ps, func(p registry.Problem) bool {
-		return p.File == file && p.Path == "targets[0].transformer" && strings.Contains(p.Message, "operation verify_otp uses the default pair")
+		return p.File == file && p.Path == "targets[0].transformer.request" && p.Check == registry.CheckInputSchema && strings.Contains(p.Message, "operation verify_otp")
 	}) {
-		t.Fatalf("want a targets[0].transformer problem for verify_otp, got %v", err)
+		t.Fatalf("want a targets[0].transformer.request input_schema problem for verify_otp, got %v", err)
 	}
 }

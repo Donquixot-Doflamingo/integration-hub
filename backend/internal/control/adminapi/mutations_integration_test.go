@@ -33,7 +33,7 @@ type adminRig struct {
 
 func newAdminRig(t *testing.T) *adminRig {
 	t.Helper()
-	return newAdminRigFrom(t, registry.Sources{Config: os.DirFS("../../../config"), Contracts: os.DirFS("../../../../contracts")})
+	return newAdminRigFrom(t, registry.Sources{Config: os.DirFS("../../../config")})
 }
 
 // newAdminRigFrom is newAdminRig starting from the bootstrap tree.
@@ -80,6 +80,19 @@ func (a *adminRig) do(role Role, method, path, body string) (*httptest.ResponseR
 		req.Header.Set("Content-Type", "application/json")
 	}
 	rec := a.spec.Serve(a.t, a.h, req)
+	var out map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	return rec, out
+}
+
+// doInvalid is do for a request that breaks the contract on purpose: only the answer is
+// validated.
+func (a *adminRig) doInvalid(role Role, method, path, body string) (*httptest.ResponseRecorder, map[string]any) {
+	a.t.Helper()
+	req := httptest.NewRequestWithContext(a.t.Context(), method, Base+path, strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token(a.t, a.iss, role, "orders-service"))
+	req.Header.Set("Content-Type", "application/json")
+	rec := a.spec.ServeInvalid(a.t, a.h, req)
 	var out map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	return rec, out

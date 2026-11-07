@@ -8,7 +8,6 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
 	"reflect"
 	"slices"
@@ -16,11 +15,13 @@ import (
 	"strings"
 	"testing/fstest"
 
+	"go.yaml.in/yaml/v3"
+
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control/adminapi"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
 
-const applyUsage = `  apply -reason TEXT [-config-dir DIR] [-contracts-dir DIR] [-yes]
+const applyUsage = `  apply -reason TEXT [-config-dir DIR] [-yes]
       Publish the difference between DIR and live through the admin API (same pipeline, change
       log and validation as the console). Applied: integration metadata and pause, a new
       integration version that DIR also makes active (draft + publish), account config and
@@ -33,12 +34,12 @@ const applyUsage = `  apply -reason TEXT [-config-dir DIR] [-contracts-dir DIR] 
 func serverOwned(p string) bool { return strings.HasPrefix(p, "admin/") }
 
 // loadTree loads a config tree for semantic comparison (nil when it does not load).
-func loadTree(files map[string][]byte, contracts string) *registry.Config {
+func loadTree(files map[string][]byte) *registry.Config {
 	m := fstest.MapFS{}
 	for p, b := range files {
 		m[p] = &fstest.MapFile{Data: b}
 	}
-	cfg, err := registry.Load(registry.Sources{Config: m, Contracts: os.DirFS(contracts)})
+	cfg, err := registry.Load(registry.Sources{Config: m})
 	if err != nil {
 		return nil
 	}
@@ -54,8 +55,9 @@ func sameObject(p string, live, local *registry.Config) bool {
 	parts := strings.Split(strings.TrimSuffix(p, path.Ext(p)), "/")
 	eq := func(a, b any) bool { return a != nil && b != nil && reflect.DeepEqual(a, b) }
 	switch {
-	case len(parts) == 2 && parts[0] == "vendors":
-		return eq(live.Vendors[parts[1]], local.Vendors[parts[1]])
+	case len(parts) == 2 && parts[0] == "vendors": // schemas compare by document, not compiled form
+		a, b := live.Vendors[parts[1]], local.Vendors[parts[1]]
+		return a != nil && b != nil && sameYAML(a, b)
 	case len(parts) == 2 && parts[0] == "accounts":
 		return eq(live.Accounts[parts[1]], local.Accounts[parts[1]])
 	case len(parts) == 2 && parts[0] == "tenants":
@@ -73,15 +75,23 @@ func sameObject(p string, live, local *registry.Config) bool {
 		}
 		va, vb := *a.Versions[n], *b.Versions[n]
 		va.Publish, vb.Publish = registry.PublishMeta{}, registry.PublishMeta{} // written by the publisher
-		return reflect.DeepEqual(va, vb)
+		return sameYAML(&va, &vb)
 	}
 	return false
 }
 
+// sameYAML compares two objects by their YAML rendering: operation and endpoint schemas compare
+// by their documents (their compiled forms are separate graphs).
+func sameYAML(a, b any) bool {
+	ya, erra := yaml.Marshal(a)
+	yb, errb := yaml.Marshal(b)
+	return erra == nil && errb == nil && string(ya) == string(yb)
+}
+
 // semanticDiff is diffTrees without server-owned files and without files whose object is
 // unchanged.
-func semanticDiff(live, local map[string][]byte, contracts string) ([]fileChange, *registry.Config, *registry.Config) {
-	lc, oc := loadTree(live, contracts), loadTree(local, contracts)
+func semanticDiff(live, local map[string][]byte) ([]fileChange, *registry.Config, *registry.Config) {
+	lc, oc := loadTree(live), loadTree(local)
 	var out []fileChange
 	for _, c := range diffTrees(live, local) {
 		if serverOwned(c.Path) || (c.Kind == "change" && sameObject(c.Path, lc, oc)) {
@@ -161,8 +171,8 @@ func planActions(changes []fileChange, live, local *registry.Config, reason stri
 		case len(parts) == 3 && parts[0] == "integrations" && parts[2] == "integration" && c.Kind == "change":
 			id := parts[1]
 			a, b := live.Integrations[id], local.Integrations[id]
-			if a.OwnerTenant != b.OwnerTenant || a.Capability != b.Capability {
-				refuse(c, "owner and capability are immutable (a schema change needs a new integration ID, D11)")
+			if a.OwnerTenant != b.OwnerTenant || a.Interactive != b.Interactive {
+				refuse(c, "owner and interactive are fixed at creation: create a new integration ID instead")
 				continue
 			}
 			if a.ActiveVersion != b.ActiveVersion && newVersions[id] != b.ActiveVersion {
@@ -229,7 +239,7 @@ func applyCmd(args []string, stdout, stderr io.Writer) int {
 	var a adminFlags
 	a.register(fs)
 	dir := fs.String("config-dir", "config", "local registry config directory")
-	contracts := fs.String("contracts-dir", "../contracts", "contracts directory (capability schemas)")
+	_ = fs.String("contracts-dir", "", "ignored since ADR-0023 (schemas live in the config tree)")
 	reason := fs.String("reason", "", "why (recorded in the change log of every change; required)")
 	yes := fs.Bool("yes", false, "make the changes (default: print them only)")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
@@ -256,7 +266,7 @@ func applyCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "hubctl: %v\n", err)
 		return 1
 	}
-	changes, lc, oc := semanticDiff(live, local, *contracts)
+	changes, lc, oc := semanticDiff(live, local)
 	if len(changes) == 0 {
 		fmt.Fprintf(stdout, "No changes: %s matches snapshot %d.\n", *dir, version)
 		return 0

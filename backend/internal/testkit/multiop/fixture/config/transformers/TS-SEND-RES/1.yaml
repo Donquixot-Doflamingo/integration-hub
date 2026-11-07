@@ -2,8 +2,6 @@
 transformer: TS-SEND-RES
 version: 1
 kind: response
-capability: test.two_step@v1
-operation: send
 response:
   status: '"sent"'
   ref:    res.body.id

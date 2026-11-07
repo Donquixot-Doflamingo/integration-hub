@@ -25,7 +25,7 @@ func toolMatrix() map[string][2]toolCase {
 			{func(h *fakeHub) { h.on("listIntegrations", h.pub("listIntegrations", 500, "INTERNAL_ERROR")) }, map[string]any{}},
 		},
 		toolDescribe: {
-			{func(h *fakeHub) { getInt(h); h.on("getCapability", h.pub("getCapability", 200, "")) }, map[string]any{"integration_id": "int_evt_brandA"}},
+			{func(h *fakeHub) { getInt(h) }, map[string]any{"integration_id": "int_evt_brandA"}},
 			{func(h *fakeHub) { h.on("getIntegration", h.pub("getIntegration", 404, "")) }, map[string]any{"integration_id": "int_evt_brandZ"}},
 		},
 		toolDryRun: {
@@ -35,7 +35,7 @@ func toolMatrix() map[string][2]toolCase {
 		toolInvoke: {
 			{func(h *fakeHub) {
 				getInt(h)
-				h.on("invokeIntegration", h.pub("invokeIntegration", 200, "events.track@v1"))
+				h.on("invokeIntegration", h.pub("invokeIntegration", 200, "transformed"))
 			}, invokeArgs},
 			{func(h *fakeHub) { getInt(h); h.on("invokeIntegration", h.pub("invokeIntegration", 422, "")) }, invokeArgs},
 		},
@@ -61,7 +61,7 @@ func toolMatrix() map[string][2]toolCase {
 	}
 }
 
-// TestEveryToolSuccessAndError runs, for every contract tool (all 42), a success and a Hub-error
+// TestEveryToolSuccessAndError runs, for every contract tool (all 41), a success and a Hub-error
 // scenario against the contract-validated fake Hub, plus for every admin tool a FORBIDDEN answer
 // to a viewer token surfaced as an isError result. Outputs are validated against the contract
 // (callTool), and every request a tool sends is one of its maps_to operations with exactly the
@@ -127,8 +127,8 @@ func TestEveryToolSuccessAndError(t *testing.T) {
 			})
 		}
 	}
-	if covered != 42 {
-		t.Errorf("%d tools covered, want 42", covered)
+	if covered != 41 {
+		t.Errorf("%d tools covered, want 41", covered)
 	}
 }
 

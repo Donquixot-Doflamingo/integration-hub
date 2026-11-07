@@ -7,29 +7,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
 	"strings"
-
-	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
 
-// Body limits (DESIGN §16.5): 1 MB, 4 MB for LLM capabilities.
+// Body limits (DESIGN §16.5): 1 MB. The 4 MB LLM limit was keyed on llm.* capability names,
+// which ADR-0023 removed; it returns with an explicit integration setting (HUB-439, ADR-0024).
 const (
 	DefaultBodyLimit = 1 << 20
-	LLMBodyLimit     = 4 << 20
-	maxDetails       = 100 // contract: details maxItems
+	maxDetails       = registry.MaxViolations // contract: details maxItems
 )
-
-// bodyLimit returns the limit for a capability key ("llm.chat@v1" → 4 MB).
-func bodyLimit(capability string) int64 {
-	if strings.HasPrefix(capability, "llm.") {
-		return LLMBodyLimit
-	}
-	return DefaultBodyLimit
-}
 
 // readJSONBody reads and decodes the request body as a JSON object. An oversized body is refused
 // from Content-Length before reading, and capped while reading otherwise (PAYLOAD_TOO_LARGE).
@@ -58,37 +47,34 @@ func readJSONBody(r *http.Request, limit int64) (map[string]any, []byte, *core.C
 	return body, raw, nil
 }
 
-// validate checks body against the operation's pre-compiled request schema (DESIGN §5.1 step 2)
-// and lists every violation with its JSON pointer.
-func validate(op *registry.Operation, body map[string]any) *core.CanonicalError {
-	err := op.Request.Validate(body)
-	if err == nil {
+// validate checks the caller's input against the operation's pre-compiled request schema
+// (DESIGN §5.1 step 2, ADR-0023): the body, then the declared caller headers. It lists every
+// violation: body ones with their JSON pointer into the body, header ones without a pointer and
+// with the header named in the message (contract CanonicalError.details). Only operations with
+// validate_input on are checked (the caller decides with Operation.Validates).
+func validate(op *registry.Operation, body map[string]any, hdr http.Header) *core.CanonicalError {
+	var details []core.ErrorDetail
+	for _, v := range registry.Violations(op.RequestSchema.Body.Compiled(), body, "") {
+		details = append(details, core.ErrorDetail{Pointer: v.Field, Keyword: v.Keyword, Message: v.Message})
+	}
+	if h := op.RequestSchema.Headers.Compiled(); h != nil && len(details) < maxDetails {
+		declared := make(map[string]any, len(op.HeaderNames()))
+		for _, name := range op.HeaderNames() {
+			if v := hdr.Get(name); v != "" {
+				declared[name] = v
+			}
+		}
+		for _, v := range registry.Violations(h, declared, "") {
+			name := strings.TrimPrefix(v.Field, "/")
+			details = append(details, core.ErrorDetail{Keyword: v.Keyword, Message: "header " + name + ": " + v.Message})
+		}
+	}
+	if len(details) == 0 {
 		return nil
 	}
-	ce := &core.CanonicalError{Code: core.CodeValidationFailed, Message: "Body does not match the capability schema", Reason: core.Ptr("schema")}
-	var ve *jsonschema.ValidationError
-	if !errors.As(err, &ve) {
-		ce.Details = []core.ErrorDetail{{Message: err.Error()}}
-		return ce
+	if len(details) > maxDetails {
+		details = details[:maxDetails]
 	}
-	seen := map[string]bool{}
-	for _, u := range ve.BasicOutput().Errors {
-		if u.Error == nil {
-			continue
-		}
-		msg := u.Error.String()
-		if strings.HasPrefix(msg, "validation failed") || strings.HasPrefix(msg, "allOf failed") {
-			continue // group wrappers: the leaves carry the detail
-		}
-		key := u.InstanceLocation + "|" + msg
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		ce.Details = append(ce.Details, core.ErrorDetail{Pointer: u.InstanceLocation, Keyword: path.Base(u.KeywordLocation), Message: msg})
-		if len(ce.Details) == maxDetails {
-			break
-		}
-	}
-	return ce
+	return &core.CanonicalError{Code: core.CodeValidationFailed, Message: "Request does not match the operation's request_schema",
+		Reason: core.Ptr("schema"), Details: details}
 }

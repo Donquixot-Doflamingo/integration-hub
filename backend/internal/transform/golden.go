@@ -15,13 +15,14 @@ import (
 
 // Golden fixtures (DESIGN §7.6): next to each transformer, in fixtures/,
 //
-//	<case>.input.json            request: canonical body, plus optional "_context"
+//	<case>.input.json            request: the caller's body, plus optional "_context"
 //	<case>.expected_request.json request: {method, path, query, headers, body}
 //	<case>.vendor_response.json  response: {status, headers, body}, plus optional "_context"
 //	<case>.expected_response.json response: {"response": ..., "session": {...}} or {"error": {code, retryable, retry_after_ms, message}}
 //
-// "_context" may set hdr, account, creds, session, req (the canonical request, for a response
-// transformer's session: section), now (RFC 3339) and uuids (list). Fixture creds must be
+// "_context" may set hdr (the caller headers: the sample's input_headers), account, creds,
+// session, req (the caller's request, for a response transformer), now (RFC 3339) and uuids
+// (list). Fixture creds must be
 // obviously fake ("fixture-..."). now defaults to GoldenNow. "session" is the vendor session data
 // a response transformer maps on success; a transformer with a session: section must pin it in
 // every success case (an unpinned session is reported as unexpected).
@@ -35,6 +36,14 @@ type GoldenResult struct {
 	Case        string
 	Diffs       []string // "/body/d/0/ts: expected 1, got 2"
 	Err         string   // a transformer or fixture error; Detail() included (fixture data)
+
+	// Request samples only, for the schema checks of ADR-0023 (callers run them: the transformer
+	// knows no schema). Input and InputHeaders are the sample's caller input (body without
+	// "_context", and _context.hdr); Checked is the produced vendor request without its
+	// credential-derived headers and query parameters (nil when the transformer failed).
+	Input        map[string]any
+	InputHeaders map[string]any
+	Checked      *core.VendorRequest
 }
 
 // Passed reports whether the case matched.
@@ -104,7 +113,7 @@ func RunGoldens(p *Program, fixtures fs.FS) []GoldenResult {
 		r := GoldenResult{Transformer: p.ref, Case: c}
 		run := func() ([]string, error) {
 			if p.kind == "request" {
-				return p.goldenRequest(fixtures, c)
+				return p.goldenRequest(fixtures, c, &r)
 			}
 			return p.goldenResponse(fixtures, c)
 		}
@@ -163,7 +172,7 @@ func splitContext(doc map[string]any) (goldenContext, error) {
 	return gc, nil
 }
 
-func (p *Program) goldenRequest(fixtures fs.FS, c string) ([]string, error) {
+func (p *Program) goldenRequest(fixtures fs.FS, c string, r *GoldenResult) ([]string, error) {
 	input, err := readJSON(fixtures, c+".input.json")
 	if err != nil {
 		return nil, err
@@ -176,14 +185,16 @@ func (p *Program) goldenRequest(fixtures fs.FS, c string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	r.Input, r.InputHeaders = input, gc.Hdr
 	in, err := gc.input(input)
 	if err != nil {
 		return nil, err
 	}
-	req, err := p.BuildRequest(in)
+	req, checked, err := p.BuildSample(in)
 	if err != nil {
 		return nil, err
 	}
+	r.Checked = &checked
 	got := map[string]any{"method": req.Method, "path": req.Path}
 	if len(req.Query) > 0 {
 		got["query"] = stringMap(req.Query)

@@ -3,7 +3,6 @@ package edge
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -32,9 +31,6 @@ func TestBodyLimits(t *testing.T) {
 	if _, _, ce := readJSONBody(req, 1024); ce == nil || ce.Code != core.CodePayloadTooLarge {
 		t.Fatalf("streamed: %+v", ce)
 	}
-	if bodyLimit("llm.chat@v1") != LLMBodyLimit || bodyLimit("events.track@v1") != DefaultBodyLimit {
-		t.Fatal("limits per capability")
-	}
 }
 
 // sizedTrackBody is a valid events.track body of exactly n bytes (padding in a property).
@@ -49,24 +45,10 @@ func sizedTrackBody(t *testing.T, n int) string {
 	return prefix + strings.Repeat("a", pad) + suffix
 }
 
-// llmSnapshot serves int_evt_brandA under an "llm." capability key (same schema), so the edge
-// applies the 4 MB LLM limit to it.
-func llmSnapshot(t *testing.T) *registry.Snapshot {
-	t.Helper()
-	snap := *devSnapshot(t)
-	snap.Capabilities = maps.Clone(snap.Capabilities)
-	snap.Capabilities["llm.chat@v1"] = snap.Capabilities["events.track@v1"]
-	snap.Integrations = maps.Clone(snap.Integrations)
-	in := *snap.Integrations["int_evt_brandA"]
-	in.Capability = "llm.chat@v1"
-	snap.Integrations["int_evt_brandA"] = &in
-	return &snap
-}
-
 // TestBodyLimitsAtTheEdge (HUB-234, DESIGN §16.5): through the real handler, a body up to the
 // limit passes the body stage (it is validated; what happens after is not the limit's business)
 // and one byte more is 413 PAYLOAD_TOO_LARGE before validation, resolution or any vendor call:
-// 1 MB by default, 4 MB for LLM capabilities, declared or chunked.
+// 1 MB, declared or chunked.
 func TestBodyLimitsAtTheEdge(t *testing.T) {
 	const path = "/v1/integrations/int_evt_brandA/invoke"
 	cases := []struct {
@@ -79,10 +61,7 @@ func TestBodyLimitsAtTheEdge(t *testing.T) {
 		{"default: exactly 1 MB", devSnapshot(t), DefaultBodyLimit, false, false},
 		{"default: 1 MB + 1", devSnapshot(t), DefaultBodyLimit + 1, false, true},
 		{"default: 1 MB + 1, chunked", devSnapshot(t), DefaultBodyLimit + 1, true, true},
-		{"llm: 2 MB is under the LLM limit", llmSnapshot(t), 2 << 20, false, false},
-		{"llm: exactly 4 MB, chunked", llmSnapshot(t), LLMBodyLimit, true, false},
-		{"llm: 4 MB + 1", llmSnapshot(t), LLMBodyLimit + 1, false, true},
-		{"llm: 4 MB + 1, chunked", llmSnapshot(t), LLMBodyLimit + 1, true, true},
+		{"default: exactly 1 MB, chunked", devSnapshot(t), DefaultBodyLimit, true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -131,17 +110,17 @@ func TestBodyMustBeOneJSONObject(t *testing.T) {
 		}
 	}
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"a": 1.5}`))
-	body, raw, ce := readJSONBody(req, bodyLimit("events.track@v1"))
+	body, raw, ce := readJSONBody(req, DefaultBodyLimit)
 	if ce != nil || body["a"] != 1.5 || string(raw) != `{"a": 1.5}` {
 		t.Fatalf("decoded %v %q %+v", body, raw, ce)
 	}
 }
 
 func TestValidationListsJSONPointers(t *testing.T) {
-	op := devSnapshot(t).Capabilities["events.track@v1"].Operations["default"]
+	op := devSnapshot(t).Integrations["int_evt_brandA"].Active().Op("default")
 	var body map[string]any
 	_ = json.Unmarshal([]byte(`{"user": {}, "event": {"name": "1bad", "timestamp": "yesterday"}, "extra": true}`), &body)
-	ce := validate(op, body)
+	ce := validate(op, body, http.Header{})
 	if ce == nil || ce.Code != core.CodeValidationFailed || ce.Reason == nil || *ce.Reason != "schema" {
 		t.Fatalf("%+v", ce)
 	}
@@ -149,21 +128,54 @@ func TestValidationListsJSONPointers(t *testing.T) {
 	for _, d := range ce.Details {
 		ptrs = append(ptrs, d.Pointer)
 	}
-	for _, want := range []string{"/user", "/event/name", "/event/timestamp", ""} {
+	for _, want := range []string{"/user/id", "/event/name", "/event/timestamp", ""} {
 		if !slices.Contains(ptrs, want) {
 			t.Errorf("no detail at %q in %v", want, ce.Details)
 		}
 	}
 	body = nil // Unmarshal merges into a non-nil map
 	_ = json.Unmarshal([]byte(`{"user": {"id": "u_1"}, "event": {"name": "order_placed"}}`), &body)
-	if ce := validate(op, body); ce != nil {
+	if ce := validate(op, body, http.Header{}); ce != nil {
 		t.Fatalf("valid body rejected: %+v", ce)
+	}
+}
+
+// Declared caller headers are checked too (ADR-0023): a violation has no pointer (the pointer is
+// into the body) and names the header.
+func TestValidationChecksDeclaredHeaders(t *testing.T) {
+	op := &registry.Operation{Name: "default", RequestSchema: registry.RequestSchema{
+		Body:    registry.NewJSONSchema(map[string]any{"type": "object"}),
+		Headers: registry.NewJSONSchema(map[string]any{"type": "object", "required": []any{"X-Request-Source"}, "properties": map[string]any{"X-Request-Source": map[string]any{"enum": []any{"web", "app"}}}}),
+	}}
+	if err := registry.CompileOperation(op, "default"); err != nil {
+		t.Fatal(err)
+	}
+	ce := validate(op, map[string]any{}, http.Header{})
+	if ce == nil || len(ce.Details) != 1 || ce.Details[0].Pointer != "" || !strings.Contains(ce.Details[0].Message, "header X-Request-Source") {
+		t.Fatalf("missing header: %+v", ce)
+	}
+	h := http.Header{}
+	h.Set("x-request-source", "tv")
+	if ce := validate(op, map[string]any{}, h); ce == nil || !strings.Contains(ce.Details[0].Message, "header X-Request-Source") {
+		t.Fatalf("bad header value: %+v", ce)
+	}
+	h.Set("X-Request-Source", "web")
+	if ce := validate(op, map[string]any{}, h); ce != nil {
+		t.Fatalf("valid header rejected: %+v", ce)
+	}
+	if got := callerHeaders(op, h); len(got) != 1 || got["X-Request-Source"] != "web" {
+		t.Fatalf("hdr.* %v", got)
+	}
+	h.Set("Idempotency-Key", "k1")
+	h.Set("X-Undeclared", "secret")
+	if got := callerHeaders(op, h); len(got) != 2 || got["idempotency_key"] != "k1" || got["X-Undeclared"] != nil {
+		t.Fatalf("hdr.* must hold only declared headers and idempotency_key: %v", got)
 	}
 }
 
 // BenchmarkValidate4KB: schema validation ≤ 0.8 ms p99 (DESIGN §18.6).
 func BenchmarkValidate4KB(b *testing.B) {
-	op := devSnapshot(b).Capabilities["events.track@v1"].Operations["default"]
+	op := devSnapshot(b).Integrations["int_evt_brandA"].Active().Op("default")
 	props := map[string]any{}
 	for i := range 60 {
 		props[fmt.Sprintf("property_%02d", i)] = fmt.Sprintf("value-%02d-abcdefghijklmnopqrstuvwxyz0123456789", i)
@@ -175,7 +187,7 @@ func BenchmarkValidate4KB(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		start := time.Now()
-		if ce := validate(op, body); ce != nil {
+		if ce := validate(op, body, http.Header{}); ce != nil {
 			b.Fatal(ce)
 		}
 		durations = append(durations, time.Since(start))

@@ -15,7 +15,6 @@ var permissions = []struct {
 	{"registry:read", RoleViewer},
 	{"change_log:read", RoleViewer},
 	{"accounts:test", RoleEditor},
-	{"capabilities:write", RoleEditor},
 	{"transformers:write", RoleEditor},
 	{"integrations:write", RoleEditor},
 	{"integrations:publish", RoleEditor},

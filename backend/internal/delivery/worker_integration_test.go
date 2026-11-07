@@ -84,7 +84,7 @@ func (r *rig) advance(d time.Duration) {
 }
 
 func devSnap(t *testing.T, vendorURL string) *registry.Snapshot {
-	snap, err := registry.Build(registry.Sources{Config: os.DirFS("../../config"), Contracts: os.DirFS("../../../contracts")}, time.Now())
+	snap, err := registry.Build(registry.Sources{Config: os.DirFS("../../config")}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,8 +183,7 @@ func (r *rig) enqueueWith(integration string, ttl time.Duration, edit func(*core
 	r.t.Helper()
 	now := r.now()
 	env := core.Envelope{
-		RequestID: "req_" + core.NewULID(now), Tenant: "orders-service", IntegrationID: integration, ResolvedVersion: 2,
-		Capability: "events.track@v1", Operation: "default", Mode: "async",
+		RequestID: "req_" + core.NewULID(now), Tenant: "orders-service", IntegrationID: integration, ResolvedVersion: 2, Operation: "default", Mode: "async",
 		Canonical:     json.RawMessage(`{"user":{"id":"u_48213"},"event":{"name":"order_placed","timestamp":"2026-10-31T09:15:00Z"}}`),
 		NextAttemptAt: now.Add(-time.Millisecond), ExpiresAt: now.Add(ttl), CreatedAt: now,
 	}
@@ -193,7 +192,7 @@ func (r *rig) enqueueWith(integration string, ttl time.Duration, edit func(*core
 	}
 	err := pgx.BeginFunc(r.t.Context(), r.db, func(tx pgx.Tx) error {
 		if err := (audit.Ledger{}).Insert(r.t.Context(), tx, audit.Record{RequestID: env.RequestID, CreatedAt: now, TenantID: env.Tenant,
-			IntegrationID: integration, Capability: env.Capability, Operation: "default", Mode: "async", Status: "accepted", PayloadPolicy: "masked"}); err != nil {
+			IntegrationID: integration, Operation: "default", Mode: "async", Status: "accepted", PayloadPolicy: "masked"}); err != nil {
 			return err
 		}
 		if parked {

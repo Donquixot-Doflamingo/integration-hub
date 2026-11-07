@@ -1,0 +1,13 @@
+integration: int_evt_brandA
+version: 1
+targets:
+  - vendor: clevertap
+    account: ct-brandA-in
+    transformer: { request: T1@7, response: R2@1 }
+    weight: 100
+delivery:
+  mode: wait
+  wait_ms: 3000
+  polling: true
+audit: { payloads: masked, retention: 30d }
+publish: { author: platform-team, reason: "initial brand A integration" }

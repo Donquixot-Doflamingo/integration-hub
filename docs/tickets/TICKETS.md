@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **282** · done: **204** · todo: **72** · other (in-progress/in-review/blocked): **6**
+Total tickets: **282** · done: **204** · todo: **68** · other (in-progress/in-review/blocked): **10**
 
 ## Epics
 
@@ -3520,7 +3520,7 @@ Contract-first change per [ADR-0023](../tech/adr/0023-remove-capabilities-integr
 
 ### HUB-433 — Backend: registry, transform, edge and delivery without capabilities
 - **Epic:** EP-14 · **Type:** refactor · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-progress · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Per [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md): registry loads operations from integration versions and request schemas from endpoints; transformer compile drops capability binding, field checks run at integration validate against the operation schema; sample checks validate produced vendor requests against the endpoint schema (publish time only); edge validates the caller input when `validate_input`; response transformer optional with header-filtered pass-through; audit PII tags from the operation schema.
@@ -3533,7 +3533,7 @@ Per [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request
 
 ### HUB-434 — Backend: admin API, migration and auth scheme none
 - **Epic:** EP-14 · **Type:** refactor · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-progress · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Admin API handlers follow the new contract; append-only migration drops `hub.capabilities` and capability columns and copies existing capability schemas into integration versions' operations; vendor auth scheme `none` with credential-less accounts ([ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md)).
@@ -3545,7 +3545,7 @@ Admin API handlers follow the new contract; append-only migration drops `hub.cap
 
 ### HUB-435 — hubctl, hubmcp, seed config and examples without capabilities
 - **Epic:** EP-14 · **Type:** refactor · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-433 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-progress · **Depends on:** HUB-433 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Update hubctl (apply, plan, export, dry-run, transform test), hubmcp tools, `backend/config` seed and all examples (Aadhaar OKYC, PAN, latency demo) to [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md); add the agify age example (firstName + lastName to `?name=`, only `age` back).
@@ -3580,7 +3580,7 @@ Rewrite hub-operator, hub-transformers, consumer skill and MCP setup docs, PRD, 
 
 ### HUB-438 — Remove leftover capability tests, fixtures and references across the repo
 - **Epic:** EP-14 · **Type:** chore · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-progress · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `refactor/HUB-433-backend-no-capabilities`
 
 Sweep: `grep -ri capabilit` returns only ADR history and changelog entries.

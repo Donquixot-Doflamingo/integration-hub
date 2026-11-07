@@ -37,7 +37,6 @@ func (s RequestState) Terminal() bool {
 type RequestStatus struct {
 	RequestID      string
 	IntegrationID  string
-	Capability     string
 	Operation      string
 	Mode           string // delivery mode: sync, wait, async, async_callback
 	Status         RequestState
@@ -48,7 +47,8 @@ type RequestStatus struct {
 	CompletedAt    *time.Time // set when terminal
 	NextAttemptAt  *time.Time
 	ExpiresAt      *time.Time
-	// Result is the canonical response when Status is succeeded, else nil.
+	// Result is the response body when Status is succeeded, else nil: the integration's output,
+	// any JSON value (a non-JSON third-party body in pass-through is a JSON string).
 	Result json.RawMessage
 	// Error is the canonical error when Status is failed, dead_lettered or expired, else nil.
 	// Its Status field is 0: it did not come with an HTTP error status.
@@ -60,7 +60,6 @@ func (r *RequestStatus) UnmarshalJSON(b []byte) error {
 	var w struct {
 		RequestID      string          `json:"request_id"`
 		IntegrationID  string          `json:"integration_id"`
-		Capability     string          `json:"capability"`
 		Operation      string          `json:"operation"`
 		Mode           string          `json:"mode"`
 		Status         RequestState    `json:"status"`
@@ -80,7 +79,6 @@ func (r *RequestStatus) UnmarshalJSON(b []byte) error {
 	*r = RequestStatus{
 		RequestID:      w.RequestID,
 		IntegrationID:  w.IntegrationID,
-		Capability:     w.Capability,
 		Operation:      w.Operation,
 		Mode:           w.Mode,
 		Status:         w.Status,

@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"go.yaml.in/yaml/v3"
@@ -18,10 +17,9 @@ import (
 // on the two-operation overlay of internal/testkit/multiop (send and verify on two endpoints).
 
 const (
-	opV          = multiop.VersionFile
-	verifyPair   = "      verify: { request: TS-VERIFY-REQ@1, response: TS-VERIFY-RES@1 }\n"
-	opsBlock     = "    operations:\n" + verifyPair
-	sendPairLine = "      verify: { request: TS-SEND-REQ@1, response: TS-SEND-RES@1 }\n"
+	opV        = multiop.VersionFile
+	verifyPair = "      verify: { request: TS-VERIFY-REQ@1, response: TS-VERIFY-RES@1 }\n"
+	opsBlock   = "    operations:\n" + verifyPair
 )
 
 // multiopFiles is validFiles plus the overlay, with overrides applied (empty value deletes).
@@ -40,11 +38,15 @@ func multiopFiles(overrides map[string]string) map[string]string {
 
 func multiopSources(t testing.TB, m map[string]string) Sources {
 	t.Helper()
-	contracts := contractsFS(t)
-	for p, s := range multiop.Files(multiop.Contracts()) {
-		contracts[p] = &fstest.MapFile{Data: []byte(s)}
-	}
-	return Sources{Config: mapFS(m), Contracts: contracts}
+	return Sources{Config: mapFS(m)}
+}
+
+// hasProblem reports whether ps holds a problem of file at path whose message contains msg (and
+// whose check is check, when given).
+func hasProblem(ps ConfigErrors, file, path, check, msg string) bool {
+	return slices.ContainsFunc(ps, func(p Problem) bool {
+		return p.File == file && p.Path == path && strings.Contains(p.Message, msg) && (check == "" || p.Check == check)
+	})
 }
 
 // opVersion returns the overlay version file with the n-th (1-based) occurrence of old replaced.
@@ -86,71 +88,61 @@ func TestPerOperationPairsBuild(t *testing.T) {
 }
 
 func TestOperationsHaveTransformers(t *testing.T) {
-	const (
-		defaulted = "operation verify uses the default pair, but %s is compiled for operation send: give verify its own pair under operations"
-		shadow    = "shadow:\n  target:\n    vendor: stepvendor\n    account: sv-backup\n    transformer: { request: TS-SEND-REQ@1, response: TS-SEND-RES@1 }\n  mode: dry_run\npublish: {"
-	)
+	type want struct{ path, check, msg string }
 	tests := []struct {
 		name    string
 		version func(t *testing.T) string
-		want    []Problem
+		want    []want
 	}{
-		{"two-operation capability, one pair (HUB-345)", func(t *testing.T) string {
-			return opVersion(t, 1, opsBlock, "")
-		}, []Problem{
-			{opV, "targets[0].transformer", strings.Replace(defaulted, "%s", "TS-SEND-REQ@1", 1)},
-			{opV, "targets[0].transformer", strings.Replace(defaulted, "%s", "TS-SEND-RES@1", 1)},
-		}},
-		{"operation key the capability does not declare", func(t *testing.T) string {
+		{"operation key the version does not declare", func(t *testing.T) string {
 			return opVersion(t, 1, "      verify:", "      verfy:")
-		}, []Problem{
-			{opV, "targets[0].operations.verfy", `"verfy" is not an operation of capability test.two_step@v1 (it declares send, verify)`},
-			{opV, "targets[0].transformer", strings.Replace(defaulted, "%s", "TS-SEND-REQ@1", 1)},
-		}},
-		{"listed pair compiled for another operation", func(t *testing.T) string {
-			return opVersion(t, 1, verifyPair, sendPairLine)
-		}, []Problem{
-			{opV, "targets[0].operations.verify", "TS-SEND-REQ@1 is compiled for operation send, not verify"},
-			{opV, "targets[0].operations.verify", "TS-SEND-RES@1 is compiled for operation send, not verify"},
-		}},
-		{"only the response of a listed pair is wrong", func(t *testing.T) string {
-			return opVersion(t, 1, "response: TS-VERIFY-RES@1", "response: TS-SEND-RES@1")
-		}, []Problem{{opV, "targets[0].operations.verify", "TS-SEND-RES@1 is compiled for operation send, not verify"}}},
+		}, []want{{"targets[0].operations.verfy", CheckOperationsHaveTransformers, `"verfy" is not an operation of this version (it declares send, verify)`}}},
+		// One pair for two operations: the send transformer's samples do not fit verify's input
+		// (code is required there), so the default pair cannot serve verify (HUB-345, ADR-0023).
+		{"two operations, one pair", func(t *testing.T) string {
+			return opVersion(t, 1, opsBlock, "")
+		}, []want{{"targets[0].transformer.request", CheckInputSchema, "sample send of TS-SEND-REQ@1 does not fit operation verify's request_schema at /body/code"}}},
 		{"failover target without the verify pair", func(t *testing.T) string {
 			return opVersion(t, 2, opsBlock, "")
-		}, []Problem{{opV, "failover[0].transformer", strings.Replace(defaulted, "%s", "TS-SEND-REQ@1", 1)}}},
-		{"shadow target without the verify pair", func(t *testing.T) string {
-			return opVersion(t, 1, "publish: {", shadow)
-		}, []Problem{{opV, "shadow.target.transformer", strings.Replace(defaulted, "%s", "TS-SEND-RES@1", 1)}}},
+		}, []want{{"failover[0].transformer.request", CheckInputSchema, "does not fit operation verify"}}},
 		{"empty operations map", func(t *testing.T) string {
 			return opVersion(t, 1, opsBlock, "    operations: {}\n")
-		}, []Problem{{opV, "targets[0].operations", "name at least one operation, or omit operations"}}},
+		}, []want{{"targets[0].operations", "", "name at least one operation, or omit operations"}}},
 		{"unknown transformer in a listed pair", func(t *testing.T) string {
 			return opVersion(t, 1, "request: TS-VERIFY-REQ@1", "request: TS-VERIFY-REQ@9")
-		}, []Problem{{opV, "targets[0].operations.verify.request", "unknown transformer TS-VERIFY-REQ@9"}}},
+		}, []want{{"targets[0].operations.verify.request", "", "unknown transformer TS-VERIFY-REQ@9"}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := validateFiles(t, multiopSources(t, multiopFiles(map[string]string{opV: tt.version(t)})))
+			// The refusal through the snapshot build (config files, hubctl apply, admin publish).
+			_, err := Build(multiopSources(t, multiopFiles(map[string]string{opV: tt.version(t)})), time.Now())
 			var ps ConfigErrors
 			if !errors.As(err, &ps) {
 				t.Fatalf("want ConfigErrors, got %v", err)
 			}
 			for _, w := range tt.want {
-				if !slices.Contains(ps, w) {
-					t.Errorf("missing problem\n  %s\ngot:\n  %s", w, strings.ReplaceAll(err.Error(), "\n", "\n  "))
+				if !hasProblem(ps, opV, w.path, w.check, w.msg) {
+					t.Errorf("missing problem %+v\ngot:\n  %s", w, strings.ReplaceAll(err.Error(), "\n", "\n  "))
 				}
-			}
-			// The same refusal through the snapshot build (config files, hubctl apply).
-			if _, err := Build(multiopSources(t, multiopFiles(map[string]string{opV: tt.version(t)})), time.Now()); err == nil {
-				t.Fatal("Build accepted the config")
 			}
 		})
 	}
 }
 
+func TestSampleInputProblemCarriesSampleAndField(t *testing.T) {
+	_, err := Build(multiopSources(t, multiopFiles(map[string]string{opV: opVersion(t, 1, opsBlock, "")})), time.Now())
+	var ps ConfigErrors
+	if !errors.As(err, &ps) {
+		t.Fatalf("want ConfigErrors, got %v", err)
+	}
+	i := slices.IndexFunc(ps, func(p Problem) bool { return p.Check == CheckInputSchema })
+	if i < 0 || ps[i].Sample != "send" || ps[i].Field != "/body/code" {
+		t.Fatalf("input_schema problem %+v", ps)
+	}
+}
+
 // TestOperationsValidShapes: listing every operation (the default pair then serves none) and a
-// default pair compiled for the other operation are both valid.
+// default pair serving the other operation are both valid.
 func TestOperationsValidShapes(t *testing.T) {
 	for name, version := range map[string]func(t *testing.T) string{
 		"every operation listed": func(t *testing.T) string {
@@ -175,10 +167,9 @@ func TestShadowSendChecksEveryOperationEndpoint(t *testing.T) {
 	shadow := "shadow:\n  target:\n    vendor: stepvendor\n    account: sv-backup\n    transformer: { request: TS-SEND-REQ@1, response: TS-SEND-RES@1 }\n" +
 		opsBlock + "  mode: send\npublish: {"
 	_, err := validateFiles(t, multiopSources(t, multiopFiles(map[string]string{opV: opVersion(t, 1, "publish: {", shadow)})))
-	want := Problem{opV, "shadow.mode", "stepvendor.send@1 is not idempotent (it has side effects): its shadow must be dry_run"}
 	var ps ConfigErrors
-	if !errors.As(err, &ps) || !slices.Contains(ps, want) {
-		t.Fatalf("missing %s in %v", want, err)
+	if !errors.As(err, &ps) || !hasProblem(ps, opV, "shadow.mode", "", "stepvendor.send@1 is not idempotent (it has side effects): its shadow must be dry_run") {
+		t.Fatalf("missing the shadow problem in %v", err)
 	}
 	if n := strings.Count(err.Error(), "is not idempotent"); n != 1 {
 		t.Fatalf("%d idempotency problems, want 1 (verify@1 is idempotent): %v", n, err)

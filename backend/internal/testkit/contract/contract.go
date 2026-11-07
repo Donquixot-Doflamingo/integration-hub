@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -62,6 +63,7 @@ func Load(tb testing.TB, file string) *Spec {
 	if err := doc.Validate(context.Background(), openapi3.DisableExamplesValidation()); err != nil {
 		tb.Fatalf("contract %s is invalid: %v", file, err)
 	}
+	anyAcceptsNull(doc)
 	// Match on path only: keep each server's base path, drop scheme and host.
 	base := "/"
 	if len(doc.Servers) > 0 {
@@ -77,6 +79,46 @@ func Load(tb testing.TB, file string) *Spec {
 	s := &Spec{name: file, doc: doc, router: router}
 	cache[file] = s
 	return s
+}
+
+// anyAcceptsNull gives every type-less schema (any JSON value) every JSON type explicitly. In
+// OpenAPI 3.1 / JSON Schema 2020-12 such a schema accepts null; kin-openapi only accepts null
+// when the type list names it, and would refuse e.g. RequestStatus.result: null, whose schema
+// (CanonicalResponse) is any JSON value since hub-public 2.0.0.
+func anyAcceptsNull(doc *openapi3.T) {
+	seen := map[*openapi3.Schema]bool{}
+	var walk func(r *openapi3.SchemaRef)
+	walk = func(r *openapi3.SchemaRef) {
+		if r == nil || r.Value == nil || seen[r.Value] {
+			return
+		}
+		s := r.Value
+		seen[s] = true
+		if (s.Type == nil || len(*s.Type) == 0) && len(s.AllOf) == 0 && len(s.OneOf) == 0 && len(s.AnyOf) == 0 && len(s.Properties) == 0 {
+			s.Type = &openapi3.Types{"null", "boolean", "object", "array", "number", "string"}
+			s.Nullable = true
+		}
+		for _, p := range s.Properties {
+			walk(p)
+		}
+		walk(s.Items)
+		walk(s.AdditionalProperties.Schema)
+		for _, l := range [][]*openapi3.SchemaRef{s.AllOf, s.OneOf, s.AnyOf} {
+			for _, x := range l {
+				walk(x)
+			}
+		}
+	}
+	for _, r := range doc.Components.Schemas {
+		walk(r)
+	}
+	for _, r := range doc.Components.Responses {
+		if r.Value != nil {
+			for _, mt := range r.Value.Content {
+				walk(mt.Schema)
+			}
+		}
+	}
 }
 
 // Dir finds the repository's contracts/ directory by walking up from the working directory.
@@ -121,6 +163,9 @@ func (s *Spec) Check(ex Exchange) error {
 		IncludeResponseStatus: true,
 		AuthenticationFunc:    openapi3filter.NoopAuthenticationFunc,
 	}
+	if ex.Header.Get("X-Hub-Pass-Through") == "true" {
+		route = passThroughRoute(route)
+	}
 	in := &openapi3filter.RequestValidationInput{Request: req, PathParams: params, Route: route, Options: opts}
 	var errs []error
 	if err := openapi3filter.ValidateRequest(context.Background(), in); err != nil && !ex.InvalidRequest {
@@ -138,6 +183,22 @@ func (s *Spec) Check(ex Exchange) error {
 			req.Method, req.URL.Path, http.StatusText(ex.Status), route.Operation.OperationID, s.name, errors.Join(errs...))
 	}
 	return nil
+}
+
+// passThroughRoute validates a pass-through response (X-Hub-Pass-Through: true, ADR-0023)
+// against the operation's default response only, also when its status equals a listed one
+// (contracts/README.md "Backend: contract tests"). An operation without a default response is
+// left as it is, so a pass-through where none is contracted fails.
+func passThroughRoute(route *routers.Route) *routers.Route {
+	def := route.Operation.Responses.Default()
+	if def == nil || def.Value == nil {
+		return route
+	}
+	op := *route.Operation
+	op.Responses = openapi3.NewResponses(openapi3.WithName("default", def.Value))
+	r := *route
+	r.Operation = &op
+	return &r
 }
 
 // describe flattens kin-openapi errors into "pointer: reason" lines.
@@ -289,6 +350,11 @@ func (s *Spec) Example(tb testing.TB, operationID string, status int, name strin
 				v = mt.Example
 			case name != "" && mt.Examples[name] != nil && mt.Examples[name].Value != nil:
 				v = mt.Examples[name].Value.Value
+			case name == "" && len(mt.Examples) > 0: // only named examples: the first by name
+				first := slices.Sorted(maps.Keys(mt.Examples))[0]
+				if ex := mt.Examples[first]; ex != nil && ex.Value != nil {
+					v = ex.Value.Value
+				}
 			default:
 				tb.Fatalf("%s: %s %d has no example %q", s.name, operationID, status, name)
 			}

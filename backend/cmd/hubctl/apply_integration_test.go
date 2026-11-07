@@ -48,7 +48,7 @@ func liveAdmin(t *testing.T) (string, *pgxpool.Pool) {
 	}
 	archive := control.NewArchive(pool, control.DirBlobStore{Root: t.TempDir()})
 	pub := &control.Publisher{Pool: pool, Archive: archive, Guard: control.RetireGuard(pool),
-		Bootstrap: registry.Sources{Config: os.DirFS("../../config"), Contracts: os.DirFS("../../../contracts")}}
+		Bootstrap: registry.Sources{Config: os.DirFS("../../config")}}
 	// Archive the bootstrap tree, as `hub admin` does at its first start.
 	_, snap, err := pub.Current(t.Context())
 	if err != nil {

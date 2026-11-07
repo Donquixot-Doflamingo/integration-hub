@@ -24,8 +24,22 @@ import (
 // request in the HUB-204/205 report).
 
 type specTransformer struct {
-	Request  string `json:"request"`
-	Response string `json:"response"`
+	Request  string  `json:"request"`
+	Response *string `json:"response"` // null or absent: pass-through (ADR-0023)
+}
+
+// specOperation is the contract's IntegrationOperation (ADR-0023).
+type specOperation struct {
+	Description   *string            `json:"description"`
+	Idempotent    *bool              `json:"idempotent"`
+	ValidateInput *bool              `json:"validate_input"`
+	RequestSchema *specRequestSchema `json:"request_schema"`
+}
+
+// specRequestSchema is the contract's OperationRequestSchema.
+type specRequestSchema struct {
+	Body    map[string]any `json:"body"`
+	Headers map[string]any `json:"headers,omitempty"`
 }
 
 type specTarget struct {
@@ -74,13 +88,14 @@ type specShadow struct {
 
 // apiSpec is the contract's IntegrationSpec.
 type apiSpec struct {
-	Targets  []specTarget  `json:"targets"`
-	Failover []specTarget  `json:"failover"`
-	Delivery specDelivery  `json:"delivery"`
-	Breaker  *specBreaker  `json:"breaker,omitempty"`
-	Webhooks []specWebhook `json:"webhooks"`
-	Audit    specAudit     `json:"audit"`
-	Shadow   *specShadow   `json:"shadow,omitempty"`
+	Operations map[string]*specOperation `json:"operations"`
+	Targets    []specTarget              `json:"targets"`
+	Failover   []specTarget              `json:"failover"`
+	Delivery   specDelivery              `json:"delivery"`
+	Breaker    *specBreaker              `json:"breaker,omitempty"`
+	Webhooks   []specWebhook             `json:"webhooks"`
+	Audit      specAudit                 `json:"audit"`
+	Shadow     *specShadow               `json:"shadow,omitempty"`
 }
 
 // unsupported refuses contract members the registry cannot express yet (400 at their pointer).
@@ -131,18 +146,62 @@ func toPair(p specTransformer, ptr string) (registry.TransformerPair, error) {
 	if out.Request, err = registry.ParseTransformerRef(p.Request); err != nil {
 		return out, badRequest(ptr+"/request", err.Error())
 	}
-	if out.Response, err = registry.ParseTransformerRef(p.Response); err != nil {
-		return out, badRequest(ptr+"/response", err.Error())
+	if p.Response != nil {
+		if out.Response, err = registry.ParseTransformerRef(*p.Response); err != nil {
+			return out, badRequest(ptr+"/response", err.Error())
+		}
+	}
+	return out, nil
+}
+
+// toOperations converts the contract's IntegrationOperations at ptr. Schemas are stored as
+// given: a schema that does not compile is reported by validate and refused by publish
+// (check schemas_compile), so a draft can be saved while it is being written.
+func toOperations(ops map[string]*specOperation, ptr string) (map[string]*registry.Operation, error) {
+	if len(ops) == 0 {
+		return nil, badRequest(ptr, "declare at least one operation (single-operation integrations use default)")
+	}
+	out := make(map[string]*registry.Operation, len(ops))
+	for _, name := range slices.Sorted(maps.Keys(ops)) {
+		at := ptr + "/" + name
+		o := ops[name]
+		switch {
+		case !operationName.MatchString(name):
+			return nil, badRequest(at, fmt.Sprintf("operation names must match %s", operationName))
+		case o == nil:
+			return nil, badRequest(at, "an operation needs idempotent and request_schema")
+		case o.Idempotent == nil:
+			return nil, badRequest(at+"/idempotent", "idempotent is required")
+		case o.RequestSchema == nil:
+			return nil, badRequest(at+"/request_schema", "request_schema is required")
+		case o.RequestSchema.Body == nil:
+			return nil, badRequest(at+"/request_schema/body", "request_schema.body is required (use {\"type\": \"object\"} for a call without fields)")
+		}
+		op := &registry.Operation{Idempotent: *o.Idempotent, RequestSchema: registry.RequestSchema{Body: registry.NewJSONSchema(o.RequestSchema.Body)}}
+		if o.Description != nil {
+			op.Description = *o.Description
+		}
+		if o.ValidateInput != nil && !*o.ValidateInput {
+			op.ValidateInput = o.ValidateInput // true is the default: not written
+		}
+		if o.RequestSchema.Headers != nil {
+			op.RequestSchema.Headers = registry.NewJSONSchema(o.RequestSchema.Headers)
+		}
+		out[name] = op
 	}
 	return out, nil
 }
 
 // fromAPISpec converts a contract spec (the request member "spec": its pointers start with
 // /spec) to a registry version with the DESIGN §2 defaults filled, so drafts and published
-// versions render alike. defaultTTL is the capability's default TTL.
-func fromAPISpec(s apiSpec, defaultTTL time.Duration) (*registry.IntegrationVersion, error) {
+// versions render alike.
+func fromAPISpec(s apiSpec) (*registry.IntegrationVersion, error) {
 	const ptr = "/spec"
 	v := &registry.IntegrationVersion{}
+	var err error
+	if v.Operations, err = toOperations(s.Operations, ptr+"/operations"); err != nil {
+		return nil, err
+	}
 	for i, t := range s.Targets {
 		rt, err := toTarget(t, fmt.Sprintf("%s/targets/%d", ptr, i), true)
 		if err != nil {
@@ -196,13 +255,13 @@ func fromAPISpec(s apiSpec, defaultTTL time.Duration) (*registry.IntegrationVers
 		}
 		v.Shadow = &registry.Shadow{Target: rt, Mode: registry.ShadowMode(sh.Mode), SampleRatio: sh.SampleRatio}
 	}
-	normalize(v, defaultTTL)
+	normalize(v)
 	return v, nil
 }
 
-// normalize fills the defaults the registry loader applies (registry.applyDefaults) and the
-// capability TTL validation fills, so a stored draft equals its published file.
-func normalize(v *registry.IntegrationVersion, defaultTTL time.Duration) {
+// normalize fills the defaults the registry loader applies (registry.applyDefaults), so a
+// stored draft equals its published file.
+func normalize(v *registry.IntegrationVersion) {
 	d := &v.Delivery
 	if d.Mode == "" {
 		d.Mode = registry.ModeWait
@@ -217,7 +276,7 @@ func normalize(v *registry.IntegrationVersion, defaultTTL time.Duration) {
 		d.Pending = registry.ReResolve
 	}
 	if d.TTL == 0 {
-		d.TTL = registry.Duration(defaultTTL)
+		d.TTL = registry.Duration(registry.DefaultTTL)
 	}
 	if v.Audit.Payloads == "" {
 		v.Audit.Payloads = registry.PayloadMasked
@@ -231,7 +290,32 @@ func normalize(v *registry.IntegrationVersion, defaultTTL time.Duration) {
 }
 
 func renderPair(p registry.TransformerPair) map[string]any {
-	return map[string]any{"request": p.Request.String(), "response": p.Response.String()}
+	m := map[string]any{"request": p.Request.String(), "response": nil}
+	if !p.PassThrough() {
+		m["response"] = p.Response.String()
+	}
+	return m
+}
+
+// renderOperations is the contract's IntegrationOperations; validate_input is always the
+// effective value.
+func renderOperations(ops map[string]*registry.Operation) map[string]any {
+	out := make(map[string]any, len(ops))
+	for name, op := range ops {
+		if op == nil {
+			continue
+		}
+		rs := map[string]any{"body": map[string]any{}}
+		if op.RequestSchema.Body != nil && op.RequestSchema.Body.Doc != nil {
+			rs["body"] = op.RequestSchema.Body.Doc
+		}
+		if op.RequestSchema.Headers != nil {
+			rs["headers"] = op.RequestSchema.Headers.Doc
+		}
+		out[name] = map[string]any{"description": nullable(op.Description), "idempotent": op.Idempotent,
+			"validate_input": op.Validates(), "request_schema": rs}
+	}
+	return out
 }
 
 func renderTarget(t registry.Target, weighted bool) map[string]any {
@@ -288,7 +372,8 @@ func renderSpec(v *registry.IntegrationVersion) map[string]any {
 	if v.Audit.Retention != 0 {
 		audit["retention_ms"] = v.Audit.Retention.Std().Milliseconds()
 	}
-	out := map[string]any{"targets": targets, "failover": failover, "delivery": delivery, "webhooks": webhooks, "audit": audit}
+	out := map[string]any{"operations": renderOperations(v.Operations), "targets": targets, "failover": failover, "delivery": delivery,
+		"webhooks": webhooks, "audit": audit}
 	if n := v.Breaker.Override.OpenAfterConsecutiveTimeouts; n != 0 {
 		out["breaker"] = map[string]any{"override": map[string]any{"open_after_consecutive_timeouts": n}}
 	}
@@ -314,7 +399,7 @@ func generic(v map[string]any) map[string]any {
 // publish metadata are set by control.versionDoc).
 func versionYAML(v *registry.IntegrationVersion) ([]byte, error) {
 	cp := *v
-	cp.Integration, cp.Version, cp.OwnerTenant, cp.Grants, cp.Capability = "", 0, "", nil, ""
+	cp.Integration, cp.Version, cp.OwnerTenant, cp.Grants = "", 0, "", nil
 	cp.Publish = registry.PublishMeta{}
 	return yaml.Marshal(&cp)
 }
@@ -336,8 +421,12 @@ var pathSegment = regexp.MustCompile(`[A-Za-z_]+`)
 
 // contractPath renames the members of a registry problem path (targets[1].account →
 // targets[1].account_id) so the pointer addresses the contract's IntegrationSpec. Operation
-// names (targets[0].operations.<op>) are keys, never renamed.
+// names (operations.<op>, targets[0].operations.<op>) and what follows them in the operations
+// block (schemas) are keys, never renamed.
 func contractPath(p string) string {
+	if strings.HasPrefix(p, "operations.") {
+		return p
+	}
 	if head, op, ok := strings.Cut(p, ".operations."); ok {
 		return contractPath(head) + ".operations." + op
 	}

@@ -55,23 +55,28 @@ func AllStates() []State {
 // integration id, never the vendor payload, so the worker re-resolves and re-transforms at send
 // time (cutover, transformer fixes, failover).
 type Envelope struct {
-	RequestID       string            `json:"request_id"`
-	Tenant          string            `json:"tenant"`
-	IntegrationID   string            `json:"integration_id"`
-	ResolvedVersion int               `json:"resolved_version"`
-	Pinned          bool              `json:"pinned"`
-	SessionID       *string           `json:"session_id"`
-	Capability      string            `json:"capability"`
-	Operation       string            `json:"operation"`
-	Canonical       json.RawMessage   `json:"canonical"`
-	Mode            string            `json:"mode"`
-	IdempotencyKey  *string           `json:"idempotency_key"`
-	OrderingKey     *string           `json:"ordering_key"`
-	Attempt         int               `json:"attempt"`
-	NextAttemptAt   time.Time         `json:"next_attempt_at"`
-	ExpiresAt       time.Time         `json:"expires_at"`
-	Trace           map[string]string `json:"trace,omitempty"`
-	CreatedAt       time.Time         `json:"created_at"`
+	RequestID       string          `json:"request_id"`
+	Tenant          string          `json:"tenant"`
+	IntegrationID   string          `json:"integration_id"`
+	ResolvedVersion int             `json:"resolved_version"`
+	Pinned          bool            `json:"pinned"`
+	SessionID       *string         `json:"session_id"`
+	Operation       string          `json:"operation"`
+	Canonical       json.RawMessage `json:"canonical"`
+	// Headers are the caller headers the operation declares (request_schema.headers, ADR-0023),
+	// which the request transformer reads as hdr.* when the worker sends the request.
+	Headers map[string]string `json:"headers,omitempty"`
+	// Pool is the worker pool (DESIGN §17); empty means messaging. It used to be derived from
+	// llm.* capability names, which ADR-0023 removed (ADR-0024).
+	Pool           string            `json:"pool,omitempty"`
+	Mode           string            `json:"mode"`
+	IdempotencyKey *string           `json:"idempotency_key"`
+	OrderingKey    *string           `json:"ordering_key"`
+	Attempt        int               `json:"attempt"`
+	NextAttemptAt  time.Time         `json:"next_attempt_at"`
+	ExpiresAt      time.Time         `json:"expires_at"`
+	Trace          map[string]string `json:"trace,omitempty"`
+	CreatedAt      time.Time         `json:"created_at"`
 }
 
 // RequestIDTime returns the creation time encoded in a request id's ULID (millisecond

@@ -13,24 +13,41 @@ import (
 
 // integrationItem is one hub_list_integrations item.
 type integrationItem struct {
-	IntegrationID          string   `json:"integration_id"`
-	Capability             string   `json:"capability"`
-	Operations             []string `json:"operations"`
-	DeliveryMode           string   `json:"delivery_mode"`
-	Interactive            bool     `json:"interactive"`
-	Paused                 bool     `json:"paused"`
-	MovesMoneyOrQuota      bool     `json:"moves_money_or_quota"`
-	IdempotencyKeyRequired bool     `json:"idempotency_key_required"`
-	Description            *string  `json:"description"`
+	IntegrationID          string          `json:"integration_id"`
+	Operations             []operationItem `json:"operations"`
+	DeliveryMode           string          `json:"delivery_mode"`
+	Interactive            bool            `json:"interactive"`
+	Paused                 bool            `json:"paused"`
+	MovesMoneyOrQuota      bool            `json:"moves_money_or_quota"`
+	IdempotencyKeyRequired bool            `json:"idempotency_key_required"`
+	Description            *string         `json:"description"`
+}
+
+// operationItem is hub-public OperationDescriptor: what to send to one operation (ADR-0023).
+type operationItem struct {
+	Name          string        `json:"name"`
+	Description   *string       `json:"description"`
+	Idempotent    bool          `json:"idempotent"`
+	RequestSchema requestSchema `json:"request_schema"`
+}
+
+type requestSchema struct {
+	Body    json.RawMessage `json:"body"`
+	Headers json.RawMessage `json:"headers,omitempty"`
 }
 
 func summaryItem(s hubclient.IntegrationSummary) integrationItem {
-	ops := s.Operations
-	if ops == nil {
-		ops = []string{}
+	ops := make([]operationItem, 0, len(s.Operations))
+	for _, op := range s.Operations {
+		it := operationItem{Name: op.Name, Description: optString(op.Description), Idempotent: op.Idempotent,
+			RequestSchema: requestSchema{Body: objectOrEmpty(op.RequestSchema.Body)}}
+		if len(op.RequestSchema.Headers) > 0 && op.RequestSchema.Headers[0] == '{' {
+			it.RequestSchema.Headers = op.RequestSchema.Headers
+		}
+		ops = append(ops, it)
 	}
 	return integrationItem{
-		IntegrationID: s.IntegrationID, Capability: s.Capability, Operations: ops, DeliveryMode: s.DeliveryMode,
+		IntegrationID: s.IntegrationID, Operations: ops, DeliveryMode: s.DeliveryMode,
 		Interactive: s.Interactive, Paused: s.Paused, MovesMoneyOrQuota: s.MovesMoneyOrQuota,
 		IdempotencyKeyRequired: s.IdempotencyKeyRequired, Description: optString(s.Description),
 	}
@@ -43,14 +60,13 @@ type listOutput struct {
 
 func (a *app) listIntegrations(ctx context.Context, c *toolCall) toolResult {
 	var in struct {
-		Capability string `json:"capability"`
-		Cursor     string `json:"cursor"`
-		Limit      int    `json:"limit"`
+		Cursor string `json:"cursor"`
+		Limit  int    `json:"limit"`
 	}
 	if err := json.Unmarshal(c.args, &in); err != nil {
 		return invalidArguments(toolListIntegrations, err)
 	}
-	page, err := c.hub.ListIntegrations(ctx, hubclient.ListOptions{Capability: in.Capability, Cursor: in.Cursor, Limit: in.Limit})
+	page, err := c.hub.ListIntegrations(ctx, hubclient.ListOptions{Cursor: in.Cursor, Limit: in.Limit})
 	if err != nil {
 		e, status := a.hubErrorObject(err)
 		return failure(toolListIntegrations, e, status)
@@ -71,22 +87,10 @@ type integrationDetail struct {
 	CallbackEvents []string `json:"callback_events"`
 }
 
-type capabilityOut struct {
-	Capability  string         `json:"capability"`
-	Interactive bool           `json:"interactive"`
-	Operations  []operationOut `json:"operations"`
-}
-
-type operationOut struct {
-	Name           string          `json:"name"`
-	Idempotent     bool            `json:"idempotent"`
-	RequestSchema  json.RawMessage `json:"request_schema"`
-	ResponseSchema json.RawMessage `json:"response_schema"`
-}
-
+// describeOutput is hub_describe_integration's output: the integration with its operations and
+// their request schemas (one getIntegration call since ADR-0023).
 type describeOutput struct {
 	Integration integrationDetail `json:"integration"`
-	Capability  capabilityOut     `json:"capability"`
 }
 
 func (a *app) describeIntegration(ctx context.Context, c *toolCall) toolResult {
@@ -103,13 +107,6 @@ func (a *app) describeIntegration(ctx context.Context, c *toolCall) toolResult {
 		res.integrationID = in.IntegrationID
 		return res
 	}
-	cp, err := c.hub.GetCapability(ctx, d.Capability)
-	if err != nil {
-		e, status := a.hubErrorObject(err)
-		res := failure(toolDescribe, e, status)
-		res.integrationID = in.IntegrationID
-		return res
-	}
 	out := describeOutput{
 		Integration: integrationDetail{
 			integrationItem: summaryItem(d.IntegrationSummary),
@@ -118,15 +115,9 @@ func (a *app) describeIntegration(ctx context.Context, c *toolCall) toolResult {
 			OnCircuitOpen:   d.OnCircuitOpen,
 			CallbackEvents:  d.CallbackEvents,
 		},
-		Capability: capabilityOut{Capability: cp.Capability, Interactive: cp.Interactive, Operations: make([]operationOut, 0, len(cp.Operations))},
 	}
 	if out.Integration.CallbackEvents == nil {
 		out.Integration.CallbackEvents = []string{}
-	}
-	for _, op := range cp.Operations {
-		out.Capability.Operations = append(out.Capability.Operations, operationOut{
-			Name: op.Name, Idempotent: op.Idempotent, RequestSchema: objectOrEmpty(op.RequestSchema), ResponseSchema: objectOrEmpty(op.ResponseSchema),
-		})
 	}
 	return toolResult{structured: out, integrationID: in.IntegrationID}
 }

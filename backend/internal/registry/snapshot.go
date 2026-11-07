@@ -23,12 +23,11 @@ type Snapshot struct {
 	// the content is not (yet) known to be archived: built from the config directory, or
 	// booted from the local cache, until the node has checked the archive.
 	Version uint64
-	// Checksum is "sha256:<hex>" over every config file and every capability schema used.
-	// Equal content gives an equal checksum, on every node.
+	// Checksum is "sha256:<hex>" over every config file (schemas included: they live inline in
+	// the files). Equal content gives an equal checksum, on every node.
 	Checksum string
 	BuiltAt  time.Time
 
-	Capabilities map[string]*Capability
 	Vendors      map[string]*Vendor
 	Accounts     map[string]*Account
 	Transformers map[TransformerRef]*TransformerFile
@@ -40,6 +39,9 @@ type Snapshot struct {
 	Programs map[TransformerRef]*transform.Program
 
 	keys map[string]KeyEntry // API key hash → tenant + key (edge auth, M3)
+
+	// Legacy is set when the snapshot was rebuilt from a pre-ADR-0023 blob (UpgradeLegacy).
+	Legacy *Legacy
 }
 
 // KeyEntry is the tenant and key record for one API key hash.
@@ -69,6 +71,30 @@ func ReindexKeys(s *Snapshot) *Snapshot {
 // Active returns the active version of the integration.
 func (in *Integration) Active() *IntegrationVersion { return in.Versions[in.ActiveVersion] }
 
+// Op returns operation name of the version, nil when it does not declare it. A map lookup: safe
+// on the hot path.
+func (v *IntegrationVersion) Op(name string) *Operation {
+	if v == nil {
+		return nil
+	}
+	return v.Operations[name]
+}
+
+// OperationNames lists the version's operations, "default" first, then by name.
+func (v *IntegrationVersion) OperationNames() []string {
+	if v == nil {
+		return nil
+	}
+	names := sortedKeys(v.Operations)
+	for i, n := range names {
+		if n == "default" && i > 0 {
+			copy(names[1:i+1], names[:i])
+			names[0] = "default"
+		}
+	}
+	return names
+}
+
 // Build loads, validates and indexes src into a new, unpublished Snapshot.
 func Build(src Sources, now time.Time) (*Snapshot, error) {
 	c, err := Load(src)
@@ -78,18 +104,18 @@ func Build(src Sources, now time.Time) (*Snapshot, error) {
 	if err := Validate(c); err != nil {
 		return nil, err
 	}
-	programs, err := c.compileAll(src.Config)
-	if err != nil {
-		return nil, err
+	cc, ps := c.compileAll(src.Config)
+	if ps = append(ps, c.checkIntegrations(cc)...); len(ps) > 0 {
+		return nil, ps
 	}
-	sum, err := checksum(src.Config, c)
+	sum, err := checksum(src.Config)
 	if err != nil {
 		return nil, err
 	}
 	s := &Snapshot{
 		Checksum: sum, BuiltAt: now.UTC(),
-		Capabilities: c.Capabilities, Vendors: c.Vendors, Accounts: c.Accounts, Transformers: c.Transformers,
-		Integrations: c.Integrations, Tenants: c.Tenants, Registrar: c.Registrar, Programs: programs,
+		Vendors: c.Vendors, Accounts: c.Accounts, Transformers: c.Transformers,
+		Integrations: c.Integrations, Tenants: c.Tenants, Registrar: c.Registrar, Programs: cc.programs,
 		keys: map[string]KeyEntry{},
 	}
 	for _, t := range c.Tenants {
@@ -103,8 +129,8 @@ func Build(src Sources, now time.Time) (*Snapshot, error) {
 	return s, nil
 }
 
-// checksum hashes every file under the config FS (sorted by path) and every capability schema.
-func checksum(config fs.FS, c *Config) (string, error) {
+// checksum hashes every file under the config FS (sorted by path).
+func checksum(config fs.FS) (string, error) {
 	h := sha256.New()
 	var paths []string
 	err := fs.WalkDir(config, ".", func(p string, d fs.DirEntry, err error) error {
@@ -129,15 +155,6 @@ func checksum(config fs.FS, c *Config) (string, error) {
 		h.Write([]byte{0})
 		h.Write(b)
 		h.Write([]byte{0})
-	}
-	for _, key := range sortedKeys(c.Capabilities) {
-		capability := c.Capabilities[key]
-		for _, name := range sortedKeys(capability.Operations) {
-			op := capability.Operations[name]
-			h.Write([]byte(key + "/" + name))
-			h.Write(op.RequestSchema)
-			h.Write(op.ResponseSchema)
-		}
 	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }

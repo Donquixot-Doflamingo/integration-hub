@@ -78,7 +78,7 @@ func (s *Server) integrationView(ctx context.Context, in *registry.Integration, 
 		grants = []string{}
 	}
 	return map[string]any{
-		"integration_id": in.Integration, "owner_tenant": in.OwnerTenant, "capability": in.Capability,
+		"integration_id": in.Integration, "owner_tenant": in.OwnerTenant, "interactive": in.Interactive,
 		"description": nullable(in.Description), "grants": grants, "moves_money_or_quota": in.MovesMoneyOrQuota,
 		"active_version": active, "latest_version": latestV, "has_draft": hasDraft,
 		"paused": in.Paused, "paused_reason": nullable(in.PausedReason), "active": nil,
@@ -240,9 +240,6 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if !sees(p, in) || (tenant != "" && in.OwnerTenant != tenant && !slices.Contains(in.Grants, tenant)) {
 			continue
 		}
-		if c := q.Get("capability"); c != "" && in.Capability != c {
-			continue
-		}
 		act := in.Active()
 		if !targets(act, q.Get("vendor_id"), q.Get("account_id")) {
 			continue
@@ -314,7 +311,9 @@ func (s *Server) integrationSummary(in *registry.Integration, hasDraft bool) map
 	}
 	var mode *string
 	tg := []map[string]any{}
+	ops := []string{}
 	if v := in.Active(); v != nil {
+		ops = v.OperationNames()
 		m := string(v.Delivery.Mode)
 		mode = &m
 		for _, t := range v.Targets {
@@ -325,7 +324,7 @@ func (s *Server) integrationSummary(in *registry.Integration, hasDraft bool) map
 			tg = append(tg, map[string]any{"vendor_id": t.Vendor, "account_id": t.Account, "weight": w})
 		}
 	}
-	return map[string]any{"integration_id": in.Integration, "owner_tenant": in.OwnerTenant, "capability": in.Capability,
+	return map[string]any{"integration_id": in.Integration, "owner_tenant": in.OwnerTenant, "interactive": in.Interactive, "operations": ops,
 		"description": nullable(in.Description), "active_version": active, "latest_version": latest, "has_draft": hasDraft,
 		"paused": in.Paused, "delivery_mode": mode, "targets": tg}
 }

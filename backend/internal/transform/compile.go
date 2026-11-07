@@ -1,8 +1,6 @@
 package transform
 
 import (
-	"encoding/json"
-	"fmt"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -33,29 +31,40 @@ func DefaultLimits() Limits {
 
 // Options configure Compile.
 type Options struct {
-	// RequestSchema is the capability's canonical request schema; req.* paths are checked against it.
-	RequestSchema json.RawMessage
-	// ValidateResponse checks a mapped response against the capability response schema.
-	ValidateResponse func(any) error
 	// Limits; zero value means DefaultLimits.
 	Limits Limits
 }
 
 // Program is a compiled, immutable transformer. It is safe for concurrent use and shared by
-// every integration version that references the same ID@version.
+// every integration version that references the same ID@version. It knows no caller schema
+// (ADR-0023): the req.* and hdr.* fields it reads (FieldRefs) are checked against each
+// integration operation that uses it.
 type Program struct {
-	ref, kind, capability string
-	method, path          string
-	headers, query        []cfield
-	body, response        *cnode
-	session               *cnode
-	errors                []crule
-	batchPath             string
-	batchMax              int
-	limits                Limits
-	validateResponse      func(any) error
-	credsInBody           bool
+	ref, kind      string
+	method, path   string
+	headers, query []cfield
+	body, response *cnode
+	session        *cnode
+	errors         []crule
+	batchPath      string
+	batchMax       int
+	limits         Limits
+	credsInBody    bool
+	refs           []FieldRef
 }
+
+// FieldRef is one statically known read of the caller's input: req.a.b (Root "req", Segs
+// [a b]) or hdr["X-Source"] (Root "hdr", Segs [X-Source]). Path is the transformer target that
+// reads it.
+type FieldRef struct {
+	Path string
+	Root string
+	Segs []string
+}
+
+// FieldRefs lists the req.* and hdr.* reads of the transformer (request mapping and session:
+// section), in file order, without duplicates.
+func (p *Program) FieldRefs() []FieldRef { return p.refs }
 
 // Ref is "T1@7".
 func (p *Program) Ref() string { return p.ref }
@@ -103,7 +112,7 @@ func CompiledExpressions() int64 { return compiled.Load() }
 // Variables each mapping direction may read (DESIGN §7.2).
 var (
 	requestVars  = []string{"req", "hdr", "account", "creds", "session", "now", "uuid"}
-	responseVars = []string{"res", "account", "now", "uuid"}
+	responseVars = []string{"res", "req", "account", "now", "uuid"}
 	// sessionVars: a response transformer's session: section also reads the canonical request
 	// (e.g. which user opened the session). Never creds or hdr: session data is stored.
 	sessionVars = []string{"res", "req", "account", "now", "uuid"}
@@ -148,13 +157,7 @@ func Compile(s Spec, o Options) (*Program, error) {
 	if perr != nil {
 		return nil, perr
 	}
-	var schema map[string]any
-	if len(o.RequestSchema) > 0 {
-		if err := json.Unmarshal(o.RequestSchema, &schema); err != nil {
-			return nil, &CompileError{Transformer: s.Ref(), Problems: []Problem{{Message: "request schema: " + err.Error()}}}
-		}
-	}
-	c := &compiler{spec: s, limits: o.Limits, schema: schema, ce: &CompileError{Transformer: s.Ref()}, mapping: s.Kind}
+	c := &compiler{spec: s, limits: o.Limits, ce: &CompileError{Transformer: s.Ref()}, mapping: s.Kind, seen: map[string]bool{}}
 	if s.Kind == "request" {
 		c.vars, c.otherVars = requestVars, responseVars
 	} else {
@@ -163,9 +166,8 @@ func Compile(s Spec, o Options) (*Program, error) {
 	c.opts = exprOptions(c.vars, o.Limits)
 
 	p := &Program{
-		ref: s.Ref(), kind: s.Kind, capability: s.Capability, method: pt.method, path: pt.path,
-		batchPath: pt.batchPath, batchMax: pt.batchMax, limits: o.Limits,
-		validateResponse: o.ValidateResponse, credsInBody: s.AllowCredsInBody,
+		ref: s.Ref(), kind: s.Kind, method: pt.method, path: pt.path,
+		batchPath: pt.batchPath, batchMax: pt.batchMax, limits: o.Limits, credsInBody: s.AllowCredsInBody,
 	}
 	for _, f := range pt.headers {
 		p.headers = append(p.headers, cfield{key: f.key, node: c.node(f.node, false)})
@@ -196,13 +198,15 @@ func Compile(s Spec, o Options) (*Program, error) {
 	if len(c.ce.Problems) > 0 {
 		return nil, c.ce
 	}
+	p.refs = c.refs
 	return p, nil
 }
 
 type compiler struct {
 	spec            Spec
 	limits          Limits
-	schema          map[string]any
+	refs            []FieldRef
+	seen            map[string]bool
 	vars, otherVars []string
 	opts            []expr.Option
 	ce              *CompileError
@@ -276,16 +280,20 @@ func (c *compiler) expression(n *cnode, src string, noCreds bool) {
 			failed = true
 		}
 	}
-	if c.schema != nil {
-		for _, chain := range v.chains {
-			if chain[0] != "req" {
-				continue
-			}
-			if err := checkSchemaPath(c.schema, chain[1:]); err != nil {
-				c.ce.add(n.path, "req.%s: %v", strings.Join(chain[1:], "."), err)
-				failed = true
-			}
+	for _, chain := range v.chains {
+		if (chain[0] != "req" && chain[0] != "hdr") || len(chain) < 2 || !slices.Contains(c.vars, chain[0]) {
+			continue
 		}
+		// a.b.c is also visited as a.b: keep only the longest chain.
+		if slices.ContainsFunc(v.chains, func(o []string) bool { return len(o) > len(chain) && slices.Equal(o[:len(chain)], chain) }) {
+			continue
+		}
+		key := chain[0] + "\x00" + strings.Join(chain[1:], "\x00")
+		if c.seen[key] {
+			continue
+		}
+		c.seen[key] = true
+		c.refs = append(c.refs, FieldRef{Path: n.path, Root: chain[0], Segs: chain[1:]})
 	}
 	if failed {
 		return
@@ -396,53 +404,4 @@ func nestingDepth(src string) int {
 		}
 	}
 	return deepest
-}
-
-// checkSchemaPath reports whether segs is a valid path under the JSON Schema (properties,
-// additionalProperties, items and local $refs). Free-form objects allow any deeper path.
-func checkSchemaPath(root map[string]any, segs []string) error {
-	node := root
-	for i, seg := range segs {
-		node = resolveRef(root, node)
-		if props, ok := node["properties"].(map[string]any); ok {
-			if next, ok := props[seg].(map[string]any); ok {
-				node = next
-				continue
-			}
-		}
-		switch ap := node["additionalProperties"].(type) {
-		case bool:
-			if !ap {
-				return fmt.Errorf("field %q is not in the capability schema", strings.Join(segs[:i+1], "."))
-			}
-			return nil
-		case map[string]any:
-			node = ap
-			continue
-		}
-		if _, hasProps := node["properties"]; hasProps {
-			return nil // object with declared properties but open: unknown keys allowed
-		}
-		return nil // free-form (no properties): anything deeper is allowed
-	}
-	return nil
-}
-
-func resolveRef(root, node map[string]any) map[string]any {
-	ref, ok := node["$ref"].(string)
-	if !ok || !strings.HasPrefix(ref, "#/") {
-		return node
-	}
-	cur := any(root)
-	for _, part := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
-		m, ok := cur.(map[string]any)
-		if !ok {
-			return node
-		}
-		cur = m[part]
-	}
-	if m, ok := cur.(map[string]any); ok {
-		return m
-	}
-	return node
 }

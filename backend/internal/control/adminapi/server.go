@@ -189,6 +189,9 @@ type Detail struct {
 	Pointer string `json:"pointer,omitempty"`
 	Keyword string `json:"keyword,omitempty"`
 	Message string `json:"message"`
+	// Sample and Field locate a sample check failure (since hub-admin 2.0.0, ADR-0023).
+	Sample string `json:"sample,omitempty"`
+	Field  string `json:"field,omitempty"`
 }
 
 // Error is an admin API error; handlers return it and writeError renders the envelope.

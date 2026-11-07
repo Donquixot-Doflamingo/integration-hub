@@ -83,7 +83,7 @@ func (s PGStore) Write(ctx context.Context, b Batch) error {
 			batch := &pgx.Batch{}
 			for _, r := range b.Records {
 				batch.Queue(upsertRecord, r.RequestID, r.CreatedAt, r.TenantID, r.IntegrationID, nullable(r.IntegrationVersion),
-					r.Capability, r.Operation, r.Mode, r.DryRun, r.Status, r.PayloadPolicy, nullable(int64(r.SnapshotVersion)), // #nosec G115 -- snapshot versions stay far below 2^63
+					r.Operation, r.Mode, r.DryRun, r.Status, r.PayloadPolicy, nullable(int64(r.SnapshotVersion)), // #nosec G115 -- snapshot versions stay far below 2^63
 					nullable(r.IdempotencyKey), nullable(r.TraceID), nullable(r.HTTPStatus), nullable(r.ErrorCode), r.Attempts,
 					r.HubOverheadMS, r.VendorMS, r.QueueWaitMS, nullable(r.CompletedAt))
 			}
@@ -103,10 +103,10 @@ func payloadBytes(e Event) any {
 }
 
 const upsertRecord = `
-INSERT INTO hub.requests (request_id, created_at, tenant_id, integration_id, integration_version, capability,
+INSERT INTO hub.requests (request_id, created_at, tenant_id, integration_id, integration_version,
     operation, mode, dry_run, status, payload_policy, snapshot_version, idempotency_key, trace_id, http_status,
     error_code, attempts, hub_overhead_ms, vendor_ms, queue_wait_ms, completed_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 ON CONFLICT (created_at, request_id) DO UPDATE SET
     status = EXCLUDED.status, http_status = EXCLUDED.http_status, error_code = EXCLUDED.error_code,
     attempts = EXCLUDED.attempts, hub_overhead_ms = EXCLUDED.hub_overhead_ms, vendor_ms = EXCLUDED.vendor_ms,

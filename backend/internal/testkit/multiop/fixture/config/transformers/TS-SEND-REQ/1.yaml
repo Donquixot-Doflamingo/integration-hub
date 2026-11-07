@@ -2,8 +2,6 @@
 transformer: TS-SEND-REQ
 version: 1
 kind: request
-capability: test.two_step@v1
-operation: send
 vendor_endpoint: stepvendor.send@1
 request:
   method: POST

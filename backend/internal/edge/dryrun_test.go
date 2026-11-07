@@ -88,7 +88,7 @@ func TestDryRunErrors(t *testing.T) {
 		{"unknown integration", devKey, "/v1/integrations/int_nope/dry-run", trackBody, nil, 404, `"INTEGRATION_NOT_FOUND"`},
 		{"unknown operation", devKey, "/v1/integrations/int_evt_brandA/dry-run?operation=verify", trackBody, nil, 404, `"OPERATION_NOT_FOUND"`},
 		{"unknown session", devKey, "/v1/integrations/int_evt_brandA/dry-run", trackBody, []string{"X-Hub-Session", "ses_01J9Z3K8X2V7Q4M6N8P0R2S4T6"}, 404, `"SESSION_NOT_FOUND"`},
-		{"schema", devKey, "/v1/integrations/int_evt_brandA/dry-run", `{"user": {}}`, nil, 400, `"pointer":"/user"`},
+		{"schema", devKey, "/v1/integrations/int_evt_brandA/dry-run", `{"user": {}}`, nil, 400, `"pointer":"/user/id"`},
 		{"not json", devKey, "/v1/integrations/int_evt_brandA/dry-run", `not json`, nil, 400, `"VALIDATION_FAILED"`},
 	}
 	for _, tc := range cases {

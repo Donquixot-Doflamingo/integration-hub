@@ -39,7 +39,7 @@ func t1Version(t testing.TB, expected any, editWant func(string) string) string 
 		want = editWant(want)
 	}
 	b, _ := json.Marshal(map[string]any{
-		"kind": "request", "capability": "events.track@v1", "vendor_endpoint": "clevertap.upload@1", "expected_latest_version": expected,
+		"kind": "request", "vendor_endpoint": "clevertap.upload@1", "expected_latest_version": expected,
 		"yaml":     configFile(t, "transformers/T1/7.yaml"),
 		"fixtures": []map[string]any{{"name": "minimal", "input": rawJSON(t, configFile(t, "transformers/T1/fixtures/minimal.input.json")), "expected_request": rawJSON(t, want)}},
 		"docs_url": "https://developer.clevertap.com/docs/upload-events-api", "reason": "Republish T1 with its minimal golden",
@@ -66,7 +66,7 @@ func TestTransformerReads(t *testing.T) {
 	for _, c := range []struct {
 		query string
 		want  int
-	}{{"", 4}, {"?kind=response", 2}, {"?kind=request", 2}, {"?vendor_id=clevertap", 4}, {"?vendor_id=other", 0}, {"?capability=events.track@v1", 4}, {"?q=t", 2}} {
+	}{{"", 4}, {"?kind=response", 2}, {"?kind=request", 2}, {"?vendor_id=clevertap", 4}, {"?vendor_id=other", 0}, {"?q=t", 2}} {
 		if resp, body := a.do(RoleViewer, http.MethodGet, "/transformers"+c.query, ""); resp.Code != 200 || len(items(body)) != c.want {
 			t.Errorf("list %q: %d %d items", c.query, resp.Code, len(items(body)))
 		}
@@ -79,7 +79,8 @@ func TestTransformerReads(t *testing.T) {
 		t.Fatalf("get T1: %d %v", resp.Code, body)
 	}
 	resp, body = a.do(RoleViewer, http.MethodGet, "/transformers/R1/versions/2", "")
-	if resp.Code != 200 || body["vendor_endpoint"] != "clevertap.upload@1" || body["kind"] != "response" || body["fixtures"].([]any)[0].(map[string]any)["vendor_response"] == nil {
+	// A response transformer stands alone (ADR-0023): no vendor endpoint.
+	if resp.Code != 200 || body["vendor_endpoint"] != nil || body["kind"] != "response" || body["fixtures"].([]any)[0].(map[string]any)["vendor_response"] == nil {
 		t.Fatalf("get R1@2: %d %v", resp.Code, body)
 	}
 	if resp, body := a.do(RoleViewer, http.MethodGet, "/transformers/T1/versions", ""); resp.Code != 200 || len(items(body)) != 1 || items(body)[0]["goldens_passed"] != true {
@@ -172,7 +173,7 @@ func TestRunGoldens(t *testing.T) {
 	good := create["fixtures"].([]any)[0].(map[string]any)
 	pass := map[string]any{"name": "passing", "input": good["input"],
 		"expected_request": json.RawMessage(configFile(t, "transformers/T1/fixtures/minimal.expected_request.json"))}
-	req, _ := json.Marshal(map[string]any{"draft": map[string]any{"kind": "request", "capability": "events.track@v1", "vendor_endpoint": "clevertap.upload@1",
+	req, _ := json.Marshal(map[string]any{"draft": map[string]any{"kind": "request", "vendor_endpoint": "clevertap.upload@1",
 		"yaml": create["yaml"]}, "fixtures": []any{good, pass}})
 	resp, body = a.do(RoleEditor, http.MethodPost, "/transformers/run-goldens", string(req))
 	if resp.Code != 200 || body["passed"] != false || body["total"] != 2.0 || body["failed"] != 1.0 {
@@ -191,10 +192,10 @@ func TestRunGoldens(t *testing.T) {
 		name, body string
 		status     int
 	}{
-		{"ref and draft", `{"ref":"T1@7","draft":{"kind":"request","capability":"events.track@v1","vendor_endpoint":"clevertap.upload@1","yaml":"x: 1"}}`, 400},
+		{"ref and draft", `{"ref":"T1@7","draft":{"kind":"request","vendor_endpoint":"clevertap.upload@1","yaml":"x: 1"}}`, 400},
 		{"neither", `{}`, 400},
 		{"unknown ref", `{"ref":"T1@99"}`, 404},
-		{"draft without fixtures", `{"draft":{"kind":"request","capability":"events.track@v1","vendor_endpoint":"clevertap.upload@1","yaml":"request: {method: POST, path: /x}"}}`, 400},
+		{"draft without fixtures", `{"draft":{"kind":"request","vendor_endpoint":"clevertap.upload@1","yaml":"request: {method: POST, path: /x}"}}`, 400},
 	} {
 		if resp, body := a.do(RoleEditor, http.MethodPost, "/transformers/run-goldens", c.body); resp.Code != c.status {
 			t.Errorf("%s: %d %v", c.name, resp.Code, body)
@@ -222,9 +223,20 @@ func TestDryRunTransformer(t *testing.T) {
 		t.Fatalf("response dry-run error: %d %v", resp.Code, body)
 	}
 	resp, body = a.do(RoleEditor, http.MethodPost, "/transformers/dry-run",
-		`{"draft":{"kind":"request","capability":"events.track@v1","vendor_endpoint":"clevertap.upload@1","yaml":"request:\n  method: POST\n  path: /1/upload\n  body:\n    id: req.user.nope\n"},"input":{"user":{"id":"u"},"event":{"name":"x"}}}`)
+		`{"draft":{"kind":"request","vendor_endpoint":"clevertap.upload@1","yaml":"request:\n  method: POST\n  path: /1/upload\n  body:\n    id: 'req.user.id +'\n"},"input":{"user":{"id":"u"},"event":{"name":"x"}}}`)
 	if resp.Code != 200 || body["ok"] != false || len(body["compile_errors"].([]any)) == 0 {
-		t.Fatalf("draft that does not type-check: %d %v", resp.Code, body)
+		t.Fatalf("draft that does not compile: %d %v", resp.Code, body)
+	}
+	// ADR-0023: a request transformer knows no caller schema (req.user.nope compiles), and the
+	// produced request is checked against the endpoint's request_schema (schema_errors).
+	resp, body = a.do(RoleEditor, http.MethodPost, "/transformers/dry-run",
+		`{"draft":{"kind":"request","vendor_endpoint":"clevertap.upload@1","yaml":"request:\n  method: POST\n  path: /1/upload\n  body:\n    id: req.user.nope\n"},"input":{"user":{"id":"u"},"event":{"name":"x"}},"input_headers":{"X-Request-Source":"web"}}`)
+	fields := map[string]bool{}
+	for _, v := range body["schema_errors"].([]any) {
+		fields[v.(map[string]any)["field"].(string)] = true
+	}
+	if resp.Code != 200 || body["ok"] != true || !fields["/body/d"] || !fields["/headers/Content-Type"] {
+		t.Fatalf("draft breaking the endpoint schema: %d %v", resp.Code, body)
 	}
 	for _, c := range []struct {
 		name, body string

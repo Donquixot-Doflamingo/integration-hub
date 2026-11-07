@@ -66,21 +66,21 @@ func TestUnifiedDiff(t *testing.T) {
 // TestSpecRoundTrip: a contract spec converts to a registry version and renders back to the
 // same spec (defaults filled); unsupported members are refused at their pointer.
 func TestSpecRoundTrip(t *testing.T) {
-	in := `{"targets":[{"vendor_id":"clevertap","account_id":"ct-brandA-in","transformer":{"request":"T1@7","response":"R1@2"},"weight":90},
-	  {"vendor_id":"clevertap","account_id":"ct-brandB-us","transformer":{"request":"T2@3","response":"R1@2"},"weight":10}],
+	in := `{"operations":{"default":{"description":"Track one event","idempotent":true,"request_schema":{"body":{"type":"object","required":["user"]},"headers":{"type":"object","properties":{"X-Request-Source":{"type":"string"}}}}}},"targets":[{"vendor_id":"clevertap","account_id":"ct-brandA-in","transformer":{"request":"T1@7","response":"R1@2"},"weight":90},
+	  {"vendor_id":"clevertap","account_id":"ct-brandB-us","transformer":{"request":"T2@3","response":null},"weight":10}],
 	  "failover":[],"delivery":{"mode":"wait","polling":true},"breaker":{"override":{"open_after_consecutive_timeouts":3}},
 	  "webhooks":[{"event":"delivery.status","endpoint_id":"reg_orders_cb"}],"audit":{"payloads":"masked"}}`
 	var s apiSpec
 	if err := json.Unmarshal([]byte(in), &s); err != nil {
 		t.Fatal(err)
 	}
-	v, err := fromAPISpec(s, 6*time.Hour)
+	v, err := fromAPISpec(s)
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := renderSpec(v)
-	want := decodeJSON(t, `{"targets":[{"vendor_id":"clevertap","account_id":"ct-brandA-in","transformer":{"request":"T1@7","response":"R1@2"},"weight":90},
-	  {"vendor_id":"clevertap","account_id":"ct-brandB-us","transformer":{"request":"T2@3","response":"R1@2"},"weight":10}],
+	want := decodeJSON(t, `{"operations":{"default":{"description":"Track one event","idempotent":true,"validate_input":true,"request_schema":{"body":{"type":"object","required":["user"]},"headers":{"type":"object","properties":{"X-Request-Source":{"type":"string"}}}}}},"targets":[{"vendor_id":"clevertap","account_id":"ct-brandA-in","transformer":{"request":"T1@7","response":"R1@2"},"weight":90},
+	  {"vendor_id":"clevertap","account_id":"ct-brandB-us","transformer":{"request":"T2@3","response":null},"weight":10}],
 	  "failover":[],"delivery":{"mode":"wait","wait_ms":3000,"ttl_ms":21600000,"on_circuit_open":"fail_fast","pending":"re_resolve","polling":true},
 	  "breaker":{"override":{"open_after_consecutive_timeouts":3}},
 	  "webhooks":[{"event":"delivery.status","endpoint_id":"reg_orders_cb"}],"audit":{"payloads":"masked","retention_ms":2592000000}}`)
@@ -96,18 +96,23 @@ func TestSpecRoundTrip(t *testing.T) {
 		t.Fatalf("YAML round trip: %v\n%s", err, doc)
 	}
 
+	const op = `"operations":{"default":{"idempotent":true,"request_schema":{"body":{"type":"object"}}}},`
 	for _, tc := range []struct{ body, pointer string }{
-		{`{"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1","response":"R1@1"},"params":{"model":"x"}}],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`, "/spec/targets/0/params"},
-		{`{"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1","response":"R1@1"}}],"delivery":{"mode":"sync","retry":{"max_attempts":2}},"audit":{"payloads":"masked"}}`, "/spec/delivery/retry"},
-		{`{"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1","response":"R1@1"}}],"delivery":{"mode":"sync"},"breaker":{"override":{"min_calls":5}},"audit":{"payloads":"masked"}}`, "/spec/breaker/override/min_calls"},
-		{`{"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1","response":"R1@1"}}],"failover":[{"vendor_id":"v","account_id":"b","transformer":{"request":"T1@1","response":"R1@1"},"weight":5}],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`, "/spec/failover/0/weight"},
-		{`{"targets":[],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`, "/spec/targets"},
+		{`{"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1"}}],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`, "/spec/operations"},
+		{`{"operations":{"default":{"request_schema":{"body":{}}}},"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1"}}],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`, "/spec/operations/default/idempotent"},
+		{`{"operations":{"default":{"idempotent":true,"request_schema":{}}},"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1"}}],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`, "/spec/operations/default/request_schema/body"},
+		{`{"operations":{"Bad":{"idempotent":true,"request_schema":{"body":{}}}},"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1"}}],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`, "/spec/operations/Bad"},
+		{`{` + op + `"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1","response":"R1@1"},"params":{"model":"x"}}],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`, "/spec/targets/0/params"},
+		{`{` + op + `"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1","response":"R1@1"}}],"delivery":{"mode":"sync","retry":{"max_attempts":2}},"audit":{"payloads":"masked"}}`, "/spec/delivery/retry"},
+		{`{` + op + `"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1","response":"R1@1"}}],"delivery":{"mode":"sync"},"breaker":{"override":{"min_calls":5}},"audit":{"payloads":"masked"}}`, "/spec/breaker/override/min_calls"},
+		{`{` + op + `"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1","response":"R1@1"}}],"failover":[{"vendor_id":"v","account_id":"b","transformer":{"request":"T1@1","response":"R1@1"},"weight":5}],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`, "/spec/failover/0/weight"},
+		{`{` + op + `"targets":[],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`, "/spec/targets"},
 	} {
 		var s apiSpec
 		if err := json.Unmarshal([]byte(tc.body), &s); err != nil {
 			t.Fatal(err)
 		}
-		_, err := fromAPISpec(s, 0)
+		_, err := fromAPISpec(s)
 		var e *Error
 		if !errors.As(err, &e) || e.Status != 400 || len(e.Details) != 1 || e.Details[0].Pointer != tc.pointer {
 			t.Errorf("%s: %v", tc.pointer, err)
@@ -135,7 +140,8 @@ func TestSpecProblemsUseContractNames(t *testing.T) {
 // their pointer.
 func TestSpecOperationsRoundTrip(t *testing.T) {
 	const pairs = `"transformer":{"request":"GEN@1","response":"GEN_R@1"},"operations":{"verify":{"request":"VER@1","response":"VER_R@1"}}`
-	in := `{"targets":[{"vendor_id":"kycdemo","account_id":"kycdemo-in",` + pairs + `,"weight":100}],
+	in := `{"operations":{"generate":{"idempotent":false,"request_schema":{"body":{"type":"object"}}},"verify":{"idempotent":false,"request_schema":{"body":{"type":"object"}}}},
+	  "targets":[{"vendor_id":"kycdemo","account_id":"kycdemo-in",` + pairs + `,"weight":100}],
 	  "failover":[{"vendor_id":"kycdemo","account_id":"kycdemo-b",` + pairs + `}],
 	  "shadow":{"target":{"vendor_id":"kycdemo","account_id":"kycdemo-c",` + pairs + `},"mode":"dry_run"},
 	  "delivery":{"mode":"sync","on_circuit_open":"failover"},"webhooks":[],"audit":{"payloads":"sealed"}}`
@@ -143,7 +149,7 @@ func TestSpecOperationsRoundTrip(t *testing.T) {
 	if err := json.Unmarshal([]byte(in), &s); err != nil {
 		t.Fatal(err)
 	}
-	v, err := fromAPISpec(s, time.Hour)
+	v, err := fromAPISpec(s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,19 +184,19 @@ func TestSpecOperationsRoundTrip(t *testing.T) {
 	}
 
 	target := func(ops string) string {
-		return `{"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1","response":"R1@1"},"operations":` + ops + `}],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`
+		return `{"operations":{"default":{"idempotent":true,"request_schema":{"body":{}}}},"targets":[{"vendor_id":"v","account_id":"a","transformer":{"request":"T1@1","response":"R1@1"},"operations":` + ops + `}],"delivery":{"mode":"sync"},"audit":{"payloads":"masked"}}`
 	}
 	for _, tc := range []struct{ body, pointer string }{
 		{target(`{}`), "/spec/targets/0/operations"},
 		{target(`{"Verify":{"request":"V@1","response":"VR@1"}}`), "/spec/targets/0/operations/Verify"},
 		{target(`{"verify":{"request":"V","response":"VR@1"}}`), "/spec/targets/0/operations/verify/request"},
-		{target(`{"verify":{"request":"V@1"}}`), "/spec/targets/0/operations/verify/response"},
+		{target(`{"verify":{"request":"V@1","response":"VR"}}`), "/spec/targets/0/operations/verify/response"},
 	} {
 		var s apiSpec
 		if err := json.Unmarshal([]byte(tc.body), &s); err != nil {
 			t.Fatal(err)
 		}
-		_, err := fromAPISpec(s, 0)
+		_, err := fromAPISpec(s)
 		var e *Error
 		if !errors.As(err, &e) || e.Status != 400 || len(e.Details) != 1 || e.Details[0].Pointer != tc.pointer {
 			t.Errorf("%s: %v", tc.pointer, err)
@@ -198,21 +204,24 @@ func TestSpecOperationsRoundTrip(t *testing.T) {
 	}
 }
 
-// TestOperationsProblemsMapToTheirCheck: registry operations_have_transformers problems report
-// that check with a contract pointer; operation names are never renamed like member names.
+// TestOperationsProblemsMapToTheirCheck: registry problems report their check (the one the
+// registry named, else one derived from the message) with a contract pointer; operation names
+// are never renamed like member names, and nothing under operations.<op> is.
 func TestOperationsProblemsMapToTheirCheck(t *testing.T) {
 	const f = "integrations/int_x/versions/3.yaml"
 	ps := specProblems(registry.ConfigErrors{
-		{File: f, Path: "targets[0].transformer", Message: "operation verify uses the default pair, but G@1 is compiled for operation generate: give verify its own pair under operations"},
-		{File: f, Path: "failover[1].operations.account", Message: `"account" is not an operation of capability x@v1 (it declares generate, verify)`},
-		{File: f, Path: "shadow.target.operations.verify", Message: "G@1 is compiled for operation generate, not verify"},
+		{File: f, Path: "targets[0].transformer.request", Message: "sample s does not fit", Check: registry.CheckInputSchema, Sample: "s", Field: "/body/code"},
+		{File: f, Path: "failover[1].operations.account", Message: `"account" is not an operation of this version (it declares generate, verify)`},
+		{File: f, Path: "shadow.target.operations.verify", Message: "x", Check: registry.CheckOperationsHaveTransformers},
 		{File: f, Path: "targets[0].operations.verify.request", Message: "unknown transformer V@9"},
+		{File: f, Path: "operations.verify.request_schema.headers.properties.account", Message: "x", Check: registry.CheckSchemasCompile},
 	}, "int_x")
 	want := []struct{ ptr, check string }{
-		{"/targets/0/transformer", registry.CheckOperationsHaveTransformers},
+		{"/targets/0/transformer/request", registry.CheckInputSchema},
 		{"/failover/1/operations/account", registry.CheckOperationsHaveTransformers},
 		{"/shadow/target/operations/verify", registry.CheckOperationsHaveTransformers},
 		{"/targets/0/operations/verify/request", "references_exist"},
+		{"/operations/verify/request_schema/headers/properties/account", registry.CheckSchemasCompile},
 	}
 	for i, w := range want {
 		if got := pointer(ps[i].Path); got != w.ptr || checkOf(ps[i]) != w.check {
@@ -222,6 +231,17 @@ func TestOperationsProblemsMapToTheirCheck(t *testing.T) {
 	report := validationReport(ps)
 	if report["valid"] != false {
 		t.Fatal("report valid")
+	}
+	first := report["checks"].([]map[string]any)
+	i := slices.IndexFunc(first, func(c map[string]any) bool { return c["check"] == registry.CheckInputSchema })
+	str := func(v any) string {
+		if p, ok := v.(*string); ok && p != nil {
+			return *p
+		}
+		return ""
+	}
+	if i < 0 || str(first[i]["sample"]) != "s" || str(first[i]["field"]) != "/body/code" || first[i]["status"] != "fail" {
+		t.Fatalf("input_schema row %v", first)
 	}
 	if !slices.Contains(knownChecks, registry.CheckOperationsHaveTransformers) {
 		t.Fatal("operations_have_transformers is not a known check")
@@ -240,8 +260,7 @@ func perOpSnapshot(t *testing.T) *registry.Snapshot {
 		}
 		return m
 	}
-	snap, err := registry.Build(registry.Sources{Config: merge(os.DirFS("../../../config"), multiop.Config()),
-		Contracts: merge(os.DirFS("../../../../contracts"), multiop.Contracts())}, time.Now())
+	snap, err := registry.Build(registry.Sources{Config: merge(os.DirFS("../../../config"), multiop.Config())}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

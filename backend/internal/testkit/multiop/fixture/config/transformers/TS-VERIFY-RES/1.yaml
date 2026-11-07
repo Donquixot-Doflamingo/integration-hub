@@ -2,8 +2,6 @@
 transformer: TS-VERIFY-RES
 version: 1
 kind: response
-capability: test.two_step@v1
-operation: verify
 response:
   status: '"verified"'
 errors:

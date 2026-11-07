@@ -180,8 +180,23 @@ func TestBuildRefusesFailingGoldensAndTypeErrors(t *testing.T) {
 			`transformers/T1/fixtures/basic: T1@7: golden mismatch: /method: expected "PUT", got "POST"`},
 		{"missing goldens", map[string]string{"transformers/R2/fixtures/ok.vendor_response.json": "", "transformers/R2/fixtures/ok.expected_response.json": ""},
 			"transformers/R2/fixtures: R2@1: no golden fixtures"},
-		{"type error", map[string]string{"transformers/T1/7.yaml": validFiles["transformers/T1/7.yaml"] + "  body:\n    id: req.user.idd\n"},
-			`transformers/T1/7.yaml: request.body.id: req.user.idd: field "user.idd" is not in the capability schema`},
+		{"type error", map[string]string{"transformers/T1/7.yaml": validFiles["transformers/T1/7.yaml"] + "  body:\n    id: 'req.user.id +'\n"},
+			`transformers/T1/7.yaml: request.body.id: syntax`},
+		// ADR-0023: the fields a transformer reads are checked against each operation using it.
+		{"undeclared field", map[string]string{
+			"transformers/T1/7.yaml":                               validFiles["transformers/T1/7.yaml"] + "  body:\n    id: req.user.idd\n",
+			"transformers/T1/fixtures/basic.expected_request.json": `{"method": "POST", "path": "/1/upload", "body": {}}`},
+			`integrations/int_evt_brandA/versions/1.yaml: targets[0].transformer.request: T1@7 (request.body.id) reads req.user.idd, which operation default's request_schema.body does not declare`},
+		{"undeclared header", map[string]string{
+			"transformers/T1/7.yaml":                               validFiles["transformers/T1/7.yaml"] + "  headers:\n    X-Source: hdr[\"X-Source\"] ?? \"none\"\n",
+			"transformers/T1/fixtures/basic.expected_request.json": `{"method": "POST", "path": "/1/upload", "headers": {"X-Source": "none"}}`},
+			`reads hdr.X-Source, which operation default's request_schema.headers does not declare`},
+		{"sample breaks the endpoint schema", map[string]string{
+			"vendors/clevertap.yaml": strings.Replace(validFiles["vendors/clevertap.yaml"], "request_schema: {}", "request_schema: { query: { type: object, required: [name] } }", 1)},
+			`transformers/T1/fixtures/basic: vendor_endpoint: T1@7: sample basic: the produced request breaks clevertap.upload@1's request_schema at /query/name: missing property 'name'`},
+		{"sample input does not fit the operation", map[string]string{
+			"transformers/T1/fixtures/basic.input.json": `{"user": {"id": "u_1"}}`},
+			`sample basic of T1@7 does not fit operation default's request_schema at /body/event`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

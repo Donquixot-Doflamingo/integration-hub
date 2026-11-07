@@ -58,14 +58,14 @@ func (o *Outbox) LockForErase(ctx context.Context, db DB, ids []string) (queued 
 }
 
 // EraseDeadLetters removes the bodies of the dead letters of ids: the envelope's canonical body
-// becomes null and the last vendor request and response are dropped. The row (reason, attempts,
+// becomes null, its caller headers go, and the last vendor request and response are dropped. The row (reason, attempts,
 // error class, times) stays; Replay refuses an erased dead letter.
 func (o *Outbox) EraseDeadLetters(ctx context.Context, db DB, ids []string) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
 	tag, err := db.Exec(ctx, `UPDATE hub.dead_letters
-		SET envelope = jsonb_set(envelope, '{canonical}', 'null'::jsonb), last_vendor_request = NULL, last_vendor_response = NULL
+		SET envelope = jsonb_set(envelope, '{canonical}', 'null'::jsonb) - 'headers', last_vendor_request = NULL, last_vendor_response = NULL
 		WHERE request_id = ANY($1)`, ids)
 	if err != nil {
 		return 0, fmt.Errorf("queue: erase dead letters: %w", err)

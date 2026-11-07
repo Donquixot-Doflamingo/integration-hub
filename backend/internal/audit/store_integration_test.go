@@ -65,7 +65,7 @@ func TestPGStorePartitionsAndWrites(t *testing.T) {
 			{At: now, RequestID: id, Seq: 2, Type: audit.IntegrationResolved, Meta: map[string]any{"version": 2}},
 		},
 		Attempts: []audit.Attempt{{StartedAt: now, RequestID: id, AttemptNo: 1, AccountID: "ct-brandA-in", EndpointID: "upload@1", DurationMS: 3.5, HTTPStatus: 200}},
-		Records:  []audit.Record{{RequestID: id, CreatedAt: now, TenantID: "orders-service", IntegrationID: "int_evt_brandA", Capability: "events.track@v1", Operation: "default", Mode: "sync", Status: "in_flight", PayloadPolicy: "masked"}},
+		Records:  []audit.Record{{RequestID: id, CreatedAt: now, TenantID: "orders-service", IntegrationID: "int_evt_brandA", Operation: "default", Mode: "sync", Status: "in_flight", PayloadPolicy: "masked"}},
 	}
 	if err := store.Write(t.Context(), b); err != nil {
 		t.Fatal(err)

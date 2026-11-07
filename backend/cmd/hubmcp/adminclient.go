@@ -45,7 +45,6 @@ var adminRoutes = map[string]adminRoute{
 	"listAccounts":               {http.MethodGet, "/accounts"},
 	"getAccount":                 {http.MethodGet, "/accounts/{account_id}"},
 	"updateAccount":              {http.MethodPatch, "/accounts/{account_id}"},
-	"listCapabilities":           {http.MethodGet, "/capabilities"},
 	"getTransformer":             {http.MethodGet, "/transformers/{transformer_id}"},
 	"createTransformerVersion":   {http.MethodPost, "/transformers/{transformer_id}/versions"},
 	"runTransformerGoldens":      {http.MethodPost, "/transformers/run-goldens"},

@@ -2,28 +2,39 @@ package registry
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"path"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/santhosh-tekuri/jsonschema/v6"
 	"go.yaml.in/yaml/v3"
 )
 
 // Problem is one config error, qualified by file and YAML path:
 // "integrations/int_evt_brandA/versions/3.yaml: delivery.wait_ms: must be ≤ 30000".
+// Check names the publish check it fails (admin contract ValidationCheck) when the loader knows
+// it; Sample and Field locate a sample check failure (sample name, JSON pointer in the checked
+// object).
 type Problem struct {
 	File    string
 	Path    string
 	Message string
+	Check   string
+	Sample  string
+	Field   string
 }
+
+// Publish checks the registry names itself (admin contract ValidationCheck.check).
+const (
+	CheckSchemasCompile = "schemas_compile"
+	CheckGoldensPass    = "goldens_pass"
+	CheckEndpointSchema = "endpoint_schema"
+	CheckInputSchema    = "input_schema"
+)
 
 func (p Problem) String() string {
 	if p.Path == "" {
@@ -47,45 +58,15 @@ func (ps *ConfigErrors) add(file, path, format string, args ...any) {
 	*ps = append(*ps, Problem{File: file, Path: path, Message: fmt.Sprintf(format, args...)})
 }
 
-// Sources are where config is read from: the registry directory (backend/config) and the
-// contracts directory (repo-root contracts/) that holds capability schemas.
+// addCompile records a schemas_compile problem (a schema of the loaded file is unusable).
+func (ps *ConfigErrors) addCompile(file, path, format string, args ...any) {
+	*ps = append(*ps, Problem{File: file, Path: path, Message: fmt.Sprintf(format, args...), Check: CheckSchemasCompile})
+}
+
+// Sources are where config is read from: the registry directory (backend/config). Every schema
+// lives in it, inline in its integration version or vendor file (ADR-0023).
 type Sources struct {
-	Config    fs.FS
-	Contracts fs.FS
-}
-
-// Capability is a capability with its compiled schemas.
-type Capability struct {
-	Key         string // "events.track@v1"
-	Minor       int
-	Interactive bool
-	DefaultTTL  time.Duration
-	Operations  map[string]*Operation
-	File        string
-	SchemaRef   string // contracts-relative path of the root request schema
-	SchemaDir   string // contracts-relative directory of every schema file of this capability
-}
-
-// Operation is one operation of a capability.
-type Operation struct {
-	Name           string
-	Description    string
-	Idempotent     bool
-	Request        *jsonschema.Schema
-	Response       *jsonschema.Schema
-	RequestID      string // schema $id, recorded by the request.validated audit event
-	RequestFile    string // file names relative to Capability.SchemaDir
-	ResponseFile   string
-	RequestSchema  json.RawMessage
-	ResponseSchema json.RawMessage
-	// PII lists the x-pii tagged locations of the request (JSON pointer; "*" = any array item).
-	PII []PIIPath
-}
-
-// PIIPath is one x-pii tagged location.
-type PIIPath struct {
-	Pointer string
-	Kind    string
+	Config fs.FS
 }
 
 // Integration is an integration with all of its versions.
@@ -99,7 +80,6 @@ type Integration struct {
 
 // Config is everything loaded from Sources, before cross-reference validation.
 type Config struct {
-	Capabilities map[string]*Capability
 	Vendors      map[string]*Vendor
 	Accounts     map[string]*Account
 	Transformers map[TransformerRef]*TransformerFile
@@ -117,11 +97,13 @@ const (
 	DefaultWaitMS    = 3000
 	MaxWaitMS        = 30000
 	DefaultRetention = 30 * 24 * time.Hour
+	// DefaultTTL is how long an accepted request may wait for delivery when the version does not
+	// say (ADR-0023: it used to come from the capability).
+	DefaultTTL = 6 * time.Hour
 )
 
 var (
 	idPattern       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$`)
-	capKeyPattern   = regexp.MustCompile(`^[a-z][a-z0-9_.]*@v[1-9][0-9]*$`)
 	opNamePattern   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 	transformerID   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
 	keyHashPattern  = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
@@ -132,16 +114,16 @@ var (
 // references are checked by Validate.
 func Load(src Sources) (*Config, error) {
 	c := &Config{
-		Capabilities: map[string]*Capability{}, Vendors: map[string]*Vendor{}, Accounts: map[string]*Account{},
+		Vendors: map[string]*Vendor{}, Accounts: map[string]*Account{},
 		Transformers: map[TransformerRef]*TransformerFile{}, Integrations: map[string]*Integration{},
 		Tenants: map[string]*Tenant{}, Registrar: map[string]*RegistrarEndpoint{}, files: map[string]string{},
 	}
 	var ps ConfigErrors
-	c.loadCapabilities(src, &ps)
 	eachYAML(src.Config, "vendors", &ps, func(file string, data []byte) {
 		var v Vendor
 		if decode(file, data, &v, &ps) && c.put(file, "vendor", v.Vendor, &ps) {
-			for name, ep := range v.Endpoints {
+			for _, name := range sortedKeys(v.Endpoints) {
+				ep := v.Endpoints[name]
 				if !endpointPattern.MatchString(name) {
 					ps.add(file, "endpoints."+name, "endpoint keys look like name@version (e.g. upload@1)")
 				}
@@ -151,6 +133,8 @@ func Load(src Sources) (*Config, error) {
 				if ep.ConnectTimeoutMS <= 0 {
 					ps.add(file, "endpoints."+name+".connect_timeout_ms", "must be > 0")
 				}
+				compileEndpoint(&ep, file, "endpoints."+name, &ps)
+				v.Endpoints[name] = ep
 			}
 			c.Vendors[v.Vendor] = &v
 		}
@@ -273,160 +257,6 @@ func cleanYAMLError(err error) string {
 	return strings.Join(parts, "; ")
 }
 
-// ---- capabilities ----
-
-func (c *Config) loadCapabilities(src Sources, ps *ConfigErrors) {
-	compiler := jsonschema.NewCompiler()
-	compiler.DefaultDraft(jsonschema.Draft2020)
-	compiler.AssertFormat()
-	eachYAML(src.Config, "capabilities", ps, func(file string, data []byte) {
-		var cf CapabilityFile
-		if !decode(file, data, &cf, ps) {
-			return
-		}
-		if !capKeyPattern.MatchString(cf.Capability) {
-			ps.add(file, "capability", "want <name>@v<major>, got %q", cf.Capability)
-			return
-		}
-		if _, dup := c.Capabilities[cf.Capability]; dup {
-			ps.add(file, "capability", "duplicate capability %q", cf.Capability)
-			return
-		}
-		capability, err := compileCapability(compiler, src.Contracts, cf)
-		if err != nil {
-			ps.add(file, "schema_ref", "%v", err)
-			return
-		}
-		capability.File = file
-		c.Capabilities[cf.Capability] = capability
-		c.files["capability/"+cf.Capability] = file
-	})
-}
-
-type capabilityHeader struct {
-	XCapability string `json:"x-capability"`
-	Minor       int    `json:"x-capability-minor"`
-	Interactive bool   `json:"interactive"`
-	Operations  map[string]struct {
-		Description    string `json:"description"`
-		Idempotent     bool   `json:"idempotent"`
-		RequestSchema  string `json:"request_schema"`
-		ResponseSchema string `json:"response_schema"`
-	} `json:"operations"`
-}
-
-func compileCapability(compiler *jsonschema.Compiler, contracts fs.FS, cf CapabilityFile) (*Capability, error) {
-	if contracts == nil {
-		return nil, errors.New("no contracts directory configured")
-	}
-	root, err := fs.ReadFile(contracts, cf.SchemaRef)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", cf.SchemaRef, err)
-	}
-	var hdr capabilityHeader
-	if err := json.Unmarshal(root, &hdr); err != nil {
-		return nil, fmt.Errorf("%s: %w", cf.SchemaRef, err)
-	}
-	if hdr.XCapability != cf.Capability {
-		return nil, fmt.Errorf("%s declares x-capability %q, want %q", cf.SchemaRef, hdr.XCapability, cf.Capability)
-	}
-	if len(hdr.Operations) == 0 {
-		return nil, fmt.Errorf("%s declares no operations", cf.SchemaRef)
-	}
-	ttl := cf.DefaultTTL.Std()
-	if ttl <= 0 {
-		ttl = 6 * time.Hour
-	}
-	dir := path.Dir(cf.SchemaRef)
-	capability := &Capability{
-		Key: cf.Capability, Minor: hdr.Minor, Interactive: hdr.Interactive, DefaultTTL: ttl,
-		Operations: map[string]*Operation{}, SchemaRef: cf.SchemaRef, SchemaDir: dir,
-	}
-	names := make([]string, 0, len(hdr.Operations))
-	for name := range hdr.Operations {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	for _, name := range names {
-		op := hdr.Operations[name]
-		if !opNamePattern.MatchString(name) {
-			return nil, fmt.Errorf("operation %q must match %s", name, opNamePattern)
-		}
-		reqRaw, req, err := compileFile(compiler, contracts, path.Join(dir, op.RequestSchema))
-		if err != nil {
-			return nil, fmt.Errorf("operation %s request: %w", name, err)
-		}
-		respRaw, resp, err := compileFile(compiler, contracts, path.Join(dir, op.ResponseSchema))
-		if err != nil {
-			return nil, fmt.Errorf("operation %s response: %w", name, err)
-		}
-		var id struct {
-			ID string `json:"$id"`
-		}
-		_ = json.Unmarshal(reqRaw, &id)
-		var tree any
-		_ = json.Unmarshal(reqRaw, &tree)
-		capability.Operations[name] = &Operation{
-			Name: name, Description: op.Description, Idempotent: op.Idempotent,
-			Request: req, Response: resp, RequestID: id.ID, RequestFile: op.RequestSchema, ResponseFile: op.ResponseSchema,
-			RequestSchema: reqRaw, ResponseSchema: respRaw, PII: piiPaths(tree, "", nil),
-		}
-	}
-	return capability, nil
-}
-
-func compileFile(compiler *jsonschema.Compiler, contracts fs.FS, name string) (json.RawMessage, *jsonschema.Schema, error) {
-	raw, err := fs.ReadFile(contracts, name)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read %s: %w", name, err)
-	}
-	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
-	if err != nil {
-		return nil, nil, fmt.Errorf("%s: %w", name, err)
-	}
-	url := "contracts:///" + name
-	if err := compiler.AddResource(url, doc); err != nil {
-		return nil, nil, fmt.Errorf("%s: %w", name, err)
-	}
-	sch, err := compiler.Compile(url)
-	if err != nil {
-		return nil, nil, fmt.Errorf("compile %s: %w", name, err)
-	}
-	return raw, sch, nil
-}
-
-// piiPaths walks properties/items and collects x-pii tags as instance JSON pointers.
-// A tag on an object covers its subtree, so the walk stops there.
-func piiPaths(node any, at string, out []PIIPath) []PIIPath {
-	m, ok := node.(map[string]any)
-	if !ok {
-		return out
-	}
-	if kind, ok := m["x-pii"].(string); ok {
-		ptr := at
-		if ptr == "" {
-			ptr = "/"
-		}
-		return append(out, PIIPath{Pointer: ptr, Kind: kind})
-	}
-	if props, ok := m["properties"].(map[string]any); ok {
-		keys := make([]string, 0, len(props))
-		for k := range props {
-			keys = append(keys, k)
-		}
-		slices.Sort(keys)
-		for _, k := range keys {
-			out = piiPaths(props[k], at+"/"+escapePointer(k), out)
-		}
-	}
-	if items, ok := m["items"]; ok {
-		out = piiPaths(items, at+"/*", out)
-	}
-	return out
-}
-
-func escapePointer(s string) string { return strings.NewReplacer("~", "~0", "/", "~1").Replace(s) }
-
 // ---- transformers ----
 
 func (c *Config) loadTransformers(src Sources, ps *ConfigErrors) {
@@ -464,6 +294,9 @@ func (c *Config) loadTransformers(src Sources, ps *ConfigErrors) {
 			}
 			if t.Kind == KindRequest && t.VendorEndpoint == "" {
 				ps.add(file, "vendor_endpoint", "required for request transformers (vendor.endpoint@n)")
+			}
+			if t.Kind == KindResponse && t.VendorEndpoint != "" {
+				ps.add(file, "vendor_endpoint", "response transformers stand alone: no vendor_endpoint (ADR-0023)")
 			}
 			ref := TransformerRef{ID: t.Transformer, Version: t.Version}
 			c.Transformers[ref] = &t
@@ -518,6 +351,17 @@ func (c *Config) loadIntegrations(src Sources, ps *ConfigErrors) {
 				return
 			}
 			applyDefaults(&v)
+			if len(v.Operations) == 0 {
+				ps.addCompile(vfile, "operations", "declare at least one operation (single-operation integrations use default)")
+			}
+			for _, name := range sortedKeys(v.Operations) {
+				op := v.Operations[name]
+				if op == nil {
+					op = &Operation{}
+					v.Operations[name] = op
+				}
+				compileOperation(op, name, vfile, "operations."+name, ps)
+			}
 			in.Versions[n] = &v
 			in.VersionFiles[n] = vfile
 		})
@@ -527,8 +371,7 @@ func (c *Config) loadIntegrations(src Sources, ps *ConfigErrors) {
 }
 
 // applyDefaults fills the DESIGN §2 defaults: wait mode with a 3 s window, fail_fast on an open
-// circuit, re-resolve pending requests, masked audit kept 30 days. TTL defaults to the
-// capability's default during validation.
+// circuit, re-resolve pending requests, a 6 h TTL, masked audit kept 30 days.
 func applyDefaults(v *IntegrationVersion) {
 	d := &v.Delivery
 	if d.Mode == "" {
@@ -542,6 +385,9 @@ func applyDefaults(v *IntegrationVersion) {
 	}
 	if d.Pending == "" {
 		d.Pending = ReResolve
+	}
+	if d.TTL == 0 {
+		d.TTL = Duration(DefaultTTL)
 	}
 	if v.Audit.Payloads == "" {
 		v.Audit.Payloads = PayloadMasked

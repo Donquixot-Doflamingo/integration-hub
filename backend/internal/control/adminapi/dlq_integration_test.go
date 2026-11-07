@@ -34,13 +34,12 @@ import (
 func insertDeadLetter(t *testing.T, pool *pgxpool.Pool, id, tenant, integration, account, reason string) {
 	t.Helper()
 	created, _ := core.RequestIDTime(id)
-	env := core.Envelope{RequestID: id, Tenant: tenant, IntegrationID: integration, ResolvedVersion: 2, Capability: "events.track@v1",
+	env := core.Envelope{RequestID: id, Tenant: tenant, IntegrationID: integration, ResolvedVersion: 2,
 		Operation: "default", Mode: "async", Canonical: json.RawMessage(`{"user":{"id":"u_1"},"event":{"name":"x"}}`),
 		ExpiresAt: created.Add(time.Hour), CreatedAt: created}
 	body, _ := json.Marshal(env)
 	err := pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
-		if err := (audit.Ledger{}).Insert(t.Context(), tx, audit.Record{RequestID: id, CreatedAt: created, TenantID: tenant, IntegrationID: integration,
-			Capability: "events.track@v1", Operation: "default", Mode: "async", Status: "dead_lettered", PayloadPolicy: "masked"}); err != nil {
+		if err := (audit.Ledger{}).Insert(t.Context(), tx, audit.Record{RequestID: id, CreatedAt: created, TenantID: tenant, IntegrationID: integration, Operation: "default", Mode: "async", Status: "dead_lettered", PayloadPolicy: "masked"}); err != nil {
 			return err
 		}
 		_, err := tx.Exec(t.Context(), `INSERT INTO hub.dead_letters (request_id, created_at, tenant_id, integration_id, account_id, reason, last_error, attempts, envelope,
@@ -79,7 +78,6 @@ const t1v8 = `# Test-only fix (HUB-209): T1@7 plus event-name sanitising. Clever
 transformer: T1
 version: 8
 kind: request
-capability: events.track@v1
 docs_url: https://developer.clevertap.com/docs/upload-events-api
 vendor_endpoint: clevertap.upload@1
 request:
@@ -133,7 +131,7 @@ func configWithFix(t *testing.T) fs.FS {
 
 func buildSnap(t *testing.T, config fs.FS, vendorURL string) *registry.Snapshot {
 	t.Helper()
-	snap, err := registry.Build(registry.Sources{Config: config, Contracts: os.DirFS("../../../../contracts")}, time.Now())
+	snap, err := registry.Build(registry.Sources{Config: config}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,13 +201,12 @@ func testWorker(t *testing.T, pool *pgxpool.Pool, sn *snaps) *delivery.Worker {
 func enqueueEvent(t *testing.T, pool *pgxpool.Pool, integration, name string) core.Envelope {
 	t.Helper()
 	now := time.Now().UTC()
-	env := core.Envelope{RequestID: "req_" + core.NewULID(now), Tenant: "orders-service", IntegrationID: integration, ResolvedVersion: 2,
-		Capability: "events.track@v1", Operation: "default", Mode: "async",
+	env := core.Envelope{RequestID: "req_" + core.NewULID(now), Tenant: "orders-service", IntegrationID: integration, ResolvedVersion: 2, Operation: "default", Mode: "async",
 		Canonical:     json.RawMessage(`{"user":{"id":"u_48213"},"event":{"name":"` + name + `","timestamp":"2026-10-31T09:15:00Z"}}`),
 		NextAttemptAt: now.Add(-time.Millisecond), ExpiresAt: now.Add(6 * time.Hour), CreatedAt: now}
 	err := pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
 		if err := (audit.Ledger{}).Insert(t.Context(), tx, audit.Record{RequestID: env.RequestID, CreatedAt: now, TenantID: env.Tenant,
-			IntegrationID: integration, Capability: env.Capability, Operation: "default", Mode: "async", Status: "accepted", PayloadPolicy: "masked"}); err != nil {
+			IntegrationID: integration, Operation: "default", Mode: "async", Status: "accepted", PayloadPolicy: "masked"}); err != nil {
 			return err
 		}
 		return (&queue.Outbox{}).Enqueue(t.Context(), tx, env)

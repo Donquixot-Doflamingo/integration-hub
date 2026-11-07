@@ -44,7 +44,7 @@ func metaOf(f registry.IntegrationFile) map[string]any {
 	if grants == nil {
 		grants = []string{}
 	}
-	return map[string]any{"owner_tenant": f.OwnerTenant, "capability": f.Capability, "description": nullable(f.Description),
+	return map[string]any{"owner_tenant": f.OwnerTenant, "interactive": f.Interactive, "description": nullable(f.Description),
 		"grants": grants, "moves_money_or_quota": f.MovesMoneyOrQuota}
 }
 
@@ -52,7 +52,7 @@ func (s *Server) createIntegration(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		IntegrationID     string   `json:"integration_id"`
 		OwnerTenant       string   `json:"owner_tenant"`
-		Capability        string   `json:"capability"`
+		Interactive       bool     `json:"interactive"`
 		Description       *string  `json:"description"`
 		Grants            []string `json:"grants"`
 		MovesMoneyOrQuota bool     `json:"moves_money_or_quota"`
@@ -88,11 +88,7 @@ func (s *Server) createIntegration(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	if _, ok := c.snap.Capabilities[body.Capability]; !ok {
-		s.fail(w, r, badRequest("/capability", fmt.Sprintf("unknown capability %q", body.Capability)))
-		return
-	}
-	f := registry.IntegrationFile{Integration: body.IntegrationID, OwnerTenant: body.OwnerTenant, Capability: body.Capability,
+	f := registry.IntegrationFile{Integration: body.IntegrationID, OwnerTenant: body.OwnerTenant, Interactive: body.Interactive,
 		Grants: body.Grants, MovesMoneyOrQuota: body.MovesMoneyOrQuota}
 	if f.Grants == nil {
 		f.Grants = []string{}

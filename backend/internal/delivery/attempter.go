@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -72,7 +73,14 @@ type Job struct {
 
 // Result is what a job produced. Exactly one of Body and Err is set.
 type Result struct {
-	Body []byte // canonical response JSON
+	// Body is the response JSON: the response transformer's output, or in pass-through the
+	// vendor's JSON body (a non-JSON body as a JSON string; ADR-0023).
+	Body []byte
+	// PassThrough is set when the operation has no response transformer and the vendor
+	// answered: its status, body and the two headers that pass through. A synchronous caller
+	// gets exactly that, also for a vendor error once retries are exhausted (Err then holds the
+	// default classification, which drives retries, the breaker and queued completions).
+	PassThrough *PassThrough
 	// Session is the vendor session data the response transformer mapped on success (its
 	// session: section); the caller opens a session with it. nil when none.
 	Session  map[string]any
@@ -93,6 +101,16 @@ type Result struct {
 	OverCap  bool
 	Account  string
 	Endpoint string
+}
+
+// PassThrough is a vendor answer returned unchanged (ADR-0023): only Content-Type and
+// Retry-After of the vendor's headers go back to the caller; every other header is dropped so
+// no header identifies the vendor (DESIGN §0).
+type PassThrough struct {
+	Status      int
+	ContentType string
+	RetryAfter  string
+	Body        []byte
 }
 
 // AuditRequest is the audit and dry-run view of an upstream request.
@@ -132,7 +150,13 @@ func internalError() *core.CanonicalError {
 // credential values are added to the trail's secrets before anything else is recorded.
 func (a *Attempter) Input(ctx context.Context, snap *registry.Snapshot, res resolve.Resolution, body, hdr map[string]any, trail *audit.Trail) (transform.Input, creds.Credentials, *core.CanonicalError) {
 	account := snap.Accounts[res.Target.Account]
-	c, err := a.Creds.Get(ctx, account.Account)
+	var c creds.Credentials
+	var err error
+	if v := snap.Vendors[account.Vendor]; v != nil && !creds.NeedsCredentials(v.Auth) {
+		c = creds.Credentials{AccountID: account.Account} // auth none: a public API, no credentials
+	} else {
+		c, err = a.Creds.Get(ctx, account.Account)
+	}
 	if err != nil {
 		a.Log.ErrorContext(ctx, "credentials unavailable", slog.String("integration", res.Integration.Integration), slog.String("error", err.Error()))
 		if errors.Is(err, creds.ErrCacheMiss) {
@@ -166,7 +190,7 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	in.Session = j.Session
 	pair := j.Res.Pair() // the invoked operation's pair (HUB-343)
 	reqProg := j.Snap.Programs[pair.Request]
-	respProg := j.Snap.Programs[pair.Response]
+	respProg := j.Snap.Programs[pair.Response] // nil: pass-through
 	integration := j.Res.Integration.Integration
 	ref := pair.Request
 	tf := j.Snap.Transformers[ref]
@@ -239,8 +263,12 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 		return r
 	}
 
+	if respProg == nil {
+		a.passThrough(j, &r, n, att, adm)
+		return r
+	}
 	start = time.Now()
-	span = startTransform(ctx, "hub.transform.response", j.Res.Target.Transformer.Response)
+	span = startTransform(ctx, "hub.transform.response", pair.Response)
 	out, session, vce, err := respProg.MapResponseSession(att.Response, in)
 	if errors.Is(err, transform.ErrTimeBudget) {
 		out, session, vce, err = respProg.MapResponseSession(att.Response, in)
@@ -271,6 +299,42 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	j.Trail.Add(audit.ResponseTransformed, n, body, map[string]any{"transformer": respProg.Ref()})
 	r.Body, r.Session = body, session
 	return r
+}
+
+// passThrough completes an attempt of an operation without a response transformer: the vendor's
+// status and body go back unchanged. A vendor error status is classified by default (timeouts
+// never get here; 429 and 5xx are retryable, other 4xx are not) for retries and the breaker.
+func (a *Attempter) passThrough(j Job, r *Result, n int, att upstream.Attempt, adm admission) {
+	status := att.Response.Status
+	r.PassThrough = &PassThrough{Status: status, ContentType: att.Response.Headers.Get("Content-Type"),
+		RetryAfter: att.Response.Headers.Get("Retry-After"), Body: att.Raw}
+	var vce *core.CanonicalError
+	if status >= 400 {
+		vce = transform.Classify(status)
+		EnrichVendorError(vce, att.Response, a.now())
+	}
+	adm.record(a.now(), responseOutcome(status, vce))
+	if vce != nil {
+		j.Trail.Add(audit.ResponseTransformed, n, nil, map[string]any{"pass_through": true, "status": status, "code": string(vce.Code)})
+		r.Err = vce
+		return
+	}
+	r.Body = PassThroughJSON(r.PassThrough)
+	j.Trail.Add(audit.ResponseTransformed, n, r.Body, map[string]any{"pass_through": true, "status": status})
+}
+
+// PassThroughJSON is the JSON form of a pass-through body, as results are stored: a JSON body
+// as it is, an empty one as null, anything else as a JSON string.
+func PassThroughJSON(pt *PassThrough) []byte {
+	raw := bytes.TrimSpace(pt.Body)
+	if len(raw) == 0 {
+		return []byte("null")
+	}
+	if strings.Contains(strings.ToLower(pt.ContentType), "json") && json.Valid(raw) {
+		return raw
+	}
+	out, _ := json.Marshal(string(pt.Body))
+	return out
 }
 
 // attempt sends one vendor call and records vendor.sent, vendor.responded and the attempt row.

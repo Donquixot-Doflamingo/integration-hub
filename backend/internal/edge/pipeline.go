@@ -16,11 +16,6 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 )
 
-// hdrAllowlist maps the caller headers a transformer may read (hdr.*, DESIGN §7.2).
-var hdrAllowlist = map[string]string{
-	"Idempotency-Key": "idempotency_key",
-}
-
 // prepared is one request from authorization to the transformer input. Fields fill in as the
 // pipeline advances; integration and trail are set as soon as the caller is authorized, so every
 // later failure is audited.
@@ -65,15 +60,14 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 		}
 		return nil, tenantQuotaError(wait) // before any body is read: nothing to audit
 	}
-	capability := c.Snap.Capabilities[in.Capability]
-	p.op = capability.Operations[operation]
+	p.op = in.Active().Op(operation)
 	pii := []registry.PIIPath(nil)
 	if p.op != nil {
 		pii = p.op.PII
 	}
 
 	start = time.Now()
-	body, raw, ce := readJSONBody(r, bodyLimit(in.Capability))
+	body, raw, ce := readJSONBody(r, DefaultBodyLimit)
 	p.timings.Observe(telemetry.StageBodyLimit, start)
 	p.trailOpts = audit.TrailOptions{
 		RequestID: RequestID(r.Context()), Tenant: c.Tenant.Tenant, Policy: in.Active().Audit.Payloads,
@@ -86,16 +80,18 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 	}
 	p.body, p.raw = body, raw
 	if p.op == nil {
-		return p, &core.CanonicalError{Code: core.CodeOperationNotFound, Message: "The capability has no operation " + operation}
+		return p, &core.CanonicalError{Code: core.CodeOperationNotFound, Message: "The integration has no operation " + operation}
 	}
 	start = time.Now()
-	ce = validate(p.op, p.body)
+	if p.op.Validates() { // validate_input off: callers are not checked (ADR-0023)
+		ce = validate(p.op, p.body, r.Header)
+	}
 	p.timings.Observe(telemetry.StageValidate, start)
 	if ce != nil {
 		return p, ce
 	}
 	canonical, _ := json.Marshal(p.body)
-	p.trail.Add(audit.RequestValidated, 0, canonical, map[string]any{"schema_id": p.op.RequestID})
+	p.trail.Add(audit.RequestValidated, 0, canonical, map[string]any{"operation": operation, "validated": p.op.Validates()})
 
 	start = time.Now()
 	routeKey := r.Header.Get("Idempotency-Key")
@@ -125,7 +121,7 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 	pair := res.Pair()
 	resolved := map[string]any{
 		"integration": id, "version": res.VersionNumber, "vendor": res.Target.Vendor, "account": res.Target.Account,
-		"transformers": map[string]string{"request": pair.Request.String(), "response": pair.Response.String()},
+		"transformers": transformersMeta(pair),
 		"target_index": res.TargetIndex, "policy": string(p.trail.Policy()), "snapshot_version": res.SnapshotVersion,
 	}
 	if p.session != nil { // meta only: never the session data
@@ -133,13 +129,33 @@ func (s *Server) prepare(r *http.Request, scope, operation string) (*prepared, *
 	}
 	p.trail.Add(audit.IntegrationResolved, 0, nil, resolved)
 
-	p.hdr = map[string]any{}
-	for name, key := range hdrAllowlist {
-		if v := r.Header.Get(name); v != "" {
-			p.hdr[key] = v
+	p.hdr = callerHeaders(p.op, r.Header)
+	return p, nil
+}
+
+// callerHeaders is the transformer's hdr.*: the caller headers the operation declares in
+// request_schema.headers (keyed as declared), plus the Hub-provided idempotency_key. No other
+// caller header is visible to transformers (ADR-0023).
+func callerHeaders(op *registry.Operation, h http.Header) map[string]any {
+	out := make(map[string]any, len(op.HeaderNames())+1)
+	for _, name := range op.HeaderNames() {
+		if v := h.Get(name); v != "" {
+			out[name] = v
 		}
 	}
-	return p, nil
+	if v := h.Get("Idempotency-Key"); v != "" {
+		out[registry.HdrIdempotencyKey] = v
+	}
+	return out
+}
+
+// transformersMeta names the pair of the resolved target; response is null for pass-through.
+func transformersMeta(pair registry.TransformerPair) map[string]any {
+	m := map[string]any{"request": pair.Request.String(), "response": nil}
+	if !pair.PassThrough() {
+		m["response"] = pair.Response.String()
+	}
+	return m
 }
 
 // receivedMeta is the request.received context: the tenant key appears only as its id and hash
@@ -173,6 +189,15 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, p *prepared, ce *c
 	s.record(r, p, "failed", ce.Code.HTTPStatus(), string(ce.Code))
 }
 
+// failed records a request whose vendor error the caller already got in pass-through: the
+// same audit as fail, with the vendor's status, without writing the canonical envelope.
+func (s *Server) failed(r *http.Request, p *prepared, ce *core.CanonicalError, status int) {
+	s.log.InfoContext(r.Context(), "request failed", slog.String("integration", p.integration.Integration),
+		slog.String("code", string(ce.Code)), slog.Int("status", status), slog.Int("attempts", p.attempts), slog.Bool("pass_through", true))
+	p.trail.Add(audit.RequestFailed, 0, nil, map[string]any{"code": string(ce.Code), "status": status, "pass_through": true})
+	s.record(r, p, "failed", status, string(ce.Code))
+}
+
 // finish records request.completed and the final record of a successful request.
 // shadow starts the version's shadow copy of the request, if any (DESIGN §6.4). It never
 // delays or changes the caller's answer.
@@ -197,7 +222,7 @@ func (s *Server) record(r *http.Request, p *prepared, status string, httpStatus 
 	in := p.integration
 	rec := audit.Record{
 		RequestID: RequestID(r.Context()), CreatedAt: p.timings.Start, TenantID: p.caller.Tenant.Tenant,
-		IntegrationID: in.Integration, IntegrationVersion: p.res.VersionNumber, Capability: in.Capability,
+		IntegrationID: in.Integration, IntegrationVersion: p.res.VersionNumber,
 		Operation: p.operation, Mode: string(in.Active().Delivery.Mode), DryRun: p.dryRun, Status: status,
 		SnapshotVersion: p.caller.Snap.Version, IdempotencyKey: r.Header.Get("Idempotency-Key"), TraceID: traceID(r.Context()),
 		HTTPStatus: httpStatus, ErrorCode: code, Attempts: p.attempts,

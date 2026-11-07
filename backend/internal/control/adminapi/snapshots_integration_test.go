@@ -62,7 +62,7 @@ func TestSnapshotsListAndGet(t *testing.T) {
 		Config   map[string]string `json:"config"`
 	}
 	if err := json.Unmarshal(resp.Body.Bytes(), &blob); err != nil || resp.Header().Get("Content-Type") != "application/json" ||
-		blob.Format != 1 || blob.Checksum != top["checksum"] || !strings.Contains(blob.Config["integrations/int_evt_brandA/integration.yaml"], "paused: true") {
+		blob.Format != 2 || blob.Checksum != top["checksum"] || !strings.Contains(blob.Config["integrations/int_evt_brandA/integration.yaml"], "paused: true") {
 		t.Fatalf("blob: %v %s", err, resp.Body.String()[:min(200, resp.Body.Len())])
 	}
 	req := a.request(RoleViewer, http.MethodGet, "/snapshots/3/blob", "")

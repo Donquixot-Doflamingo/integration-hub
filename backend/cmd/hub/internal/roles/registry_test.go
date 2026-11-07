@@ -83,7 +83,7 @@ func writeFile(path, content string) error {
 func writeDevCache(t *testing.T, dir string) {
 	t.Helper()
 	cfg := testConfig(t, Gateway)
-	src := registry.Sources{Config: os.DirFS(cfg.ConfigDir), Contracts: os.DirFS(cfg.ContractsDir)}
+	src := registry.Sources{Config: os.DirFS(cfg.ConfigDir)}
 	snap, err := registry.Build(src, time.Now())
 	if err != nil {
 		t.Fatal(err)

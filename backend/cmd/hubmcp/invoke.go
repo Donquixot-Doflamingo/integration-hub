@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -65,14 +69,15 @@ func (ic *integrationCache) get(ctx context.Context, c *toolCall, id string) (*h
 }
 
 type invokeInput struct {
-	IntegrationID  string          `json:"integration_id"`
-	Operation      string          `json:"operation"`
-	Body           json.RawMessage `json:"body"`
-	IdempotencyKey string          `json:"idempotency_key"`
-	PreferAsync    bool            `json:"prefer_async"`
-	DeadlineMS     int             `json:"deadline_ms"`
-	Session        string          `json:"session"`
-	Confirm        bool            `json:"confirm"`
+	IntegrationID  string            `json:"integration_id"`
+	Operation      string            `json:"operation"`
+	Body           json.RawMessage   `json:"body"`
+	Headers        map[string]string `json:"headers"`
+	IdempotencyKey string            `json:"idempotency_key"`
+	PreferAsync    bool              `json:"prefer_async"`
+	DeadlineMS     int               `json:"deadline_ms"`
+	Session        string            `json:"session"`
+	Confirm        bool              `json:"confirm"`
 }
 
 // operationOption selects a named operation; "default" (or none) uses the plain invoke path.
@@ -122,6 +127,12 @@ func (a *app) invokeChecked(ctx context.Context, c *toolCall, in *invokeInput) t
 	}
 
 	opts := operationOption(in.Operation)
+	if len(in.Headers) > 0 {
+		if err := declaredHeaders(d, in.Operation, in.Headers); err != nil {
+			return invalidArguments(toolInvoke, err)
+		}
+		opts = append(opts, hubclient.WithHeaders(in.Headers))
+	}
 	if in.IdempotencyKey != "" {
 		opts = append(opts, hubclient.WithIdempotencyKey(in.IdempotencyKey))
 	}
@@ -141,11 +152,71 @@ func (a *app) invokeChecked(ctx context.Context, c *toolCall, in *invokeInput) t
 			out, err = c.hub.Invoke(ctx, in.IntegrationID, in.Body, opts...)
 		}
 	}
+	var pt *hubclient.PassThroughError
+	if errors.As(err, &pt) {
+		return passThroughFailure(pt)
+	}
 	if err != nil {
 		e, status := a.hubErrorObject(err)
 		return failure(toolInvoke, e, status)
 	}
 	return invokeResult(out)
+}
+
+// hubOwnHeaders are the headers hubmcp sets from dedicated inputs; the headers input never
+// carries them (contract hub_invoke/hub_dry_run headers).
+var hubOwnHeaders = []string{"authorization", "idempotency-key", "prefer", "x-request-deadline", "x-hub-session", "traceparent"}
+
+// declaredHeaders refuses caller headers the operation does not declare in
+// request_schema.headers (the Hub would not pass them to the transformer anyway) and the Hub's
+// own headers.
+func declaredHeaders(d *hubclient.IntegrationDetail, op string, headers map[string]string) error {
+	if op == "" {
+		op = "default"
+	}
+	var declared struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if o := d.Operation(op); o != nil && len(o.RequestSchema.Headers) > 0 {
+		_ = json.Unmarshal(o.RequestSchema.Headers, &declared)
+	}
+	for name := range headers {
+		if slices.Contains(hubOwnHeaders, strings.ToLower(name)) {
+			return fmt.Errorf("headers.%s is a Hub header: use the dedicated input instead", name)
+		}
+		ok := false
+		for k := range declared.Properties {
+			ok = ok || strings.EqualFold(k, name)
+		}
+		if !ok {
+			return fmt.Errorf("headers.%s is not declared in operation %s's request_schema.headers (see hub_describe_integration)", name, op)
+		}
+	}
+	return nil
+}
+
+// resultJSON is a response body as the tool's result: JSON as it is, anything else (a
+// pass-through text body) as a JSON string, an empty body as null.
+func resultJSON(body []byte, contentType string) json.RawMessage {
+	b := bytes.TrimSpace(body)
+	switch {
+	case len(b) == 0:
+		return nil
+	case (contentType == "" || strings.Contains(strings.ToLower(contentType), "json")) && json.Valid(b):
+		return json.RawMessage(b)
+	}
+	s, _ := json.Marshal(string(body))
+	return s
+}
+
+// passThroughFailure is a third party's error answer the Hub returned unchanged: outcome error,
+// pass_through true, no canonical error, result = the third party's body (contract hub_invoke).
+func passThroughFailure(pt *hubclient.PassThroughError) toolResult {
+	status := pt.Status
+	return toolResult{isError: true, outcome: "error", requestID: pt.RequestID,
+		note: "The third party answered HTTP " + strconv.Itoa(status) + " (pass-through: its own body is in result).",
+		structured: invokeOutput{Outcome: "error", HTTPStatus: &status, RequestID: optString(pt.RequestID), PassThrough: true,
+			Result: resultJSON(pt.Body, pt.ContentType)}}
 }
 
 // confirmGuard enforces contract rule 2 (HUB-304) for an integration that moves money or quota:
@@ -211,15 +282,15 @@ func autoRetry(err error, idempotencyKey string) (time.Duration, bool) {
 func invokeResult(out hubclient.Outcome) toolResult {
 	switch o := out.(type) {
 	case *hubclient.Result:
-		status := 200
-		body := o.Body
-		if len(body) == 0 || body[0] != '{' {
-			body = nil // the contract's result is an object; anything else is not passed on
+		status := o.Status
+		if status == 0 {
+			status = 200
 		}
 		return toolResult{
 			outcome: "completed", requestID: o.RequestID,
 			structured: invokeOutput{Outcome: "completed", HTTPStatus: &status, RequestID: optString(o.RequestID),
-				IdempotentReplay: o.IdempotentReplay, Result: body, Session: optString(o.Session)},
+				IdempotentReplay: o.IdempotentReplay, Result: resultJSON(o.Body, o.ContentType), PassThrough: o.PassThrough,
+				Session: optString(o.Session)},
 		}
 	case *hubclient.Queued:
 		status := 202
@@ -238,7 +309,6 @@ func invokeResult(out hubclient.Outcome) toolResult {
 type requestOutput struct {
 	RequestID     string          `json:"request_id"`
 	IntegrationID string          `json:"integration_id"`
-	Capability    string          `json:"capability,omitempty"`
 	Operation     string          `json:"operation,omitempty"`
 	Mode          string          `json:"mode,omitempty"`
 	Status        string          `json:"status"`
@@ -265,11 +335,11 @@ func (a *app) getRequest(ctx context.Context, c *toolCall) toolResult {
 		return res
 	}
 	out := requestOutput{
-		RequestID: st.RequestID, IntegrationID: st.IntegrationID, Capability: st.Capability, Operation: st.Operation,
+		RequestID: st.RequestID, IntegrationID: st.IntegrationID, Operation: st.Operation,
 		Mode: st.Mode, Status: string(st.Status), Attempts: st.Attempts,
 		NextAttemptAt: optTime(st.NextAttemptAt), ExpiresAt: optTime(st.ExpiresAt), CompletedAt: optTime(st.CompletedAt),
 	}
-	if len(st.Result) > 0 && st.Result[0] == '{' {
+	if len(st.Result) > 0 { // any JSON value (ADR-0023)
 		out.Result = st.Result
 	}
 	if st.Error != nil {
@@ -306,15 +376,29 @@ type upstreamOutput struct {
 // redacted, in case a value slipped through.
 func (a *app) dryRun(ctx context.Context, c *toolCall) toolResult {
 	var in struct {
-		IntegrationID string          `json:"integration_id"`
-		Operation     string          `json:"operation"`
-		Body          json.RawMessage `json:"body"`
-		Session       string          `json:"session"`
+		IntegrationID string            `json:"integration_id"`
+		Operation     string            `json:"operation"`
+		Body          json.RawMessage   `json:"body"`
+		Headers       map[string]string `json:"headers"`
+		Session       string            `json:"session"`
 	}
 	if err := json.Unmarshal(c.args, &in); err != nil {
 		return invalidArguments(toolDryRun, err)
 	}
 	opts := operationOption(in.Operation)
+	if len(in.Headers) > 0 {
+		d, err := a.integrations.get(ctx, c, in.IntegrationID)
+		if err != nil {
+			e, status := a.hubErrorObject(err)
+			res := failure(toolDryRun, e, status)
+			res.integrationID = in.IntegrationID
+			return res
+		}
+		if err := declaredHeaders(d, in.Operation, in.Headers); err != nil {
+			return invalidArguments(toolDryRun, err)
+		}
+		opts = append(opts, hubclient.WithHeaders(in.Headers))
+	}
 	if in.Session != "" {
 		opts = append(opts, hubclient.WithSession(in.Session))
 	}

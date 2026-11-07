@@ -6,6 +6,13 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `refactor(registry)` · Replace capabilities by operation schemas · HUB-433 · F-23
+  - Each integration version declares its operations with the caller's request schema (body, optional headers, `validate_input`); live calls are checked against it only when `validate_input` is on, and only declared caller headers reach the transformer as `hdr.*`
+  - Vendor endpoints declare the request they accept; transformer samples must fit it (`endpoint_schema`), and integration publish checks that each transformer's fields and samples fit the operation (`schemas_compile`, `input_schema`)
+  - An operation without a response transformer returns the vendor's status and body unchanged with `X-Hub-Pass-Through: true` and only `Content-Type` and `Retry-After` from the vendor; response transformer output goes back as it is
+  - Vendors can use auth scheme `none`: their accounts carry no credentials
+  - The admin API, discovery, hubctl, hubmcp and the Go client follow the 2.0.0 contracts; the capability endpoints are gone
+  - Migration 00011 drops the capability table and columns after copying capability schemas into integration versions; archived snapshots, drafts and pending integrations from before are upgraded on the admin's first boot
 - 2026-11-07 · `contract(contracts)` · Replace capabilities with request schemas · HUB-432 · F-23
   - hub-admin 2.0.0: the capability API and fields are gone; each integration version declares its operations with the caller's request schema (body and headers, required or optional fields, `validate_input`), each vendor endpoint declares the request it accepts, transformers are proven by samples checked against the endpoint schema, and the response transformer is optional
   - hub-public 2.0.0: discovery lists each operation with its request schema; an operation without a response transformer returns the vendor's status and body unchanged, marked `X-Hub-Pass-Through: true`, with only `Content-Type` and `Retry-After` vendor headers

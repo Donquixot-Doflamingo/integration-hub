@@ -24,8 +24,8 @@ type Input struct {
 	UUID func() string
 }
 
-// EvalError is a transformer failure at run time: an expression threw, the output was too large
-// or did not match the capability schema, or the time budget was exceeded. Callers map it to
+// EvalError is a transformer failure at run time: an expression threw, the output was too large,
+// or the time budget was exceeded. Callers map it to
 // TRANSFORM_FAILED (DESIGN §4.4) and record Path and Expr in the audit trail; it never contains
 // request values.
 type EvalError struct {
@@ -72,10 +72,7 @@ func (p *Program) env(in Input, res map[string]any) map[string]any {
 	if p.kind == "request" {
 		env["req"], env["hdr"], env["session"], env["creds"] = orEmpty(in.Req), orEmpty(in.Hdr), orEmpty(in.Session), creds
 	} else {
-		env["res"] = res
-		if p.session != nil { // only the session: section reads req (sessionVars)
-			env["req"] = orEmpty(in.Req)
-		}
+		env["res"], env["req"] = res, orEmpty(in.Req)
 	}
 	return env
 }

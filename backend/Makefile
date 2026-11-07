@@ -54,7 +54,7 @@ fmt: ## Format code
 	golangci-lint fmt ./...
 
 goldens: ## Run every transformer's golden fixtures (hubctl transform test)
-	$(GO) run ./cmd/hubctl transform test -config-dir config -contracts-dir ../contracts
+	$(GO) run ./cmd/hubctl transform test -config-dir config
 
 PROMTOOL ?= promtool
 monitoring: ## Alert rules (promtool check + unit tests) and dashboards query only exported metrics (HUB-232)

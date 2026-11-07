@@ -102,7 +102,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-common=(-config-dir "$state/config" -contracts-dir "$root/contracts" -blob-url "file://$state/blobs" -ready-drain 200ms -log-level warn)
+common=(-config-dir "$state/config" -blob-url "file://$state/blobs" -ready-drain 200ms -log-level warn)
 
 "$bin/mockvendor" -addr "$mv_addr" -control-addr "$mv_ctl" 2>"$state/mockvendor.log" &
 mv_pid=$!

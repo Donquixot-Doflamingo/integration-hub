@@ -1,65 +1,17 @@
 package transform
 
 import (
-	"bytes"
 	"errors"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
-
-	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 )
 
-func responseValidator(t testing.TB) func(any) error {
-	t.Helper()
-	raw, err := os.ReadFile("../../../contracts/schemas/capabilities/events.track.v1.response.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := jsonschema.NewCompiler()
-	if err := c.AddResource("resp.json", doc); err != nil {
-		t.Fatal(err)
-	}
-	sch, err := c.Compile("resp.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return func(v any) error { return sch.Validate(normalizeForSchema(v)) }
-}
-
-// normalizeForSchema converts Go ints to float64, as JSON decoding would.
-func normalizeForSchema(v any) any {
-	switch x := v.(type) {
-	case int:
-		return float64(x)
-	case int64:
-		return float64(x)
-	case map[string]any:
-		out := make(map[string]any, len(x))
-		for k, e := range x {
-			out[k] = normalizeForSchema(e)
-		}
-		return out
-	case []any:
-		out := make([]any, len(x))
-		for i, e := range x {
-			out[i] = normalizeForSchema(e)
-		}
-		return out
-	}
-	return v
-}
-
 func compileResponse(t *testing.T, src string) *Program {
 	t.Helper()
-	p, err := Compile(specFromYAML(t, src), Options{ValidateResponse: responseValidator(t)})
+	p, err := Compile(specFromYAML(t, src), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +20,7 @@ func compileResponse(t *testing.T, src string) *Program {
 
 func devResponse(t testing.TB, rel string) *Program {
 	t.Helper()
-	p, err := Compile(devSpec(t, rel), Options{ValidateResponse: responseValidator(t)})
+	p, err := Compile(devSpec(t, rel), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,12 +111,26 @@ func TestUnmatchedErrorStatusIsClassified(t *testing.T) {
 	}
 }
 
-func TestResponseMustMatchCapabilitySchema(t *testing.T) {
-	p := compileResponse(t, respHead+"response:\n  status: '\"great\"'\n")
-	_, _, err := p.MapResponse(vendor(200, nil), Input{})
-	var ee *EvalError
-	if !errors.As(err, &ee) || !strings.Contains(err.Error(), "does not match the capability response schema") {
-		t.Fatalf("err %v", err)
+// ADR-0023: the output is returned as it is, whatever its shape; no response schema.
+func TestResponseOutputIsReturnedAsIs(t *testing.T) {
+	body := map[string]any{"count": 1744.0, "name": "harsh", "age": 29.0}
+	for name, tt := range map[string]struct {
+		src  string
+		want any
+	}{
+		"object":     {"response:\n  age: res.body.age\n", map[string]any{"age": 29.0}},
+		"any status": {"response:\n  status: '\"great\"'\n", map[string]any{"status": "great"}},
+		"scalar":     {"response: res.body.age\n", 29.0},
+		"whole body": {"response: res.body\n", body},
+		"echo input": {"response:\n  first: req.firstName\n", map[string]any{"first": "Mich"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := compileResponse(t, respHead+tt.src)
+			out, ce, err := p.MapResponse(vendor(200, body), Input{Req: map[string]any{"firstName": "Mich"}})
+			if err != nil || ce != nil || len(Diff(tt.want, out)) > 0 {
+				t.Fatalf("out %#v ce %v err %v", out, ce, err)
+			}
+		})
 	}
 }
 

@@ -9,12 +9,14 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/trackops"
 )
 
 // brandASpec is a version document of int_evt_brandA: weight on ct-brandA-in, the rest on
 // ct-brandB-us.
 func brandASpec(weightA int) string {
-	doc := "targets:\n  - { vendor: clevertap, account: ct-brandA-in, transformer: { request: T1@7, response: R1@2 }, weight: " + fmt.Sprint(weightA) + " }\n"
+	doc := trackops.Block + "targets:\n  - { vendor: clevertap, account: ct-brandA-in, transformer: { request: T1@7, response: R1@2 }, weight: " + fmt.Sprint(weightA) + " }\n"
 	if weightA < 100 {
 		doc += "  - { vendor: clevertap, account: ct-brandB-us, transformer: { request: T1@7, response: R1@2 }, weight: " + fmt.Sprint(100-weightA) + " }\n"
 	}
@@ -63,7 +65,7 @@ func TestIntegrationReads(t *testing.T) {
 		{"?paused=true", nil},
 		{"?has_active_version=false", nil},
 		{"?active_version_behind=false", []string{"int_evt_brandA", "int_evt_brandB", "int_evt_brandB_min"}},
-		{"?capability=events.track@v1&limit=2", []string{"int_evt_brandA", "int_evt_brandB"}},
+		{"?limit=2", []string{"int_evt_brandA", "int_evt_brandB"}},
 		{"?tenant_id=orders-service&limit=1", []string{"int_evt_brandA"}},
 	} {
 		resp, body := a.do(RoleTenantViewer, http.MethodGet, "/integrations"+tc.query, "")

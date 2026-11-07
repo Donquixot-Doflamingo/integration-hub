@@ -49,22 +49,12 @@ func (d Duration) MarshalYAML() (any, error) {
 // Std returns the value as a time.Duration.
 func (d Duration) Std() time.Duration { return time.Duration(d) }
 
-// ---- capabilities ----
-
-// CapabilityFile is backend/config/capabilities/<name>.v<major>.yaml. The schema itself lives in
-// contracts/schemas/capabilities (ADR-0004); this file only points at it.
-type CapabilityFile struct {
-	Capability string   `yaml:"capability"` // "events.track@v1"
-	SchemaRef  string   `yaml:"schema_ref"` // path under contracts/, the request schema of the default (or first) op
-	DefaultTTL Duration `yaml:"default_ttl"`
-}
-
 // ---- vendors ----
 
 // Vendor is backend/config/vendors/<vendor>.yaml (DESIGN §8.3). Same for every account.
 type Vendor struct {
 	Vendor    string              `yaml:"vendor"`
-	Auth      string              `yaml:"auth"` // static_headers | bearer | basic | query | hmac | oauth2_cc | mtls
+	Auth      string              `yaml:"auth"` // none | static_headers | bearer | basic | query | hmac | oauth2_cc | mtls
 	Regions   map[string]string   `yaml:"regions"`
 	Endpoints map[string]Endpoint `yaml:"endpoints"` // key "upload@1"
 	Defaults  VendorDefaults      `yaml:"defaults"`
@@ -79,6 +69,21 @@ type Endpoint struct {
 	ConnectTimeoutMS int    `yaml:"connect_timeout_ms"`
 	Idempotent       bool   `yaml:"idempotent"`
 	BatchMax         int    `yaml:"batch_max,omitempty"`
+	// RequestSchema is the request the endpoint accepts (ADR-0023). Required; {} means nothing
+	// besides method and path. Request transformer samples are checked against it at transformer
+	// creation and at integration validate/publish, never on live calls.
+	RequestSchema *EndpointRequestSchema `yaml:"request_schema"`
+	// ResponseSchema is the vendor's response body, informational only: stored, never enforced.
+	ResponseSchema map[string]any `yaml:"response_schema,omitempty"`
+}
+
+// EndpointRequestSchema is one JSON Schema per part of the vendor request. Credential headers and
+// query values (creds.*) are never part of the checked request.
+type EndpointRequestSchema struct {
+	Path    *JSONSchema `yaml:"path,omitempty"`    // path parameters ({name} segments of Endpoint.Path)
+	Query   *JSONSchema `yaml:"query,omitempty"`   // query parameters object
+	Headers *JSONSchema `yaml:"headers,omitempty"` // non-credential headers object
+	Body    *JSONSchema `yaml:"body,omitempty"`    // JSON body
 }
 
 // VendorDefaults are limits shared by every account of a vendor unless the account overrides them.
@@ -156,11 +161,8 @@ type TransformerFile struct {
 	Transformer    string          `yaml:"transformer"`
 	Version        int             `yaml:"version"`
 	Kind           TransformerKind `yaml:"kind"`
-	Capability     string          `yaml:"capability"`
 	VendorEndpoint string          `yaml:"vendor_endpoint,omitempty"` // "clevertap.upload@1" (request transformers)
 	DocsURL        string          `yaml:"docs_url,omitempty"`        // vendor doc the mapping was checked against (AGENTS §3.3)
-	// Operation of a multi-operation capability this transformer maps; empty = the only operation.
-	Operation string `yaml:"operation,omitempty"`
 	// AllowCredsInBody lets creds.* appear in body targets (vendor requires it; platform review).
 	AllowCredsInBody bool      `yaml:"allow_creds_in_body,omitempty"`
 	Request          yaml.Node `yaml:"request,omitempty"`
@@ -189,8 +191,12 @@ func ParseTransformerRef(s string) (TransformerRef, error) {
 	return TransformerRef{ID: id, Version: n}, nil
 }
 
-// UnmarshalYAML reads the "T2@3" form.
+// UnmarshalYAML reads the "T2@3" form; null (or empty) is the unset ref.
 func (r *TransformerRef) UnmarshalYAML(n *yaml.Node) error {
+	if n.Tag == "!!null" || (n.Kind == yaml.ScalarNode && n.Value == "" && n.Style == 0) {
+		*r = TransformerRef{}
+		return nil
+	}
 	ref, err := ParseTransformerRef(n.Value)
 	if err != nil {
 		return err
@@ -202,40 +208,48 @@ func (r *TransformerRef) UnmarshalYAML(n *yaml.Node) error {
 // MarshalYAML writes the "T2@3" form.
 func (r TransformerRef) MarshalYAML() (any, error) { return r.String(), nil }
 
+// IsZero reports an unset ref (no response transformer: pass-through). yaml omitempty uses it.
+func (r TransformerRef) IsZero() bool { return r.ID == "" && r.Version == 0 }
+
 // ---- integrations ----
 
-// IntegrationFile is backend/config/integrations/<id>/integration.yaml: the stable ID, its owner,
-// capability and which version is active. Versions live next to it in versions/<n>.yaml.
+// IntegrationFile is backend/config/integrations/<id>/integration.yaml: the stable ID, its owner
+// and which version is active. Versions live next to it in versions/<n>.yaml; each version
+// declares its operations and their request schemas (ADR-0023).
 type IntegrationFile struct {
 	Integration   string   `yaml:"integration"`
 	OwnerTenant   string   `yaml:"owner_tenant"`
-	Capability    string   `yaml:"capability"`
 	Grants        []string `yaml:"grants"`
 	ActiveVersion int      `yaml:"active_version"`
 	Paused        bool     `yaml:"paused"`
 	PausedReason  string   `yaml:"paused_reason,omitempty"`
 	Description   string   `yaml:"description,omitempty"`
+	// Interactive: the operations are steps of one session a person is waiting on (X-Hub-Session);
+	// only sync delivery is allowed (DESIGN §5.4). Fixed when the integration is created.
+	Interactive bool `yaml:"interactive,omitempty"`
 	// MovesMoneyOrQuota makes Idempotency-Key mandatory and gates hubmcp invokes (contracts).
 	MovesMoneyOrQuota bool `yaml:"moves_money_or_quota"`
 }
 
 // IntegrationVersion is one immutable version (DESIGN §3.4). The repeated header fields
-// (integration, owner_tenant, grants, capability) let the §3.4 record be pasted verbatim; they
-// must match integration.yaml.
+// (integration, owner_tenant, grants) let the §3.4 record be pasted verbatim; they must match
+// integration.yaml.
 type IntegrationVersion struct {
-	Integration string          `yaml:"integration"`
-	OwnerTenant string          `yaml:"owner_tenant,omitempty"`
-	Grants      []string        `yaml:"grants,omitempty"`
-	Capability  string          `yaml:"capability,omitempty"`
-	Version     int             `yaml:"version"`
-	Targets     []Target        `yaml:"targets"`
-	Failover    []Target        `yaml:"failover,omitempty"`
-	Delivery    Delivery        `yaml:"delivery"`
-	Breaker     BreakerOverride `yaml:"breaker,omitempty"`
-	Webhooks    []Subscription  `yaml:"webhooks,omitempty"`
-	Audit       AuditPolicy     `yaml:"audit"`
-	Shadow      *Shadow         `yaml:"shadow,omitempty"`
-	Publish     PublishMeta     `yaml:"publish"`
+	Integration string   `yaml:"integration"`
+	OwnerTenant string   `yaml:"owner_tenant,omitempty"`
+	Grants      []string `yaml:"grants,omitempty"`
+	Version     int      `yaml:"version"`
+	// Operations are what callers invoke, each with the caller's request schema (ADR-0023).
+	// Single-operation integrations use "default".
+	Operations map[string]*Operation `yaml:"operations"`
+	Targets    []Target              `yaml:"targets"`
+	Failover   []Target              `yaml:"failover,omitempty"`
+	Delivery   Delivery              `yaml:"delivery"`
+	Breaker    BreakerOverride       `yaml:"breaker,omitempty"`
+	Webhooks   []Subscription        `yaml:"webhooks,omitempty"`
+	Audit      AuditPolicy           `yaml:"audit"`
+	Shadow     *Shadow               `yaml:"shadow,omitempty"`
+	Publish    PublishMeta           `yaml:"publish"`
 }
 
 // ShadowMode is how a shadow target receives its copy of the traffic (DESIGN §6.4).
@@ -266,9 +280,9 @@ type Target struct {
 	Vendor  string `yaml:"vendor"`
 	Account string `yaml:"account"`
 	// Transformer is the default pair: it serves every operation Operations does not list (for a
-	// single-operation capability, the only pair).
+	// single-operation integration, the only pair).
 	Transformer TransformerPair `yaml:"transformer"`
-	// Operations gives operations of a multi-operation capability their own pair, so each can go
+	// Operations gives operations of a multi-operation integration their own pair, so each can go
 	// to its own vendor endpoint (HUB-343, admin contract TargetRef.operations).
 	Operations map[string]TransformerPair `yaml:"operations,omitempty"`
 	Weight     int                        `yaml:"weight,omitempty"` // failover entries have no weight
@@ -293,11 +307,15 @@ func (t Target) Pairs() []TransformerPair {
 	return out
 }
 
-// TransformerPair names the request and response transformers of a target.
+// TransformerPair names the request and response transformers of a target. Response is
+// optional: unset means pass-through (the caller gets the vendor's status and body, ADR-0023).
 type TransformerPair struct {
 	Request  TransformerRef `yaml:"request"`
-	Response TransformerRef `yaml:"response"`
+	Response TransformerRef `yaml:"response,omitempty"`
 }
+
+// PassThrough reports a pair without a response transformer.
+func (p TransformerPair) PassThrough() bool { return p.Response.IsZero() }
 
 // Mode is a delivery mode (DESIGN §5.2).
 type Mode string

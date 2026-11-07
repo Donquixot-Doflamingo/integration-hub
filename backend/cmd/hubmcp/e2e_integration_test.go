@@ -25,6 +25,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/contract"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/trackops"
 )
 
 // HUB-307: hubmcp against a running Hub. The hub (gateway, worker, admin) and mockvendor run as
@@ -85,7 +86,7 @@ func TestMCPEndToEnd(t *testing.T) {
 	body := map[string]any{"user": map[string]any{"id": "u_48213"}, "event": map[string]any{"name": "order_placed", "timestamp": "2026-10-31T09:15:00Z"}}
 
 	t.Run("discovery", func(t *testing.T) {
-		out := call(toolListIntegrations, map[string]any{"capability": "events.track@v1"})
+		out := call(toolListIntegrations, map[string]any{})
 		ids := map[string]bool{}
 		for _, it := range out.field(t, "items").([]any) {
 			ids[it.(map[string]any)["integration_id"].(string)] = true
@@ -96,7 +97,8 @@ func TestMCPEndToEnd(t *testing.T) {
 			}
 		}
 		d := call(toolDescribe, map[string]any{"integration_id": "int_evt_brandA"})
-		if d.field(t, "integration", "delivery_mode") != "wait" || d.field(t, "capability", "capability") != "events.track@v1" {
+		ops, _ := d.field(t, "integration", "operations").([]any)
+		if d.field(t, "integration", "delivery_mode") != "wait" || len(ops) != 1 || ops[0].(map[string]any)["request_schema"].(map[string]any)["body"] == nil {
 			t.Errorf("describe: %s", d.json)
 		}
 	})
@@ -301,12 +303,12 @@ func onboardThroughMCP(t *testing.T, st *hubStack, cs *mcp.ClientSession, a *app
 	write("hub_admin_create_vendor", map[string]any{"vendor_id": e2eVendor, "display_name": "MCP vendor", "auth_scheme": "static_headers",
 		"regions": map[string]any{"in": st.vendorURL}, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "reason": "New analytics vendor"})
 	ep := write("hub_admin_create_vendor_endpoint", map[string]any{"vendor_id": e2eVendor, "name": "upload", "method": "POST", "path": "/1/upload",
-		"idempotent": false, "reason": "Upload endpoint"})
+		"idempotent": false, "request_schema": map[string]any{"body": map[string]any{"type": "object", "required": []any{"d"}}}, "reason": "Upload endpoint"})
 	if ep.field(t, "endpoint", "endpoint_ref") != "upload@1" {
 		t.Fatalf("endpoint: %s", ep.json)
 	}
 
-	tv := write("hub_admin_create_transformer_version", map[string]any{"transformer_id": "T1", "kind": "request", "capability": "events.track@v1",
+	tv := write("hub_admin_create_transformer_version", map[string]any{"transformer_id": "T1", "kind": "request",
 		"vendor_endpoint": "clevertap.upload@1", "expected_latest_version": 7, "yaml": configFile(t, "transformers/T1/7.yaml"),
 		"fixtures": []any{map[string]any{"name": "minimal", "input": configJSON(t, "transformers/T1/fixtures/minimal.input.json"),
 			"expected_request": configJSON(t, "transformers/T1/fixtures/minimal.expected_request.json")}},
@@ -315,9 +317,14 @@ func onboardThroughMCP(t *testing.T, st *hubStack, cs *mcp.ClientSession, a *app
 		t.Fatalf("transformer version: %s", tv.json)
 	}
 
-	write("hub_admin_create_integration", map[string]any{"integration_id": e2eIntegration, "owner_tenant": e2eTenant, "capability": "events.track@v1",
+	write("hub_admin_create_integration", map[string]any{"integration_id": e2eIntegration, "owner_tenant": e2eTenant,
 		"description": "MCP team engagement events", "reason": "MCP team events"})
+	var ops map[string]any
+	if err := json.Unmarshal([]byte("{"+trackops.Member+"}"), &ops); err != nil {
+		t.Fatal(err)
+	}
 	spec := map[string]any{
+		"operations": ops["operations"],
 		"targets": []any{map[string]any{"vendor_id": "clevertap", "account_id": "ct-brandA-in",
 			"transformer": map[string]any{"request": "T1@8", "response": "R1@2"}, "weight": 100}},
 		"failover": []any{},

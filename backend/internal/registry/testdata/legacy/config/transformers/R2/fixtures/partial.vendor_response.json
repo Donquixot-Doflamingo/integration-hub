@@ -1,0 +1,18 @@
+{
+  "status": 200,
+  "body": {
+    "status": "partial",
+    "processed": 1,
+    "unprocessed": [
+      {
+        "status": "fail",
+        "code": 509,
+        "error": "Event name is mandatory",
+        "record": {
+          "identity": "u_9",
+          "type": "event"
+        }
+      }
+    ]
+  }
+}

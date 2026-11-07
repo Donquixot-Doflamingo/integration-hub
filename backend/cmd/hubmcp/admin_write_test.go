@@ -47,7 +47,7 @@ var adminErrorStatus = map[string]int{
 	"listTenants": 400, "getTenant": 404, "createTenant": 409, "updateTenant": 412, "createApiKey": 404,
 	"listVendors": 400, "getVendor": 404, "createVendor": 409, "updateVendor": 412,
 	"listVendorEndpoints": 404, "getVendorEndpoint": 404, "createVendorEndpoint": 404,
-	"listAccounts": 400, "getAccount": 404, "updateAccount": 412, "listCapabilities": 400,
+	"listAccounts": 400, "getAccount": 404, "updateAccount": 412,
 	"getTransformer": 404, "createTransformerVersion": 422, "runTransformerGoldens": 400, "dryRunTransformer": 400,
 	"listIntegrations": 400, "getIntegration": 404, "createIntegration": 409, "getIntegrationVersion": 404,
 	"diffIntegrationVersions": 404, "createIntegrationDraft": 409, "updateIntegrationDraft": 409,
@@ -135,8 +135,8 @@ func TestToolRegistrationByTransport(t *testing.T) {
 			adminRead = append(adminRead, tool.Name)
 		}
 	}
-	if len(tenant) != 5 || len(adminRead) != 21 || len(adminWrite) != 16 {
-		t.Fatalf("contract: %d tenant, %d admin read, %d admin write tools; want 5, 21, 16", len(tenant), len(adminRead), len(adminWrite))
+	if len(tenant) != 5 || len(adminRead) != 20 || len(adminWrite) != 16 {
+		t.Fatalf("contract: %d tenant, %d admin read, %d admin write tools; want 5, 20, 16", len(tenant), len(adminRead), len(adminWrite))
 	}
 	tests := []struct {
 		name      string
@@ -225,8 +225,8 @@ func TestNoToolMapsToDeleteOrForbidden(t *testing.T) {
 	mapped := map[string]bool{}
 	a := testApp(t, hub.srv.URL, true, nil) // stdio with token: the superset of registered tools
 	registered := registeredTools(c, a.transport, true)
-	if len(registered) != 42 {
-		t.Fatalf("%d registered tools, want 42", len(registered))
+	if len(registered) != 41 {
+		t.Fatalf("%d registered tools, want 41", len(registered))
 	}
 	for _, tool := range registered {
 		mutatingOp := false
@@ -581,7 +581,7 @@ const (
 	plantedSigningSecret = "whsec_EXAMPLEexampleEXAMPLEexample00"
 )
 
-// TestSecretInInputIsRefused: for every tool (all 42 on stdio with a token), arguments carrying
+// TestSecretInInputIsRefused: for every tool (all 41 on stdio with a token), arguments carrying
 // a string that matches secret_patterns are refused with SECRET_IN_INPUT (hub_invoke: outcome
 // refused), the secret is not echoed, and the Hub is never called.
 func TestSecretInInputIsRefused(t *testing.T) {
