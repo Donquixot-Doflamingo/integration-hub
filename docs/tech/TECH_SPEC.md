@@ -1,5 +1,7 @@
 # Integration Hub — Technical Specification
 
+> **Capabilities were removed on 2026-11-07 ([ADR-0023](adr/0023-remove-capabilities-integration-owns-its-request-schema.md)).** Where this document talks about capabilities, the integration's per-operation request schema and the vendor endpoint's request schema now apply. EP-14 updates the code and docs.
+
 | | |
 | --- | --- |
 | Status | Phase 1 (documentation only, no code yet) |
