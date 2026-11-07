@@ -190,3 +190,73 @@ describe('mockAdminFetch (server side, mock builds)', () => {
 		expect(createHandlers().length).toBe(74);
 	});
 });
+
+describe('onboarding preset (HUB-436)', () => {
+	it('answers the agify world with contract-valid bodies and echoes what create calls send', async () => {
+		server.use(...presets['onboarding']!());
+		const ok = (name: string, body: unknown) => {
+			const v = schema(name);
+			expect(v(body), `${name}: ${JSON.stringify(v.errors)}`).toBe(true);
+		};
+		const vendor = (
+			await api().raw.GET('/vendors/{vendor_id}', { params: { path: { vendor_id: 'agify' } } })
+		).data;
+		ok('Vendor', vendor);
+		expect(vendor).toMatchObject({ vendor_id: 'agify', auth_scheme: 'none' });
+		const endpoint = vendor?.endpoints.at(0);
+		expect(endpoint?.request_schema).toMatchObject({ query: { required: ['name'] } });
+
+		const account = (
+			await api().raw.GET('/accounts/{account_id}', {
+				params: { path: { account_id: 'agify-public' } }
+			})
+		).data;
+		ok('Account', account);
+		expect(account?.credentials).toEqual([]);
+
+		for (const id of ['AGE_REQ', 'AGE_RES']) {
+			const t = (
+				await api().raw.GET('/transformers/{transformer_id}/versions/{version}', {
+					params: { path: { transformer_id: id, version: 1 } }
+				})
+			).data;
+			ok('TransformerVersion', t);
+			expect(t?.transformer_id).toBe(id);
+		}
+
+		const created = (
+			await api().raw.POST('/integrations', {
+				body: {
+					integration_id: 'int_age_estimate',
+					owner_tenant: 'orders-service',
+					interactive: false,
+					reason: 'Onboard the age estimate'
+				}
+			})
+		).data;
+		ok('Integration', created?.integration);
+		expect(created?.integration).toMatchObject({
+			integration_id: 'int_age_estimate',
+			interactive: false
+		});
+
+		const draft = (
+			await api().raw.GET('/integrations/{integration_id}/versions/{version}', {
+				params: { path: { integration_id: 'int_age_estimate', version: 1 } }
+			})
+		).data;
+		ok('IntegrationVersion', draft);
+		expect(draft?.spec.operations.default?.request_schema.body).toMatchObject({
+			required: ['firstName', 'lastName']
+		});
+
+		const published = (
+			await api().raw.POST('/integrations/{integration_id}/versions/{version}/publish', {
+				params: { path: { integration_id: 'int_age_estimate', version: 1 } },
+				body: { expected_active_version: null, reason: 'Go live' }
+			})
+		).data;
+		ok('PublishResult', published);
+		expect(published).toMatchObject({ integration_id: 'int_age_estimate', active_version: 1 });
+	});
+});

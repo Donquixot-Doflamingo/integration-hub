@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(frontend)` · Add an onboarding mock world for a public API · HUB-436 · F-23
+  - Mock builds and e2e can select the scenario `onboarding`: a public vendor `agify` (auth none) with endpoint `estimate@1` (`GET /`, required query `name`), a credential-less account, request and response transformers proven by samples, and integration `int_age_estimate`, all from the contract's named examples
+  - Create calls in that scenario answer with what was sent, so a flow that creates each object from the panel lands on pages that show it
+
 - 2026-11-07 · `feat(frontend)` · Show operations and their input fields on integration pages · HUB-436 · F-23
   - The integration and version pages list each operation: description, idempotent, whether live calls are checked, its request body and headers as fields with Required / Optional, PII tags and constraints, and the transformer pair each target uses for it
   - A target without a response transformer reads "pass-through" everywhere (operations, targets, failover)
