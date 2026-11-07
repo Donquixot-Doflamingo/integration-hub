@@ -1,7 +1,7 @@
 # F-05 — Tenant auth, grants & edge validation
 
 ## Summary
-The first gateway stages: authenticate the tenant key, check owner/grant, apply body limits, validate the canonical body against the pre-compiled capability schema, and mint the request id. Also the additive caller discovery endpoints (PRD DV-3) so callers, `hubmcp` and the Claude skill can find what to call (DESIGN §4.2, §5.1).
+The first gateway stages: authenticate the tenant key, check owner/grant, apply body limits, validate the body against the operation's pre-compiled request schema (when `validate_input` is on, ADR-0023), and mint the request id. Also the additive caller discovery endpoints (PRD DV-3) so callers, `hubmcp` and the Claude skill can find what to call (DESIGN §4.2, §5.1).
 
 ## Status
 `shipped` — 2026-10-31 (M3, `docs/milestones/M3.md`). Tenant rate limiting moves to M5 (EP-06).
@@ -19,9 +19,9 @@ Bad requests must fail immediately and cheaply, never after queueing (DESIGN §5
 **Goals**
 - Bearer tenant key → hash lookup in the snapshot (no DB). Keys shown once, stored hashed, rotatable with overlap (DESIGN §16.5).
 - Owner/grantee check (`integration_grants`); API key scopes `invoke`, `dry_run`, `requests_read`, each optionally narrowed to one integration as `<scope>:<integration_id>` (`hub-admin.v1.yaml#/components/schemas/ApiKeyScope`). `dry_run` is not granted by default. A missing scope gives 403 `FORBIDDEN`, reason `missing_scope`.
-- Body size limits: 1 MB default, 4 MB for LLM capabilities.
-- Schema validation with JSON-pointer details; `VALIDATION_FAILED` never deferred to a queue.
-- Discovery: `GET /v1/integrations`, `GET /v1/integrations/{id}`, `GET /v1/capabilities/{capability}`.
+- Body size limits: 1 MB (the 4 MB LLM limit waits for an explicit integration setting, HUB-439, [ADR-0024](../tech/adr/0024-llm-body-limit-and-pool-without-capability-names.md)).
+- Schema validation of the body and declared caller headers against the operation's `request_schema`, switchable per operation (`validate_input`, default on), with JSON-pointer details; `VALIDATION_FAILED` never deferred to a queue. Only declared caller headers reach the transformer as `hdr.*`.
+- Discovery: `GET /v1/integrations`, `GET /v1/integrations/{id}` (operations with their request schemas; `GET /v1/capabilities/{capability}` was removed in 2.0.0).
 
 **Non-goals**
 - mTLS tenant identity (optional per DESIGN §4.2; Release 2). Tenant rate limiting is F-13 (same stage, separate feature).
@@ -37,12 +37,13 @@ Bad requests must fail immediately and cheaply, never after queueing (DESIGN §5
 | --- | --- | --- |
 | Caller API | `GET /v1/integrations` | `contracts/openapi/hub-public.v1.yaml#listIntegrations` |
 | Caller API | `GET /v1/integrations/{id}` | `#getIntegration` |
-| Caller API | `GET /v1/capabilities/{capability}` | `#getCapability` |
 | Admin API | Tenants and API keys (create/rotate/revoke) | `contracts/openapi/hub-admin.v1.yaml#createTenant`, `#updateTenant`, `#createApiKey`, `#rotateApiKey`, `#revokeApiKey` |
 
 Discovery item shape (no vendor/account/version):
 ```json
-{ "integration_id": "int_evt_brandA", "capability": "events.track@v1", "operations": ["default"],
+{ "integration_id": "int_evt_brandA",
+  "operations": [ { "name": "default", "description": "Track a single event for a user.", "idempotent": true,
+                    "request_schema": { "body": { "type": "object", "required": ["user", "event"], "properties": { } } } } ],
   "delivery_mode": "wait", "interactive": false, "paused": false,
   "moves_money_or_quota": false, "idempotency_key_required": false,
   "description": "Brand A product analytics events" }
@@ -52,8 +53,8 @@ Discovery item shape (no vendor/account/version):
 1. Stage order (DESIGN §18.4): recover → request id + trace → auth → grant → tenant rate limit → body limit → schema validate.
 2. Unknown/revoked key → 401 `UNAUTHORIZED`. Known key, not owner/grantee → 403 `FORBIDDEN`. Unknown integration → 404 `INTEGRATION_NOT_FOUND`.
 3. Discovery returns only integrations the tenant owns or is granted; an integration outside that set is 404, not 403, to avoid enumeration.
-4. Discovery responses are built from the snapshot; fields are an allowlist (`integration_id`, `capability`, `operations`, `delivery_mode`, `interactive`, `paused`, `moves_money_or_quota`, `idempotency_key_required`, `description`; `hub-public.v1.yaml#/components/schemas/IntegrationSummary`). Contract tests assert no `vendor`, `account`, `version`, `target` keys appear (DESIGN §0).
-5. `GET /v1/capabilities/{capability}` returns request/response JSON Schemas per operation, with `x-pii` tags preserved and `interactive` flag, but no vendor schema.
+4. Discovery responses are built from the snapshot; fields are an allowlist (`integration_id`, `operations` (`OperationDescriptor`: name, description, idempotent, request_schema), `delivery_mode`, `interactive`, `paused`, `moves_money_or_quota`, `idempotency_key_required`, `description`; `hub-public.v1.yaml#/components/schemas/IntegrationSummary`). Contract tests assert no `vendor`, `account`, `version`, `target` keys appear (DESIGN §0).
+5. Each operation's `request_schema` is returned as the integration's active version declares it, `x-pii` tags preserved; there is no response schema and no vendor schema (ADR-0023).
 6. Validation happens before any outbox write in every mode. Errors list `pointer` + `reason`.
 7. Each stage publishes its own duration (`hub_overhead_ms{stage}`) and stays < 100 µs p99 except validation (0.8 ms budget; DESIGN §18.6).
 
@@ -97,7 +98,7 @@ Discovery endpoints are additive (minor contract bump).
 ## Open questions
 - ~~HTTP status for oversized bodies (413 vs 400)~~ Resolved by the contract: 413 `PAYLOAD_TOO_LARGE`.
 - ~~Do paused integrations appear in discovery?~~ Resolved by the contract: yes, owned or granted integrations are listed with `paused: true` (PRD Q10).
-- ~~Should discovery expose per-integration "idempotency required"?~~ Resolved by the contract: `moves_money_or_quota` and `idempotency_key_required` on every discovery item (integration-level, not derived from the capability).
+- ~~Should discovery expose per-integration "idempotency required"?~~ Resolved by the contract: `moves_money_or_quota` and `idempotency_key_required` on every discovery item (integration-level).
 
 ## Tickets
 HUB-080 – HUB-109 (EP-04, filter `feature: F-05`).
@@ -106,3 +107,4 @@ HUB-080 – HUB-109 (EP-04, filter `feature: F-05`).
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-07 | Validation against the operation's request schema and `validate_input`; discovery returns operations with request schemas; `getCapability` removed (ADR-0023, HUB-437) | docs-keeper |

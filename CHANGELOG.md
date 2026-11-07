@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(features)` · Update feature docs for the schema registry model (HUB-437) · HUB-437 · F-23
+  - F-03, F-04, F-05, F-06, F-08, F-09, F-10, F-14, F-16, F-17: operations on integration versions and request schemas on endpoints instead of capabilities; samples checked against both; `validate_input`; pass-through; Hub default TTL; the 1 MB body limit until HUB-439
+  - F-14 explains how per-operation pairs are checked now that transformers name no operation (HUB-345 is caught by the sample check)
+  - F-19 records what HUB-436 shipped (schema editors, operations, samples, auth none); F-20 and F-21 follow MCP and caller contracts 2.0.0; F-22 is "Release-2 features"; the feature template drops capability YAML
 - 2026-11-07 · `docs(product)` · Add F-23, US-2301 to US-2313 and PRD DV-7 for the schema registry (HUB-437) · HUB-437 · F-23
   - PRD: DV-7 records the removal of capabilities (operations on the integration, request schemas on the endpoint, samples, optional response transformer, pass-through, auth `none`); new FR-54 to FR-60; goals, non-goals, discovery, error catalogue and body limit follow contracts 2.0.0
   - USER_STORIES: thirteen F-23 stories with Given/When/Then (onboarding from the panel, schemas from a sample, samples, operation checks, `validate_input`, response output, pass-through, auth `none`, discovery, vendor switch, upgrade, skills, the planned LLM setting); older stories and journeys no longer mention capabilities

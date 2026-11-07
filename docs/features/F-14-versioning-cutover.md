@@ -18,14 +18,14 @@ Vendor and account swaps are big-bang, multi-team deploys today, with no canary 
 ## Goals / Non-goals
 **Goals**
 - Integration version = targets (vendor + account + transformers, weights) + failover + delivery + breaker overrides + webhooks + audit (DESIGN §3.4).
-- Publish validation (DESIGN §6.4): schemas compile, expressions type-check, goldens pass, response output conforms to capability response schema, references exist and are not retired, interactive → sync only, async modes have poll/callback path, LLM `supports` matches.
+- Publish validation (DESIGN §6.4, ADR-0023): operation schemas compile and transformer field reads are declared in them, expressions type-check, samples pass (`goldens_pass`), sample inputs fit the operation (`input_schema`) and produced requests fit the endpoint (`endpoint_schema`), references exist and are not retired, interactive → sync only, async modes have poll/callback path, LLM `supports` matches.
 - Rollback = publish old content as a new version; history linear.
 - Weights hashed on idempotency key or request id; shadow (logged only; dry-run-only shadow for side-effecting vendors).
 - Re-resolve at send time by default; `pending: pinned` opt-in; sessions pinned to opening version + account.
 - Every attempt records `integration_version`.
 
 **Non-goals**
-- Caller-selected versions (never, D12). Capability schema major versions (new integration ID, D11).
+- Caller-selected versions (never, D12). Breaking request schema changes should use a new integration ID (D11, guidance since ADR-0023); a version can change an operation's schema and the publish diff shows it.
 
 ## User stories
 - [US-1401](../product/USER_STORIES.md) — Immutable versions
@@ -72,12 +72,11 @@ DESIGN §6.3 request handling at publish of v8:
 - **Deviation**: one PK read per step ≥ 2 request on the sync path — [ADR-0011](../tech/adr/0011-vendor-session-lookup-on-the-request-path.md).
 
 ### Per-operation transformers (HUB-343, HUB-345) — implementation notes
-- **Shape.** A target (`targets[]`, `failover[]`, `shadow.target`) has a required default pair `transformer: {request, response}` and an optional `operations: {<operation>: {request, response}}` (registry `Target.Operations`, YAML key `operations`; admin `TargetRef.operations`, hub-admin 1.2.0). A listed operation uses its own pair, both request and response; every other operation uses `transformer`. A single-operation capability omits `operations`. Because a request transformer names one `vendor_endpoint`, this is how one integration sends `send_otp` and `verify_otp` (or `generate` and `verify`, DESIGN §3.1) to different vendor endpoints.
+- **Shape.** A target (`targets[]`, `failover[]`, `shadow.target`) has a required default pair `transformer: {request, response}` and an optional `operations: {<operation>: {request, response}}` (registry `Target.Operations`, YAML key `operations`; admin `TargetRef.operations`, hub-admin 1.2.0). A listed operation uses its own pair, both request and response; every other operation uses `transformer`. A single-operation integration omits `operations`. Because a request transformer names one `vendor_endpoint`, this is how one integration sends `send_otp` and `verify_otp` (or `generate` and `verify`, DESIGN §3.1) to different vendor endpoints.
 - **Selection.** `resolve.Resolution.Operation` is the invoked operation (path `/invoke/{operation}`, envelope `operation`); `Resolution.Pair()` = `Target.Pair(Operation)`. The edge sets it after resolve (sync, wait, dry-run with `?operation=`, session steps through `resolve.ResolveSession`); the worker sets it from the envelope when it re-resolves at send time (async, `re_resolve` and `pinned`). Failover and shadow copy the resolution and swap only `Target`, so they select the same way. Cost on the hot path: one lookup in a small map.
 - **Publish check `operations_have_transformers`** (registry `checkOperations`, run by `registry.Build`, so by config files, `hubctl apply`, the admin `validate` and `publish` and every node's snapshot build alike). It fails:
-  - for an `operations` key the capability does not declare — pointer `/targets/<i>/operations/<op>`;
-  - for an operation whose selected pair has a transformer compiled for another operation (the transformer's `operation:`) — pointer `/targets/<i>/operations/<op>` for a listed operation, `/targets/<i>/transformer` for a defaulted one. Same for `/failover/<i>/…` and `/shadow/target/…`.
-  This subsumes **HUB-345**: a multi-operation capability whose only pair is compiled for one operation fails for every other operation at `targets[i].transformer`, instead of silently running the first operation's transformers on the second operation's body. The pair references (exist, right kind, same capability, the target's vendor) are checked for every pair under `references_exist` as before. `operations: {}` is refused (name at least one operation, or omit it).
+  - for an `operations` key the version's `operations` does not declare — pointer `/targets/<i>/operations/<op>` (same for `/failover/<i>/…` and `/shadow/target/…`).
+  Since ADR-0023 transformers name no operation, so "compiled for another operation" no longer exists. **HUB-345** is covered instead by checking each selected pair against its own operation: the request transformer's `req.*` / `hdr.*` reads must be declared in that operation's request schema (`schemas_compile`) and its samples' inputs must fit it (`input_schema`). The pair references (exist, right kind, the target's vendor) are checked for every pair under `references_exist` as before. `operations: {}` is refused (name at least one operation, or omit it).
 - **Shadow `send`** must be safe for every pair of the shadow target: any non-idempotent request endpoint forces `dry_run`.
 - **Copies.** Rollback (`CopyVersion`) and weight changes (`reweigh`) copy the version through its YAML, so `operations` is kept. Breakers listed by the admin API, transformer usage counts and the paired endpoint of a response transformer walk every pair (`Target.Pairs()`).
 - **Not covered:** `hubctl dry-run <integration>` still shows the default pair of the heaviest target (HUB-350). The caller dry-run (`?operation=`) selects per operation.
@@ -86,7 +85,7 @@ DESIGN §6.3 request handling at publish of v8:
 `integrations(active_version, paused)`, `integration_versions(spec JSONB, author, reason, published_at)` immutable, `request_attempts.integration_version`, `vendor_sessions.version` (DESIGN §18.2).
 
 ## Config impact
-Integration YAML `versions[]`, `targets[].weight`, `targets[].shadow` (proposed field), `delivery.pending`, `targets[].operations` / `failover[].operations` / `shadow.target.operations` (HUB-343). Transformer YAML `operation:` names the operation a transformer is compiled for (required for a multi-operation capability).
+Integration YAML `versions[]`, `targets[].weight`, `targets[].shadow` (proposed field), `delivery.pending`, `targets[].operations` / `failover[].operations` / `shadow.target.operations` (HUB-343). Each operation is declared in the version's `operations` with its own `request_schema` (ADR-0023); transformer files no longer carry `operation:` or `capability:`.
 
 ## Observability
 | Kind | Name | Notes |
@@ -111,7 +110,7 @@ Versions never surface to callers except debug header (F-06). Publish requires `
 
 ## Testing
 - **Integration**: the six §6.3 scenarios for each change type (account, vendor, transformer) (DESIGN §19 M6 accept).
-- **Per-operation transformers (HUB-343, HUB-345)**: fixture `internal/testkit/multiop` (capability `test.two_step@v1`, operations `send` and `verify` on two endpoints, goldens per transformer). Registry: `TestPerOperationPairsBuild`, `TestOperationsHaveTransformers` (one pair for two operations = HUB-345, undeclared key, wrong operation, failover, shadow, empty map), `TestOperationsValidShapes`, `TestShadowSendChecksEveryOperationEndpoint`, `TestTargetOperationsRoundTrip`; resolve: `TestPairFollowsTheOperation`; edge: `TestPerOperationSyncSelectsThePair`, `TestPerOperationFailoverSelectsThePair`, `TestPerOperationDryRunSelectsThePair`, `TestPerOperationShadowSelectsThePair`, and (integration) `TestPerOperationWaitMode`, `TestPerOperationAsyncWorker`; admin: `TestSpecOperationsRoundTrip`, `TestOperationsProblemsMapToTheirCheck`, `TestPerOperationEndpointsAreListed`, (integration, contract-validated) `TestPerOperationSpecs`. Session steps on two endpoints: `TestExampleOTPAccountFlow`, `TestExampleOTPRefusesOnePairForBothOperations` (examples/otp-account-flow).
+- **Per-operation transformers (HUB-343, HUB-345)**: fixture `internal/testkit/multiop` (operations `send` and `verify` on two endpoints, goldens per transformer; it held a capability `test.two_step@v1` before ADR-0023). Registry: `TestPerOperationPairsBuild`, `TestOperationsHaveTransformers` (undeclared key, one pair for two operations caught because its sample does not fit the second operation = HUB-345, failover, shadow, empty map), `TestOperationsValidShapes`, `TestShadowSendChecksEveryOperationEndpoint`, `TestTargetOperationsRoundTrip`; resolve: `TestPairFollowsTheOperation`; edge: `TestPerOperationSyncSelectsThePair`, `TestPerOperationFailoverSelectsThePair`, `TestPerOperationDryRunSelectsThePair`, `TestPerOperationShadowSelectsThePair`, and (integration) `TestPerOperationWaitMode`, `TestPerOperationAsyncWorker`; admin: `TestSpecOperationsRoundTrip`, `TestOperationsProblemsMapToTheirCheck`, `TestPerOperationEndpointsAreListed`, (integration, contract-validated) `TestPerOperationSpecs`. Session steps on two endpoints: `TestExampleOTPAccountFlow`, `TestExampleOTPRefusesOnePairForBothOperations` (examples/otp-account-flow).
 - **Unit**: weight distribution ± 1 % over 10,000; same key → same target.
 - **Integration**: rollback restores behaviour; history linear.
 
@@ -132,3 +131,4 @@ HUB-170 – HUB-199 (EP-07, filter `feature: F-14`). Per-operation transformers:
 | 2026-11-02 | Vendor session implementation notes (HUB-175, HUB-183) | backend-engineer |
 | 2026-11-02 | Shipped in M6: publisher, distribution, shadow, cutover tests | backend-engineer |
 | 2026-11-07 | Per-operation transformers and the `operations_have_transformers` check (HUB-343, HUB-345) | backend-engineer |
+| 2026-11-07 | Publish checks and per-operation pairs after ADR-0023 (no capability, no transformer `operation:`; HUB-437) | docs-keeper |

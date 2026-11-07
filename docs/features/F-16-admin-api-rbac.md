@@ -17,7 +17,7 @@ Without an API, every operation (publish, pause, replay, rotate) is SQL or a red
 
 ## Goals / Non-goals
 **Goals**
-- Resources: `vendors`, `accounts` (test-connection, rotate, lifecycle), `capabilities`, `transformers` (dry-run, run-goldens), `integrations` (versions, publish, rollback, diff, pause, weights), `tenants`, `api-keys`, `registrar-endpoints`, `snapshots`, `requests` (search, timeline, unseal), `dlq` (list, replay, purge), `breakers` (state, force-open/close).
+- Resources: `vendors` (endpoints with request schemas), `accounts` (test-connection, rotate, lifecycle; none for auth `none` vendors), `transformers` (dry-run, run samples), `integrations` (versions, publish, rollback, diff, pause, weights), `tenants`, `api-keys`, `registrar-endpoints`, `snapshots`, `requests` (search, timeline, unseal), `dlq` (list, replay, purge), `breakers` (state, force-open/close).
 - OIDC (stub in dev), RBAC per role.
 - `change_log(actor, action, object, before, after, reason, at)` for every mutation; `reason` required.
 - Pagination, filtering, ETags for optimistic concurrency.
@@ -32,11 +32,11 @@ Without an API, every operation (publish, pause, replay, rotate) is SQL or a red
 - [US-1604](../product/USER_STORIES.md) — Breaker force and pause
 
 ## UX / API surface
-| Area | Representative operationIds in `contracts/openapi/hub-admin.v1.yaml` (79 in 1.0.0) |
+| Area | Representative operationIds in `contracts/openapi/hub-admin.v1.yaml` (74 in 2.0.0; the `/capabilities*` operations were removed by ADR-0023) |
 | --- | --- |
 | Vendors / accounts | `listVendors`, `createVendor`, `createVendorEndpoint`, `listAccounts`, `createAccount`, `testAccountConnection`, `addNextCredential`, `promoteNextCredential`, `deleteOldCredential`, `transitionAccountLifecycle` |
-| Capabilities / transformers | `listCapabilities`, `createCapability`, `createTransformerVersion`, `dryRunTransformer`, `runTransformerGoldens` |
-| Integrations | `listIntegrations` (admin view), `createIntegrationDraft`, `validateIntegrationVersion`, `publishIntegrationVersion`, `rollbackIntegration`, `diffIntegrationVersions`, `pauseIntegration`, `resumeIntegration`, `updateIntegrationWeights` |
+| Transformers | `listTransformers`, `getTransformer`, `createTransformerVersion` (samples checked: `goldens_pass`, `endpoint_schema`), `dryRunTransformer`, `runTransformerGoldens` |
+| Integrations | `listIntegrations` (admin view), `createIntegration` (`interactive`), `createIntegrationDraft` (operations with request schemas), `validateIntegrationVersion`, `publishIntegrationVersion`, `rollbackIntegration`, `diffIntegrationVersions`, `pauseIntegration`, `resumeIntegration`, `updateIntegrationWeights` |
 | Tenants | `createTenant`, `createApiKey`, `rotateApiKey`, `revokeApiKey`, `createRegistrarEndpoint`, `rotateRegistrarSecret` |
 | Ops | `getLatestSnapshot`, `searchRequests`, `getRequestTimeline`, `unsealRequest` (R2), `listDeadLetters`, `replayDeadLetters`, `purgeDeadLetters`, `listBreakers`, `forceOpenBreaker`, `forceCloseBreaker`, `clearBreakerForce` |
 | Audit / identity | `listChangeLog`, `getChangeLogEntry`, `getMe` |
@@ -98,3 +98,4 @@ HUB-200 – HUB-229 (EP-08, filter `feature: F-16`).
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
 | 2026-11-02 | Shipped in M7 (see docs/milestones/M7.md) | backend-engineer |
+| 2026-11-07 | Admin API 2.0.0: no capability resources; endpoint request schemas, samples, operations (ADR-0023, HUB-437) | docs-keeper |

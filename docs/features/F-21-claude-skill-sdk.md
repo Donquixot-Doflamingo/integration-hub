@@ -18,8 +18,8 @@ Callers misuse async APIs (treating 202 as done), skip idempotency keys, and ver
 ## Goals / Non-goals
 **Goals — skill content**
 - When to use the Hub (never call vendors directly; no vendor names in code).
-- Discovery: `GET /v1/integrations`, `GET /v1/capabilities/{capability}` or the `hub_*` MCP tools.
-- Building canonical bodies from the capability schema; `dry-run` first.
+- Discovery: `GET /v1/integrations`, `GET /v1/integrations/{id}` (operations with their request schemas) or the `hub_*` MCP tools.
+- Building bodies from the operation's `request_schema` (required vs optional fields, declared headers); `dry-run` first; recognising pass-through answers (`X-Hub-Pass-Through: true`) before parsing an error envelope (ADR-0023, [F-23](F-23-schema-registry.md)).
 - `Idempotency-Key` rules (mandatory for money/quota; derive from business ids; no PII).
 - Handling 200 vs 202 (`accepted|queued|in_flight`), polling `GET /v1/requests/{id}`, error codes and `retryable` / `retry_after_ms`.
 - Verifying `X-Hub-Signature` (5-min window, constant-time compare), dedupe on `X-Hub-Delivery-Id`.
@@ -52,7 +52,7 @@ Callers misuse async APIs (treating 202 as done), skip idempotency keys, and ver
 ## UX / API surface
 | Surface | Item | Contract ref |
 | --- | --- | --- |
-| SDK | `Client.Invoke` (with `WithOperation` for `/invoke/{op}`), `GetRequest`, `DryRun`, `ListIntegrations` / `AllIntegrations`, `GetIntegration`, `GetCapability` (shipped, HUB-094) | `contracts/openapi/hub-public.v1.yaml#invokeIntegration`, `#invokeIntegrationOperation`, `#getRequestStatus`, `#dryRunIntegration`, `#listIntegrations`, `#getIntegration`, `#getCapability` |
+| SDK | `Client.Invoke` (with `WithOperation` for `/invoke/{op}`), `GetRequest`, `DryRun`, `ListIntegrations` / `AllIntegrations`, `GetIntegration` (operations with `RequestSchema`), `WithHeaders`, `Result.PassThrough` and `PassThroughError` (shipped, HUB-094; `GetCapability` removed with hub-public 2.0.0) | `contracts/openapi/hub-public.v1.yaml#invokeIntegration`, `#invokeIntegrationOperation`, `#getRequestStatus`, `#dryRunIntegration`, `#listIntegrations`, `#getIntegration` |
 | SDK | `VerifySignature` | `contracts/openapi/hub-public.v1.yaml#/components/parameters/CallbackSignature`; shared signature test vectors are not in `contracts/` yet (to be added via CCR) |
 | Skill | `clients/claude-skill/integration-hub/SKILL.md` (+ `references/` examples); installs unchanged in Claude Code, claude.ai, Codex and Cursor; `clients/claude-skill/PASTE-INTO-ANY-ASSISTANT.md` for other assistants (HUB-317) | `contracts/openapi/hub-public.v1.yaml` |
 | Operator skill | `.claude/skills/hub-operator/SKILL.md` (+ `references/`), linked from `.agents/skills/hub-operator` for Codex (HUB-316) | `contracts/openapi/hub-admin.v1.yaml`, `contracts/mcp/hubmcp-tools.json` |
@@ -108,3 +108,4 @@ HUB-300 – HUB-329 (EP-11, filter `feature: F-21`).
 | 2026-11-07 | Operator skill `hub-operator` (HUB-316, US-2105) | docs agent |
 | 2026-11-07 | Consumer skill portable to Codex, Cursor and any assistant; two-step OTP flow; real hubclient API (HUB-317, US-2106) | docs agent |
 | 2026-11-07 | `references/mcp-setup.md` for Claude Code, Claude Desktop, Codex CLI and Cursor; tenant vs admin profile (HUB-318, US-2107) | docs agent |
+| 2026-11-07 | Discovery of operations and request schemas, pass-through in the SDK and skills, `GetCapability` removed (ADR-0023, HUB-437) | docs-keeper |
