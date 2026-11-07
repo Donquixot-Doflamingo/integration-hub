@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(skills)` · Describe operations_have_transformers as it works after ADR-0023 (HUB-437) · HUB-437 · F-23
+  - hub-operator says what the check refuses today (a target `operations` key the version does not declare); per-operation correctness comes from `schemas_compile` and `input_schema`
 - 2026-11-07 · `docs(tech)` · Describe the schema registry in TECH_SPEC and the tech docs (HUB-437) · HUB-437 · F-23
   - TECH_SPEC: layout, registry tables, outbox pool, what the snapshot holds (compiled operation and endpoint schemas, blob formats), registry files, `HUB_CONTRACTS_DIR` unused, console routes for vendors, endpoints, accounts, transformers and drafts, MCP results and tool counts, and new extension points (onboard an API without code; changing what callers send)
   - SECURITY: the pass-through body caveat, the caller header allowlist, console-authored transformers and auth `none` accounts in the threat model; RBAC without capabilities

@@ -198,7 +198,7 @@ Validation runs every check, including:
 - `schemas_compile`: the operation schemas compile, and every `req.*` / `hdr.*` the transformers read is declared in the operation's body / headers schema;
 - `input_schema`: each request sample's input fits the operation's request schema;
 - `endpoint_schema` and `goldens_pass`: the request samples still produce the expected request, and it fits the endpoint's schema;
-- references exist, accounts not retired, interactive only `sync`, weights sum to 100, a delivery path is declared, `operations_have_transformers`.
+- references exist, accounts not retired, interactive only `sync`, weights sum to 100, a delivery path is declared, and every target `operations` key names a declared operation (`operations_have_transformers`).
 
 Failures carry `pointer`, `sample` and `field`.
 
