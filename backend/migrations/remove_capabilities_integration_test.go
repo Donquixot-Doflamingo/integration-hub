@@ -188,7 +188,7 @@ func TestRemoveCapabilitiesMigration(t *testing.T) {
 	})
 
 	t.Run("capability table and columns are gone", func(t *testing.T) {
-		assertColumns(t, db, map[string]bool{
+		assertColumns(ctx, t, db, map[string]bool{
 			"capabilities.capability": false, "integrations.capability": false, "transformers.capability": false,
 			"requests.capability": false, "integrations.interactive": true,
 			"vendor_endpoints.request_schema": true, "vendor_endpoints.response_schema": true,
@@ -205,7 +205,7 @@ func TestRemoveCapabilitiesMigration(t *testing.T) {
 		if err := migrations.DownTo(ctx, db, 10); err != nil {
 			t.Fatal(err)
 		}
-		assertColumns(t, db, map[string]bool{
+		assertColumns(ctx, t, db, map[string]bool{
 			"capabilities.capability": true, "integrations.capability": true, "transformers.capability": true,
 			"requests.capability": true, "integrations.interactive": false,
 			"vendor_endpoints.request_schema": false, "vendor_endpoints.response_schema": false,
@@ -220,16 +220,16 @@ func TestRemoveCapabilitiesMigration(t *testing.T) {
 		if n, err := migrations.Up(ctx, db); err != nil || n != 1 {
 			t.Fatalf("up again: applied %d, %v", n, err)
 		}
-		assertColumns(t, db, map[string]bool{"capabilities.capability": false, "integrations.interactive": true})
+		assertColumns(ctx, t, db, map[string]bool{"capabilities.capability": false, "integrations.interactive": true})
 	})
 }
 
 // assertColumns checks that each "table.column" of schema hub exists (true) or not (false).
-func assertColumns(t *testing.T, db *sql.DB, want map[string]bool) {
+func assertColumns(ctx context.Context, t *testing.T, db *sql.DB, want map[string]bool) {
 	t.Helper()
 	for tc, exists := range want {
 		var n int
-		if err := db.QueryRowContext(t.Context(), `SELECT count(*) FROM information_schema.columns
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns
 			WHERE table_schema = 'hub' AND table_name || '.' || column_name = $1`, tc).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
