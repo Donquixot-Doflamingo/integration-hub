@@ -24,7 +24,7 @@ key=hk_test_example_latency_demo_local_only # local test key (tenant latency-dem
 [ "$N" -ge "$((C * ROUNDS))" ] || hub_die "N ($N) must be at least C × ROUNDS ($((C * ROUNDS)))"
 
 hub_setup "${HUB_DEMO_STATE_DIR:-$root/.demo/latency-demo}" "$here"
-hub_set_creds echo-public client_tag=latency-demo
+# The echo API is public: its vendor uses auth scheme none, so there is no credential to store.
 case "$target" in
   public)
     direct_url="https://postman-echo.com/post"

@@ -1,5 +1,0 @@
-# EXAMPLE ONLY (HUB-352). Single operation (default). The schemas live in the example contracts
-# overlay (examples/aadhaar-okyc/contracts/), never in the frozen contracts/.
-capability: demo.pan_verify@v1
-schema_ref: schemas/capabilities/demo.pan_verify.v1.request.json
-default_ttl: 10m

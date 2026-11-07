@@ -4,8 +4,6 @@
 transformer: DEMO-OTP-SEND-RES
 version: 1
 kind: response
-capability: demo.mobile_otp@v1
-operation: send_otp
 response:
   status:       '"otp_sent"'
   expires_in_s: res.body.expires_in

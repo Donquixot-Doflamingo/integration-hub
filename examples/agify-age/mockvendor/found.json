@@ -1,0 +1,13 @@
+{
+  "description": "agify stand-in: GET /?name=... answers like the public API for \"harsh\" (200, age 29).",
+  "routes": {
+    "agify": {
+      "match": { "method": "GET", "path": "/" },
+      "behaviour": {
+        "status": 200,
+        "headers": { "X-Rate-Limit-Limit": "10", "X-Rate-Limit-Remaining": "9", "X-Rate-Limit-Reset": "64792" },
+        "body": { "count": 1744, "name": "harsh", "age": 29 }
+      }
+    }
+  }
+}

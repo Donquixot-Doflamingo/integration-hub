@@ -1,0 +1,29 @@
+# EXAMPLE ONLY (HUB-435). One operation (default) with the caller's request schema (ADR-0023):
+# both names required. sync: the caller waits for the answer; fail_fast when the breaker is open.
+integration: int_age_by_name
+version: 1
+operations:
+  default:
+    description: Estimate the age for a first and last name.
+    idempotent: true
+    request_schema:
+      body:
+        type: object
+        required: [firstName, lastName]
+        additionalProperties: false
+        properties:
+          firstName: { type: string, minLength: 1, maxLength: 100, x-pii: name }
+          lastName: { type: string, minLength: 1, maxLength: 100, x-pii: name }
+        examples:
+          - { firstName: har, lastName: sh }
+    validate_input: true
+targets:
+  - vendor: agify
+    account: agify-public
+    transformer: { request: AGIFY-REQ@1, response: AGIFY-RES@1 }
+    weight: 100
+delivery:
+  mode: sync
+  on_circuit_open: fail_fast
+audit: { payloads: masked, retention: 7d }
+publish: { author: example, reason: "first version" }

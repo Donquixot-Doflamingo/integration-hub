@@ -1,4 +1,0 @@
-# EXAMPLE ONLY (HUB-353). The schema lives in the example contracts overlay.
-capability: demo.echo@v1
-schema_ref: schemas/capabilities/demo.echo.v1.request.json
-default_ttl: 10m

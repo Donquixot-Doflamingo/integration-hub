@@ -1,0 +1,13 @@
+{
+  "description": "agify stand-in: a name with no data (200, age null, count 0).",
+  "routes": {
+    "agify": {
+      "match": { "method": "GET", "path": "/" },
+      "behaviour": {
+        "status": 200,
+        "headers": { "X-Rate-Limit-Limit": "10", "X-Rate-Limit-Remaining": "8", "X-Rate-Limit-Reset": "64790" },
+        "body": { "count": 0, "name": "xqzvbn", "age": null }
+      }
+    }
+  }
+}

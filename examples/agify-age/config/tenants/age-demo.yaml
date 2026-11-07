@@ -1,0 +1,10 @@
+# EXAMPLE ONLY (HUB-435). The caller of the agify example. Its key is a test value for local use
+# only: hk_test_example_age_demo_local_only (stored here only as its sha256, like every key).
+tenant: age-demo
+display_name: Age by name (example)
+api_keys:
+  - key_id: key_01JEXAMP1E0AGE0BYNAME0000A
+    hash: sha256:f6db7367cd3137ae41350fe848c097f4a00e0d3c13da5dde7b3181557f3bdf99
+    scopes: [invoke, dry_run]
+    state: active
+rate_limit: { rps: 20, burst: 20 }

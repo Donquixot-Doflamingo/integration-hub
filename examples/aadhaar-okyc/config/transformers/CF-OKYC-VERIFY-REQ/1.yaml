@@ -4,12 +4,12 @@
 #   POST {base}/offline-aadhaar/verify   headers x-client-id, x-client-secret
 #   body {"otp": "<6 digits>", "ref_id": "<ref_id from step 1>"}   (both strings, both required)
 # ref_id comes from the vendor session send_otp opened (session.vendor_txn_id, DESIGN §14): the
-# caller never sees or sends it; it only sends X-Hub-Session.
+# caller never sees or sends it; it only sends X-Hub-Session. ref_id is required by the endpoint's
+# request_schema, so every sample runs inside a session (a sample without one would produce a
+# request the provider refuses, and the Hub refuses that sample).
 transformer: CF-OKYC-VERIFY-REQ
 version: 1
 kind: request
-capability: demo.aadhaar_okyc@v1
-operation: verify_otp
 docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/submit-otp-to-verify-aadhaar
 vendor_endpoint: cashfree-sid.okyc_verify@1
 request:

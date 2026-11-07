@@ -1,9 +1,36 @@
 # EXAMPLE ONLY (HUB-342, HUB-343). v2 differs from v1 only in the account: the example test
 # publishes v2 between step 1 and step 2 to show that a session stays on the version + account
 # that opened it. Each operation has its own transformer pair, so its own vendor endpoint:
-# send_otp uses the default pair (transformer), verify_otp its pair under operations.
+# send_otp uses the default pair (transformer), verify_otp its pair under operations. Both
+# versions declare the same two operations and their request schemas (ADR-0023).
 integration: int_demo_otp
 version: 2
+operations:
+  send_otp:
+    description: Send an OTP to the mobile number. Opens a vendor session (X-Hub-Session).
+    idempotent: false
+    request_schema:
+      body:
+        type: object
+        required: [mobile]
+        additionalProperties: false
+        properties:
+          mobile: { type: string, pattern: '^\+91[6-9][0-9]{9}$', x-pii: phone, description: "Indian mobile number in E.164 form." }
+        examples:
+          - { mobile: "+919812345678" }
+  verify_otp:
+    description: Verify the OTP the user typed, inside the session send_otp opened (send X-Hub-Session).
+    idempotent: false
+    request_schema:
+      body:
+        type: object
+        required: [mobile, otp]
+        additionalProperties: false
+        properties:
+          mobile: { type: string, pattern: '^\+91[6-9][0-9]{9}$', x-pii: phone, description: "The mobile number the OTP was sent to." }
+          otp: { type: string, pattern: '^[0-9]{4,8}$', x-pii: free_text, description: "The OTP the user typed." }
+        examples:
+          - { mobile: "+919812345678", otp: "482913" }
 targets:
   - vendor: demo-kyc
     account: demo-kyc-b
@@ -12,7 +39,7 @@ targets:
       verify_otp: { request: DEMO-OTP-VERIFY-REQ@1, response: DEMO-OTP-VERIFY-RES@1 }
     weight: 100
 delivery:
-  mode: sync                    # interactive capability: sync only (DESIGN §5.4)
+  mode: sync                    # interactive integration: sync only (DESIGN §5.4)
   on_circuit_open: fail_fast    # never queue an OTP: a person is waiting
 audit: { payloads: masked, retention: 30d }
 publish: { author: example, reason: "move OTP traffic to the second demo-kyc account" }

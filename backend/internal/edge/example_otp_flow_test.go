@@ -17,9 +17,8 @@ import (
 
 // HUB-342: examples/otp-account-flow is a registry overlay kept out of backend/config
 // (production config). The overlay is merged over it in memory, the way sessionOverlay builds its
-// test registry. The examples still use the pre-ADR-0023 layout (capability schemas on a
-// contracts side) until HUB-435 rewrites them: the merged tree goes through
-// registry.UpgradeLegacy, which leaves an already-upgraded tree as it is.
+// test registry. Like backend/config, every example keeps its schemas inline (ADR-0023, HUB-435):
+// the merged tree is built as it is, without the legacy upgrade.
 
 const exampleDir = "../../../examples/otp-account-flow"
 
@@ -43,7 +42,7 @@ func mergeInto(t testing.TB, m fstest.MapFS, src fs.FS) {
 	}
 }
 
-// exampleSources is backend/config + the example config (upgraded, see above). activeOTP picks
+// exampleSources is backend/config + the example config. activeOTP picks
 // the active version of int_demo_otp (the publish-equivalent).
 func exampleSources(t testing.TB, activeOTP int) registry.Sources {
 	t.Helper()
@@ -57,21 +56,20 @@ func exampleSources(t testing.TB, activeOTP int) registry.Sources {
 	return registry.Sources{Config: cfg}
 }
 
-// exampleTree merges the example dir's config over backend/config and upgrades the result when
-// the example still holds capabilities (its schemas in dir/contracts).
+// exampleTree merges the example dir's config over backend/config. An example must not hold a
+// pre-ADR-0023 layout (a capabilities/ folder or a contracts/ overlay): only stored archives are
+// upgraded in code (ADR-0025), never files in the repository.
 func exampleTree(t testing.TB, dir string) fstest.MapFS {
 	t.Helper()
-	cfg, contracts := fstest.MapFS{}, fstest.MapFS{}
+	cfg := fstest.MapFS{}
 	mergeInto(t, cfg, os.DirFS("../../config"))
 	mergeOverlay(t, cfg, os.DirFS(dir+"/config"))
-	if _, err := os.Stat(dir + "/contracts"); err == nil {
-		mergeInto(t, contracts, os.DirFS(dir+"/contracts"))
+	for _, old := range []string{"config/capabilities", "contracts"} {
+		if _, err := os.Stat(dir + "/" + old); err == nil {
+			t.Fatalf("%s: %s/ is the pre-ADR-0023 layout; schemas live in the integration versions and vendor endpoints", dir, old)
+		}
 	}
-	up, _, err := registry.UpgradeLegacy(cfg, contracts)
-	if err != nil {
-		t.Fatalf("%s: %v", dir, err)
-	}
-	return up
+	return cfg
 }
 
 // mergeOverlay merges an example overlay and refuses to overwrite a backend/config or contracts/

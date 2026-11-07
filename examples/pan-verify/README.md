@@ -2,7 +2,7 @@
 
 Check that a PAN exists and is valid at the Income Tax Department, and optionally that a name matches it, with one call to `int_pan_verify`. Same provider, account and tooling as the [Aadhaar OTP e-KYC example](../aadhaar-okyc/README.md) (Cashfree Secure ID, mockvendor or its sandbox); the overlay lives in [`../aadhaar-okyc/`](../aadhaar-okyc/) because both integrations share the vendor and the account. Ticket: HUB-352. Pattern: use case 7.1 of the [use-case catalogue](../../docs/use-cases/README.md#71-sync-lookup-bureau-pull-pan-penny-drop).
 
-**Everything here is an example**, not production config or a frozen contract.
+**Everything here is an example**, not production config.
 
 ## The call
 
@@ -85,10 +85,9 @@ With the Go SDK: `hub.Invoke(ctx, "int_pan_verify", map[string]any{"pan": pan, "
 
 | Path (under `../aadhaar-okyc/`) | What |
 | --- | --- |
-| `contracts/schemas/capabilities/demo.pan_verify.v1.*.json` | Example capability `demo.pan_verify@v1` (interactive, single operation): `pan` (`x-pii: government_id`), optional `name` → `pan_status`, `pan_masked`, `pan_type`, `registered_name`, `name_match`, `aadhaar_linked`, `vendor_ref` |
-| `config/vendors/cashfree-sid.yaml` | Endpoint `pan_verify@1` (`POST /pan`, 5 s timeout) |
-| `config/integrations/int_pan_verify/` | `sync`, `fail_fast`, `moves_money_or_quota: true`, audit `sealed` for `90d` (D6) |
-| `config/transformers/CF-PAN-REQ`, `CF-PAN-RES` | The mapping, with goldens |
+| `config/vendors/cashfree-sid.yaml` | Endpoint `pan_verify@1` (`POST /pan`, 5 s timeout); its `request_schema` requires `Content-Type` and a body with `pan` (`name` optional) |
+| `config/integrations/int_pan_verify/` | `interactive` (never queued), `sync`, `fail_fast`, `moves_money_or_quota: true`, audit `sealed` for `90d` (D6). Operation `default`, request schema: `pan` (`x-pii: government_id`), optional `name` (`x-pii: name`) |
+| `config/transformers/CF-PAN-REQ`, `CF-PAN-RES` | The mapping, with goldens; the response transformer returns `pan_status`, `pan_masked`, `pan_type`, `registered_name`, `name_match`, `aadhaar_linked`, `vendor_ref` |
 | `mockvendor/pan-*.json` | Scenario files (valid, invalid, provider down), shared by `run.sh` and the tests |
 
 ## Tests

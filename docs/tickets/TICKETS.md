@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **284** · done: **204** · todo: **68** · other (in-progress/in-review/blocked): **12**
+Total tickets: **285** · done: **204** · todo: **68** · other (in-progress/in-review/blocked): **13**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **284** · done: **204** · todo: **68** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 9 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 10 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3563,15 +3563,20 @@ Admin API handlers follow the new contract; append-only migration drops `hub.cap
 ### HUB-435 — hubctl, hubmcp, seed config and examples without capabilities
 - **Epic:** EP-14 · **Type:** refactor · **Area:** backend
 - **Status:** in-review · **Depends on:** HUB-433 · **Feature:** F-23 · **Stories:** US-2301, US-2309
-- **Branch:** `refactor/HUB-433-backend-no-capabilities`
+- **Branch:** `refactor/HUB-433-backend-no-capabilities` (hubctl, hubmcp, seed config); `refactor/HUB-435-examples-no-capabilities` (examples, agify example)
 
 Update hubctl (apply, plan, export, dry-run, transform test), hubmcp tools, `backend/config` seed and all examples (Aadhaar OKYC, PAN, latency demo) to [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md); add the agify age example (firstName + lastName to `?name=`, only `age` back).
 
 **Acceptance criteria**
-- [ ] No capability files or fields left in backend/config or examples
-  - backend/config, deploy/load and the testkit fixtures: done. examples/ is not converted on this branch (backend scope); the gateway upgrades their capability overlays in memory, so the example tests still pass. Converting the files and adding an agify example under examples/ is left to whoever owns examples (HUB-437)
+- [x] No capability files or fields left in backend/config or examples
+  - backend/config, deploy/load and the testkit fixtures: done on `refactor/HUB-433-backend-no-capabilities`
+  - examples/ (branch `refactor/HUB-435-examples-no-capabilities`): `otp-account-flow`, `aadhaar-okyc` (with `pan-verify`) and `latency-demo` declare operations and request schemas on their integration versions and request schemas on their vendor endpoints; no `config/capabilities`, no `contracts/` overlay, no `capability`/`operation` in transformers; `grep -rni capabilit examples/` is empty. Postman Echo uses auth `none` (the fake `client_tag` credential is gone). The two "verify without a session" samples were dropped: they produced requests without the endpoint's required `ref_id` / `txn_id`
+  - The example tests no longer call the legacy upgrade (`registry.UpgradeLegacy`) and fail if an example brings back the old layout; `examples/lib/local-hub.sh` merges config only. The legacy upgrade itself stays (ADR-0025)
 - [x] Examples run offline against mockvendor
-  - The example integration tests (`example_kyc`, `example_otp_flow`, `example_latency`) are green; the agify-like flow runs as `TestAgifyOnboardedWithoutCapabilities` against mockvendor
+  - `go test -race -run Example ./internal/edge` (unit and `-tags integration`) green: `example_kyc`, `example_otp_flow`, `example_latency`, `example_agify`
+  - `run.sh` by hand, offline, on private ports: Aadhaar happy, wrong-otp, otp-expired, invalid, rate-limited, provider-down and the Go client; PAN valid, invalid, provider-down; latency demo `LATENCY_TARGET=mock`; agify found, unknown-name, rate-limited and serve mode, all as their READMEs say
+- [x] Agify age example (`examples/agify-age`): vendor `agify` (auth `none`, region `public` = https://api.agify.io, shape checked against https://agify.io/documentation/api/reference on 2026-11-07), endpoint `estimate@1` `GET /` requiring `query.name`, account `agify-public` without credentials, `AGIFY-REQ` (`name: req.firstName + req.lastName`) and `AGIFY-RES` (only `age`) with samples (found, unknown name, 429, …), integration `int_age_by_name` (`firstName`, `lastName` required, sync). `run.sh` offline by default answers `{"age":29}`; `AGIFY_TARGET=live` calls the public API (needs direct egress: the Hub's upstream client never uses an environment proxy). `TestExampleAgifyConfigBuilds`, `TestExampleAgifyAge`
+  - Follow-up filed: HUB-441 (`frontend/e2e-real/` without capabilities)
 - [x] hubmcp tests green, still no delete tools
 
 ### HUB-436 — Console: schema registry editors, samples and no capabilities
@@ -3624,6 +3629,20 @@ The 4 MB body limit and the `llm` worker pool were chosen from `llm.*` capabilit
 - [ ] Contract change request filed and merged (admin API integration create/update/get)
 - [ ] An integration with the setting accepts bodies up to 4 MB and queues async work in the `llm` pool; others keep 1 MB and `messaging`
 - [ ] ADR-0024 superseded or closed
+
+### HUB-441 — e2e-real suite on the ADR-0023 admin API and console
+- **Epic:** EP-14 · **Type:** test · **Area:** frontend
+- **Status:** in-review · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
+- **Branch:** `refactor/HUB-435-examples-no-capabilities` (follow-up of HUB-435, with the examples it reads)
+
+`frontend/e2e-real/` (Playwright against a real stack from `scripts/dev-up.sh`, not in CI) still created capabilities and picked them in the console: `aadhaar-setup.ts` posted `/capabilities` and read the Aadhaar example's capability schemas, `aadhaar.test.ts`, `integrations.test.ts` and `transformers.test.ts` selected a capability, and the endpoint and sample screens changed with HUB-436. Move the suite to the admin API and console of [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md): operations with their request schemas on the integration draft, endpoint request schemas, transformers without a capability, samples instead of goldens.
+
+**Acceptance criteria**
+- [x] No capability left in `frontend/e2e-real/`; it calls only admin API operations and fields of the current contract (generated types in `frontend/src/lib/api/`)
+  - The setup bodies are checked with `satisfies` against `VendorCreate`, `VendorEndpointCreate`, `AccountCreate` and `TransformerVersionCreate`
+- [x] The Aadhaar e2e builds `int_aadhaar_okyc` with its two operations and their request schemas (from `examples/aadhaar-okyc`), endpoints with their request schemas, and per-operation pairs
+- [x] `npm run check` green; the suite passes against a stack from `scripts/dev-up.sh`
+  - svelte-check 0/0, eslint and prettier clean, `tsc` on `e2e-real/` clean; 18 of 18 passed twice against `scripts/dev-up.sh` on private ports (2026-11-07). `vendors.test.ts` also needed the HUB-436 endpoint pages (links and a page instead of a dialog)
 
 ## Parallel tracks
 

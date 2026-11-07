@@ -11,9 +11,71 @@ auth: bearer
 regions:
   in: http://127.0.0.1:8099
 endpoints:
-  otp_send@1:    { method: POST, path: /v1/otp/send,             timeout_ms: 3000, connect_timeout_ms: 500, idempotent: false }
-  otp_verify@1:  { method: POST, path: /v1/otp/verify,           timeout_ms: 3000, connect_timeout_ms: 500, idempotent: false }
-  bank_verify@1: { method: POST, path: /v1/bank-accounts/verify, timeout_ms: 5000, connect_timeout_ms: 500, idempotent: false }
+  # Each endpoint declares the request it accepts (ADR-0023): every request transformer sample
+  # must fit it. The bearer token is injected by the auth scheme and is never part of the checked
+  # request; X-Client-Id comes from the account's config, so it is checked.
+  otp_send@1:
+    method: POST
+    path: /v1/otp/send
+    timeout_ms: 3000
+    connect_timeout_ms: 500
+    idempotent: false
+    request_schema:
+      headers:
+        type: object
+        required: [Content-Type, X-Client-Id]
+        properties:
+          Content-Type: { type: string, pattern: '^application/json' }
+          X-Client-Id: { type: string, minLength: 1 }
+      body:
+        type: object
+        required: [mobile]
+        additionalProperties: false
+        properties:
+          mobile: { type: string, pattern: '^\+[0-9]{8,15}$' }
+  otp_verify@1:
+    method: POST
+    path: /v1/otp/verify
+    timeout_ms: 3000
+    connect_timeout_ms: 500
+    idempotent: false
+    request_schema:
+      headers:
+        type: object
+        required: [Content-Type, X-Client-Id]
+        properties:
+          Content-Type: { type: string, pattern: '^application/json' }
+          X-Client-Id: { type: string, minLength: 1 }
+      body:
+        type: object
+        required: [mobile, txn_id, otp]
+        additionalProperties: false
+        properties:
+          mobile: { type: string, pattern: '^\+[0-9]{8,15}$' }
+          txn_id: { type: string, minLength: 1 }
+          otp: { type: string, minLength: 4, maxLength: 8 }
+  bank_verify@1:
+    method: POST
+    path: /v1/bank-accounts/verify
+    timeout_ms: 5000
+    connect_timeout_ms: 500
+    idempotent: false
+    request_schema:
+      headers:
+        type: object
+        required: [Content-Type, X-Client-Id]
+        properties:
+          Content-Type: { type: string, pattern: '^application/json' }
+          X-Client-Id: { type: string, minLength: 1 }
+      body:
+        type: object
+        required: [account_number, ifsc, reference]
+        additionalProperties: false
+        properties:
+          account_number: { type: string, minLength: 1 }
+          ifsc: { type: string, minLength: 11, maxLength: 11 }
+          name_to_match: { type: string }
+          reference: { type: string, minLength: 1 }
 defaults:
   rate_limit: { per_account_rps: 20 }
   breaker: { window_s: 30, min_calls: 20, failure_ratio: 0.5, consecutive_timeouts: 5, open_s: 30, open_max_s: 600, half_open_probes: 3 }

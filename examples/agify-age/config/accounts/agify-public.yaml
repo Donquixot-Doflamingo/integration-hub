@@ -1,0 +1,8 @@
+# EXAMPLE ONLY (HUB-435). The only account of agify. Auth scheme none: no credentials, no
+# credentials_ref. region: public (https://api.agify.io) or mock (mockvendor); run.sh sets it.
+account: agify-public
+vendor: agify
+region: public
+state: active
+config: {}
+quota: { rps: 5, daily: 1000 }

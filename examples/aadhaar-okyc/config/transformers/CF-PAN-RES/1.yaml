@@ -15,7 +15,6 @@
 transformer: CF-PAN-RES
 version: 1
 kind: response
-capability: demo.pan_verify@v1
 docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/pan/verify-pan-sync
 response:
   pan_status: >-

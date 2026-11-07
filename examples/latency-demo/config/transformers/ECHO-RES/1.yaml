@@ -1,10 +1,9 @@
 # EXAMPLE ONLY (HUB-353). Postman Echo response (see ECHO-REQ@1): 200 {"args", "data", "files",
 # "form", "headers", "json": <our body>, "url"}. Only the echoed message and seq go back; the
-# echoed request headers (which include X-Hub-Demo-Client) never reach the caller.
+# echoed request headers (they name the vendor's host) never reach the caller.
 transformer: ECHO-RES
 version: 1
 kind: response
-capability: demo.echo@v1
 docs_url: https://learning.postman.com/docs/reference/developer-resources/echo-api
 response:
   status:  '"echoed"'

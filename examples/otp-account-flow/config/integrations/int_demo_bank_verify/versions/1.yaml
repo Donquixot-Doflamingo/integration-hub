@@ -1,6 +1,22 @@
-# EXAMPLE ONLY (HUB-342).
+# EXAMPLE ONLY (HUB-342). The caller's request schema is declared here (ADR-0023); the
+# transformer also reads hdr.idempotency_key, which the Hub always provides.
 integration: int_demo_bank_verify
 version: 1
+operations:
+  default:
+    description: Verify a bank account number + IFSC and return the account holder's name at the bank.
+    idempotent: false
+    request_schema:
+      body:
+        type: object
+        required: [account_number, ifsc]
+        additionalProperties: false
+        properties:
+          account_number: { type: string, pattern: '^[0-9]{9,18}$', x-pii: financial, description: "Bank account number, digits only." }
+          ifsc: { type: string, pattern: '^[A-Z]{4}0[A-Z0-9]{6}$', description: "IFSC of the branch." }
+          name: { type: string, minLength: 1, maxLength: 128, x-pii: name, description: "Name the user entered, for the name match." }
+        examples:
+          - { account_number: "50100123456789", ifsc: DEMO0001234, name: Asha Verma }
 targets:
   - vendor: demo-kyc
     account: demo-kyc-a

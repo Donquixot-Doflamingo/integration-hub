@@ -1,5 +1,4 @@
 {
   "message": "hello",
-  "seq": 7,
-  "_context": {"creds": {"client_tag": "fixture-client-tag"}}
+  "seq": 7
 }

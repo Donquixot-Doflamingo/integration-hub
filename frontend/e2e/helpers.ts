@@ -28,7 +28,21 @@ export function roleLabel(role: Role): string {
 export async function expectNoSeriousA11yViolations(page: Page) {
 	// AsyncView dims data while it refreshes (aria-busy, opacity 0.6), e.g. right after a mutation
 	// reloads the page data; axe would measure that transient state's contrast. Wait it out.
-	await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+	// Checking aria-busy alone races: a reload triggered by the mutation may not have started yet
+	// when it is checked, then dims the page while axe runs. Wait for the network to go quiet, then
+	// for no busy region and no dimmed data block.
+	await page.waitForLoadState('networkidle');
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					!document.querySelector('[aria-busy="true"]') &&
+					[...document.querySelectorAll('.data')].every(
+						(el) => getComputedStyle(el).opacity === '1'
+					)
+			)
+		)
+		.toBe(true);
 	const results = await new AxeBuilder({ page }).analyze();
 	const bad = results.violations.filter((v) => ['serious', 'critical'].includes(v.impact ?? ''));
 	expect(bad.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual(

@@ -1,7 +1,54 @@
 # EXAMPLE ONLY (HUB-351). One target, two operations, two vendor endpoints: send_otp uses the
-# default pair (transformer), verify_otp its own pair under operations (HUB-343).
+# default pair (transformer), verify_otp its own pair under operations (HUB-343). The operations
+# declare the caller's request schemas (ADR-0023); x-pii tags drive the sealed audit's masking.
 integration: int_aadhaar_okyc
 version: 1
+operations:
+  send_otp:
+    description: Send an OTP to the mobile number linked to the Aadhaar number. Opens a vendor session (X-Hub-Session).
+    idempotent: false
+    request_schema:
+      body:
+        type: object
+        required: [aadhaar_number, consent, purpose]
+        additionalProperties: false
+        properties:
+          aadhaar_number:
+            type: string
+            pattern: '^[2-9][0-9]{11}$'
+            x-pii: government_id
+            description: 12-digit Aadhaar number, digits only. Aadhaar numbers never start with 0 or 1.
+          consent:
+            type: boolean
+            const: true
+            description: >-
+              The person explicitly agreed to Aadhaar e-KYC for the stated purpose. The Hub refuses
+              the call (400) unless it is true; the value is kept in the sealed audit trail.
+          purpose:
+            type: string
+            minLength: 3
+            maxLength: 200
+            description: Purpose shown to the person when consent was taken (kept in the sealed audit trail).
+        examples:
+          - { aadhaar_number: "655675523712", consent: true, purpose: KYC for a personal loan application }
+  verify_otp:
+    description: >-
+      Verify the OTP the person typed, inside the session send_otp opened (send X-Hub-Session), and
+      return the minimal e-KYC data. The Aadhaar number is not sent again.
+    idempotent: false
+    request_schema:
+      body:
+        type: object
+        required: [otp]
+        additionalProperties: false
+        properties:
+          otp:
+            type: string
+            pattern: '^[0-9]{6}$'
+            x-pii: free_text
+            description: The 6-digit OTP the person received by SMS on the mobile number linked to their Aadhaar.
+        examples:
+          - { otp: "111000" }
 targets:
   - vendor: cashfree-sid
     account: cf-sid-test
@@ -10,7 +57,7 @@ targets:
       verify_otp: { request: CF-OKYC-VERIFY-REQ@1, response: CF-OKYC-VERIFY-RES@1 }
     weight: 100
 delivery:
-  mode: sync                    # interactive capability: a person is waiting (DESIGN §5.4)
+  mode: sync                    # interactive integration: a person is waiting (DESIGN §5.4)
   on_circuit_open: fail_fast    # never queue an OTP
 audit: { payloads: sealed, retention: 90d }   # D6: Aadhaar payloads sealed, 90 days, unseal audited
 publish: { author: example, reason: "first version" }

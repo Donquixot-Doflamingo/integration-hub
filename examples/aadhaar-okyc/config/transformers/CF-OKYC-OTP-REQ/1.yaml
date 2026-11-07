@@ -8,8 +8,6 @@
 transformer: CF-OKYC-OTP-REQ
 version: 1
 kind: request
-capability: demo.aadhaar_okyc@v1
-operation: send_otp
 docs_url: https://www.cashfree.com/docs/api-reference/vrs/v2/aadhaar/generate-otp-to-verify-aadhaar
 vendor_endpoint: cashfree-sid.okyc_otp@1
 request:

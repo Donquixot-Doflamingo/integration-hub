@@ -8,16 +8,41 @@
 # Regions: public (the internet) and mock (mockvendor on this machine, for an offline run of the
 # same script). run.sh picks one by the account's region.
 #
-# The service needs no credentials, but every Hub auth scheme needs one value: static_headers
-# sends creds.client_tag as X-Hub-Demo-Client (a non-secret tag, stored like any credential).
+# The service needs no credentials: auth scheme none (ADR-0023), so its account has none either.
 vendor: postman-echo
-auth: static_headers
+auth: none
 docs_url: https://learning.postman.com/docs/reference/developer-resources/echo-api
 regions:
   public: https://postman-echo.com
   mock:   http://127.0.0.1:8099
 endpoints:
-  echo@1: { method: POST, path: /post, timeout_ms: 5000, connect_timeout_ms: 2000, idempotent: true }
+  echo@1:
+    method: POST
+    path: /post
+    timeout_ms: 5000
+    connect_timeout_ms: 2000
+    idempotent: true
+    # What the echo API accepts here (ADR-0023): ECHO-REQ's samples must fit it. The service
+    # echoes any JSON; the schema pins the body the demo sends.
+    request_schema:
+      headers:
+        type: object
+        required: [Content-Type]
+        properties:
+          Content-Type: { type: string, pattern: '^application/json' }
+      body:
+        type: object
+        required: [message]
+        properties:
+          message: { type: string }
+          seq: { type: integer }
+    response_schema:
+      type: object
+      properties:
+        args: { type: object }
+        headers: { type: object }
+        json: { type: object }
+        url: { type: string }
 defaults:
   # High enough not to delay the demo (the account limiter would add waiting time to "via Hub");
   # politeness to the public service comes from run.sh's small N and C.

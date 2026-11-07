@@ -1,9 +1,9 @@
 # EXAMPLE ONLY (HUB-353). The only account of postman-echo. region: public (the internet) or mock
-# (mockvendor); run.sh sets it from LATENCY_TARGET. The credential is a non-secret tag.
+# (mockvendor); run.sh sets it from LATENCY_TARGET. The vendor's auth scheme is none: the account
+# has no credentials (no credentials_ref, nothing to store with hubctl creds set).
 account: echo-public
 vendor: postman-echo
 region: public
 state: active
-credentials_ref: localfile://echo-public
 config: {}
 quota: { rps: 100, daily: 10000 }

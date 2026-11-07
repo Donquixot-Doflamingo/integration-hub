@@ -1,0 +1,13 @@
+{
+  "description": "agify stand-in: the free daily allowance is used up (429 Request limit reached, window resets in 30 s).",
+  "routes": {
+    "agify": {
+      "match": { "method": "GET", "path": "/" },
+      "behaviour": {
+        "status": 429,
+        "headers": { "X-Rate-Limit-Limit": "10", "X-Rate-Limit-Remaining": "0", "X-Rate-Limit-Reset": "30" },
+        "body": { "error": "Request limit reached" }
+      }
+    }
+  }
+}

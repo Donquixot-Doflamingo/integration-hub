@@ -6,6 +6,36 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(frontend)` · Wait for page data to settle before the axe check (HUB-436) · HUB-436 · F-19
+  - The accessibility check in the console e2e no longer measures a page that is still dimmed while it reloads after a change, which made it report false contrast failures at random
+- 2026-11-07 · `docs(tickets)` · Record the HUB-435 examples and agify work (HUB-435) · HUB-435 · F-23
+  - HUB-435: every criterion checked, with the examples branch, the dropped no-session samples, the offline runs of every `run.sh` and the agify example; HUB-441 linked as the e2e-real follow-up
+- 2026-11-07 · `test(frontend)` · Move the e2e-real suite to the schema registry console (HUB-441) · HUB-441 · F-23
+  - `frontend/e2e-real/` creates no capability: the Aadhaar e2e builds `int_aadhaar_okyc` as an interactive integration with `send_otp` and `verify_otp` and their request schemas (read from `examples/aadhaar-okyc`), endpoints with their request schemas, transformers without a capability
+  - The integrations e2e sets operation `default`'s request schema (the dev registry's events schema) in the form editor; the transformers e2e uses samples; the vendors e2e uses the endpoint pages
+  - 18 of 18 pass against `scripts/dev-up.sh`; the setup bodies are checked against the generated admin types
+- 2026-11-07 · `docs(tickets)` · File HUB-441 for the e2e-real suite without capabilities (HUB-441) · HUB-441 · F-23
+  - HUB-441 (EP-14): move `frontend/e2e-real/` (real-stack Playwright suite, not in CI) to the ADR-0023 admin API and console; it still created and selected capabilities
+- 2026-11-07 · `feat(examples)` · Add the agify age example on a public API (HUB-435) · HUB-435 · F-23
+  - `examples/agify-age`: `int_age_by_name` takes `{firstName, lastName}` (both required) and returns only `{"age"}` from agify.io (`GET /?name=<first><last>`), vendor `agify` with auth `none` and an account without credentials, endpoint `estimate@1` requiring `query.name`
+  - `AGIFY-REQ` and `AGIFY-RES` ship with samples (found, unknown name, 429, invalid name, vendor down, non-JSON); an unknown name returns `{}`, a used-up allowance 429 `UPSTREAM_RATE_LIMITED` with `retry_after_ms` from `X-Rate-Limit-Reset`
+  - `run.sh` runs offline against mockvendor by default (`{"age":29}`), `AGIFY_TARGET=live` calls the public API; `TestExampleAgifyConfigBuilds` and `TestExampleAgifyAge` cover the config and the gateway flow
+- 2026-11-07 · `refactor(edge)` · Load the examples without the legacy upgrade (HUB-435) · HUB-435 · F-23
+  - The example tests merge each example over `backend/config` as it is: the in-memory capability upgrade (ADR-0025) is no longer used for examples, and an example that brings back `config/capabilities` or a `contracts/` overlay fails its test
+  - `examples/lib/local-hub.sh` copies only config (no `contracts/` merge, no `-contracts-dir`) and refuses a `contracts/` overlay; the legacy upgrade itself stays in the code for stored archives
+- 2026-11-07 · `refactor(examples)` · Run the latency demo on auth none without capabilities (HUB-435) · HUB-435 · F-23
+  - `examples/latency-demo` has no capability files or `contracts/` overlay: `int_latency_echo` declares its `default` operation and request schema, endpoint `echo@1` its request schema
+  - Postman Echo uses the auth scheme `none`: the fake `client_tag` credential, the `X-Hub-Demo-Client` header and the `hubctl creds set` step are gone; the account has no credentials
+  - `TestExampleLatencyEcho` proves no credential is loaded or sent; `LATENCY_TARGET=mock run.sh` gives the documented comparison
+- 2026-11-07 · `refactor(examples)` · Move the Aadhaar and PAN example schemas into integrations (HUB-435) · HUB-435 · F-23
+  - `examples/aadhaar-okyc` (and so `examples/pan-verify`) has no capability files or `contracts/` overlay: `int_aadhaar_okyc` declares `send_otp` and `verify_otp` (still `interactive`, `x-pii` tags kept for the sealed audit), `int_pan_verify` its `default` operation
+  - The Cashfree Secure ID endpoints declare the request they accept, from the provider's docs (body fields, `Content-Type`, `X-Api-Version`); the credential headers are never part of it
+  - `CF-OKYC-VERIFY-REQ` loses its sample without a session (it produced a request without the required `ref_id`); transformers name no capability or operation
+  - Both demos run offline as their READMEs say: every Aadhaar and PAN mock scenario and the Go client give the documented answers
+- 2026-11-07 · `refactor(examples)` · Move the OTP flow example's schemas into its integrations (HUB-435) · HUB-435 · F-23
+  - `examples/otp-account-flow` has no capability files or `contracts/` overlay any more: `int_demo_otp` (both versions) declares `send_otp` and `verify_otp` with their request schemas, `int_demo_bank_verify` its `default` operation; both integrations are `interactive`
+  - The `demo-kyc` endpoints declare the request they accept (headers and body); the sample of `DEMO-OTP-VERIFY-REQ` without a session is gone, since it produced a request without the required `txn_id`
+  - Transformers name no capability or operation; the README explains the per-operation checks that replace them
 - 2026-11-07 · `docs(agents)` · Describe the caller contract without capabilities in AGENTS and CLAUDE (HUB-437) · HUB-437 · F-23
   - The operating rules for agents and contributors describe the caller contract as integration ID + operation + request body against the operation's schema (ADR-0023); contracts/ no longer lists capability schemas; D11 is guidance
 - 2026-11-07 · `docs(tickets)` · Put HUB-437 in review with the real F-23 story ids (HUB-437) · HUB-437 · F-23

@@ -3,7 +3,6 @@
 transformer: DEMO-BANK-RES
 version: 1
 kind: response
-capability: demo.bank_account_verify@v1
 response:
   account_status: 'res.body.result == "VALID" ? "valid" : "invalid"'
   name_at_bank:   res.body.beneficiary_name
