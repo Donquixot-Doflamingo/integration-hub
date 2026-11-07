@@ -55,28 +55,31 @@ test('admin adds an endpoint, then a new version of it (versions are immutable)'
 	page
 }) => {
 	await signIn(page, { role: 'admin', next: `/vendors/${VENDOR}` });
+	// Endpoints are created on their own page with the request they accept (HUB-436, ADR-0023);
+	// this one declares nothing besides method and path.
+	await page.getByRole('link', { name: 'Add endpoint' }).click();
+	await expect(page).toHaveURL(`/vendors/${VENDOR}/endpoints/new`);
+	await page.getByLabel('Name (required)').fill('send_event');
+	await page.getByLabel('Path (required)').fill('/v1/events');
+	await page.getByRole('checkbox', { name: /^Idempotent/ }).check();
+	await page.getByLabel(/^Reason/).fill('Events endpoint for the e2e vendor');
 	await page.getByRole('button', { name: 'Add endpoint' }).click();
-	let dialog = page.getByRole('dialog', { name: `Add an endpoint to ${VENDOR}` });
-	await dialog.getByLabel(/^Name/).fill('send_event');
-	await dialog.getByLabel(/^Path/).fill('/v1/events');
-	await dialog.getByRole('checkbox', { name: /^Idempotent/ }).check();
-	await dialog.getByLabel(/^Reason/).fill('Events endpoint for the e2e vendor');
-	await dialog.getByRole('button', { name: 'Add endpoint' }).click();
-	await expect(dialog).toBeHidden();
+	await expect(page).toHaveURL(`/vendors/${VENDOR}/endpoints/send_event@1`);
 	await changeIdOf(page, 'Created endpoint send_event@1');
 
-	await page.getByRole('button', { name: /New version of send_event/ }).click();
-	dialog = page.getByRole('dialog', { name: `Create send_event@2 on ${VENDOR}` });
-	await expect(dialog.getByLabel(/^Name/)).toHaveValue('send_event');
-	await expect(dialog.getByLabel(/^Name/)).toHaveAttribute('readonly', '');
-	await expect(dialog.getByLabel(/^Path/)).toHaveValue('/v1/events');
-	await dialog.getByLabel(/^Path/).fill('/v2/events');
-	await dialog.getByLabel('Timeout (ms)', { exact: true }).fill('2500');
-	await dialog.getByLabel(/^Reason/).fill('v2 path of the events API');
-	await dialog.getByRole('button', { name: 'Create send_event@2' }).click();
-	await expect(dialog).toBeHidden();
+	await page.getByRole('link', { name: 'New version (send_event@2)' }).click();
+	await expect(page).toHaveURL(`/vendors/${VENDOR}/endpoints/new?from=send_event`);
+	await expect(page.getByLabel('Name (required)')).toHaveValue('send_event');
+	await expect(page.getByLabel('Name (required)')).toHaveAttribute('readonly', '');
+	await expect(page.getByLabel('Path (required)')).toHaveValue('/v1/events');
+	await page.getByLabel('Path (required)').fill('/v2/events');
+	await page.getByLabel('Timeout (ms)', { exact: true }).fill('2500');
+	await page.getByLabel(/^Reason/).fill('v2 path of the events API');
+	await page.getByRole('button', { name: 'Create send_event@2' }).click();
+	await expect(page).toHaveURL(`/vendors/${VENDOR}/endpoints/send_event@2`);
 	await changeIdOf(page, 'Created endpoint send_event@2');
 
+	await page.goto(`/vendors/${VENDOR}`);
 	const table = page.getByRole('region', { name: 'Endpoint versions' });
 	await expect(table.getByRole('row', { name: /send_event@2/ })).toContainText('Latest');
 	await expect(table.getByRole('row', { name: /send_event@1/ })).toContainText('/v1/events');
@@ -85,7 +88,7 @@ test('admin adds an endpoint, then a new version of it (versions are immutable)'
 	await table.getByRole('link', { name: 'send_event@1' }).click();
 	await expect(page.getByRole('note')).toContainText('A newer version exists: send_event@2');
 	await page.getByRole('link', { name: 'send_event@2' }).click();
-	await expect(page.getByRole('button', { name: 'New version (send_event@3)' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'New version (send_event@3)' })).toBeVisible();
 	await shot(page, 'vendor-endpoint');
 	await expectNoSeriousA11yViolations(page);
 });
@@ -126,8 +129,8 @@ test('editors and viewers read vendors without change controls; tenant viewers s
 		await expect(page.getByRole('heading', { level: 1 })).toHaveText(VENDOR);
 		await expect(page.getByRole('region', { name: 'Endpoint versions' })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Edit vendor' })).toHaveCount(0);
-		await expect(page.getByRole('button', { name: 'Add endpoint' })).toHaveCount(0);
-		await expect(page.getByRole('button', { name: /New version/ })).toHaveCount(0);
+		await expect(page.getByRole('link', { name: 'Add endpoint' })).toHaveCount(0);
+		await expect(page.getByRole('link', { name: /New version/ })).toHaveCount(0);
 		await expect(page.getByRole('note')).toContainText('needs the Admin role');
 		await page.goto('/vendors');
 		await expect(page.getByRole('link', { name: 'Create vendor' })).toHaveCount(0);

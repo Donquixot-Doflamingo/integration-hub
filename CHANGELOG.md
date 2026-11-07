@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(frontend)` · Move the e2e-real suite to the schema registry console (HUB-441) · HUB-441 · F-23
+  - `frontend/e2e-real/` creates no capability: the Aadhaar e2e builds `int_aadhaar_okyc` as an interactive integration with `send_otp` and `verify_otp` and their request schemas (read from `examples/aadhaar-okyc`), endpoints with their request schemas, transformers without a capability
+  - The integrations e2e sets operation `default`'s request schema (the dev registry's events schema) in the form editor; the transformers e2e uses samples; the vendors e2e uses the endpoint pages
+  - 18 of 18 pass against `scripts/dev-up.sh`; the setup bodies are checked against the generated admin types
 - 2026-11-07 · `docs(tickets)` · File HUB-441 for the e2e-real suite without capabilities (HUB-441) · HUB-441 · F-23
   - HUB-441 (EP-14): move `frontend/e2e-real/` (real-stack Playwright suite, not in CI) to the ADR-0023 admin API and console; it still created and selected capabilities
 - 2026-11-07 · `feat(examples)` · Add the agify age example on a public API (HUB-435) · HUB-435 · F-23

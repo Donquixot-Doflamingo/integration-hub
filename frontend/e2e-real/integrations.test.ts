@@ -1,14 +1,54 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { parse } from 'yaml';
 import { changeIdOf, expectNoSeriousA11yViolations, shot, signIn, uid } from './helpers';
 
 // HUB-292 against the real stack: create an integration, build its first draft in the form editor
-// (validation report errors on their fields), publish with a reason, change the weights in a new
-// draft, compare against the active version, publish again, then roll back with a reason.
+// (its operation's request schema, validation report errors on their fields), publish with a
+// reason, change the weights in a new draft, compare against the active version, publish again,
+// then roll back with a reason.
 
 const INT = uid('int-e2e');
 const REASON = 'Onboard the e2e integration';
 
 test.describe.configure({ mode: 'serial' });
+
+/**
+ * The request body schema of the dev registry's events integration (backend/config,
+ * int_evt_brandA v2): what T1@7 reads (ADR-0023, HUB-441).
+ */
+function eventsBodySchema(): Record<string, unknown> {
+	const file = join(
+		import.meta.dirname,
+		'..',
+		'..',
+		'backend',
+		'config',
+		'integrations',
+		'int_evt_brandA',
+		'versions',
+		'2.yaml'
+	);
+	const version = parse(readFileSync(file, 'utf8')) as {
+		operations: { default: { request_schema: { body: Record<string, unknown> } } };
+	};
+	return version.operations.default.request_schema.body;
+}
+
+/** Describes operation `default` and sets its request body schema in the JSON Schema view. */
+async function fillDefaultOperation(page: Page) {
+	const op = page.getByRole('listitem', { name: 'Operation default' });
+	await op.getByLabel('Description (shown to callers)').fill('Track a single event for a user.');
+	await op.getByRole('checkbox', { name: /^Idempotent/ }).check();
+	const body = op.getByRole('group', { name: 'Request body (required)' });
+	await body.getByRole('button', { name: 'Edit as JSON Schema' }).click();
+	await body
+		.getByLabel('Request body as JSON Schema')
+		.fill(JSON.stringify(eventsBodySchema(), null, 2));
+	await body.getByRole('button', { name: 'Fields', exact: true }).click();
+	await expect(body.getByRole('checkbox', { name: 'user required' })).toBeChecked();
+}
 
 /** Fills one target of the form editor. */
 async function fillTarget(page: Page, n: number, t: { account: string; weight: string }) {
@@ -16,8 +56,8 @@ async function fillTarget(page: Page, n: number, t: { account: string; weight: s
 	await target.getByLabel('Vendor').fill('clevertap');
 	await target.getByLabel('Account').fill(t.account);
 	await target.getByLabel('Weight (%)').fill(t.weight);
-	await target.getByLabel('Request transformer').fill('T1@7');
-	await target.getByLabel('Response transformer').fill('R1@2');
+	await target.getByLabel('Request transformer', { exact: true }).fill('T1@7');
+	await target.getByLabel('Response transformer (optional)', { exact: true }).fill('R1@2');
 	return target;
 }
 
@@ -27,7 +67,6 @@ test('editor creates an integration and lands on its first draft', async ({ page
 	await expect(page).toHaveURL('/integrations/new');
 	await page.getByLabel(/^Integration id/).fill(INT);
 	await page.getByLabel(/^Owner tenant/).selectOption('orders-service');
-	await page.getByLabel(/^Capability/).selectOption('events.track@v1');
 	await page.getByLabel('Description').fill('E2E events integration');
 	await page.getByLabel(/^Reason/).fill(REASON);
 	await shot(page, 'integration-new');
@@ -50,6 +89,7 @@ test('form editor: checks on the fields, validation report inline, publish with 
 	await expect(t1.getByLabel('Vendor')).toHaveAttribute('aria-invalid', 'true');
 	await expect(t1.getByText('Pick the request transformer.')).toBeVisible();
 
+	await fillDefaultOperation(page);
 	await fillTarget(page, 1, { account: 'ct-brandA-in', weight: '100' });
 	// Wait mode without a polling path or webhook: the Hub's publish check fails at /delivery.
 	await page.getByLabel('Mode').selectOption('wait');
@@ -69,6 +109,7 @@ test('form editor: checks on the fields, validation report inline, publish with 
 	await page.getByRole('button', { name: 'YAML' }).click();
 	await expect(page.getByLabel(/^Spec/)).toHaveValue(/account_id: ct-brandA-in/);
 	await expect(page.getByLabel(/^Spec/)).toHaveValue(/mode: sync/);
+	await expect(page.getByLabel(/^Spec/)).toHaveValue(/validate_input: true/);
 	await page.getByRole('button', { name: 'Form' }).click();
 
 	await page.getByRole('button', { name: 'Publish v1' }).click();

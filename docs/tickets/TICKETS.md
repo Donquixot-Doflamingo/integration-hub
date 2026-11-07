@@ -3624,15 +3624,17 @@ The 4 MB body limit and the `llm` worker pool were chosen from `llm.*` capabilit
 
 ### HUB-441 — e2e-real suite on the ADR-0023 admin API and console
 - **Epic:** EP-14 · **Type:** test · **Area:** frontend
-- **Status:** in-progress · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `refactor/HUB-435-examples-no-capabilities` (follow-up of HUB-435, with the examples it reads)
 
 `frontend/e2e-real/` (Playwright against a real stack from `scripts/dev-up.sh`, not in CI) still created capabilities and picked them in the console: `aadhaar-setup.ts` posted `/capabilities` and read the Aadhaar example's capability schemas, `aadhaar.test.ts`, `integrations.test.ts` and `transformers.test.ts` selected a capability, and the endpoint and sample screens changed with HUB-436. Move the suite to the admin API and console of [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md): operations with their request schemas on the integration draft, endpoint request schemas, transformers without a capability, samples instead of goldens.
 
 **Acceptance criteria**
-- [ ] No capability left in `frontend/e2e-real/`; it calls only admin API operations and fields of the current contract (generated types in `frontend/src/lib/api/`)
-- [ ] The Aadhaar e2e builds `int_aadhaar_okyc` with its two operations and their request schemas (from `examples/aadhaar-okyc`), endpoints with their request schemas, and per-operation pairs
-- [ ] `npm run check` green; the suite passes against a stack from `scripts/dev-up.sh`
+- [x] No capability left in `frontend/e2e-real/`; it calls only admin API operations and fields of the current contract (generated types in `frontend/src/lib/api/`)
+  - The setup bodies are checked with `satisfies` against `VendorCreate`, `VendorEndpointCreate`, `AccountCreate` and `TransformerVersionCreate`
+- [x] The Aadhaar e2e builds `int_aadhaar_okyc` with its two operations and their request schemas (from `examples/aadhaar-okyc`), endpoints with their request schemas, and per-operation pairs
+- [x] `npm run check` green; the suite passes against a stack from `scripts/dev-up.sh`
+  - svelte-check 0/0, eslint and prettier clean, `tsc` on `e2e-real/` clean; 18 of 18 passed twice against `scripts/dev-up.sh` on private ports (2026-11-07). `vendors.test.ts` also needed the HUB-436 endpoint pages (links and a page instead of a dialog)
 
 ## Parallel tracks
 
