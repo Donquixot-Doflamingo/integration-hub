@@ -322,6 +322,40 @@ export const contractMocks: ContractMocks = {
 					"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KN"
 				}
 			}
+		},
+		named: {
+			"request": {
+				"with_credentials": {
+					"account_id": "ct-brandA-in",
+					"vendor_id": "clevertap",
+					"region": "in",
+					"config": {
+						"project_id": "4RW-XXX-XXXX",
+						"brand_code": "A"
+					},
+					"quota": {
+						"rps": 50,
+						"daily": 5000000
+					},
+					"credentials": {
+						"account_id": "4RW-XXX-XXXX",
+						"passcode": "example-passcode-not-real"
+					},
+					"credential_expires_at": null,
+					"reason": "Brand A India workspace"
+				},
+				"auth_none": {
+					"account_id": "agify-public",
+					"vendor_id": "agify",
+					"region": "global",
+					"config": {},
+					"quota": {
+						"rps": 1,
+						"daily": 1000
+					},
+					"reason": "Public age estimate API, free tier"
+				}
+			}
 		}
 	},
 	createApiKey: {
@@ -715,6 +749,262 @@ export const contractMocks: ContractMocks = {
 					"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KN"
 				}
 			}
+		},
+		named: {
+			"request": {
+				"canary": {
+					"based_on": 7,
+					"spec": {
+						"operations": {
+							"default": {
+								"description": "Track a single event for a user.",
+								"idempotent": true,
+								"validate_input": true,
+								"request_schema": {
+									"body": {
+										"type": "object",
+										"required": [
+											"user",
+											"event"
+										],
+										"properties": {
+											"user": {
+												"type": "object",
+												"required": [
+													"id"
+												],
+												"properties": {
+													"id": {
+														"type": "string",
+														"x-pii": "identifier"
+													}
+												}
+											},
+											"event": {
+												"type": "object",
+												"required": [
+													"name"
+												],
+												"properties": {
+													"name": {
+														"type": "string"
+													},
+													"timestamp": {
+														"type": "string",
+														"format": "date-time"
+													},
+													"properties": {
+														"type": "object",
+														"x-pii": "free_text"
+													}
+												}
+											},
+											"context": {
+												"type": "object",
+												"properties": {
+													"campaign": {
+														"type": "string"
+													}
+												}
+											}
+										}
+									},
+									"headers": {
+										"type": "object",
+										"properties": {
+											"X-Request-Source": {
+												"type": "string"
+											}
+										}
+									}
+								}
+							}
+						},
+						"targets": [
+							{
+								"vendor_id": "clevertap",
+								"account_id": "ct-brandA-in",
+								"transformer": {
+									"request": "T1@7",
+									"response": "R1@2"
+								},
+								"weight": 90
+							},
+							{
+								"vendor_id": "clevertap",
+								"account_id": "ct-brandA-in-v2",
+								"transformer": {
+									"request": "T1@8",
+									"response": "R1@2"
+								},
+								"weight": 10
+							}
+						],
+						"failover": [],
+						"delivery": {
+							"mode": "wait",
+							"wait_ms": 3000,
+							"ttl_ms": 21600000,
+							"on_circuit_open": "queue_if_allowed",
+							"pending": "re_resolve"
+						},
+						"breaker": {
+							"override": {
+								"open_after_consecutive_timeouts": 3
+							}
+						},
+						"webhooks": [
+							{
+								"event": "delivery.status",
+								"endpoint_id": "reg_orders_cb"
+							}
+						],
+						"audit": {
+							"payloads": "masked",
+							"retention_ms": 2592000000
+						}
+					},
+					"reason": "Canary 10% to the new workspace"
+				},
+				"per_operation": {
+					"spec": {
+						"operations": {
+							"generate": {
+								"description": "Send an OTP to the mobile number linked to the Aadhaar number.",
+								"idempotent": false,
+								"validate_input": true,
+								"request_schema": {
+									"body": {
+										"type": "object",
+										"required": [
+											"aadhaar_number"
+										],
+										"properties": {
+											"aadhaar_number": {
+												"type": "string",
+												"pattern": "^[0-9]{12}$",
+												"x-pii": "government_id"
+											}
+										}
+									}
+								}
+							},
+							"verify": {
+								"description": "Verify the OTP and return the e-KYC result.",
+								"idempotent": false,
+								"validate_input": true,
+								"request_schema": {
+									"body": {
+										"type": "object",
+										"required": [
+											"otp"
+										],
+										"properties": {
+											"otp": {
+												"type": "string",
+												"pattern": "^[0-9]{6}$",
+												"x-pii": "free_text"
+											}
+										}
+									}
+								}
+							}
+						},
+						"targets": [
+							{
+								"vendor_id": "kycdemo",
+								"account_id": "kycdemo-in",
+								"transformer": {
+									"request": "AOTP_GEN@1",
+									"response": "AOTP_GEN_R@1"
+								},
+								"operations": {
+									"verify": {
+										"request": "AOTP_VER@1",
+										"response": "AOTP_VER_R@1"
+									}
+								},
+								"weight": 100
+							}
+						],
+						"failover": [],
+						"delivery": {
+							"mode": "sync",
+							"on_circuit_open": "fail_fast",
+							"pending": "re_resolve"
+						},
+						"webhooks": [],
+						"audit": {
+							"payloads": "sealed",
+							"retention_ms": 7776000000
+						}
+					},
+					"reason": "Verify OTP through its own vendor endpoint"
+				},
+				"pass_through": {
+					"spec": {
+						"operations": {
+							"default": {
+								"description": "Estimate the age for a first and last name.",
+								"idempotent": true,
+								"validate_input": true,
+								"request_schema": {
+									"body": {
+										"type": "object",
+										"required": [
+											"firstName",
+											"lastName"
+										],
+										"properties": {
+											"firstName": {
+												"type": "string",
+												"minLength": 1,
+												"x-pii": "name"
+											},
+											"lastName": {
+												"type": "string",
+												"minLength": 1,
+												"x-pii": "name"
+											}
+										}
+									},
+									"headers": {
+										"type": "object",
+										"properties": {
+											"X-Request-Source": {
+												"type": "string"
+											}
+										}
+									}
+								}
+							}
+						},
+						"targets": [
+							{
+								"vendor_id": "agify",
+								"account_id": "agify-public",
+								"transformer": {
+									"request": "AGE_REQ@1",
+									"response": null
+								},
+								"weight": 100
+							}
+						],
+						"failover": [],
+						"delivery": {
+							"mode": "sync",
+							"on_circuit_open": "fail_fast",
+							"pending": "re_resolve"
+						},
+						"webhooks": [],
+						"audit": {
+							"payloads": "masked",
+							"retention_ms": 2592000000
+						}
+					},
+					"reason": "First version of the age estimate"
+				}
+			}
 		}
 	},
 	createRegistrarEndpoint: {
@@ -1050,6 +1340,181 @@ export const contractMocks: ContractMocks = {
 					"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KN"
 				}
 			}
+		},
+		named: {
+			"request": {
+				"request": {
+					"kind": "request",
+					"vendor_endpoint": "clevertap.upload@1",
+					"expected_latest_version": 7,
+					"yaml": "transformer: T1\nkind: request\nvendor_endpoint: clevertap.upload@1\nrequest:\n  method: POST\n  path: /1/upload\n",
+					"fixtures": [
+						{
+							"name": "order_placed",
+							"input": {
+								"user": {
+									"id": "u_48213"
+								},
+								"event": {
+									"name": "order_placed",
+									"timestamp": "2026-10-31T09:15:00Z"
+								}
+							},
+							"input_headers": {
+								"X-Request-Source": "checkout"
+							},
+							"expected_request": {
+								"method": "POST",
+								"path": "/1/upload",
+								"body": {
+									"d": [
+										{
+											"identity": "u_48213",
+											"type": "event",
+											"evtName": "order_placed",
+											"ts": 1793438100
+										}
+									]
+								}
+							}
+						}
+					],
+					"docs_url": "https://developer.clevertap.com/docs/upload-events-api",
+					"reason": "Map context.campaign"
+				},
+				"request_query": {
+					"kind": "request",
+					"vendor_endpoint": "agify.estimate@1",
+					"expected_latest_version": null,
+					"yaml": "transformer: AGE_REQ\nkind: request\nvendor_endpoint: agify.estimate@1\nrequest:\n  method: GET\n  path: /\n  query:\n    name: req.firstName + req.lastName\n",
+					"fixtures": [
+						{
+							"name": "full_name",
+							"input": {
+								"firstName": "Mich",
+								"lastName": "ael"
+							},
+							"expected_request": {
+								"method": "GET",
+								"path": "/",
+								"query": {
+									"name": "Michael"
+								}
+							}
+						}
+					],
+					"docs_url": "https://agify.io/documentation",
+					"reason": "Age estimate request mapping"
+				},
+				"response": {
+					"kind": "response",
+					"expected_latest_version": null,
+					"yaml": "transformer: AGE_RES\nkind: response\nresponse:\n  age: res.body.age\n",
+					"fixtures": [
+						{
+							"name": "known_name",
+							"vendor_response": {
+								"status": 200,
+								"headers": {
+									"Content-Type": "application/json"
+								},
+								"body": {
+									"count": 21,
+									"name": "Michael",
+									"age": 57
+								}
+							},
+							"expected_response": {
+								"age": 57
+							}
+						}
+					],
+					"docs_url": "https://agify.io/documentation",
+					"reason": "Return only the age"
+				}
+			},
+			"errors": {
+				"422": {
+					"endpoint_schema": {
+						"error": {
+							"code": "PUBLISH_VALIDATION_FAILED",
+							"message": "1 sample check failed",
+							"retryable": false,
+							"retry_after_ms": null,
+							"details": [
+								{
+									"pointer": "/fixtures/1",
+									"keyword": "endpoint_schema",
+									"sample": "empty_name",
+									"field": "/query/name",
+									"message": "sample 'empty_name': /query/name must NOT have fewer than 1 characters"
+								}
+							],
+							"meta": {
+								"report": {
+									"valid": false,
+									"checks": [
+										{
+											"check": "goldens_pass",
+											"status": "pass",
+											"message": null,
+											"pointer": null
+										},
+										{
+											"check": "endpoint_schema",
+											"status": "fail",
+											"message": "/query/name must NOT have fewer than 1 characters",
+											"pointer": "/fixtures/1",
+											"sample": "empty_name",
+											"field": "/query/name"
+										}
+									]
+								}
+							},
+							"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KP"
+						}
+					},
+					"goldens_pass": {
+						"error": {
+							"code": "PUBLISH_VALIDATION_FAILED",
+							"message": "1 sample check failed",
+							"retryable": false,
+							"retry_after_ms": null,
+							"details": [
+								{
+									"pointer": "/fixtures/0/expected_request/query/name",
+									"keyword": "goldens_pass",
+									"sample": "full_name",
+									"field": "/query/name",
+									"message": "sample 'full_name': expected 'Michael', got 'Mich ael'"
+								}
+							],
+							"meta": {
+								"report": {
+									"valid": false,
+									"checks": [
+										{
+											"check": "goldens_pass",
+											"status": "fail",
+											"message": "expected 'Michael', got 'Mich ael'",
+											"pointer": "/fixtures/0/expected_request/query/name",
+											"sample": "full_name",
+											"field": "/query/name"
+										},
+										{
+											"check": "endpoint_schema",
+											"status": "pass",
+											"message": null,
+											"pointer": null
+										}
+									]
+								}
+							},
+							"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KQ"
+						}
+					}
+				}
+			}
 		}
 	},
 	createVendor: {
@@ -1163,6 +1628,61 @@ export const contractMocks: ContractMocks = {
 					"details": [],
 					"meta": null,
 					"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KN"
+				}
+			}
+		},
+		named: {
+			"request": {
+				"static_headers": {
+					"vendor_id": "clevertap",
+					"display_name": "CleverTap",
+					"auth_scheme": "static_headers",
+					"regions": {
+						"in": "https://in1.api.clevertap.com",
+						"us": "https://us1.api.clevertap.com"
+					},
+					"defaults": {
+						"rate_limit": {
+							"per_account_rps": 50
+						},
+						"breaker": {
+							"window_ms": 30000,
+							"min_calls": 20,
+							"failure_ratio": 0.5,
+							"consecutive_timeouts": 5,
+							"open_ms": 30000,
+							"open_max_ms": 600000,
+							"half_open_probes": 3
+						},
+						"health_probe": {
+							"endpoint": "upload@1",
+							"dry": true,
+							"every_ms": 30000
+						}
+					},
+					"webhook_verification": {
+						"scheme": "hmac_sha256",
+						"header": "X-CleverTap-Signature",
+						"max_skew_ms": 300000
+					},
+					"docs_url": "https://developer.clevertap.com/docs/upload-events-api",
+					"reason": "Onboard CleverTap for brand A/B engagement events"
+				},
+				"public_api": {
+					"vendor_id": "agify",
+					"display_name": "Agify",
+					"auth_scheme": "none",
+					"regions": {
+						"global": "https://api.agify.io"
+					},
+					"defaults": {
+						"rate_limit": {
+							"per_account_rps": 1
+						}
+					},
+					"webhook_verification": null,
+					"docs_url": "https://agify.io/documentation",
+					"reason": "Age estimate from first and last name (no credentials needed)"
 				}
 			}
 		}
@@ -1279,6 +1799,113 @@ export const contractMocks: ContractMocks = {
 					"details": [],
 					"meta": null,
 					"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KN"
+				}
+			}
+		},
+		named: {
+			"request": {
+				"json_body": {
+					"name": "upload",
+					"method": "POST",
+					"path": "/1/upload",
+					"timeout_ms": 3000,
+					"connect_timeout_ms": 500,
+					"idempotent": true,
+					"batch_max": 1000,
+					"request_schema": {
+						"headers": {
+							"type": "object",
+							"required": [
+								"Content-Type"
+							],
+							"properties": {
+								"Content-Type": {
+									"const": "application/json"
+								}
+							}
+						},
+						"body": {
+							"type": "object",
+							"required": [
+								"d"
+							],
+							"properties": {
+								"d": {
+									"type": "array",
+									"minItems": 1,
+									"maxItems": 1000,
+									"items": {
+										"type": "object",
+										"required": [
+											"identity",
+											"type",
+											"evtName"
+										],
+										"properties": {
+											"identity": {
+												"type": "string",
+												"minLength": 1
+											},
+											"type": {
+												"const": "event"
+											},
+											"evtName": {
+												"type": "string",
+												"minLength": 1
+											},
+											"ts": {
+												"type": "integer"
+											},
+											"evtData": {
+												"type": "object"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"reason": "Upload events endpoint"
+				},
+				"query_only": {
+					"name": "estimate",
+					"method": "GET",
+					"path": "/",
+					"timeout_ms": 2000,
+					"connect_timeout_ms": 500,
+					"idempotent": true,
+					"request_schema": {
+						"query": {
+							"type": "object",
+							"required": [
+								"name"
+							],
+							"properties": {
+								"name": {
+									"type": "string",
+									"minLength": 1
+								}
+							}
+						}
+					},
+					"response_schema": {
+						"type": "object",
+						"properties": {
+							"count": {
+								"type": "integer"
+							},
+							"name": {
+								"type": "string"
+							},
+							"age": {
+								"type": [
+									"integer",
+									"null"
+								]
+							}
+						}
+					},
+					"reason": "Age estimate endpoint"
 				}
 			}
 		}
@@ -2679,6 +3306,202 @@ export const contractMocks: ContractMocks = {
 					"details": [],
 					"meta": null,
 					"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KN"
+				}
+			}
+		},
+		named: {
+			"response": {
+				"single_operation": {
+					"integration_id": "int_evt_brandA",
+					"version": 7,
+					"state": "published",
+					"spec": {
+						"operations": {
+							"default": {
+								"description": "Track a single event for a user.",
+								"idempotent": true,
+								"validate_input": true,
+								"request_schema": {
+									"body": {
+										"type": "object",
+										"required": [
+											"user",
+											"event"
+										],
+										"properties": {
+											"user": {
+												"type": "object",
+												"required": [
+													"id"
+												],
+												"properties": {
+													"id": {
+														"type": "string",
+														"x-pii": "identifier"
+													}
+												}
+											},
+											"event": {
+												"type": "object",
+												"required": [
+													"name"
+												],
+												"properties": {
+													"name": {
+														"type": "string"
+													},
+													"timestamp": {
+														"type": "string",
+														"format": "date-time"
+													},
+													"properties": {
+														"type": "object",
+														"x-pii": "free_text"
+													}
+												}
+											},
+											"context": {
+												"type": "object",
+												"properties": {
+													"campaign": {
+														"type": "string"
+													}
+												}
+											}
+										}
+									},
+									"headers": {
+										"type": "object",
+										"properties": {
+											"X-Request-Source": {
+												"type": "string"
+											}
+										}
+									}
+								}
+							}
+						},
+						"targets": [
+							{
+								"vendor_id": "clevertap",
+								"account_id": "ct-brandA-in",
+								"transformer": {
+									"request": "T1@7",
+									"response": "R1@2"
+								},
+								"weight": 100
+							}
+						],
+						"failover": [],
+						"delivery": {
+							"mode": "wait",
+							"wait_ms": 3000,
+							"ttl_ms": 21600000,
+							"on_circuit_open": "queue_if_allowed",
+							"pending": "re_resolve"
+						},
+						"webhooks": [
+							{
+								"event": "delivery.status",
+								"endpoint_id": "reg_orders_cb"
+							}
+						],
+						"audit": {
+							"payloads": "masked",
+							"retention_ms": 2592000000
+						}
+					},
+					"based_on": 6,
+					"author": "priya@example.com",
+					"reason": "Add breaker override",
+					"created_at": "2026-10-29T08:00:00Z",
+					"published_at": "2026-10-29T08:05:00Z",
+					"published_by": "priya@example.com",
+					"snapshot_version": 412
+				},
+				"per_operation": {
+					"integration_id": "int_kyc_otp",
+					"version": 2,
+					"state": "published",
+					"spec": {
+						"operations": {
+							"generate": {
+								"description": "Send an OTP to the mobile number linked to the Aadhaar number.",
+								"idempotent": false,
+								"validate_input": true,
+								"request_schema": {
+									"body": {
+										"type": "object",
+										"required": [
+											"aadhaar_number"
+										],
+										"properties": {
+											"aadhaar_number": {
+												"type": "string",
+												"pattern": "^[0-9]{12}$",
+												"x-pii": "government_id"
+											}
+										}
+									}
+								}
+							},
+							"verify": {
+								"description": "Verify the OTP and return the e-KYC result.",
+								"idempotent": false,
+								"validate_input": true,
+								"request_schema": {
+									"body": {
+										"type": "object",
+										"required": [
+											"otp"
+										],
+										"properties": {
+											"otp": {
+												"type": "string",
+												"pattern": "^[0-9]{6}$",
+												"x-pii": "free_text"
+											}
+										}
+									}
+								}
+							}
+						},
+						"targets": [
+							{
+								"vendor_id": "kycdemo",
+								"account_id": "kycdemo-in",
+								"transformer": {
+									"request": "AOTP_GEN@1",
+									"response": "AOTP_GEN_R@1"
+								},
+								"operations": {
+									"verify": {
+										"request": "AOTP_VER@1",
+										"response": "AOTP_VER_R@1"
+									}
+								},
+								"weight": 100
+							}
+						],
+						"failover": [],
+						"delivery": {
+							"mode": "sync",
+							"on_circuit_open": "fail_fast",
+							"pending": "re_resolve"
+						},
+						"webhooks": [],
+						"audit": {
+							"payloads": "sealed",
+							"retention_ms": 7776000000
+						}
+					},
+					"based_on": 1,
+					"author": "priya@example.com",
+					"reason": "Verify OTP through its own vendor endpoint",
+					"created_at": "2026-11-07T09:00:00Z",
+					"published_at": "2026-11-07T09:10:00Z",
+					"published_by": "priya@example.com",
+					"snapshot_version": 431
 				}
 			}
 		}
@@ -6099,6 +6922,64 @@ export const contractMocks: ContractMocks = {
 					"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KN"
 				}
 			}
+		},
+		named: {
+			"response": {
+				"passed": {
+					"passed": true,
+					"total": 2,
+					"failed": 0,
+					"results": [
+						{
+							"fixture": "order_placed",
+							"passed": true,
+							"diff": [],
+							"schema_errors": []
+						},
+						{
+							"fixture": "no_timestamp",
+							"passed": true,
+							"diff": [],
+							"schema_errors": []
+						}
+					],
+					"duration_ms": 12
+				},
+				"failed": {
+					"passed": false,
+					"total": 2,
+					"failed": 1,
+					"results": [
+						{
+							"fixture": "full_name",
+							"passed": true,
+							"diff": [],
+							"schema_errors": []
+						},
+						{
+							"fixture": "empty_last_name",
+							"passed": false,
+							"diff": [
+								{
+									"op": "replace",
+									"path": "/query/name",
+									"before": "Michael",
+									"after": ""
+								}
+							],
+							"schema_errors": [
+								{
+									"field": "/query/name",
+									"keyword": "minLength",
+									"message": "must NOT have fewer than 1 characters"
+								}
+							],
+							"error": null
+						}
+					],
+					"duration_ms": 4
+				}
+			}
 		}
 	},
 	searchRequests: {
@@ -6390,6 +7271,41 @@ export const contractMocks: ContractMocks = {
 					"details": [],
 					"meta": null,
 					"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KN"
+				}
+			}
+		},
+		named: {
+			"errors": {
+				"409": {
+					"RETIRE_BLOCKED": {
+						"error": {
+							"code": "RETIRE_BLOCKED",
+							"message": "Account still referenced by pinned requests or open vendor sessions",
+							"retryable": true,
+							"retry_after_ms": 600000,
+							"details": [],
+							"meta": {
+								"pinned_requests": 12,
+								"open_sessions": 3,
+								"active_versions": []
+							},
+							"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KH"
+						}
+					},
+					"CONFLICT": {
+						"error": {
+							"code": "CONFLICT",
+							"message": "Cannot transition from 'active' to 'retired'",
+							"retryable": false,
+							"retry_after_ms": null,
+							"details": [],
+							"meta": {
+								"from": "active",
+								"to": "retired"
+							},
+							"request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KJ"
+						}
+					}
 				}
 			}
 		}

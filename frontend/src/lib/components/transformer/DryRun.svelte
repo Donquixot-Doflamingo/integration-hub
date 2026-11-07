@@ -47,12 +47,20 @@
 	$effect.pre(() => {
 		const first = withSample[0];
 		body = first ? prettyJson(sample(first.name)) : '';
+		headers = headersOf(first?.name ?? '');
 		fixture = first?.name ?? '';
 	});
+
+	/** A request sample's caller headers, as the headers field shows them. */
+	function headersOf(name: string): string {
+		const h = mode === 'request' ? v.fixtures.find((x) => x.name === name)?.input_headers : null;
+		return h ? prettyJson(h) : '';
+	}
 
 	function loadFixture() {
 		const value = sample(fixture);
 		if (value !== undefined) body = prettyJson(value);
+		headers = headersOf(fixture);
 		fields = {};
 	}
 

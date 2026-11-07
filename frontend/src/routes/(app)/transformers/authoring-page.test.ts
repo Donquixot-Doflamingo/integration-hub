@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,8 +17,9 @@ import { load as newLoad } from './new/+page';
 import ListPage from './+page.svelte';
 import { load as listLoad } from './+page';
 
-// HUB-293: create transformer versions from the console. Goldens of the exact draft gate
-// "Create" (the API refuses failing goldens, 422), per-fixture diffs, masked dry run.
+// HUB-293, HUB-436: create transformer versions from the console. A passing run of the exact
+// draft's samples gates "Create" (the API refuses failing samples, 422), per-sample diffs and
+// endpoint-schema violations on the field that broke, masked dry run.
 
 const goto = vi.fn();
 vi.mock('$app/navigation', () => ({
@@ -72,17 +73,17 @@ beforeEach(() => {
 });
 
 describe('new version of a transformer', () => {
-	it('starts from the latest version; create stays locked until goldens of this draft pass', async () => {
+	it('starts from the latest version; create stays locked until samples of this draft pass', async () => {
 		const bodies = goldensAnswers(FAIL, PASS);
 		await renderVersion();
 		const source = (await screen.findByLabelText(/^Source/)) as HTMLTextAreaElement;
 		expect(source.value).toBe(contractMocks.getTransformer.example.latest.yaml);
 		const create = screen.getByRole('button', { name: 'Create T1@8' });
 		expect(create).toBeDisabled();
-		expect(screen.getByText(/Run the goldens on this draft first/)).toBeInTheDocument();
+		expect(screen.getByText(/Run the samples on this draft first/)).toBeInTheDocument();
 
-		await userEvent.click(screen.getByRole('button', { name: 'Run goldens on this draft' }));
-		expect(await screen.findByText('Goldens fail')).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Run samples on this draft' }));
+		expect(await screen.findByText('Samples fail')).toBeInTheDocument();
 		// The failing case with its diff (expected vs produced).
 		const failed = screen
 			.getAllByRole('listitem', { name: /order_placed/ })
@@ -90,7 +91,7 @@ describe('new version of a transformer', () => {
 		expect(failed).toHaveTextContent('/1/wrong');
 		expect(failed).toHaveTextContent('/1/upload');
 		expect(create).toBeDisabled();
-		expect(screen.getByText(/1 of 1 goldens fail/)).toBeInTheDocument();
+		expect(screen.getByText(/1 of 1 samples fail/)).toBeInTheDocument();
 		expect(bodies[0]).toMatchObject({
 			draft: {
 				kind: 'request',
@@ -99,8 +100,8 @@ describe('new version of a transformer', () => {
 			fixtures: [{ name: 'order_placed' }]
 		});
 
-		await userEvent.click(screen.getByRole('button', { name: 'Run goldens on this draft' }));
-		expect(await screen.findByText('All goldens pass')).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Run samples on this draft' }));
+		expect(await screen.findByText('All samples pass')).toBeInTheDocument();
 		expect(create).toBeEnabled();
 
 		// Any change to the draft locks it again until the goldens run on the new text.
@@ -119,8 +120,8 @@ describe('new version of a transformer', () => {
 			})
 		);
 		await renderVersion();
-		await userEvent.click(await screen.findByRole('button', { name: 'Run goldens on this draft' }));
-		await screen.findByText('All goldens pass');
+		await userEvent.click(await screen.findByRole('button', { name: 'Run samples on this draft' }));
+		await screen.findByText('All samples pass');
 		await userEvent.click(screen.getByRole('button', { name: 'Create T1@8' }));
 		const dialog = screen.getByRole('dialog', { name: 'Create T1@8' });
 		await userEvent.type(within(dialog).getByLabelText(/^Reason/), 'Map context.campaign');
@@ -137,7 +138,7 @@ describe('new version of a transformer', () => {
 		});
 	});
 
-	it('a 422 from the Hub (goldens failed there) keeps the dialog open with the report', async () => {
+	it('a 422 from the Hub (samples failed there) keeps the dialog open with the report', async () => {
 		goldensAnswers(PASS);
 		server.use(
 			mockError('createTransformerVersion', 422, {
@@ -146,8 +147,8 @@ describe('new version of a transformer', () => {
 			})
 		);
 		await renderVersion();
-		await userEvent.click(await screen.findByRole('button', { name: 'Run goldens on this draft' }));
-		await screen.findByText('All goldens pass');
+		await userEvent.click(await screen.findByRole('button', { name: 'Run samples on this draft' }));
+		await screen.findByText('All samples pass');
 		await userEvent.click(screen.getByRole('button', { name: 'Create T1@8' }));
 		const dialog = screen.getByRole('dialog', { name: 'Create T1@8' });
 		await userEvent.type(within(dialog).getByLabelText(/^Reason/), 'Map context.campaign');
@@ -158,7 +159,7 @@ describe('new version of a transformer', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 
-	it('API pointers into the fixtures land on the fixture field', async () => {
+	it('API pointers into the samples land on the sample field', async () => {
 		server.use(
 			mockError('runTransformerGoldens', 400, {
 				details: [
@@ -167,8 +168,8 @@ describe('new version of a transformer', () => {
 			})
 		);
 		await renderVersion();
-		await userEvent.click(await screen.findByRole('button', { name: 'Run goldens on this draft' }));
-		const fixture = screen.getByRole('listitem', { name: /^Fixture 1/ });
+		await userEvent.click(await screen.findByRole('button', { name: 'Run samples on this draft' }));
+		const fixture = screen.getByRole('listitem', { name: /^Sample 1/ });
 		await waitFor(() =>
 			expect(within(fixture).getByLabelText('Expected vendor request')).toHaveAttribute(
 				'aria-invalid',
@@ -199,12 +200,124 @@ describe('new version of a transformer', () => {
 	});
 });
 
+describe('samples: which sample and which field broke (HUB-436)', () => {
+	const FAILED = contractMocks.runTransformerGoldens.named!.response!.failed!;
+
+	async function renderNew() {
+		const data = newLoad({ fetch, url: new URL('http://console.test/transformers/new') } as never);
+		render(NewPage, { props: { data: { access: editor, ...(data as object) } as never } });
+		await screen.findByLabelText(/^Transformer id/);
+		return userEvent.setup();
+	}
+
+	it('a failing sample lists the broken fields on its card and in the run result', async () => {
+		goldensAnswers(FAILED);
+		const user = await renderNew();
+		await user.type(screen.getByLabelText(/^Transformer id/), 'AGE_REQ');
+		await user.type(screen.getByLabelText('Vendor endpoint'), 'clevertap.upload@1');
+		await user.type(screen.getByLabelText(/^Source/), 'transformer: AGE_REQ');
+		const sample = screen.getByRole('listitem', { name: /^Sample 1/ });
+		const name = within(sample).getByLabelText('Name');
+		await user.clear(name);
+		await user.type(name, 'empty_last_name');
+		await fireEvent.input(within(sample).getByLabelText('Input body'), {
+			target: { value: '{"firstName": "Michael", "lastName": ""}' }
+		});
+		await fireEvent.input(within(sample).getByLabelText('Expected vendor request'), {
+			target: { value: '{"method": "GET", "path": "/", "query": {"name": "Michael"}}' }
+		});
+		await user.click(screen.getByRole('button', { name: 'Run samples on this draft' }));
+		const why = await within(sample).findByRole('group', {
+			name: 'Why sample empty_last_name fails'
+		});
+		expect(why).toHaveTextContent(
+			'/query/name breaks the endpoint schema: must NOT have fewer than 1 characters (minLength)'
+		);
+		expect(why).toHaveTextContent(
+			'/query/name differs from the expected output: expected "Michael", produced ""'
+		);
+		expect(
+			screen.getByRole('group', { name: 'Endpoint schema violations of empty_last_name' })
+		).toHaveTextContent('/query/name');
+		expect(screen.getByRole('button', { name: 'Create AGE_REQ@1' })).toBeDisabled();
+		expect(screen.getByText(/1 of 2 samples fail/)).toBeInTheDocument();
+	});
+
+	it('a 422 endpoint_schema refusal names the sample and the field on its card', async () => {
+		goldensAnswers(PASS);
+		const refusal = contractMocks.createTransformerVersion.named!.errors!['422']!.endpoint_schema!;
+		server.use(mockError('createTransformerVersion', 422, refusal.error));
+		await renderVersion();
+		const sample = await screen.findByRole('listitem', { name: /^Sample 1/ });
+		const name = within(sample).getByLabelText('Name');
+		await userEvent.clear(name);
+		await userEvent.type(name, 'empty_name');
+		await userEvent.click(screen.getByRole('button', { name: 'Run samples on this draft' }));
+		await screen.findByText('All samples pass');
+		await userEvent.click(screen.getByRole('button', { name: 'Create T1@8' }));
+		const dialog = screen.getByRole('dialog', { name: 'Create T1@8' });
+		await userEvent.type(within(dialog).getByLabelText(/^Reason/), 'Map the name query');
+		await userEvent.click(within(dialog).getByRole('button', { name: 'Create T1@8' }));
+		expect(await within(dialog).findByRole('alert')).toHaveTextContent('PUBLISH_VALIDATION_FAILED');
+		const why = within(sample).getByRole('group', { name: 'Why sample empty_name fails' });
+		expect(why).toHaveTextContent(
+			/\/query\/name breaks the endpoint schema: .*must NOT have fewer than 1 characters/
+		);
+	});
+
+	it("starts a sample's expected request from what the endpoint accepts", async () => {
+		await renderVersion();
+		const sample = await screen.findByRole('listitem', { name: /^Sample 1/ });
+		await userEvent.click(
+			within(sample).getByRole('button', { name: 'Start from what clevertap.upload@1 accepts' })
+		);
+		const expected = within(sample).getByLabelText(
+			'Expected vendor request'
+		) as HTMLTextAreaElement;
+		expect(JSON.parse(expected.value)).toEqual({
+			method: 'POST',
+			path: '/1/upload',
+			headers: { 'Content-Type': 'application/json' },
+			body: { d: [] }
+		});
+		expect(screen.getByText('What clevertap.upload@1 accepts')).toBeInTheDocument();
+	});
+
+	it('a response transformer has no endpoint; its samples are vendor response -> output', async () => {
+		const bodies = goldensAnswers(PASS);
+		const user = await renderNew();
+		await user.selectOptions(screen.getByLabelText('Kind'), 'response');
+		expect(screen.queryByLabelText('Vendor endpoint')).toBeNull();
+		await user.type(screen.getByLabelText(/^Transformer id/), 'AGE_RES');
+		await user.type(screen.getByLabelText(/^Source/), 'transformer: AGE_RES');
+		const sample = screen.getByRole('listitem', { name: /^Sample 1/ });
+		await fireEvent.input(within(sample).getByLabelText('Vendor response'), {
+			target: { value: '{"status": 200, "body": {"count": 21, "name": "Michael", "age": 57}}' }
+		});
+		await fireEvent.input(within(sample).getByLabelText('Expected output'), {
+			target: { value: '{"age": 57}' }
+		});
+		await user.click(screen.getByRole('button', { name: 'Run samples on this draft' }));
+		await screen.findByText('All samples pass');
+		expect(bodies[0]).toEqual({
+			draft: { kind: 'response', yaml: 'transformer: AGE_RES' },
+			fixtures: [
+				{
+					name: 'case_1',
+					vendor_response: { status: 200, body: { count: 21, name: 'Michael', age: 57 } },
+					expected_response: { age: 57 }
+				}
+			]
+		});
+	});
+});
+
 describe('new transformer and roles', () => {
-	it('a new id needs an id and the draft fields before goldens run', async () => {
+	it('a new id needs an id and the draft fields before samples run', async () => {
 		const bodies = goldensAnswers(PASS);
 		const data = newLoad({ fetch, url: new URL('http://console.test/transformers/new') } as never);
 		render(NewPage, { props: { data: { access: editor, ...(data as object) } as never } });
-		await userEvent.click(await screen.findByRole('button', { name: 'Run goldens on this draft' }));
+		await userEvent.click(await screen.findByRole('button', { name: 'Run samples on this draft' }));
 		expect(screen.getByLabelText(/^Transformer id/)).toHaveAttribute('aria-invalid', 'true');
 		expect(
 			screen
@@ -218,7 +331,7 @@ describe('new transformer and roles', () => {
 	it.each<Role>(['viewer', 'tenant_viewer'])('%s gets no authoring controls', async (role) => {
 		await renderVersion(role);
 		expect(screen.getByRole('note')).toHaveTextContent('needs the Editor role');
-		expect(screen.queryByRole('button', { name: /Run goldens/ })).toBeNull();
+		expect(screen.queryByRole('button', { name: /Run samples/ })).toBeNull();
 		const access = accessFromRoles([role], role === 'tenant_viewer' ? ['orders-service'] : []);
 		const data = listLoad({ fetch, url: new URL('http://console.test/transformers') } as never);
 		render(ListPage, { props: { data: { access, ...(data as object) } as never } });

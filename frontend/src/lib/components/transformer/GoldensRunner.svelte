@@ -35,13 +35,13 @@
 						: new HubApiError({
 								status: r.status,
 								code: 'VALIDATION_FAILED',
-								message: d?.fields?.ref ?? 'The goldens could not run.'
+								message: d?.fields?.ref ?? 'The samples could not run.'
 							});
 				} else {
 					error = new HubApiError({
 						status: r.type === 'error' ? (r.status ?? 500) : 500,
 						code: 'UNEXPECTED_RESPONSE',
-						message: 'The console could not run the goldens. Try again.'
+						message: 'The console could not run the samples. Try again.'
 					});
 				}
 			} finally {
@@ -55,14 +55,14 @@
 	<input type="hidden" name="ref" value={transformerRef} />
 	<button type="submit" aria-disabled={running ? 'true' : undefined}>
 		<Icon name="retry" size={16} />{running
-			? 'Running goldens...'
-			: `Run goldens for ${transformerRef}`}
+			? 'Running samples...'
+			: `Run samples for ${transformerRef}`}
 	</button>
-	<span class="hint">Runs every fixture now; nothing is saved or sent to a vendor.</span>
+	<span class="hint">Runs every sample now; nothing is saved or sent to a vendor.</span>
 </form>
-{#if running}<p class="visually-hidden" role="status">Running goldens</p>{/if}
+{#if running}<p class="visually-hidden" role="status">Running samples</p>{/if}
 {#if error}
-	<ErrorPanel {error} context="Could not run the goldens" headingLevel={3} />
+	<ErrorPanel {error} context="Could not run the samples" headingLevel={3} />
 {:else if result}
 	<GoldensResult {result} refLabel={transformerRef} />
 {/if}

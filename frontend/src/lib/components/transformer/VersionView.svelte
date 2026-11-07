@@ -76,7 +76,7 @@
 			</dd>
 		</div>
 		<div>
-			<dt>Stored goldens</dt>
+			<dt>Samples when stored</dt>
 			<dd>
 				<StatusBadge
 					tone={v.goldens.passed ? 'ok' : 'danger'}
@@ -89,11 +89,11 @@
 	</dl>
 
 	<section aria-labelledby="{uid}-goldens">
-		<h3 id="{uid}-goldens">Goldens</h3>
+		<h3 id="{uid}-goldens">Run the samples</h3>
 		<RoleGate {access} op="runTransformerGoldens">
 			{#key v.ref}<GoldensRunner transformerRef={v.ref} />{/key}
 			{#snippet denied(role)}
-				<p class="muted">Running goldens needs the {role} role. The stored result is above.</p>
+				<p class="muted">Running samples needs the {role} role. The stored result is above.</p>
 			{/snippet}
 		</RoleGate>
 	</section>

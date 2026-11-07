@@ -5,7 +5,10 @@ import {
 	createBody,
 	draftKey,
 	emptyValues,
+	expectedRequestSkeleton,
 	fieldsFor,
+	findingsFromError,
+	findingsFromRun,
 	problems,
 	rowsFromJson,
 	valuesFromVersion,
@@ -200,5 +203,43 @@ describe('transformer authoring form', () => {
 		expect(rowsFromJson('[{"name":"a","outcome":"x","json":{"input":"{}","evil":"1"}}]')).toEqual([
 			{ name: 'a', outcome: 'response', json: { input: '{}' } }
 		]);
+	});
+});
+
+describe('sample findings (HUB-436)', () => {
+	it('a run: schema violations and diffs by sample, on their field', () => {
+		const failed = contractMocks.runTransformerGoldens.named!.response!.failed!;
+		expect(findingsFromRun(failed)).toEqual({
+			empty_last_name: [
+				{
+					check: 'endpoint_schema',
+					field: '/query/name',
+					message: 'must NOT have fewer than 1 characters (minLength)'
+				},
+				{ check: 'goldens_pass', field: '/query/name', message: 'expected "Michael", produced ""' }
+			]
+		});
+	});
+
+	it.each(['endpoint_schema', 'goldens_pass'])('a 422 %s refusal: sample and field', (name) => {
+		const env = contractMocks.createTransformerVersion.named!.errors!['422']![name]!;
+		const plain = { ...env.error, details: env.error.details ?? [], meta: env.error.meta ?? null };
+		const f = findingsFromError(plain as never);
+		const [sample] = Object.keys(f);
+		expect(f[sample!]).toEqual([expect.objectContaining({ check: name, field: '/query/name' })]);
+	});
+
+	it("an expected request skeleton from the endpoint's request schema", () => {
+		const e = contractMocks.getVendor.example.endpoints[0]!;
+		expect(
+			expectedRequestSkeleton({
+				...e,
+				method: 'GET',
+				path: '/',
+				request_schema: {
+					query: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } }
+				}
+			})
+		).toEqual({ method: 'GET', path: '/', query: { name: '' } });
 	});
 });

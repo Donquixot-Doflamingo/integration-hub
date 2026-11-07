@@ -20,6 +20,13 @@ export type OperationResponse<Op extends keyof operations> =
 			}[keyof R]
 		: never;
 
+/** JSON request body of an operation, by operationId (never for operations without a body). */
+export type OperationRequestBody<Op extends keyof operations> = operations[Op] extends {
+	requestBody?: { content: { 'application/json': infer B } };
+}
+	? B
+	: never;
+
 export type Me = Schemas['Me'];
 export type Role = Schemas['Role'];
 export type BreakerState = Schemas['BreakerState'];

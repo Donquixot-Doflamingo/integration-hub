@@ -20,10 +20,10 @@ test('list -> transformer: docs link, source, versions, run goldens', async ({ p
 	const post = page.waitForRequest(
 		(r) => r.method() === 'POST' && r.url().includes('?/runGoldens')
 	);
-	await page.getByRole('button', { name: 'Run goldens for T1@7' }).click();
+	await page.getByRole('button', { name: 'Run samples for T1@7' }).click();
 	expect(new URLSearchParams((await post).postData() ?? '').get('ref')).toBe('T1@7');
-	await expect(page.getByRole('status').filter({ hasText: 'All goldens pass' })).toContainText(
-		'T1@7: 2 of 2 fixtures pass (12 ms).'
+	await expect(page.getByRole('status').filter({ hasText: 'All samples pass' })).toContainText(
+		'T1@7: 2 of 2 samples pass (12 ms).'
 	);
 	await page
 		.getByRole('region', { name: 'Version history' })
@@ -40,8 +40,8 @@ test('list -> transformer: docs link, source, versions, run goldens', async ({ p
 
 test('viewers see the stored goldens result but cannot run them', async ({ page }) => {
 	await signIn(page, { role: 'viewer', next: '/transformers/T1' });
-	await expect(page.getByText(/Running goldens needs the Editor role/)).toBeVisible();
-	await expect(page.getByRole('button', { name: /Run goldens/ })).toHaveCount(0);
+	await expect(page.getByText(/Running samples needs the Editor role/)).toBeVisible();
+	await expect(page.getByRole('button', { name: /Run samples/ })).toHaveCount(0);
 });
 
 for (const scheme of ['light', 'dark'] as const) {
@@ -51,8 +51,8 @@ for (const scheme of ['light', 'dark'] as const) {
 		await expect(page.getByRole('table')).toBeVisible();
 		await expectNoSeriousA11yViolations(page);
 		await page.goto('/transformers/T1');
-		await page.getByRole('button', { name: 'Run goldens for T1@7' }).click();
-		await expect(page.getByText(/fixtures pass/)).toBeVisible();
+		await page.getByRole('button', { name: 'Run samples for T1@7' }).click();
+		await expect(page.getByText(/samples pass/)).toBeVisible();
 		await page.getByText('order_placed', { exact: true }).first().click();
 		await expectNoSeriousA11yViolations(page);
 	});
@@ -66,7 +66,7 @@ test('dry run: invalid JSON is caught in the browser, the result shows the vendo
 	page.on('request', (r) => {
 		if (r.method() === 'POST' && r.url().includes('?/dryRun')) posts.push(r.url());
 	});
-	const input = page.getByLabel(/^Canonical input \(JSON\)/);
+	const input = page.getByLabel(/^Caller input \(JSON body\)/);
 	await expect(input).toHaveValue(/"u_48213"/);
 	await input.fill('{ "user": { "id": "u_48213" }, }');
 	await page.getByRole('button', { name: 'Dry-run T1@7' }).click();

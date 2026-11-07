@@ -26,27 +26,36 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import DryRunResult from '$lib/components/transformer/DryRunResult.svelte';
 	import GoldensResult from '$lib/components/transformer/GoldensResult.svelte';
+	import SchemaFields from '$lib/components/schema/SchemaFields.svelte';
+	import { prettyJson } from '$lib/utils/json-input';
 	import { setFlash } from '$lib/stores/flash.svelte';
 	import { blockersFrom } from '$lib/utils/form';
 	import {
 		draftKey,
 		draftProblems,
 		emptyFixture,
+		expectedRequestSkeleton,
+		findingsFromError,
+		findingsFromRun,
 		fieldLabels,
 		fieldsFor,
 		KINDS,
 		needsEndpoint,
 		problems,
 		type FixtureRow,
-		type FormValues
+		type FormValues,
+		type SampleFinding
 	} from './authoring';
 
 	/**
-	 * Create a transformer version (HUB-293): YAML source and golden fixtures, then "Run goldens"
-	 * (`runTransformerGoldens` on the unsaved draft, per-fixture diffs) and an optional dry run
+	 * Create a transformer version (HUB-293, HUB-436): YAML source and samples (a request
+	 * transformer names its vendor endpoint; a response transformer stands alone), then "Run samples"
+	 * (`runTransformerGoldens` on the unsaved draft: per-sample diffs and endpoint-schema
+	 * violations, shown on the sample and the field that broke) and an optional dry run
 	 * (`dryRunTransformer` on the draft, output masked as the API returns it). "Create" stays
-	 * locked until a goldens run of this exact draft passed: the Hub refuses a version whose
-	 * goldens fail (422), and the console says so before the operator gets there.
+	 * locked until a run of this exact draft passed: the Hub refuses a version whose samples fail
+	 * (422, checks `goldens_pass` / `endpoint_schema` naming sample and field), and the console
+	 * says so before the operator gets there.
 	 */
 	let {
 		mode,
@@ -82,6 +91,32 @@
 	let runningGoldens = $state(false);
 	const passedNow = $derived(!!goldens && goldens.key === key && goldens.result.passed);
 	const stale = $derived(!!goldens && goldens.key !== key);
+	// Why samples failed, by sample name, for this exact draft: from a refused create (422, the
+	// Hub's word) or else from the last run.
+	let refused = $state.raw<{ key: string; findings: Record<string, SampleFinding[]> } | null>(null);
+	const findings = $derived<Record<string, SampleFinding[]>>(
+		refused && refused.key === key
+			? refused.findings
+			: goldens && goldens.key === key
+				? findingsFromRun(goldens.result)
+				: {}
+	);
+	const checkLabel = (c: string) =>
+		c === 'endpoint_schema'
+			? 'breaks the endpoint schema'
+			: c === 'goldens_pass'
+				? 'differs from the expected output'
+				: c === 'error'
+					? 'threw'
+					: c;
+
+	// The endpoint a request transformer targets, when the console knows it (its request schema).
+	const endpoint = $derived(
+		needsEndpoint(values.kind) ? (endpoints[values.vendor_endpoint.trim()] ?? null) : null
+	);
+	function fillExpected(f: FixtureRow) {
+		if (endpoint) f.json.expected_request = prettyJson(expectedRequestSkeleton(endpoint));
+	}
 
 	function failureOf(r: { type: string; status?: number; data?: unknown }, what: string) {
 		const d = r.data as ActionFailureData | undefined;
@@ -139,7 +174,7 @@
 						key: sentKey,
 						result: (r.data as ActionSuccessData<GoldensRunResult>).result
 					};
-				else goldensError = failureOf(r, 'run the goldens');
+				else goldensError = failureOf(r, 'run the samples');
 			} finally {
 				runningGoldens = false;
 			}
@@ -151,6 +186,7 @@
 	const sampleOf = (f: FixtureRow | undefined) =>
 		f?.json[responseKind ? 'vendor_response' : 'input'] ?? '';
 	let dryBody = $state(untrack(() => sampleOf(initial.fixtures[0])));
+	let dryHeaders = $state(untrack(() => initial.fixtures[0]?.json.input_headers ?? ''));
 	let dryAccount = $state('');
 	let dryResult = $state.raw<TransformerDryRunResult | null>(null);
 	let dryError = $state.raw<HubApiError | null>(null);
@@ -190,11 +226,11 @@
 		Object.keys(found).length
 			? 'Fix the marked fields first.'
 			: !goldens
-				? 'Run the goldens on this draft first: the Hub refuses a version whose goldens fail.'
+				? 'Run the samples on this draft first: the Hub refuses a version whose samples fail.'
 				: stale
 					? 'The draft changed since the last goldens run. Run them again.'
 					: !goldens.result.passed
-						? `${goldens.result.failed} of ${goldens.result.total} goldens fail. Fix the source or the fixtures; the Hub refuses a version whose goldens fail.`
+						? `${goldens.result.failed} of ${goldens.result.total} samples fail. Fix the source or the samples; the Hub refuses a version whose samples fail.`
 						: null
 	);
 
@@ -214,6 +250,8 @@
 	}
 	function onCreateFailed(d: ActionFailureData) {
 		apiFields = { ...(d.fields ?? {}), ...detailFields(d) };
+		const f = findingsFromError(d.error);
+		refused = Object.keys(f).length ? { key, findings: f } : null;
 	}
 
 	// ---- fixtures -----------------------------------------------------------------------------
@@ -322,28 +360,65 @@
 		/>
 	</div>
 
+	{#if endpoint}
+		<details class="fk-group accepts">
+			<summary>What {values.vendor_endpoint.trim()} accepts</summary>
+			<p class="fk-hint">
+				Each sample's produced request must fit this, or the Hub refuses the transformer (check
+				<code>endpoint_schema</code>).
+			</p>
+			{#each ['path', 'query', 'headers', 'body'] as const as part (part)}
+				{#if endpoint.request_schema?.[part] !== undefined}
+					<h3>{part}</h3>
+					<SchemaFields
+						schema={endpoint.request_schema[part]}
+						label="{part} of {values.vendor_endpoint.trim()}"
+						empty="Declared, without fields."
+					/>
+				{/if}
+			{/each}
+		</details>
+	{/if}
+
 	<fieldset class="fk-group" aria-describedby="{fid('/fixtures')}-hint">
-		<legend>Golden fixtures <span class="fk-req">(at least one)</span></legend>
+		<legend>Samples <span class="fk-req">(at least one)</span></legend>
 		<p id="{fid('/fixtures')}-hint" class="fk-hint">
 			{responseKind
-				? 'Each fixture is a vendor response and the canonical response or error it must produce.'
-				: 'Each fixture is a canonical input and the exact vendor request it must produce.'} JSON objects.
+				? 'Each sample is a vendor response (status, headers, body) and the output the caller must get, or the error it must produce. The output goes back unchanged: no schema check.'
+				: 'Each sample is the caller input (body and optional headers) and the exact vendor request it must produce: method, resolved path, and the query, non-credential headers and body that apply.'}
+			JSON objects. The Hub runs the transformer on every sample and refuses it when an output differs{responseKind
+				? ''
+				: " or breaks the endpoint's request schema"}.
 		</p>
 		<FieldError id="{fid('/fixtures')}-error" message={err('/fixtures')} />
 		<ol class="fixtures">
 			{#each values.fixtures as f, i (i)}
 				{@const at = `/fixtures/${i}`}
-				<li class="fixture" aria-labelledby="{fid(at)}-h">
+				{@const failed = findings[f.name.trim()] ?? []}
+				<li class="fixture" class:failed={failed.length > 0} aria-labelledby="{fid(at)}-h">
 					<div class="fixture-head">
-						<h3 id="{fid(at)}-h">Fixture {i + 1}{f.name ? `: ${f.name}` : ''}</h3>
+						<h3 id="{fid(at)}-h">Sample {i + 1}{f.name ? `: ${f.name}` : ''}</h3>
 						<button
 							type="button"
 							class="btn btn-quiet"
 							onclick={() => removeFixture(i)}
-							aria-label="Remove fixture {f.name || i + 1}"
+							aria-label="Remove sample {f.name || i + 1}"
 							><Icon name="close" size={14} />Remove</button
 						>
 					</div>
+					{#if failed.length}
+						<div class="findings" role="group" aria-label="Why sample {f.name} fails">
+							<p><Icon name="alert" size={14} /> This sample fails:</p>
+							<ul>
+								{#each failed as x, k (k)}
+									<li>
+										{#if x.field}<code class="field">{x.field}</code>{/if}
+										<span class="check">{checkLabel(x.check)}</span>: {x.message}
+									</li>
+								{/each}
+							</ul>
+						</div>
+					{/if}
 					<FieldError id="{fid(at)}-error" message={err(at)} />
 					<div class="fk-grid">
 						<div class="fk-field">
@@ -363,10 +438,11 @@
 								<span class="fk-label" id="{fid(at)}-outcome">Expects</span>
 								<div class="outcome" role="radiogroup" aria-labelledby="{fid(at)}-outcome">
 									<label class="fk-check"
-										><input type="radio" value="response" bind:group={f.outcome} /> a canonical response</label
+										><input type="radio" value="response" bind:group={f.outcome} /> an output</label
 									>
 									<label class="fk-check"
-										><input type="radio" value="error" bind:group={f.outcome} /> a canonical error</label
+										><input type="radio" value="error" bind:group={f.outcome} /> an error (from its errors
+										rules)</label
 									>
 								</div>
 							</div>
@@ -378,12 +454,24 @@
 								<textarea
 									id={fid(p)}
 									class="fk-mono"
-									rows={k === 'account_config' ? 2 : 6}
+									rows={k === 'account_config' || k === 'input_headers' ? 2 : 6}
 									value={f.json[k] ?? ''}
 									oninput={(e) => (f.json[k] = e.currentTarget.value)}
 									spellcheck="false"
+									placeholder={k === 'input_headers'
+										? '{ "X-Request-Source": "checkout" }'
+										: k === 'expected_request'
+											? '{ "method": "GET", "path": "/", "query": { "name": "Michael" } }'
+											: undefined}
 									aria-invalid={err(p) ? 'true' : undefined}
 									aria-describedby="{fid(p)}-error"></textarea>
+								{#if k === 'expected_request' && endpoint}
+									<div>
+										<button type="button" class="btn btn-quiet" onclick={() => fillExpected(f)}
+											>Start from what {values.vendor_endpoint.trim()} accepts</button
+										>
+									</div>
+								{/if}
 								<FieldError id="{fid(p)}-error" message={err(p)} />
 							</div>
 						{/each}
@@ -391,7 +479,7 @@
 				</li>
 			{/each}
 		</ol>
-		<div><button type="button" class="btn" onclick={addFixture}>Add fixture</button></div>
+		<div><button type="button" class="btn" onclick={addFixture}>Add sample</button></div>
 	</fieldset>
 
 	{#if touched && Object.keys(found).length}
@@ -399,24 +487,24 @@
 	{/if}
 
 	<section class="fk-group" aria-labelledby="{uid}-goldens-h">
-		<h2 id="{uid}-goldens-h">Goldens</h2>
+		<h2 id="{uid}-goldens-h">Run the samples</h2>
 		<form method="POST" action="?/runDraftGoldens" use:enhance={runGoldens}>
 			{@render draftFields()}
 			<button type="submit" class="btn" aria-disabled={runningGoldens ? 'true' : undefined}>
 				<Icon name="retry" size={16} />{runningGoldens
-					? 'Running goldens...'
-					: 'Run goldens on this draft'}
+					? 'Running samples...'
+					: 'Run samples on this draft'}
 			</button>
 		</form>
 		{#if goldensError}<ErrorPanel
 				error={goldensError}
-				context="Could not run the goldens"
+				context="Could not run the samples"
 				headingLevel={3}
 			/>{/if}
 		{#if goldens}
 			{#if stale}
 				<p class="fk-note" role="status">
-					<Icon name="alert" size={14} /> The draft changed since this run: run the goldens again.
+					<Icon name="alert" size={14} /> The draft changed since this run: run the samples again.
 				</p>
 			{/if}
 			<GoldensResult result={goldens.result} refLabel="This draft" />
@@ -432,7 +520,7 @@
 				<label for="{uid}-dry-body"
 					>{responseKind
 						? 'Vendor response (JSON: status, headers, body)'
-						: 'Canonical input (JSON)'}</label
+						: 'Caller input body (JSON)'}</label
 				>
 				<textarea
 					id="{uid}-dry-body"
@@ -448,6 +536,22 @@
 					message={dryFields.input ?? dryFields.vendor_response}
 				/>
 			</div>
+			{#if !responseKind}
+				<div class="fk-field">
+					<label for="{uid}-dry-headers">Caller headers (optional JSON object of strings)</label>
+					<textarea
+						id="{uid}-dry-headers"
+						name="input_headers"
+						class="fk-mono"
+						rows="2"
+						bind:value={dryHeaders}
+						spellcheck="false"
+						placeholder={'{ "X-Request-Source": "checkout" }'}
+						aria-invalid={dryFields.input_headers ? 'true' : undefined}
+						aria-describedby="{uid}-dry-headers-error"></textarea>
+					<FieldError id="{uid}-dry-headers-error" message={dryFields.input_headers} />
+				</div>
+			{/if}
 			<div class="fk-field">
 				<label for="{uid}-dry-account">Account (optional: its config, credentials redacted)</label>
 				<input
@@ -494,7 +598,7 @@
 		{#if createBlocked}<p id="{uid}-blocked" class="fk-note">{createBlocked}</p>{/if}
 		{#if passedNow}
 			<p class="fk-note" role="status">
-				<Icon name="check" size={14} /> All goldens pass on this draft.
+				<Icon name="check" size={14} /> All samples pass on this draft.
 			</p>
 		{/if}
 	</section>
@@ -572,5 +676,48 @@
 	.dry {
 		display: grid;
 		gap: var(--space-3);
+	}
+	.fixture.failed {
+		border-left-color: var(--status-danger);
+		border-left-width: 6px;
+	}
+	.findings {
+		padding: var(--space-2) var(--space-3);
+		border: 1px solid var(--status-danger);
+		border-radius: var(--radius-sm);
+		background: var(--status-danger-wash);
+		font-size: var(--text-sm);
+	}
+	.findings p {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		margin: 0 0 var(--space-1);
+		color: var(--status-danger);
+		font-weight: 700;
+	}
+	.findings ul {
+		display: grid;
+		gap: 0.15rem;
+		margin: 0;
+		padding-left: var(--space-4);
+	}
+	.findings li {
+		overflow-wrap: anywhere;
+	}
+	.findings .field {
+		margin-right: 0.35rem;
+		font-weight: 700;
+	}
+	.findings .check {
+		font-weight: 600;
+	}
+	.accepts summary {
+		cursor: pointer;
+		font-weight: 700;
+	}
+	.accepts h3 {
+		margin: var(--space-2) 0 0;
+		font-size: var(--text-sm);
 	}
 </style>

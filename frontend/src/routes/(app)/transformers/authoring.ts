@@ -1,12 +1,16 @@
-import type { FieldErrors } from '$lib/api/actions';
+import type { FieldErrors, PlainApiError } from '$lib/api/actions';
 import type {
 	GoldenFixture,
+	GoldensRunResult,
 	TransformerDraft,
 	TransformerKind,
 	TransformerVersion,
-	TransformerVersionCreate
+	TransformerVersionCreate,
+	ValidationCheck,
+	VendorEndpoint
 } from '$lib/api/types';
 import { parseJsonObject, prettyJson } from '$lib/utils/json-input';
+import { skeletonOf } from '$lib/utils/json-schema';
 
 /**
  * Transformer authoring (HUB-293, HUB-436): a new transformer (version 1) or the next version of
@@ -255,4 +259,82 @@ export function valuesFromForm(form: FormData): FormValues | null {
 		yaml: get('yaml').replace(/\r\n/g, '\n'),
 		fixtures
 	};
+}
+
+// ---- sample findings (HUB-436) --------------------------------------------------------------
+
+/** One reason a sample failed, on the field it names when there is one. */
+export interface SampleFinding {
+	/** Which check: the output differs, the produced request breaks the endpoint schema, it threw. */
+	check: 'goldens_pass' | 'endpoint_schema' | 'error' | string;
+	/** JSON pointer of the field (in the produced request `{path, query, headers, body}`). */
+	field: string | null;
+	message: string;
+}
+
+const show = (v: unknown) => (v === undefined ? 'nothing' : JSON.stringify(v));
+
+/** What a samples run found, by sample name (failing samples only). */
+export function findingsFromRun(result: GoldensRunResult): Record<string, SampleFinding[]> {
+	const out: Record<string, SampleFinding[]> = {};
+	for (const r of result.results) {
+		if (r.passed) continue;
+		const list: SampleFinding[] = [];
+		if (r.error) list.push({ check: 'error', field: null, message: r.error });
+		for (const v of r.schema_errors ?? [])
+			list.push({
+				check: 'endpoint_schema',
+				field: v.field,
+				message: v.keyword ? `${v.message} (${v.keyword})` : v.message
+			});
+		for (const d of r.diff)
+			list.push({
+				check: 'goldens_pass',
+				field: d.path || null,
+				message:
+					d.op === 'add'
+						? `produced ${show(d.after)}, not expected`
+						: d.op === 'remove'
+							? `expected ${show(d.before)}, produced nothing`
+							: `expected ${show(d.before)}, produced ${show(d.after)}`
+			});
+		out[r.fixture] = list;
+	}
+	return out;
+}
+
+/**
+ * What a refused `createTransformerVersion` (422 `PUBLISH_VALIDATION_FAILED`) says about the
+ * samples: `error.details[]` and `error.meta.report.checks[]` name the sample and the field.
+ */
+export function findingsFromError(
+	error: PlainApiError | null | undefined
+): Record<string, SampleFinding[]> {
+	const out: Record<string, SampleFinding[]> = {};
+	const add = (sample: string | null | undefined, f: SampleFinding) => {
+		if (!sample) return;
+		const list = (out[sample] ??= []);
+		if (!list.some((x) => x.check === f.check && x.field === f.field)) list.push(f);
+	};
+	for (const d of error?.details ?? [])
+		add(d.sample, { check: d.keyword ?? 'error', field: d.field ?? null, message: d.message });
+	const report = (error?.meta as { report?: { checks?: unknown } } | null | undefined)?.report;
+	if (report && Array.isArray(report.checks))
+		for (const c of report.checks as ValidationCheck[])
+			if (c.status === 'fail')
+				add(c.sample, { check: c.check, field: c.field ?? null, message: c.message ?? c.check });
+	return out;
+}
+
+/**
+ * A starting point for a request sample's expected request, from the endpoint's request schema:
+ * method and path as declared, and the required fields of each declared part (placeholders by
+ * type). The operator fills in the values the transformer must produce.
+ */
+export function expectedRequestSkeleton(endpoint: VendorEndpoint): Record<string, unknown> {
+	const out: Record<string, unknown> = { method: endpoint.method, path: endpoint.path };
+	const rs = endpoint.request_schema ?? {};
+	for (const part of ['query', 'headers', 'body'] as const)
+		if (rs[part] !== undefined) out[part] = skeletonOf(rs[part]);
+	return out;
 }

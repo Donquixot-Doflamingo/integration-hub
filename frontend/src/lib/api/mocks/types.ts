@@ -1,5 +1,5 @@
 import type { AdminErrorEnvelope } from '../errors';
-import type { OperationResponse, Operations } from '../types';
+import type { OperationRequestBody, OperationResponse, Operations } from '../types';
 
 export type OperationId = keyof Operations;
 export type HttpMethodName = 'get' | 'put' | 'post' | 'patch' | 'delete';
@@ -17,6 +17,13 @@ export interface OperationMock<Op extends OperationId> {
 	example: OperationResponse<Op>;
 	/** Example error envelope per declared 4xx/5xx status. */
 	errors: Partial<Record<string, AdminErrorEnvelope>>;
+	/** Named examples (`examples:` in the contract), by name; typed by the generated client. */
+	named?: {
+		request?: Record<string, OperationRequestBody<Op>>;
+		response?: Record<string, OperationResponse<Op>>;
+		/** status -> example name -> error envelope. */
+		errors?: Record<string, Record<string, AdminErrorEnvelope>>;
+	};
 }
 
 /** Every admin operation must have a mock: a new operationId without one fails `npm run check`. */

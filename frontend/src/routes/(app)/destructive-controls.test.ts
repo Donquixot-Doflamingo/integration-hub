@@ -176,7 +176,7 @@ const screens: Screen[] = [
 				: screen.findByLabelText('T1@7 source (YAML)'));
 		},
 		controls: [
-			{ name: /^Run goldens for T1@7$/, op: 'runTransformerGoldens', min: 'editor' },
+			{ name: /^Run samples for T1@7$/, op: 'runTransformerGoldens', min: 'editor' },
 			{ name: /^Dry-run T1@7$/, op: 'dryRunTransformer', min: 'editor' }
 		]
 	}

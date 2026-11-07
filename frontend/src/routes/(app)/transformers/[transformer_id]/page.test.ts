@@ -123,8 +123,8 @@ describe('transformer viewer', () => {
 describe('goldens', () => {
 	it('viewers see the stored result and why they cannot run them', async () => {
 		await renderPage(accessFromRoles(['viewer']));
-		expect(screen.queryByRole('button', { name: /Run goldens/ })).toBeNull();
-		expect(screen.getByText(/Running goldens needs the Editor role/)).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /Run samples/ })).toBeNull();
+		expect(screen.getByText(/Running samples needs the Editor role/)).toBeInTheDocument();
 	});
 
 	it('runs the goldens of this version and shows each fixture passing', async () => {
@@ -136,11 +136,11 @@ describe('goldens', () => {
 			})
 		);
 		const user = await renderPage();
-		await user.click(screen.getByRole('button', { name: 'Run goldens for T1@7' }));
-		expect(await screen.findByText(/T1@7: 2 of 2 fixtures pass/)).toBeInTheDocument();
+		await user.click(screen.getByRole('button', { name: 'Run samples for T1@7' }));
+		expect(await screen.findByText(/T1@7: 2 of 2 samples pass/)).toBeInTheDocument();
 		expect(seen).toEqual([{ ref: 'T1@7' }]);
-		expect(screen.getByText('All goldens pass')).toBeInTheDocument();
-		expect(screen.getAllByText('Output matches the golden.')).toHaveLength(2);
+		expect(screen.getByText('All samples pass')).toBeInTheDocument();
+		expect(screen.getAllByText('Output matches the expected one.')).toHaveLength(2);
 	});
 
 	it('renders the diff per failing fixture, failing ones first', async () => {
@@ -165,8 +165,8 @@ describe('goldens', () => {
 			})
 		);
 		const user = await renderPage();
-		await user.click(screen.getByRole('button', { name: 'Run goldens for T1@7' }));
-		expect(await screen.findByText(/1 of 3 fixtures pass, 2 failing/)).toBeInTheDocument();
+		await user.click(screen.getByRole('button', { name: 'Run samples for T1@7' }));
+		expect(await screen.findByText(/1 of 3 samples pass, 2 failing/)).toBeInTheDocument();
 		const items = screen.getAllByRole('listitem').filter((li) => li.querySelector('h4'));
 		expect(items.map((li) => li.querySelector('h4 code')?.textContent)).toEqual([
 			'no_timestamp',
@@ -174,7 +174,7 @@ describe('goldens', () => {
 			'order_placed'
 		]);
 		const diff = within(items[0]!).getByRole('region', {
-			name: 'Differences for fixture no_timestamp'
+			name: 'Differences for sample no_timestamp'
 		});
 		expect(
 			within(diff)
@@ -190,7 +190,7 @@ describe('goldens', () => {
 	it('shows a failed run with code and request id', async () => {
 		server.use(mockError('runTransformerGoldens', 403));
 		const user = await renderPage();
-		await user.click(screen.getByRole('button', { name: 'Run goldens for T1@7' }));
+		await user.click(screen.getByRole('button', { name: 'Run samples for T1@7' }));
 		const alert = await screen.findByRole('alert');
 		expect(alert).toHaveTextContent('FORBIDDEN');
 		expect(alert).toHaveTextContent(

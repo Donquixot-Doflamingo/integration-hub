@@ -27,7 +27,7 @@ describe('transformer version', () => {
 		expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('T1@7');
 		expect(await screen.findByLabelText('T1@7 source (YAML)')).toBeInTheDocument();
 		expect(screen.getByRole('link', { name: /developer\.clevertap\.com/ })).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: 'Run goldens for T1@7' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Run samples for T1@7' })).toBeInTheDocument();
 		expect(screen.getByRole('link', { name: 'All versions of T1' })).toHaveAttribute(
 			'href',
 			'/transformers/T1'
