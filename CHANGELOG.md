@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(agents)` · Describe the caller contract without capabilities in AGENTS and CLAUDE (HUB-437) · HUB-437 · F-23
+  - The operating rules for agents and contributors describe the caller contract as integration ID + operation + request body against the operation's schema (ADR-0023); contracts/ no longer lists capability schemas; D11 is guidance
 - 2026-11-07 · `docs(tickets)` · Put HUB-437 in review with the real F-23 story ids (HUB-437) · HUB-437 · F-23
   - EP-14 tickets HUB-431 to HUB-439 name their stories (US-2301 to US-2313) instead of `US-23xx`; HUB-437 is in review with its criteria checked and what other owners still have to do
   - The tickets README lists EP-13, EP-14 and F-23; counters recounted

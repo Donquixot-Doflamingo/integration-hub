@@ -15,7 +15,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish. C
 | `docs/tech/` | `TECH_SPEC.md`, `OBSERVABILITY.md`, `TESTING_STRATEGY.md`, `SECURITY.md`, `adr/NNNN-*.md` | lead / backend |
 | `docs/tickets/TICKETS.md` | The ticket backlog (no external tracker yet). | everyone |
 | `docs/process/` | Git workflow, contract-change process, release process | lead |
-| `contracts/` | **Frozen API contracts**: OpenAPI 3.1 YAML + JSON Schemas for capabilities and webhook events | `contract-steward` |
+| `contracts/` | **Frozen API contracts**: OpenAPI 3.1 YAML (admin, public caller API), the MCP tool contract and JSON Schemas for webhook events | `contract-steward` |
 | `backend/` | Go module `github.com/Donquixot-Doflamingo/integration-hub/backend`: `hub`, `hubctl`, `mockvendor`, `hubmcp` binaries | `backend-engineer` |
 | `frontend/` | SvelteKit admin console (control plane UI) | `frontend-engineer` |
 | `clients/claude-skill/` | Distributable consumer skill for teams that *use* the Hub (works in Claude, Codex, Cursor and other agents) | `contract-steward` + docs |
@@ -24,7 +24,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish. C
 | `.claude/skills/`, `backend/.claude/skills/`, `frontend/.claude/skills/` | Skills. Repo-wide skills at the root; backend/frontend skills **inside their folder** | owner of the folder |
 
 ## 3. Non-negotiable product rules (from DESIGN.md §0)
-1. **Callers never see vendor names, account names or versions.** Caller contract = integration ID + canonical body → canonical response. If a change would leak vendor identity into the caller contract, stop and ask the user. The one documented exception is the scope-gated caller dry-run (`dryRunIntegration`, key scope `dry_run`, PRD DV-6); see `contracts/README.md`.
+1. **Callers never see vendor names, account names or versions.** Caller contract = integration ID + operation + a request body (and headers) that fit the operation's request schema → the response transformer's output, or the vendor's body passed through (ADR-0023). If a change would leak vendor identity into the caller contract, stop and ask the user. The one documented exception is the scope-gated caller dry-run (`dryRunIntegration`, key scope `dry_run`, PRD DV-6); see `contracts/README.md`.
 2. **Hot path discipline**: no DB or registry reads on the sync path, only the in-memory snapshot. Every middleware publishes its own duration metric.
 3. **Never call real vendors in tests.** Use `mockvendor`. Verify real vendor payloads against current vendor docs and cite the URL in the transformer file.
 4. **Every transformer ships with golden fixtures.** You must not be able to publish a transformer whose goldens fail.

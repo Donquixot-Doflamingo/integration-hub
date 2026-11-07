@@ -20,7 +20,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish.
 - **Phase 2 (in progress):** M0–M8 done (`docs/milestones/M0.md` … `M8.md`; M8 has open items, see its Deferred list). v1.0.0 release notes drafted in `docs/releases/v1.0.0.md`. Code, milestone by milestone, from DESIGN.md §19 (M0 → M8), with the admin console (EP-10) and MCP server (EP-11) in parallel against the frozen contracts.
 
 ## Working rules (DESIGN §0)
-- **Callers never see vendor names, account names or versions.** Caller contract = integration ID + canonical body → canonical response. If a change would leak vendor identity into the caller contract, stop and tell the user.
+- **Callers never see vendor names, account names or versions.** Caller contract = integration ID + operation + a request body (and headers) that fit the operation's request schema → the response transformer's output, or the vendor's body passed through (ADR-0023). If a change would leak vendor identity into the caller contract, stop and tell the user.
 - **Hot path discipline** (DESIGN §18.5): no DB or registry reads on the sync path, only the in-memory snapshot. Every middleware publishes its own duration metric.
 - **Never call real vendors in tests.** Use `backend/cmd/mockvendor`. Real vendor payloads in the design are illustrative: verify against the vendor's current API docs and cite the doc URL in the transformer file.
 - **Every transformer ships with golden fixtures.** Publishing a transformer without passing goldens must be impossible.
@@ -44,7 +44,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish.
 | D8 | Language + expressions | Go + `expr-lang/expr` |
 | D9 | Phase-1 queue | Postgres outbox (`SKIP LOCKED`) behind `Queue` |
 | D10 | Pending at cutover | Re-resolve at send time; `pinned` opt-in |
-| D11 | Breaking canonical schema change | New integration ID; old one kept ≥ 6 months |
+| D11 | Breaking change to an operation's request schema | New integration ID recommended; old one kept ≥ 6 months (guidance since ADR-0023) |
 | D12 | Callers selecting versions | Never possible |
 
 ## Kickoff confirmations (defaults taken, 2026-10-31)
