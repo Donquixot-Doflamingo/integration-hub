@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `refactor(examples)` · Run the latency demo on auth none without capabilities (HUB-435) · HUB-435 · F-23
+  - `examples/latency-demo` has no capability files or `contracts/` overlay: `int_latency_echo` declares its `default` operation and request schema, endpoint `echo@1` its request schema
+  - Postman Echo uses the auth scheme `none`: the fake `client_tag` credential, the `X-Hub-Demo-Client` header and the `hubctl creds set` step are gone; the account has no credentials
+  - `TestExampleLatencyEcho` proves no credential is loaded or sent; `LATENCY_TARGET=mock run.sh` gives the documented comparison
 - 2026-11-07 · `refactor(examples)` · Move the Aadhaar and PAN example schemas into integrations (HUB-435) · HUB-435 · F-23
   - `examples/aadhaar-okyc` (and so `examples/pan-verify`) has no capability files or `contracts/` overlay: `int_aadhaar_okyc` declares `send_otp` and `verify_otp` (still `interactive`, `x-pii` tags kept for the sealed audit), `int_pan_verify` its `default` operation
   - The Cashfree Secure ID endpoints declare the request they accept, from the provider's docs (body fields, `Content-Type`, `X-Api-Version`); the credential headers are never part of it

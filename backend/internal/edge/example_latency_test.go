@@ -3,8 +3,10 @@ package edge
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"testing"
 
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
 
@@ -24,11 +26,18 @@ func TestExampleLatencyConfigBuilds(t *testing.T) {
 		t.Errorf("delivery %+v, moves_money_or_quota %v", v.Delivery, in.MovesMoneyOrQuota)
 	}
 	v := snap.Vendors["postman-echo"]
-	if v == nil || v.Regions["public"] != "https://postman-echo.com" || v.Regions["mock"] != "http://127.0.0.1:8099" {
+	if v == nil || v.Regions["public"] != "https://postman-echo.com" || v.Regions["mock"] != "http://127.0.0.1:8099" || v.Auth != creds.SchemeNone {
 		t.Fatalf("vendor %+v", v)
 	}
-	if a := snap.Accounts["echo-public"]; a == nil || a.Region != "public" {
+	if a := snap.Accounts["echo-public"]; a == nil || a.Region != "public" || a.CredentialsRef != "" {
 		t.Fatalf("account %+v", a)
+	}
+	// auth none: the account needs no credentials, so nothing is loaded for it.
+	if slices.Contains(creds.AccountIDs(snap), "echo-public") {
+		t.Error("echo-public is listed as needing credentials")
+	}
+	if ep := v.Endpoints["echo@1"]; ep.RequestSchema == nil || ep.RequestSchema.Body == nil {
+		t.Errorf("echo@1 has no request schema: %+v", ep)
 	}
 	// The mock scenario run.sh uses must answer on the vendor's endpoint path.
 	b, err := os.ReadFile(latencyExampleDir + "/mockvendor/echo.json")

@@ -1,6 +1,21 @@
 # EXAMPLE ONLY (HUB-353). sync: measure one request, no outbox. masked audit: nothing personal here.
+# The caller's request schema is declared on the operation (ADR-0023).
 integration: int_latency_echo
 version: 1
+operations:
+  default:
+    description: Echo a message.
+    idempotent: true
+    request_schema:
+      body:
+        type: object
+        required: [message]
+        additionalProperties: false
+        properties:
+          message: { type: string, minLength: 1, maxLength: 4096 }
+          seq: { type: integer, minimum: 0 }
+        examples:
+          - { message: hello, seq: 1 }
 targets:
   - vendor: postman-echo
     account: echo-public

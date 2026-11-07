@@ -2,7 +2,7 @@
 
 `run.sh` sends the same small JSON `POST` to a free, open echo API ([Postman Echo](https://learning.postman.com/docs/reference/developer-resources/echo-api), `https://postman-echo.com/post`, no account, no key) **N times directly** and **N times through a local Hub** (`int_latency_echo`), then prints p50 / p95 / p99 for both, the difference, and the Hub's own measurement of its overhead. Ticket: HUB-353.
 
-**Everything here is an example**, not production config or a frozen contract.
+**Everything here is an example**, not production config. Every schema lives inline in the config (ADR-0023 in `docs/tech/adr/`).
 
 ## Run it
 
@@ -40,7 +40,7 @@ Raw samples (`http_code seconds`, one line per request) are kept in `.demo/laten
 
 - **Internet jitter dominates.** A round trip to a public API takes tens to hundreds of milliseconds and varies by several milliseconds from one request to the next, more at p95/p99. The Hub adds about a millisecond. On the `public` target the *difference* row can therefore be a few milliseconds either way, even negative: that is the internet, not the Hub. Compare **deltas**, not absolute numbers, and repeat the run before drawing conclusions.
 - **p99 needs samples.** With N=200, p99 is the second-slowest request of 200. Use `N=500` or more if you care about the tail, and keep `C` small so you measure latency, not the service's rate limits.
-- **What "via Hub" adds:** one extra local hop (curl → Hub on localhost), schema validation, transform, credential injection, breaker and limiter checks, response mapping and audit. The Hub then makes the same HTTPS call to the echo API over its own pooled connection. Both paths reuse connections after the warm-up, so TLS handshakes are not counted on either side.
+- **What "via Hub" adds:** one extra local hop (curl → Hub on localhost), input validation against the operation's request schema, transform, breaker and limiter checks (no credential: auth `none`), response mapping and audit. The Hub then makes the same HTTPS call to the echo API over its own pooled connection. Both paths reuse connections after the warm-up, so TLS handshakes are not counted on either side.
 - **The Hub's own overhead line** is the gateway's `hub_overhead_ms` histogram (server time minus vendor time and deliberate waits), scraped from its metrics endpoint before and after the run. It does not depend on the internet, so it is the stable number to quote. Its percentiles are bucket estimates; the per-request values are in the audit ledger (`hub.requests.hub_overhead_ms`).
 - **For controlled numbers** (mockvendor at fixed latencies, load steps, CPU profiles) see [`docs/tech/LATENCY.md`](../../docs/tech/LATENCY.md) and the M8 load report [`docs/tech/LOAD_TEST_REPORT.md`](../../docs/tech/LOAD_TEST_REPORT.md). `LATENCY_TARGET=mock` here gives a quick local version of the same comparison.
 
@@ -48,16 +48,15 @@ Raw samples (`http_code seconds`, one line per request) are kept in `.demo/laten
 
 | Path | What |
 | --- | --- |
-| `config/vendors/postman-echo.yaml` | Regions `public` (`https://postman-echo.com`) and `mock` (mockvendor), endpoint `echo@1` (`POST /post`, 5 s) |
-| `config/accounts/echo-public.yaml` | The account; `run.sh` switches its region for `LATENCY_TARGET=mock` |
+| `config/vendors/postman-echo.yaml` | Auth scheme `none`; regions `public` (`https://postman-echo.com`) and `mock` (mockvendor); endpoint `echo@1` (`POST /post`, 5 s) with its `request_schema` (`Content-Type`, body `message`, `seq`) |
+| `config/accounts/echo-public.yaml` | The account, without credentials; `run.sh` switches its region for `LATENCY_TARGET=mock` |
 | `config/tenants/latency-demo.yaml` | The caller; local test key `hk_test_example_latency_demo_local_only` |
-| `contracts/schemas/capabilities/demo.echo.v1.*.json`, `config/capabilities/` | Example capability `demo.echo@v1`: `{"message", "seq"?}` → `{"status": "echoed", "message", "seq"}` |
-| `config/integrations/int_latency_echo/` | `sync`, `fail_fast`, `masked` audit, no `Idempotency-Key` needed (echoing moves nothing) |
-| `config/transformers/ECHO-REQ`, `ECHO-RES` | The mapping with goldens (the echoed request headers never reach the caller) |
+| `config/integrations/int_latency_echo/` | Operation `default` with request schema `{"message", "seq"?}`; `sync`, `fail_fast`, `masked` audit, no `Idempotency-Key` needed (echoing moves nothing) |
+| `config/transformers/ECHO-REQ`, `ECHO-RES` | The mapping with goldens; the response is `{"status": "echoed", "message", "seq"}` (the echoed request headers never reach the caller) |
 | `mockvendor/echo.json` | The offline stand-in: same response shape, fixed 50 ms |
 | `run.sh` | The demo (uses `../lib/local-hub.sh`) |
 
-The echo API needs no credentials, but every Hub auth scheme needs one value, so the account carries a non-secret tag sent as `X-Hub-Demo-Client`. The account limiter is set to 100 requests/s so it never delays the demo (a delayed request would show up as "Hub latency" in the client-side numbers while the Hub's own overhead excludes it).
+The echo API needs no credentials, so its vendor uses the auth scheme `none` and the account has no credentials at all (nothing is stored with `hubctl creds set`, nothing is injected). The account limiter is set to 100 requests/s so it never delays the demo (a delayed request would show up as "Hub latency" in the client-side numbers while the Hub's own overhead excludes it).
 
 ## Tests
 

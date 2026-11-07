@@ -1,18 +1,17 @@
 # EXAMPLE ONLY (HUB-353). Postman Echo POST /post, docs
 # https://learning.postman.com/docs/reference/developer-resources/echo-api (checked 2026-11-07):
-# the service returns everything it received; the JSON body comes back under "json".
+# the service returns everything it received; the JSON body comes back under "json". No credential:
+# the vendor's auth scheme is none.
 transformer: ECHO-REQ
 version: 1
 kind: request
-capability: demo.echo@v1
 docs_url: https://learning.postman.com/docs/reference/developer-resources/echo-api
 vendor_endpoint: postman-echo.echo@1
 request:
   method: POST
   path: /post
   headers:
-    Content-Type:      '"application/json"'
-    X-Hub-Demo-Client: creds.client_tag
+    Content-Type: '"application/json"'
   body:
     message: req.message
     seq:     req.seq
