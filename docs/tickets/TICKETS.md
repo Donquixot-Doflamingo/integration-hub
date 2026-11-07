@@ -3557,15 +3557,17 @@ Update hubctl (apply, plan, export, dry-run, transform test), hubmcp tools, `bac
 
 ### HUB-436 — Console: schema registry editors, samples and no capabilities
 - **Epic:** EP-14 · **Type:** feat · **Area:** frontend
-- **Status:** in-progress · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-review · **Depends on:** HUB-432 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `feat/HUB-436-console-schema-registry`
 
 Remove capability columns, filters and fields. Integration draft form gets per-operation input schema (body and headers) built from a pasted sample, each field required or optional, and the `validate_input` switch; vendor endpoint form gets its request schema (query, headers, body, path) the same way; transformer authoring takes samples (input and expected output) and shows the field-level reason when a sample fails; response transformer optional ([ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md)).
 
 **Acceptance criteria**
-- [ ] A new integration can be onboarded end to end from the panel without code
-- [ ] Sample failures show which field broke
-- [ ] `npm run check && npm test` and e2e green
+- [x] A new integration can be onboarded end to end from the panel without code (`e2e/onboarding.test.ts` on MSW: vendor auth none, endpoint `GET /` with required query `name`, credential-less account, request and response transformers proven by samples, integration with required `firstName`/`lastName`, publish; against a real Hub once HUB-433 lands)
+- [x] Sample failures show which field broke (`schema_errors` field pointer and message, `details[].field` on refusal; Vitest in `transformers/authoring-page.test.ts`, e2e "a failing sample says which field broke")
+- [x] `npm run check && npm test` and e2e green (locally: svelte-check 0/0, lint clean, Vitest 1629 passed, Playwright 111 passed with `CI=1`; GitHub run pending on the PR)
+
+Shipped (frontend-engineer, branch `feat/HUB-436-console-schema-registry`): no capability left in `frontend/src`; `SchemaEditor` (sample to fields, required/description, JSON Schema 2020-12 view); Operations section of the draft form (`validate_input` on by default, body required, headers optional; response transformer optional = pass-through); vendor endpoint pages with their request schema and optional response schema; auth `none` and credential-less accounts; transformer samples with per-field failures and Create locked until the exact draft passes; operations and input fields on integration pages. Mock world `onboarding` and preset `samples-fail` for e2e. Not migrated: `frontend/e2e-real/` (real-backend suite, outside CI) still creates capabilities and waits for the HUB-433 backend.
 
 ### HUB-437 — Skills, MCP docs, product docs and examples docs without capabilities
 - **Epic:** EP-14 · **Type:** docs · **Area:** docs
