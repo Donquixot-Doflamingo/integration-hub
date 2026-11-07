@@ -40,7 +40,8 @@ func TestRoleLoadsDevConfigSnapshot(t *testing.T) {
 		}
 	}
 	_, metrics := get(t, "http://"+addrs["ops"]+"/metrics", nil)
-	if !strings.Contains(metrics, "snapshot_version 1") || strings.Contains(metrics, "snapshot_apply_failures_total{") {
+	// No database here, so the content is not known to be archived: version 0 (HUB-401).
+	if !strings.Contains(metrics, "snapshot_version 0") || strings.Contains(metrics, "snapshot_apply_failures_total{") {
 		t.Fatal("snapshot metrics not exported")
 	}
 }

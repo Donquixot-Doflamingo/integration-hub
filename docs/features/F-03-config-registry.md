@@ -45,7 +45,7 @@ Routing, limits, transformers and policies must be readable in microseconds on e
 2. Build steps: parse → reference resolution (accounts→vendors, versions→accounts/transformers, grants→tenants) → compile JSON Schemas (2020-12, `santhosh-tekuri/jsonschema`) → compile transformers (F-04) → index → checksum.
 3. Snapshot `version` is monotonic; `checksum` covers canonical serialisation, so identical content yields identical checksums (enables idempotent `hubctl apply`).
 4. Nodes compile in the background and swap only after full success; on failure they keep the current snapshot and raise `snapshot_build_failures_total`.
-5. Nodes report their `snapshot_version`; a node > 60 s behind raises a warn alert (DESIGN §16.3).
+5. Nodes report their `snapshot_version`; a node > 60 s behind raises a warn alert (DESIGN §16.3). The number is the snapshot's archive version, never a per-process count, so a restarted node matches its peers (HUB-401); a node that built its config directory or booted from its cache reports 0 until it has checked that the archive holds the same checksum.
 6. Snapshots retained 90 days (DESIGN §8.2).
 7. Secrets are never in the snapshot blob; accounts carry `credentials_ref` only (F-07).
 8. Every operation of an integration's capability must be served by transformers compiled for it (check `operations_have_transformers`, HUB-343/HUB-345): a target's default pair serves the operations its `operations` map does not list, so a multi-operation capability with a single pair compiled for one operation is refused at `targets[i].transformer` (file-qualified), and an `operations` key the capability does not declare is refused at `targets[i].operations.<op>`. The build runs it for config files, `hubctl apply`, the admin publish and every node alike. Details: F-14 "Per-operation transformers".
@@ -59,7 +59,7 @@ Defines the YAML formats in DESIGN §3.4, §7.4, §8.3. Capability schema extens
 ## Observability
 | Kind | Name | Notes |
 | --- | --- | --- |
-| Metric | `snapshot_version` | gauge per node |
+| Metric | `snapshot_version` | gauge per node: archive version of the served snapshot (HUB-401) |
 | Metric | `snapshot_build_duration_ms`, `snapshot_build_failures_total` | |
 | Log | `snapshot_swapped` | old, new version, checksum |
 | Alert | node > 60 s behind latest snapshot | warn |
@@ -93,3 +93,4 @@ HUB-040 – HUB-059.
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-31 | Created | docs agent |
+| 2026-11-07 | `snapshot_version` is the archive version (HUB-401) | backend-engineer |

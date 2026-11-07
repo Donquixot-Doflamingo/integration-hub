@@ -30,6 +30,30 @@ tests:
               description: "wk-1 is 1 snapshot version(s) behind the newest one served in the fleet."
               runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/SnapshotBehind.md"
 
+  # SnapshotBehind after a restart (HUB-401): version 8 is published at 4m and gw-2 restarts
+  # at 7m. snapshot_version is the archive version, so the restarted node reports 8 like its
+  # peers once it has checked the archive (one scrape may catch the 0 it reports before that).
+  # With the old per-process counter it reported 1 for good and this test failed.
+  - name: a node restarted after a publish is not behind
+    interval: 1m
+    input_series:
+      - series: 'snapshot_version{instance="gw-1"}'
+        values: '7x3 8x12'
+      - series: 'snapshot_version{instance="gw-2"}'
+        values: '7x3 8x2 _ 0 8x8'
+      - series: 'snapshot_version{instance="wk-1"}'
+        values: '7x4 8x11'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: SnapshotBehind
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: SnapshotBehind
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: SnapshotBehind
+        exp_alerts: []
+
   # CredentialExpiringSoon: crosses 7 days at 20m, warns after an hour below.
   - name: credential slot below 7 days for an hour warns
     interval: 1m

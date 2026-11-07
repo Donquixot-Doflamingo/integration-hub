@@ -6,6 +6,35 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `test(edge)` · Judge the latency gate on what the Hub adds over direct calls (HUB-413) · HUB-413 · F-18
+  - The gate enforces the requirement (a 100 ms vendor stays at or under 110 ms at p99) and the Hub's added latency over direct calls in the same run (p50 ≤ 2 ms, ≤ 3 ms with an Idempotency-Key; p99 ≤ 10 ms); the absolute p50 ≤ 102 ms bound, which measured the mock vendor's own jitter, is gone
+  - More samples per scenario (300 sync + 400 concurrent, 300 keyed, 200 wait mode), so p99 is a real percentile
+- 2026-11-07 · `test(edge)` · Gate sync latency at vendor + 2 ms p50 and + 10 ms p99 (HUB-413) · HUB-413 · F-18
+  - `make latency-budget` (CI job `latency-budget`, no `-race`) runs the gateway stack against a 100 ms mockvendor and fails if a caller's p50 exceeds 102 ms, its p99 110 ms, or the Hub adds more than 2 ms p50 / 10 ms p99 over direct calls; attempts frozen by other processes are retried, never judged leniently
+  - `docs/tech/LATENCY.md`: the budget, how it is measured and run, the I/O left on the sync path, and numbers at 0/50/100/200 ms: the Hub adds about 1.2 ms p50 and 4 to 5.5 ms p99, wait mode about 5.5 ms p50
+  - The gate is red today on the p50 bound (102.1 ms; 102.9 ms with an Idempotency-Key) until HUB-409 moves audit masking off the request goroutine
+
+- 2026-11-07 · `docs(adr)` · Renumber the account limiter lease ADR to 0021 (HUB-408) · HUB-408 · F-13
+  - The account limiter lease decision is now ADR-0021 (`docs/tech/adr/0021-account-limiter-leases-tokens.md`); 0019 and 0020 are taken by other branches. References in TECH_SPEC, OBSERVABILITY, F-13, TICKETS, the limiter code comment and the HUB-408 changelog entry follow
+
+- 2026-11-07 · `test(edge)` · Prove audit, async accepts and callbacks stay off the request (HUB-413) · HUB-413 · F-18
+  - A sync call answers while the audit store hangs and its buffer is full; the audit batch is dropped and counted, never awaited
+  - async and async_callback answer 202 before the vendor is called (a 2 s vendor is paid by the worker, not the caller)
+  - A wait-mode caller gets its 200 while the tenant's callback receiver hangs; the dispatcher delivers the callback afterwards
+
+- 2026-11-07 · `fix(registry)` · Report the archive version as snapshot_version (HUB-401) · HUB-401 · F-18
+  - `snapshot_version` (the gauge, the `integration.resolved` audit meta and `hub.requests.snapshot_version`) is the archive version `getLatestSnapshot` returns, so a node restarted after a publish reports the same number as its peers and `SnapshotBehind` no longer fires falsely
+  - A node that built its config directory or booted from its cache reports 0 until it has confirmed the archive holds the same content (then the archive's version)
+  - New promtool case for a restart after a publish; the SnapshotBehind runbook loses its false-positive section
+- 2026-11-07 · `perf(upstream)` · Lease account limiter tokens off the sync request path (HUB-408) · HUB-408 · F-13
+  - A sync or worker call takes its account token from a local lease: no Redis round trip per request in steady state; leases are refilled in the background and sized to the node's recent traffic (1 token to 10 % of the account rate)
+  - The account quota still holds across nodes (two gateways measured at exactly the 40 rps quota); a node may be one token ahead of the shared bucket at most
+  - A Redis outage or stall no longer delays callers: a failed lease lets that account's traffic through for 1 s, then retries
+  - `hub_wait_ms{kind="account_limiter"}` now holds only real waits for tokens; a lease reply a call waited for counts in the `admission` stage (and in `hub_overhead_ms`)
+  - New metric `account_limiter_leases_total{result}` and `redis_op_duration_seconds{op="limiter_lease"}`; ADR-0021
+- 2026-11-07 · `docs(tickets)` · File the sync latency budget as HUB-413 (HUB-413) · HUB-413 · F-18
+  - New ticket HUB-413 (EP-13): a CI gate that keeps a 100 ms vendor at ≤ 110 ms p99 through the Hub, tests that audit, async accepts and callbacks never delay a sync call, and `docs/tech/LATENCY.md`
+  - New user story US-1808 (a sync call costs the vendor's time, not double); HUB-408 and HUB-401 in progress
 - 2026-11-07 · `docs(hubmcp)` · Resolve the leftover merge markers in the MCP setup guide and F-20 (HUB-315) · HUB-315 · F-20
   - mcp-setup.md keeps the per-client guide and adds the role requirements, the dev token commands and the local refusal codes; F-20 keeps both history rows
 - 2026-11-07 · `test(hubmcp)` · Wait for the asynchronous audit trail in the hubmcp e2e test (HUB-315) · HUB-315 · F-20

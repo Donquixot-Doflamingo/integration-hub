@@ -362,8 +362,9 @@ func (r *m5) sampleReleases(stop <-chan struct{}) (*[]sample, <-chan struct{}) {
 		for {
 			select {
 			case <-stop:
-				// A last sample: the worker can deliver the final releases between two ticks and
-				// the caller stops as soon as they succeed (faster since HUB-412's continuous claims).
+				// A last sample: the worker can deliver the final releases between two ticks and the
+				// caller stops as soon as they succeed (faster since HUB-412's continuous claims, and
+				// the limiter no longer adds a Redis round trip per attempt, HUB-408).
 				take()
 				return
 			case <-t.C:
