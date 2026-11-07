@@ -1,8 +1,12 @@
 integration: int_evt_brandB_min
 owner_tenant: orders-service
 grants: []                       # other tenants allowed to invoke
-capability: events.track@v1
 version: 3                       # immutable once published
+operations:                      # ADR-0023: the version declares what callers send
+  default:
+    idempotent: true
+    request_schema:
+      body: { type: object, required: [user, event] }
 targets:
   - vendor: clevertap
     account: ct-brandB-us        # credentials live on the account

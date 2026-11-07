@@ -6,7 +6,7 @@ SET status = EXCLUDED.status, rate_limit_rps = EXCLUDED.rate_limit_rps,
     rate_limit_burst = EXCLUDED.rate_limit_burst, updated_at = now();
 
 -- name: InsertIntegration :exec
-INSERT INTO hub.integrations (integration_id, owner_tenant, capability, active_version, paused, description, moves_money_or_quota)
+INSERT INTO hub.integrations (integration_id, owner_tenant, interactive, active_version, paused, description, moves_money_or_quota)
 VALUES ($1, $2, $3, $4, $5, $6, $7);
 
 -- name: InsertIntegrationVersion :exec
@@ -26,5 +26,5 @@ SET active_version = $2, updated_at = now()
 WHERE integration_id = $1;
 
 -- name: InsertTransformer :exec
-INSERT INTO hub.transformers (transformer_id, version, kind, capability, endpoint_id, yaml, fixtures)
-VALUES ($1, $2, $3, $4, $5, $6, $7);
+INSERT INTO hub.transformers (transformer_id, version, kind, endpoint_id, yaml, fixtures)
+VALUES ($1, $2, $3, $4, $5, $6);

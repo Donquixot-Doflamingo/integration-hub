@@ -14,6 +14,7 @@ import (
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/trackops"
 )
 
 // snapshotVersion reads the node's snapshot_version gauge and its served integration version.
@@ -56,10 +57,10 @@ func TestPublishReachesThreeNodes(t *testing.T) {
 
 	blobs, _ := control.OpenBlobStore(blobURL)
 	pub := &control.Publisher{Pool: pool, Archive: control.NewArchive(pool, blobs),
-		Bootstrap: registry.Sources{Config: os.DirFS("../../../../config"), Contracts: os.DirFS("../../../../../contracts")},
+		Bootstrap: registry.Sources{Config: os.DirFS("../../../../config")},
 		Notify:    func(ctx context.Context, v int64) { rdb.Publish(ctx, control.SnapshotChannel, v) }}
 	start := time.Now()
-	res, err := pub.PublishVersion(t.Context(), "int_evt_brandA", []byte(`
+	res, err := pub.PublishVersion(t.Context(), "int_evt_brandA", []byte(trackops.Block+`
 targets:
   - { vendor: clevertap, account: ct-brandA-in, transformer: { request: T1@7, response: R2@1 }, weight: 100 }
 delivery: { mode: wait, wait_ms: 3000, ttl: 6h, on_circuit_open: fail_fast, pending: re_resolve, polling: true }
@@ -135,11 +136,11 @@ func TestRestartedNodeReportsTheArchiveVersion(t *testing.T) {
 	// The old counter gave the long-running nodes 3 (three swaps) but the late node 2.
 	blobs, _ := control.OpenBlobStore(blobURL)
 	pub := &control.Publisher{Pool: pool, Archive: control.NewArchive(pool, blobs),
-		Bootstrap: registry.Sources{Config: os.DirFS("../../../../config"), Contracts: os.DirFS("../../../../../contracts")},
+		Bootstrap: registry.Sources{Config: os.DirFS("../../../../config")},
 		Notify:    func(ctx context.Context, v int64) { rdb.Publish(ctx, control.SnapshotChannel, v) }}
 	want := 0
 	for _, waitMS := range []string{"2500", "2000"} {
-		res, err := pub.PublishVersion(t.Context(), "int_evt_brandA", []byte(`
+		res, err := pub.PublishVersion(t.Context(), "int_evt_brandA", []byte(trackops.Block+`
 targets:
   - { vendor: clevertap, account: ct-brandA-in, transformer: { request: T1@7, response: R2@1 }, weight: 100 }
 delivery: { mode: wait, wait_ms: `+waitMS+`, ttl: 6h, on_circuit_open: fail_fast, pending: re_resolve, polling: true }

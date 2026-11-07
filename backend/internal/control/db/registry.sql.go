@@ -12,14 +12,14 @@ import (
 )
 
 const insertIntegration = `-- name: InsertIntegration :exec
-INSERT INTO hub.integrations (integration_id, owner_tenant, capability, active_version, paused, description, moves_money_or_quota)
+INSERT INTO hub.integrations (integration_id, owner_tenant, interactive, active_version, paused, description, moves_money_or_quota)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type InsertIntegrationParams struct {
 	IntegrationID     string `json:"integration_id"`
 	OwnerTenant       string `json:"owner_tenant"`
-	Capability        string `json:"capability"`
+	Interactive       bool   `json:"interactive"`
 	ActiveVersion     int32  `json:"active_version"`
 	Paused            bool   `json:"paused"`
 	Description       string `json:"description"`
@@ -30,7 +30,7 @@ func (q *Queries) InsertIntegration(ctx context.Context, arg InsertIntegrationPa
 	_, err := q.db.Exec(ctx, insertIntegration,
 		arg.IntegrationID,
 		arg.OwnerTenant,
-		arg.Capability,
+		arg.Interactive,
 		arg.ActiveVersion,
 		arg.Paused,
 		arg.Description,
@@ -64,15 +64,14 @@ func (q *Queries) InsertIntegrationVersion(ctx context.Context, arg InsertIntegr
 }
 
 const insertTransformer = `-- name: InsertTransformer :exec
-INSERT INTO hub.transformers (transformer_id, version, kind, capability, endpoint_id, yaml, fixtures)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO hub.transformers (transformer_id, version, kind, endpoint_id, yaml, fixtures)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type InsertTransformerParams struct {
 	TransformerID string      `json:"transformer_id"`
 	Version       int32       `json:"version"`
 	Kind          string      `json:"kind"`
-	Capability    string      `json:"capability"`
 	EndpointID    pgtype.Text `json:"endpoint_id"`
 	Yaml          string      `json:"yaml"`
 	Fixtures      []byte      `json:"fixtures"`
@@ -83,7 +82,6 @@ func (q *Queries) InsertTransformer(ctx context.Context, arg InsertTransformerPa
 		arg.TransformerID,
 		arg.Version,
 		arg.Kind,
-		arg.Capability,
 		arg.EndpointID,
 		arg.Yaml,
 		arg.Fixtures,

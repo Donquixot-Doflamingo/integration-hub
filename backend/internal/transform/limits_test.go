@@ -20,7 +20,7 @@ func TestOverDeepExpressionRejectedAtCompile(t *testing.T) {
 }
 
 func TestOutputLargerThanLimitFails(t *testing.T) {
-	p, err := Compile(specFromYAML(t, reqHead+"  body:\n    blob: req.event.properties.text\n"), Options{RequestSchema: eventsSchema(t), Limits: Limits{
+	p, err := Compile(specFromYAML(t, reqHead+"  body:\n    blob: req.event.properties.text\n"), Options{Limits: Limits{
 		MaxNodes: 500, MaxDepth: 24, MemoryBudget: 200_000, MaxOutputBytes: 1024, TimeBudget: time.Second}})
 	if err != nil {
 		t.Fatal(err)

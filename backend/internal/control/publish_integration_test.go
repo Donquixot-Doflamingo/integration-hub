@@ -21,6 +21,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/sessions"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/trackops"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/migrations"
 )
 
@@ -47,13 +48,13 @@ func publisher(t *testing.T) (*control.Publisher, *pgxpool.Pool) {
 	blobs := control.DirBlobStore{Root: t.TempDir()}
 	return &control.Publisher{
 		Pool: pool, Archive: control.NewArchive(pool, blobs),
-		Bootstrap: registry.Sources{Config: os.DirFS("../../config"), Contracts: os.DirFS("../../../contracts")},
+		Bootstrap: registry.Sources{Config: os.DirFS("../../config")},
 	}, pool
 }
 
 // spec is int_evt_brandA's v2 with a different response transformer and account.
 func spec(account, response string) []byte {
-	return []byte(`
+	return []byte(trackops.Block + `
 targets:
   - vendor: clevertap
     account: ` + account + `
@@ -194,7 +195,7 @@ func TestRetireGuardCountsPinnedWorkAndSessions(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	env := core.Envelope{RequestID: "req_" + core.NewULID(now), Tenant: "orders-service", IntegrationID: "int_evt_brandA", ResolvedVersion: 2,
-		Pinned: true, Capability: "events.track@v1", Operation: "default", Mode: "async", Canonical: json.RawMessage(`{}`),
+		Pinned: true, Operation: "default", Mode: "async", Canonical: json.RawMessage(`{}`),
 		NextAttemptAt: now.Add(time.Hour), ExpiresAt: now.Add(6 * time.Hour), CreatedAt: now}
 	if err := (&queue.Outbox{}).Enqueue(ctx, pool, env); err != nil {
 		t.Fatal(err)

@@ -11,13 +11,19 @@ import (
 
 // Auth scheme names, as vendor definitions spell them in `auth:` (DESIGN §8.3, §9).
 const (
+	SchemeNone          = "none" // public APIs: accounts have no credentials (ADR-0023)
 	SchemeStaticHeaders = "static_headers"
 	SchemeBearer        = "bearer"
 	SchemeBasic         = "basic"
 )
 
 // Schemes lists the auth schemes this build implements.
-func Schemes() []string { return []string{SchemeBasic, SchemeBearer, SchemeStaticHeaders} }
+func Schemes() []string {
+	return []string{SchemeBasic, SchemeBearer, SchemeNone, SchemeStaticHeaders}
+}
+
+// NeedsCredentials reports whether accounts of a vendor with this scheme carry credentials.
+func NeedsCredentials(scheme string) bool { return scheme != SchemeNone }
 
 // ValidateScheme reports ErrUnknownScheme for a name this build does not implement, so a
 // snapshot build can reject the vendor instead of failing at request time.
@@ -44,10 +50,13 @@ func ApplyVendor(v *registry.Vendor, c Credentials, req *core.VendorRequest) err
 //     present as a header value, so a transformer that forgot one fails here, not at the vendor.
 //   - bearer: Authorization: Bearer <values.token>.
 //   - basic: Authorization: Basic base64(<values.username>:<values.password>).
+//   - none: nothing (a public API; the account has no credentials).
 //
 // Errors name credential keys, never values.
 func Apply(scheme string, c Credentials, req *core.VendorRequest) error {
 	switch scheme {
+	case SchemeNone:
+		return nil
 	case SchemeStaticHeaders:
 		return checkStaticHeaders(c, req)
 	case SchemeBearer:

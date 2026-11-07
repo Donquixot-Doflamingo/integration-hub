@@ -52,6 +52,9 @@ var (
 	vendorEndpointRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$`)
 )
 
+// bootstrapAuthor is the author of objects that predate the admin API (the bootstrap tree).
+const bootstrapAuthor = "bootstrap"
+
 type transformerMeta struct {
 	Author    string    `json:"author"`
 	Reason    string    `json:"reason"`
@@ -66,17 +69,19 @@ func transformerMetaFile(ref registry.TransformerRef) string {
 	return fmt.Sprintf("admin/transformers/%s/%d.json", ref.ID, ref.Version)
 }
 
-// fixture is the contract's GoldenFixture. input and vendor_response are the fixture documents
-// as stored (DESIGN §7.6), "_context" included; account_config, when given, becomes
-// _context.account of the case.
+// fixture is the contract's GoldenFixture (a sample). input and vendor_response are the fixture
+// documents as stored (DESIGN §7.6), "_context" included; account_config, when given, becomes
+// _context.account of the case, and input_headers its _context.hdr (the caller headers the
+// transformer reads as hdr.*, ADR-0023).
 type fixture struct {
-	Name             string          `json:"name"`
-	Input            json.RawMessage `json:"input,omitempty"`
-	AccountConfig    json.RawMessage `json:"account_config,omitempty"`
-	ExpectedRequest  json.RawMessage `json:"expected_request,omitempty"`
-	VendorResponse   json.RawMessage `json:"vendor_response,omitempty"`
-	ExpectedResponse json.RawMessage `json:"expected_response,omitempty"`
-	ExpectedError    json.RawMessage `json:"expected_error,omitempty"`
+	Name             string            `json:"name"`
+	Input            json.RawMessage   `json:"input,omitempty"`
+	InputHeaders     map[string]string `json:"input_headers,omitempty"`
+	AccountConfig    json.RawMessage   `json:"account_config,omitempty"`
+	ExpectedRequest  json.RawMessage   `json:"expected_request,omitempty"`
+	VendorResponse   json.RawMessage   `json:"vendor_response,omitempty"`
+	ExpectedResponse json.RawMessage   `json:"expected_response,omitempty"`
+	ExpectedError    json.RawMessage   `json:"expected_error,omitempty"`
 }
 
 func isObject(raw json.RawMessage) bool {
@@ -84,9 +89,10 @@ func isObject(raw json.RawMessage) bool {
 	return len(raw) > 0 && json.Unmarshal(raw, &m) == nil && m != nil
 }
 
-// withContext sets _context.account of doc from accountConfig unless doc already sets it.
-func withContext(doc, accountConfig json.RawMessage) (json.RawMessage, error) {
-	if len(accountConfig) == 0 {
+// withContext sets _context.account of doc from accountConfig unless doc already sets it, and
+// _context.hdr from headers.
+func withContext(doc, accountConfig json.RawMessage, headers map[string]string) (json.RawMessage, error) {
+	if len(accountConfig) == 0 && len(headers) == 0 {
 		return doc, nil
 	}
 	var m map[string]any
@@ -97,15 +103,51 @@ func withContext(doc, accountConfig json.RawMessage) (json.RawMessage, error) {
 	if ctx == nil {
 		ctx = map[string]any{}
 	}
-	if _, set := ctx["account"]; !set {
+	if _, set := ctx["account"]; !set && len(accountConfig) > 0 {
 		var acc any
 		if err := json.Unmarshal(accountConfig, &acc); err != nil {
 			return nil, err
 		}
 		ctx["account"] = acc
 	}
+	if len(headers) > 0 {
+		hdr := make(map[string]any, len(headers))
+		for k, v := range headers {
+			hdr[k] = v
+		}
+		ctx["hdr"] = hdr
+	}
 	m["_context"] = ctx
 	return json.Marshal(m)
+}
+
+// splitHeaders takes _context.hdr out of a stored request sample: the contract shows it as
+// input_headers. An emptied _context goes too.
+func splitHeaders(doc json.RawMessage) (json.RawMessage, map[string]string) {
+	var m map[string]any
+	if json.Unmarshal(doc, &m) != nil {
+		return doc, nil
+	}
+	ctx, _ := m["_context"].(map[string]any)
+	hdr, ok := ctx["hdr"].(map[string]any)
+	if !ok {
+		return doc, nil
+	}
+	headers := make(map[string]string, len(hdr))
+	for k, v := range hdr {
+		if s, ok := v.(string); ok {
+			headers[k] = s
+		}
+	}
+	delete(ctx, "hdr")
+	if len(ctx) == 0 {
+		delete(m, "_context")
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return doc, nil
+	}
+	return b, headers
 }
 
 func indentJSON(raw json.RawMessage) []byte {
@@ -140,7 +182,7 @@ func fixtureFiles(kind string, fixtures []fixture, pointer string) (map[string][
 			if !isObject(f.Input) || !isObject(f.ExpectedRequest) {
 				return nil, badRequest(at, "request fixtures need input and expected_request objects")
 			}
-			in, err := withContext(f.Input, f.AccountConfig)
+			in, err := withContext(f.Input, f.AccountConfig, f.InputHeaders)
 			if err != nil {
 				return nil, badRequest(at+"/input", err.Error())
 			}
@@ -151,7 +193,10 @@ func fixtureFiles(kind string, fixtures []fixture, pointer string) (map[string][
 			if !isObject(f.VendorResponse) || hasResp == hasErr {
 				return nil, badRequest(at, "response fixtures need vendor_response and exactly one of expected_response or expected_error")
 			}
-			vr, err := withContext(f.VendorResponse, f.AccountConfig)
+			if len(f.InputHeaders) > 0 {
+				return nil, badRequest(at+"/input_headers", "input_headers belong to request samples")
+			}
+			vr, err := withContext(f.VendorResponse, f.AccountConfig, nil)
 			if err != nil {
 				return nil, badRequest(at+"/vendor_response", err.Error())
 			}
@@ -205,7 +250,8 @@ func readFixtures(fsys fs.FS, dir, kind string) ([]fixture, error) {
 				}
 			}
 		} else {
-			f.Input, _ = read(e.Name())
+			in, _ := read(e.Name())
+			f.Input, f.InputHeaders = splitHeaders(in)
 			f.ExpectedRequest, _ = read(name + ".expected_request.json")
 		}
 		out = append(out, f)
@@ -219,7 +265,10 @@ type goldenCase struct {
 	Fixture string   `json:"fixture"`
 	Passed  bool     `json:"passed"`
 	Diff    []diffOp `json:"diff"`
-	Error   *string  `json:"error"`
+	// SchemaErrors are the endpoint request_schema violations of a request sample's produced
+	// request (check endpoint_schema, ADR-0023); omitted for response samples.
+	SchemaErrors []registry.Violation `json:"schema_errors,omitempty"`
+	Error        *string              `json:"error"`
 }
 
 type goldensResult struct {
@@ -261,11 +310,20 @@ func diffOps(lines []string) []diffOp {
 	return out
 }
 
-func runGoldens(prog *transform.Program, fixtures fs.FS) goldensResult {
+// runGoldens runs the samples of prog; ep, when known, is the endpoint a request transformer
+// targets: a sample whose produced request breaks its request schema fails (endpoint_schema).
+func runGoldens(prog *transform.Program, fixtures fs.FS, ep *registry.Endpoint) goldensResult {
 	start := time.Now()
 	res := goldensResult{Results: []goldenCase{}}
 	for _, r := range transform.RunGoldens(prog, fixtures) {
 		c := goldenCase{Fixture: r.Case, Passed: r.Passed(), Diff: diffOps(r.Diffs), Error: nullable(r.Err)}
+		if prog.Kind() == string(registry.KindRequest) {
+			c.SchemaErrors = []registry.Violation{}
+			if r.Checked != nil && ep != nil {
+				c.SchemaErrors = append(c.SchemaErrors, registry.CheckEndpointRequest(ep, *r.Checked)...)
+			}
+			c.Passed = c.Passed && len(c.SchemaErrors) == 0
+		}
 		if c.Fixture == "" {
 			c.Fixture = "(none)"
 		}
@@ -283,10 +341,17 @@ func runGoldens(prog *transform.Program, fixtures fs.FS) goldensResult {
 // ---- compiling drafts ----
 
 type draft struct {
-	Kind           string `json:"kind"`
-	Capability     string `json:"capability"`
-	VendorEndpoint string `json:"vendor_endpoint"`
-	YAML           string `json:"yaml"`
+	Kind           string  `json:"kind"`
+	VendorEndpoint *string `json:"vendor_endpoint"` // request: required; response: absent or null
+	YAML           string  `json:"yaml"`
+}
+
+// endpoint is the draft's vendor endpoint ref ("" for response transformers).
+func (d draft) endpoint() string {
+	if d.VendorEndpoint == nil {
+		return ""
+	}
+	return *d.VendorEndpoint
 }
 
 type compileProblem struct {
@@ -295,16 +360,16 @@ type compileProblem struct {
 }
 
 // normalise sets the header fields of a transformer document the pipeline owns (id, version,
-// kind, capability, vendor endpoint, docs URL), keeping the author's comments and layout.
+// kind, vendor endpoint, docs URL), keeping the author's comments and layout.
 func normalise(src string, id string, version int, d draft, docsURL *string) ([]byte, error) {
 	var m map[string]any
 	if err := yaml.Unmarshal([]byte(src), &m); err != nil || m == nil {
 		return nil, badRequest("/yaml", "yaml must be a YAML mapping (DESIGN §7)")
 	}
 	t := control.NewScratchTree(map[string][]byte{"t.yaml": []byte(src)})
-	set := []struct{ key, value string }{{"transformer", id}, {"version", strconv.Itoa(version)}, {"kind", d.Kind}, {"capability", d.Capability}}
-	if d.VendorEndpoint != "" {
-		set = append(set, struct{ key, value string }{"vendor_endpoint", d.VendorEndpoint})
+	set := []struct{ key, value string }{{"transformer", id}, {"version", strconv.Itoa(version)}, {"kind", d.Kind}}
+	if d.endpoint() != "" {
+		set = append(set, struct{ key, value string }{"vendor_endpoint", d.endpoint()})
 	}
 	for _, kv := range set {
 		if err := t.SetScalar("t.yaml", kv.key, kv.value); err != nil {
@@ -320,8 +385,9 @@ func normalise(src string, id string, version int, d draft, docsURL *string) ([]
 	return b, nil
 }
 
-// compileDraft compiles a draft against snap's capabilities the way the snapshot build does.
-func compileDraft(snap *registry.Snapshot, d draft) (*transform.Program, []compileProblem, error) {
+// compileDraft compiles a draft the way the snapshot build does. A transformer knows no caller
+// schema (ADR-0023): its field references are checked when an integration uses it.
+func compileDraft(d draft) (*transform.Program, []compileProblem, error) {
 	if err := checkDraft(d, "/draft"); err != nil {
 		return nil, nil, err
 	}
@@ -335,26 +401,7 @@ func compileDraft(snap *registry.Snapshot, d draft) (*transform.Program, []compi
 	if err := dec.Decode(&tf); err != nil {
 		return nil, []compileProblem{{Message: strings.TrimPrefix(err.Error(), "yaml: ")}}, nil //nolint:nilerr // a draft that does not compile is a result, not a failure
 	}
-	c, ok := snap.Capabilities[tf.Capability]
-	if !ok {
-		return nil, []compileProblem{{Path: "capability", Message: "unknown capability " + tf.Capability}}, nil
-	}
-	var op *registry.Operation
-	switch {
-	case tf.Operation != "":
-		if op = c.Operations[tf.Operation]; op == nil {
-			return nil, []compileProblem{{Path: "operation", Message: "capability " + c.Key + " has no operation " + tf.Operation}}, nil
-		}
-	case len(c.Operations) == 1:
-		for _, o := range c.Operations {
-			op = o
-		}
-	default:
-		return nil, []compileProblem{{Path: "operation", Message: fmt.Sprintf("capability %s has %d operations: set operation", c.Key, len(c.Operations))}}, nil
-	}
-	spec := transform.Spec{ID: "draft", Version: 1, Kind: string(tf.Kind), Capability: tf.Capability, Request: tf.Request, Response: tf.Response,
-		Errors: tf.Errors, Batch: tf.Batch, Session: tf.Session, AllowCredsInBody: tf.AllowCredsInBody}
-	prog, err := transform.Compile(spec, transform.Options{RequestSchema: op.RequestSchema, ValidateResponse: op.Response.Validate})
+	prog, err := registry.CompileFile(&tf)
 	var ce *transform.CompileError
 	if errors.As(err, &ce) {
 		ps := make([]compileProblem, 0, len(ce.Problems))
@@ -369,14 +416,16 @@ func compileDraft(snap *registry.Snapshot, d draft) (*transform.Program, []compi
 	return prog, nil, nil
 }
 
+// checkDraft enforces the per-kind vendor_endpoint rule (contract TransformerVersionCreate): a
+// request transformer names its endpoint, a response transformer stands alone.
 func checkDraft(d draft, at string) error {
 	switch {
 	case d.Kind != string(registry.KindRequest) && d.Kind != string(registry.KindResponse):
 		return badRequest(at+"/kind", "kind must be request or response (inbound transformers are not supported by this build)")
-	case !capKeyRE.MatchString(d.Capability):
-		return badRequest(at+"/capability", "capability must be <name>@v<major>")
-	case !vendorEndpointRE.MatchString(d.VendorEndpoint):
-		return badRequest(at+"/vendor_endpoint", "vendor_endpoint must be <vendor>.<endpoint>@<version>")
+	case d.Kind == string(registry.KindRequest) && !vendorEndpointRE.MatchString(d.endpoint()):
+		return badRequest(at+"/vendor_endpoint", "a request transformer needs vendor_endpoint <vendor>.<endpoint>@<version>")
+	case d.Kind == string(registry.KindResponse) && d.endpoint() != "":
+		return badRequest(at+"/vendor_endpoint", "a response transformer stands alone: omit vendor_endpoint (or send null)")
 	case strings.TrimSpace(d.YAML) == "":
 		return badRequest(at+"/yaml", "yaml is required")
 	}
@@ -385,8 +434,10 @@ func checkDraft(d draft, at string) error {
 
 // ---- views ----
 
-// pairedEndpoint is the vendor endpoint of a response transformer: its own, else the endpoint
-// of the request transformer it is paired with in an integration target.
+// pairedEndpoint is the vendor endpoint of a transformer: a request transformer's own, else
+// (a response transformer, which stands alone) the endpoint of the request transformer it is
+// paired with in an integration target. Only the vendor_id filter uses the paired endpoint: the
+// contract reports vendor_endpoint null for response transformers (ADR-0023).
 func pairedEndpoint(snap *registry.Snapshot, ref registry.TransformerRef) string {
 	tf := snap.Transformers[ref]
 	if tf.VendorEndpoint != "" {
@@ -471,7 +522,8 @@ func (s *Server) versionView(ctx context.Context, src registry.Sources, snap *re
 		if err != nil {
 			return nil, err
 		}
-		goldens = runGoldens(prog, sub)
+		ep, _ := snap.Endpoint(tf.VendorEndpoint)
+		goldens = runGoldens(prog, sub, ep)
 	}
 	out := map[string]any{"transformer_id": ref.ID, "version": ref.Version, "ref": ref.String(), "author": m.Author, "reason": m.Reason,
 		"created_at": m.CreatedAt.UTC()}
@@ -487,7 +539,7 @@ func (s *Server) versionView(ctx context.Context, src registry.Sources, snap *re
 	if err != nil {
 		return nil, err
 	}
-	out["kind"], out["capability"], out["vendor_endpoint"] = string(tf.Kind), tf.Capability, pairedEndpoint(snap, ref)
+	out["kind"], out["vendor_endpoint"] = string(tf.Kind), nullable(tf.VendorEndpoint)
 	out["yaml"], out["fixtures"], out["docs_url"] = string(doc), fixtures, nullable(tf.DocsURL)
 	out["goldens"] = map[string]any{"passed": goldens.Passed, "total": goldens.Total, "failed": goldens.Failed}
 	return out, nil
@@ -501,7 +553,7 @@ func (s *Server) summaryView(ctx context.Context, src registry.Sources, snap *re
 	if err != nil {
 		return nil, ref, err
 	}
-	return map[string]any{"transformer_id": id, "kind": string(tf.Kind), "capability": tf.Capability, "vendor_endpoint": pairedEndpoint(snap, ref),
+	return map[string]any{"transformer_id": id, "kind": string(tf.Kind), "vendor_endpoint": nullable(tf.VendorEndpoint),
 		"latest_version": ref.Version, "used_by_active_versions": usedByActive(snap, id), "updated_at": m.CreatedAt.UTC()}, ref, nil
 }
 
@@ -525,8 +577,7 @@ func (s *Server) listTransformers(w http.ResponseWriter, r *http.Request) {
 		tf := snap.Transformers[ref]
 		ep := pairedEndpoint(snap, ref)
 		vendor, _, _ := strings.Cut(ep, ".")
-		if (q.Get("kind") != "" && q.Get("kind") != string(tf.Kind)) || (q.Get("capability") != "" && q.Get("capability") != tf.Capability) ||
-			(q.Get("vendor_id") != "" && q.Get("vendor_id") != vendor) || !matchQ(r, id) {
+		if (q.Get("kind") != "" && q.Get("kind") != string(tf.Kind)) || (q.Get("vendor_id") != "" && q.Get("vendor_id") != vendor) || !matchQ(r, id) {
 			continue
 		}
 		keep = append(keep, id)
@@ -700,11 +751,11 @@ func (s *Server) createTransformerVersion(w http.ResponseWriter, r *http.Request
 			return control.Change{}, err
 		}
 		return control.Change{Actor: meta.Author, Action: "createTransformerVersion", ObjectType: "transformer", ObjectID: ref.String(), Reason: reason,
-			After: map[string]any{"version": ref.Version, "kind": body.Kind, "capability": body.Capability, "vendor_endpoint": body.VendorEndpoint,
+			After: map[string]any{"version": ref.Version, "kind": body.Kind, "vendor_endpoint": nullable(body.endpoint()),
 				"fixtures": len(body.Fixtures)}}, nil
 	})
 	if err != nil {
-		s.fail(w, r, controlError(err))
+		s.fail(w, r, sampleError(err, body.Fixtures))
 		return
 	}
 	src, snap, err := s.current(r.Context())
@@ -732,7 +783,7 @@ func (s *Server) resolve(src registry.Sources, snap *registry.Snapshot, refStr s
 	case (refStr == "") == (d == nil):
 		return nil, draft{}, nil, badRequest("", "give exactly one of ref or draft")
 	case d != nil:
-		prog, problems, err = compileDraft(snap, *d)
+		prog, problems, err = compileDraft(*d)
 		return prog, *d, problems, err
 	}
 	ref, perr := registry.ParseTransformerRef(refStr)
@@ -744,7 +795,11 @@ func (s *Server) resolve(src registry.Sources, snap *registry.Snapshot, refStr s
 		return nil, draft{}, nil, notFound("Transformer version " + refStr)
 	}
 	doc, _ := fs.ReadFile(src.Config, transformerFile(ref))
-	return snap.Programs[ref], draft{Kind: string(stored.Kind), Capability: stored.Capability, VendorEndpoint: pairedEndpoint(snap, ref), YAML: string(doc)}, nil, nil
+	tf = draft{Kind: string(stored.Kind), YAML: string(doc)}
+	if stored.VendorEndpoint != "" {
+		tf.VendorEndpoint = &stored.VendorEndpoint
+	}
+	return snap.Programs[ref], tf, nil, nil
 }
 
 func (s *Server) dryRunTransformer(w http.ResponseWriter, r *http.Request) {
@@ -753,7 +808,7 @@ func (s *Server) dryRunTransformer(w http.ResponseWriter, r *http.Request) {
 		Draft          *draft            `json:"draft"`
 		AccountID      string            `json:"account_id"`
 		Input          map[string]any    `json:"input"`
-		Headers        map[string]string `json:"headers"`
+		InputHeaders   map[string]string `json:"input_headers"`
 		Session        map[string]any    `json:"session"`
 		VendorResponse *struct {
 			Status  int               `json:"status"`
@@ -776,22 +831,22 @@ func (s *Server) dryRunTransformer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := map[string]any{"ok": false, "kind": d.Kind, "vendor_request": nil, "canonical_response": nil, "canonical_error": nil,
-		"compile_errors": []compileProblem{}, "duration_us": 0}
+		"schema_errors": []registry.Violation{}, "compile_errors": []compileProblem{}, "duration_us": 0}
 	if len(problems) > 0 {
 		out["compile_errors"] = problems
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	vendorID, _, _ := strings.Cut(d.VendorEndpoint, ".")
+	vendorID, _, _ := strings.Cut(d.endpoint(), ".")
 	vendor := snap.Vendors[vendorID]
 	// Credentials are never read here: every creds.<key> the transformer names gets a
 	// placeholder, and DryRun masks it in the output.
 	in := transform.Input{Req: body.Input, Session: body.Session, Creds: placeholderCreds(d.YAML), Now: s.d.Now(),
 		UUID: func() string { return "00000000-0000-4000-8000-000000000000" }}
-	if len(body.Headers) > 0 {
-		in.Hdr = map[string]any{}
-		for k, v := range body.Headers {
-			in.Hdr[strings.ToLower(k)] = v
+	if len(body.InputHeaders) > 0 { // as declared in the operation's request_schema.headers
+		in.Hdr = make(map[string]any, len(body.InputHeaders))
+		for k, v := range body.InputHeaders {
+			in.Hdr[k] = v
 		}
 	}
 	base := ""
@@ -839,6 +894,14 @@ func (s *Server) dryRunTransformer(w http.ResponseWriter, r *http.Request) {
 			}
 			out["ok"] = true
 			out["vendor_request"] = map[string]any{"method": req.Method, "url": joinURL(base, req), "headers": req.Headers, "body": req.Body}
+			// The produced request against the endpoint's request_schema (credentials excluded).
+			if ep, ok := snap.Endpoint(d.endpoint()); ok {
+				if _, checked, err := prog.BuildSample(in); err == nil {
+					if v := registry.CheckEndpointRequest(ep, checked); len(v) > 0 {
+						out["schema_errors"] = v
+					}
+				}
+			}
 		}
 	} else {
 		if body.VendorResponse == nil {
@@ -858,11 +921,13 @@ func (s *Server) dryRunTransformer(w http.ResponseWriter, r *http.Request) {
 			out["canonical_error"] = ce
 		default:
 			out["ok"] = true
-			if m, isObj := mapped.(map[string]any); isObj {
+			if m, isObj := mapped.(map[string]any); isObj || mapped == nil {
 				out["canonical_response"] = m
 			} else {
+				// Callers get any JSON value (ADR-0023), but TransformerDryRunResult can only
+				// show an object here (contract gap noted in the HUB-434 report).
 				out["ok"] = false
-				out["compile_errors"] = []compileProblem{{Path: "response", Message: "the mapped response is not an object"}}
+				out["compile_errors"] = []compileProblem{{Path: "response", Message: "the output is not a JSON object: dry-run can only show objects"}}
 			}
 		}
 	}
@@ -946,5 +1011,71 @@ func (s *Server) runTransformerGoldens(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, runGoldens(prog, fixtures))
+	ep, _ := snap.Endpoint(d.endpoint())
+	writeJSON(w, http.StatusOK, runGoldens(prog, fixtures, ep))
+}
+
+// sampleError maps a refused transformer create (the full snapshot build ran its samples) to the
+// contract's 422: each problem of the new version names its check, the sample and the field of
+// the produced request, with a pointer into the request body (/fixtures/<i>/...); a compile
+// problem points at /yaml. The report lists the passing checks too.
+func sampleError(err error, fixtures []fixture) error {
+	var problems registry.ConfigErrors
+	if !errors.As(err, &problems) {
+		return controlError(err)
+	}
+	index := map[string]int{}
+	kind := ""
+	for i, f := range fixtures {
+		index[f.Name] = i
+		if len(f.ExpectedRequest) > 0 {
+			kind = string(registry.KindRequest)
+		}
+	}
+	details := make([]Detail, 0, len(problems))
+	failed := map[string][]map[string]any{}
+	for _, p := range problems {
+		check, ptr := checkOf(p), pointer(p.Path)
+		i, isSample := index[p.Sample]
+		switch {
+		case isSample && check == registry.CheckGoldensPass && p.Field != "":
+			if kind == string(registry.KindRequest) {
+				ptr = fmt.Sprintf("/fixtures/%d/expected_request%s", i, p.Field)
+			} else {
+				ptr = fmt.Sprintf("/fixtures/%d/expected_response%s", i, strings.TrimPrefix(strings.TrimPrefix(p.Field, "/response"), "/error"))
+			}
+		case isSample:
+			ptr = fmt.Sprintf("/fixtures/%d", i)
+		case strings.HasPrefix(p.File, "transformers/") && strings.HasSuffix(p.File, ".yaml"):
+			check, ptr = "expressions_typecheck", "/yaml"
+		}
+		msg := p.Message
+		if isSample {
+			msg = fmt.Sprintf("sample '%s': %s", p.Sample, p.Message)
+		} else if p.File != "" {
+			msg = p.File + ": " + msg
+		}
+		details = append(details, Detail{Pointer: ptr, Keyword: check, Message: msg, Sample: p.Sample, Field: p.Field})
+		failed[check] = append(failed[check], checkRow(check, msg, ptr, p))
+	}
+	names := []string{"expressions_typecheck", registry.CheckGoldensPass}
+	if kind == string(registry.KindRequest) {
+		names = append(names, registry.CheckEndpointSchema)
+	}
+	for c := range failed {
+		if !slices.Contains(names, c) {
+			names = append(names, c)
+		}
+	}
+	checks := []map[string]any{}
+	for _, name := range names {
+		if f, ok := failed[name]; ok {
+			checks = append(checks, f...)
+			continue
+		}
+		checks = append(checks, map[string]any{"check": name, "status": "pass", "message": nil, "pointer": nil, "sample": nil, "field": nil})
+	}
+	return &Error{Status: http.StatusUnprocessableEntity, Code: CodePublishValidationFailed, Details: details,
+		Message: fmt.Sprintf("%d sample check(s) failed", len(problems)),
+		Meta:    map[string]any{"report": map[string]any{"valid": false, "checks": checks}}}
 }

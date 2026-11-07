@@ -16,7 +16,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/multiop"
 )
 
-// HUB-343: each operation of a multi-operation capability runs its own transformer pair, so
+// HUB-343: each operation of a multi-operation integration runs its own transformer pair, so
 // send and verify of int_two_step go to two vendor endpoints (internal/testkit/multiop). These
 // tests cover the sync path, the failover chain, dry-run and shadow; the wait and async paths
 // are in peroperation_integration_test.go, session steps in the OTP example test.
@@ -28,15 +28,13 @@ const (
 	twoVerifyBody = `{"mobile": "+919812345678", "code": "482913"}`
 )
 
-// perOpSources is backend/config + contracts/ with the multiop overlay merged in.
+// perOpSources is backend/config with the multiop overlay merged in.
 func perOpSources(t testing.TB) registry.Sources {
 	t.Helper()
-	cfg, contracts := fstest.MapFS{}, fstest.MapFS{}
+	cfg := fstest.MapFS{}
 	mergeInto(t, cfg, os.DirFS("../../config"))
-	mergeInto(t, contracts, os.DirFS("../../../contracts"))
 	mergeOverlay(t, cfg, multiop.Config())
-	mergeOverlay(t, contracts, multiop.Contracts())
-	return registry.Sources{Config: cfg, Contracts: contracts}
+	return registry.Sources{Config: cfg}
 }
 
 // perOpSnapshot builds the overlay (goldens included) and lets a test tune int_two_step's
@@ -67,7 +65,12 @@ func resolvedTransformers(t *testing.T, b audit.Batch) map[string]string {
 	t.Helper()
 	for _, e := range b.Events {
 		if e.Type == audit.IntegrationResolved {
-			m, _ := e.Meta["transformers"].(map[string]string)
+			m := map[string]string{}
+			for k, v := range e.Meta["transformers"].(map[string]any) {
+				if s, ok := v.(string); ok {
+					m[k] = s
+				}
+			}
 			return m
 		}
 	}

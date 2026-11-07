@@ -70,9 +70,6 @@ func TestDiscoveryVisibility(t *testing.T) {
 	if rec, _ := get(t, spec, h, devKey, "/v1/integrations/int_nope"); rec.Code != 404 {
 		t.Fatalf("unknown: %d", rec.Code)
 	}
-	if rec, _ := get(t, spec, h, devKey, "/v1/capabilities/llm.chat@v1"); rec.Code != 404 {
-		t.Fatalf("capability without a usable integration: %d", rec.Code)
-	}
 	if rec, _ := get(t, spec, h, "hk_wrong", "/v1/integrations"); rec.Code != 401 {
 		t.Fatalf("bad key: %d", rec.Code)
 	}
@@ -95,9 +92,6 @@ func TestDiscoveryPagingAndFilter(t *testing.T) {
 	if strings.Join(seen, ",") != "int_evt_brandA,int_evt_brandB,int_evt_brandB_min" {
 		t.Fatalf("paged %v", seen)
 	}
-	if _, body := get(t, spec, h, devKey, "/v1/integrations?capability=llm.chat@v1"); len(ids(body)) != 0 {
-		t.Fatalf("filter %v", ids(body))
-	}
 	for _, q := range []string{"limit=0", "limit=201", "limit=x", "cursor=%25%25"} {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/integrations?"+q, nil)
 		req.Header.Set("Authorization", "Bearer "+devKey)
@@ -112,14 +106,22 @@ func TestDiscoveryShapes(t *testing.T) {
 	snap := devSnapshot(t)
 	h := New(Deps{Snapshots: staticSnapshots{snap}}).Handler()
 	_, d := get(t, spec, h, devKey, "/v1/integrations/int_evt_brandA")
-	if d["owned"] != true || d["capability_url"] != "/v1/capabilities/events.track@v1" || d["delivery_mode"] == "" {
+	if d["owned"] != true || d["delivery_mode"] == "" || d["capability_url"] != nil || d["capability"] != nil {
 		t.Fatalf("detail %v", d)
 	}
-	_, c := get(t, spec, h, devKey, "/v1/capabilities/events.track@v1")
-	ops := c["operations"].([]any)
+	// ADR-0023: each operation with the request schema callers follow, from the active version.
+	ops := d["operations"].([]any)
 	op := ops[0].(map[string]any)
-	if c["name"] != "events.track" || c["major"] != 1.0 || op["name"] != "default" || op["request_schema"].(map[string]any)["$id"] == nil {
-		t.Fatalf("capability %v", c)
+	rs := op["request_schema"].(map[string]any)
+	body := rs["body"].(map[string]any)
+	if len(ops) != 1 || op["name"] != "default" || op["idempotent"] != true || op["description"] != "Track a single event for a user." ||
+		body["required"].([]any)[0] != "user" || rs["headers"] != nil {
+		t.Fatalf("operations %v", ops)
+	}
+	_, list := get(t, spec, h, devKey, "/v1/integrations")
+	first := list["items"].([]any)[0].(map[string]any)
+	if first["operations"].([]any)[0].(map[string]any)["request_schema"] == nil {
+		t.Fatalf("list item without request schemas: %v", first)
 	}
 }
 
@@ -140,7 +142,7 @@ func TestDiscoveryLeaksNoVendorIdentity(t *testing.T) {
 		forbidden = append(forbidden, `"`+ref.ID+`"`, ref.String())
 	}
 	forbidden = append(forbidden, `"version"`, `"active_version"`, `"vendor"`, `"account"`, `"targets"`)
-	targets := []string{"/v1/integrations", "/v1/capabilities/events.track@v1"}
+	targets := []string{"/v1/integrations"}
 	for id := range snap.Integrations {
 		targets = append(targets, "/v1/integrations/"+id)
 	}

@@ -18,7 +18,7 @@ var t1Input = Input{
 
 func compileDev(t testing.TB, rel string) *Program {
 	t.Helper()
-	p, err := Compile(devSpec(t, rel), Options{RequestSchema: eventsSchema(t)})
+	p, err := Compile(devSpec(t, rel), Options{})
 	if err != nil {
 		t.Fatalf("compile %s: %v", rel, err)
 	}

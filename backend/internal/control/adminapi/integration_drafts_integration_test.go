@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/trackops"
 )
 
 func init() {
@@ -43,7 +45,7 @@ func apiSpecJSON(weight int, second string) string {
 	if weight < 100 {
 		targets += fmt.Sprintf(`,{"vendor_id":"clevertap","account_id":%q,"transformer":{"request":"T1@7","response":"R1@2"},"weight":%d}`, second, 100-weight)
 	}
-	return `{"targets":[` + targets + `],"failover":[],"delivery":{"mode":"wait","wait_ms":3000,"ttl_ms":21600000,"on_circuit_open":"fail_fast","pending":"re_resolve","polling":true},` +
+	return `{` + trackops.Member + `,"targets":[` + targets + `],"failover":[],"delivery":{"mode":"wait","wait_ms":3000,"ttl_ms":21600000,"on_circuit_open":"fail_fast","pending":"re_resolve","polling":true},` +
 		`"webhooks":[],"audit":{"payloads":"masked","retention_ms":2592000000}}`
 }
 

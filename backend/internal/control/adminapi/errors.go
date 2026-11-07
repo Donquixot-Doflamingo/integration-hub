@@ -47,8 +47,8 @@ func validationFailed(problems registry.ConfigErrors) *Error {
 		if p.File != "" {
 			msg = p.File + ": " + msg
 		}
-		details = append(details, Detail{Pointer: ptr, Keyword: check, Message: msg})
-		checks = append(checks, map[string]any{"check": check, "status": "fail", "message": msg, "pointer": ptr})
+		details = append(details, Detail{Pointer: ptr, Keyword: check, Message: msg, Sample: p.Sample, Field: p.Field})
+		checks = append(checks, checkRow(check, msg, ptr, p))
 	}
 	return &Error{Status: http.StatusUnprocessableEntity, Code: CodePublishValidationFailed, Details: details,
 		Message: fmt.Sprintf("%d publish check(s) failed", len(problems)),
@@ -65,11 +65,21 @@ func pointer(path string) string {
 	return "/" + strings.ReplaceAll(index.ReplaceAllString(path, ".$1"), ".", "/")
 }
 
-// checkOf names the DESIGN §6.4 check a problem failed (ValidationCheck.check).
+// checkRow is one failed ValidationCheck, with the sample and field of a sample check.
+func checkRow(check, msg, ptr string, p registry.Problem) map[string]any {
+	return map[string]any{"check": check, "status": "fail", "message": msg, "pointer": nullable(ptr),
+		"sample": nullable(p.Sample), "field": nullable(p.Field)}
+}
+
+// checkOf names the DESIGN §6.4 check a problem failed (ValidationCheck.check): the one the
+// registry named, else one derived from the message.
 func checkOf(p registry.Problem) string {
+	if p.Check != "" {
+		return p.Check
+	}
 	m, path := strings.ToLower(p.Message), strings.ToLower(p.Path)
 	switch {
-	case strings.Contains(m, "compiled for operation") || strings.Contains(m, "is not an operation of"):
+	case strings.Contains(m, "is not an operation of"):
 		return registry.CheckOperationsHaveTransformers // registry checkOperations (HUB-343)
 	case strings.Contains(m, "golden"):
 		return "goldens_pass"

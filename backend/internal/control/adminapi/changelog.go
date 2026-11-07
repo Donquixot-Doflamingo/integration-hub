@@ -82,7 +82,9 @@ func (s *Server) listChangeLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	var where []string
+	// Rows about capabilities stay in the append-only log (ADR-0023 removed the object type), but
+	// the contract's ObjectType no longer names them: they are not served.
+	where := []string{"object_type <> '" + removedObjectType + "'"}
 	var args []any
 	arg := func(v any) string { args = append(args, v); return "$" + strconv.Itoa(len(args)) }
 	for _, f := range []string{"actor", "object_type", "object_id", "action"} {
@@ -105,9 +107,7 @@ func (s *Server) listChangeLog(w http.ResponseWriter, r *http.Request) {
 		where = append(where, "(at, change_id) < ("+arg(at)+", "+arg(cursor[1])+")")
 	}
 	sql := `SELECT change_id, at, actor, actor_roles, action, object_type, object_id, reason, snapshot_version FROM hub.change_log`
-	if len(where) > 0 {
-		sql += " WHERE " + strings.Join(where, " AND ")
-	}
+	sql += " WHERE " + strings.Join(where, " AND ")
 	sql += " ORDER BY at DESC, change_id DESC LIMIT " + strconv.Itoa(limit+1)
 	if s.d.Pool == nil {
 		s.fail(w, r, errors.New("no database"))
@@ -135,6 +135,9 @@ func (s *Server) listChangeLog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": next})
 }
 
+// removedObjectType is the change-log object type of the removed capabilities (ADR-0023).
+const removedObjectType = "capability"
+
 func (s *Server) getChangeLogEntry(w http.ResponseWriter, r *http.Request) {
 	if s.d.Pool == nil {
 		s.fail(w, r, errors.New("no database"))
@@ -143,7 +146,7 @@ func (s *Server) getChangeLogEntry(w http.ResponseWriter, r *http.Request) {
 	var e changeSummary
 	var before, after []byte
 	err := s.d.Pool.QueryRow(r.Context(), `SELECT change_id, at, actor, actor_roles, action, object_type, object_id, reason, snapshot_version, before, after
-FROM hub.change_log WHERE change_id = $1`, r.PathValue("change_id")).Scan(&e.ChangeID, &e.At, &e.Actor, &e.ActorRoles, &e.Action, &e.ObjectType,
+FROM hub.change_log WHERE change_id = $1 AND object_type <> $2`, r.PathValue("change_id"), removedObjectType).Scan(&e.ChangeID, &e.At, &e.Actor, &e.ActorRoles, &e.Action, &e.ObjectType,
 		&e.ObjectID, &e.Reason, &e.SnapshotVersion, &before, &after)
 	if errors.Is(err, pgx.ErrNoRows) {
 		s.fail(w, r, notFound("Change-log entry"))

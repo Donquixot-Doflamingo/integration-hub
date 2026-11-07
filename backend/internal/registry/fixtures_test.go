@@ -2,8 +2,6 @@ package registry
 
 import (
 	"maps"
-	"os"
-	"path/filepath"
 	"testing"
 	"testing/fstest"
 )
@@ -11,11 +9,6 @@ import (
 // validFiles is a small, valid registry used as the base for loader and validation tests.
 // Tests copy it, then break one thing.
 var validFiles = map[string]string{
-	"capabilities/events.track.v1.yaml": `
-capability: events.track@v1
-schema_ref: schemas/capabilities/events.track.v1.request.json
-default_ttl: 6h
-`,
 	"vendors/clevertap.yaml": `
 vendor: clevertap
 auth: static_headers
@@ -23,7 +16,7 @@ regions:
   in: http://127.0.0.1:8099
   us: http://127.0.0.1:8099
 endpoints:
-  upload@1: { method: POST, path: /1/upload, timeout_ms: 3000, connect_timeout_ms: 500, idempotent: true, batch_max: 1000 }
+  upload@1: { method: POST, path: /1/upload, timeout_ms: 3000, connect_timeout_ms: 500, idempotent: true, batch_max: 1000, request_schema: {} }
 defaults:
   rate_limit: { per_account_rps: 50 }
   breaker: { window_s: 30, min_calls: 20, failure_ratio: 0.5, consecutive_timeouts: 5, open_s: 30, open_max_s: 600, half_open_probes: 3 }
@@ -51,7 +44,6 @@ quota: { rps: 50, daily: 5000000 }
 transformer: T1
 version: 7
 kind: request
-capability: events.track@v1
 vendor_endpoint: clevertap.upload@1
 request:
   method: POST
@@ -61,7 +53,6 @@ request:
 transformer: R2
 version: 1
 kind: response
-capability: events.track@v1
 response:
   status: '"ok"'
 `,
@@ -72,13 +63,23 @@ response:
 	"integrations/int_evt_brandA/integration.yaml": `
 integration: int_evt_brandA
 owner_tenant: orders-service
-capability: events.track@v1
 grants: []
 active_version: 1
 `,
 	"integrations/int_evt_brandA/versions/1.yaml": `
 integration: int_evt_brandA
 version: 1
+operations:
+  default:
+    idempotent: true
+    request_schema:
+      body:
+        type: object
+        required: [user, event]
+        properties:
+          user: { type: object, required: [id], properties: { id: { type: string, x-pii: identifier } } }
+          event: { type: object, required: [name], properties: { name: { type: string }, timestamp: { type: string, format: date-time }, properties: { type: object, x-pii: free_text } } }
+          context: { type: object, properties: { campaign: { type: string } } }
 targets:
   - vendor: clevertap
     account: ct-brandA-in
@@ -130,29 +131,6 @@ func mapFS(m map[string]string) fstest.MapFS {
 	return fsys
 }
 
-// contractsFS is the real repo-root contracts/ directory (capability schemas are never copied).
-func contractsFS(t testing.TB) fstest.MapFS {
-	t.Helper()
-	wd, _ := os.Getwd()
-	for d := wd; ; d = filepath.Dir(d) {
-		dir := filepath.Join(d, "contracts")
-		if st, err := os.Stat(filepath.Join(dir, "schemas", "capabilities")); err == nil && st.IsDir() {
-			out := fstest.MapFS{}
-			ents, _ := os.ReadDir(filepath.Join(dir, "schemas", "capabilities"))
-			for _, e := range ents {
-				b, err := os.ReadFile(filepath.Join(dir, "schemas", "capabilities", e.Name()))
-				if err == nil {
-					out["schemas/capabilities/"+e.Name()] = &fstest.MapFile{Data: b}
-				}
-			}
-			return out
-		}
-		if filepath.Dir(d) == d {
-			t.Fatal("contracts/ not found")
-		}
-	}
-}
-
-func sources(t testing.TB, m map[string]string) Sources {
-	return Sources{Config: mapFS(m), Contracts: contractsFS(t)}
+func sources(_ testing.TB, m map[string]string) Sources {
+	return Sources{Config: mapFS(m)}
 }

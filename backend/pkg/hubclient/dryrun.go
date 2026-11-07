@@ -7,7 +7,7 @@ import (
 	"net/url"
 )
 
-// DryRunResult is the upstream request the Hub would send for a canonical body, with secrets
+// DryRunResult is the upstream request the Hub would send for a request body, with secrets
 // replaced by "***" (operation dryRunIntegration). It is the one documented place where the
 // vendor request shape is visible: use it for onboarding and debugging only, never build logic
 // on it, because it changes whenever the Hub cuts over.
@@ -31,7 +31,8 @@ type UpstreamRequest struct {
 
 // DryRun validates and transforms body exactly like Invoke but sends nothing upstream. The API
 // key needs the dry_run scope (otherwise an *Error with CodeForbidden, reason missing_scope).
-// Of the InvokeOptions only WithOperation and WithSession apply; the others are ignored.
+// Of the InvokeOptions only WithOperation, WithSession and WithHeaders apply; the others are
+// ignored.
 func (c *Client) DryRun(ctx context.Context, integrationID string, body any, opts ...InvokeOption) (*DryRunResult, error) {
 	var cfg invokeConfig
 	for _, o := range opts {
@@ -50,6 +51,7 @@ func (c *Client) DryRun(ctx context.Context, integrationID string, body any, opt
 		q.Set("operation", cfg.operation)
 	}
 	h := http.Header{}
+	cfg.setHeaders(h)
 	if cfg.session != "" {
 		h.Set("X-Hub-Session", cfg.session)
 	}

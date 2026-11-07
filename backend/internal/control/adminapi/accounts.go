@@ -388,12 +388,8 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := body.AccountID
-	switch {
-	case !accessSlugRE.MatchString(id):
+	if !accessSlugRE.MatchString(id) {
 		s.fail(w, r, badRequest("/account_id", "account_id must match "+accessSlugRE.String()))
-		return
-	case len(body.Credentials) == 0:
-		s.fail(w, r, badRequest("/credentials", "credentials need at least one value"))
 		return
 	}
 	for k, v := range body.Credentials {
@@ -434,17 +430,31 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		if _, ok := v.Regions[body.Region]; !ok {
 			return control.Change{}, badRequest("/region", fmt.Sprintf("vendor %q has no region %q", v.Vendor, body.Region))
 		}
+		// Auth none (ADR-0023): a public API, the account has no credentials at all.
+		needsCreds := creds.NeedsCredentials(v.Auth)
+		switch {
+		case needsCreds && len(body.Credentials) == 0:
+			return control.Change{}, badRequest("/credentials", "credentials need at least one value")
+		case !needsCreds && len(body.Credentials) > 0:
+			return control.Change{}, badRequest("/credentials", fmt.Sprintf("vendor %q uses auth scheme none: omit credentials (or send {})", v.Vendor))
+		}
 		quota, err := accountQuota(body.Quota, registry.Quota{RPS: v.Defaults.RateLimit.PerAccountRPS})
 		if err != nil {
 			return control.Change{}, err
 		}
-		a := registry.Account{Account: id, Vendor: v.Vendor, Region: body.Region, State: registry.AccountActive,
-			CredentialsRef: "localfile://" + id, Config: cfg, Quota: quota}
+		a := registry.Account{Account: id, Vendor: v.Vendor, Region: body.Region, State: registry.AccountActive, Config: cfg, Quota: quota}
+		if needsCreds {
+			a.CredentialsRef = "localfile://" + id
+		}
 		doc, err := yaml.Marshal(a)
 		if err != nil {
 			return control.Change{}, err
 		}
 		t.Put(path, append([]byte("# Created through the admin API (createAccount). Secrets live only in the credential store.\n"), doc...))
+		if !needsCreds {
+			return control.Change{Actor: principal(r).Actor(), Action: "createAccount", ObjectType: "account", ObjectID: id, Reason: reason,
+				After: map[string]any{"vendor": a.Vendor, "region": a.Region, "config": a.Config, "quota": a.Quota, "credentials": []any{}}}, nil
+		}
 		sec := creds.AccountSecrets{Active: creds.NewSlot(creds.AccountSecrets{}, body.Credentials, body.CredentialExpiresAt, s.d.Now())}
 		if err := rot.PutCredentials(ctx, id, &sec, true); err != nil {
 			return control.Change{}, err
@@ -563,8 +573,22 @@ func (s *Server) transitionAccount(w http.ResponseWriter, r *http.Request) {
 
 // ---- credential rotation (DESIGN §6.6): add next → test-connection → promote → delete old ----
 
-// accountForCredentials checks that the account exists and still holds credentials.
-func (s *Server) accountForCredentials(r *http.Request) (*registry.Snapshot, *registry.Account, error) {
+// accountForCredentials checks that the account exists and still holds credentials: an account
+// of an auth none vendor never had any (409, ADR-0023).
+func (s *Server) accountForCredentials(r *http.Request) (*registry.Account, error) {
+	snap, a, err := s.accountForProbe(r)
+	if err != nil {
+		return nil, err
+	}
+	if v := snap.Vendors[a.Vendor]; v != nil && !creds.NeedsCredentials(v.Auth) {
+		return nil, &Error{Status: http.StatusConflict, Code: CodeConflict, Details: []Detail{},
+			Message: "Account " + a.Account + " belongs to vendor " + v.Vendor + " (auth scheme none): it has no credentials"}
+	}
+	return a, nil
+}
+
+// accountForProbe checks that the account exists and is not retired.
+func (s *Server) accountForProbe(r *http.Request) (*registry.Snapshot, *registry.Account, error) {
 	snap, err := s.accessSnapshot(r.Context())
 	if err != nil {
 		return nil, nil, err
@@ -614,7 +638,7 @@ func (s *Server) addNextCredential(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	_, a, err := s.accountForCredentials(r)
+	a, err := s.accountForCredentials(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -650,7 +674,7 @@ func (s *Server) promoteNextCredential(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	_, a, err := s.accountForCredentials(r)
+	a, err := s.accountForCredentials(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -686,7 +710,7 @@ func (s *Server) deleteOldCredential(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	_, a, err := s.accountForCredentials(r)
+	a, err := s.accountForCredentials(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -772,7 +796,7 @@ func (s *Server) testAccountConnection(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	snap, a, err := s.accountForCredentials(r)
+	snap, a, err := s.accountForProbe(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -792,10 +816,15 @@ func (s *Server) testAccountConnection(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, badRequest("/endpoint_ref", fmt.Sprintf("vendor %s has no endpoint %q", v.Vendor, ep)))
 		return
 	}
-	sec, ok, err := rot.ReadCredentials(a.Account)
-	if err != nil {
-		s.fail(w, r, err)
-		return
+	var sec creds.AccountSecrets
+	ok := false
+	if creds.NeedsCredentials(v.Auth) {
+		if sec, ok, err = rot.ReadCredentials(a.Account); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	} else if body.Slot == "active" { // auth none: the probe runs without credentials
+		ok = true
 	}
 	slot := &sec.Active
 	if body.Slot == "next" {

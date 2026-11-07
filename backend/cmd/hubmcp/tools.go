@@ -42,6 +42,7 @@ type invokeOutput struct {
 	RequestID        *string         `json:"request_id"`
 	IdempotentReplay bool            `json:"idempotent_replay"`
 	Result           json.RawMessage `json:"result"`
+	PassThrough      bool            `json:"pass_through"`
 	Accepted         *acceptedBody   `json:"accepted"`
 	Session          *string         `json:"session"`
 	Error            *errorObject    `json:"error"`

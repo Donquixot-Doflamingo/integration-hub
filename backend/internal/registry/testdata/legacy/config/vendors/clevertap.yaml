@@ -1,0 +1,14 @@
+# DESIGN §8.3. Dev: both regions point at mockvendor (make mockvendor, :8099).
+# Production base URLs (https://in1.api.clevertap.com, https://us1.api.clevertap.com) are set by
+# the control plane, never here.
+vendor: clevertap
+auth: static_headers
+regions:
+  in: http://127.0.0.1:8099
+  us: http://127.0.0.1:8099
+endpoints:
+  upload@1: { method: POST, path: /1/upload, timeout_ms: 3000, connect_timeout_ms: 500, idempotent: true, batch_max: 1000 }
+defaults:
+  rate_limit: { per_account_rps: 50 }
+  breaker: { window_s: 30, min_calls: 20, failure_ratio: 0.5, consecutive_timeouts: 5, open_s: 30, open_max_s: 600, half_open_probes: 3 }
+  health_probe: { endpoint: upload@1, dry: true, every_s: 30 }

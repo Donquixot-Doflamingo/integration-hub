@@ -157,23 +157,55 @@ func (s *Server) deliver(w http.ResponseWriter, r *http.Request, p *prepared) *c
 		(r.Header.Get("Prefer") == "respond-async" || len(p.res.Version.Webhooks) > 0) {
 		return s.parkNow(w, r, p, res)
 	}
-	if res.Err != nil {
+	if res.Err != nil && res.PassThrough == nil {
 		return res.Err // fail_fast: 503 with circuit "open" and retry_after_ms when the circuit refused
 	}
-	body := res.Body
+	if res.Err != nil { // pass-through: the vendor's error status and body, after retries (ADR-0023)
+		s.hubHeaders(w, p, servedBy)
+		writePassThrough(w, res.PassThrough)
+		s.failed(r, p, res.Err, res.PassThrough.Status)
+		return nil
+	}
 	sessionID, ce := s.openSession(ctx, p, p.trail, res)
 	if ce != nil {
 		return ce
 	}
 
 	setSessionHeader(w, sessionID)
+	s.hubHeaders(w, p, servedBy)
+	if res.PassThrough != nil {
+		writePassThrough(w, res.PassThrough)
+		s.finish(r, p, res.PassThrough.Status)
+		return nil
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(append(res.Body, '\n'))
+	s.finish(r, p, http.StatusOK)
+	return nil
+}
+
+// hubHeaders sets the Hub's own headers of a delivered response.
+func (s *Server) hubHeaders(w http.ResponseWriter, p *prepared, servedBy string) {
 	w.Header().Set("X-Hub-Served-By", servedBy)
 	if s.deps.DebugHeaders {
 		w.Header().Set("X-Hub-Integration-Version", strconv.Itoa(p.res.VersionNumber))
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(append(body, '\n'))
-	s.finish(r, p, http.StatusOK)
-	return nil
+}
+
+// writePassThrough writes a vendor answer unchanged (ADR-0023, contract PassThrough): its status
+// and body, its Content-Type and Retry-After and no other vendor header, marked with
+// X-Hub-Pass-Through so callers never parse it as the canonical error envelope.
+func writePassThrough(w http.ResponseWriter, pt *delivery.PassThrough) {
+	h := w.Header()
+	h.Del("Content-Type")
+	if pt.ContentType != "" {
+		h.Set("Content-Type", pt.ContentType)
+	}
+	if pt.RetryAfter != "" {
+		h.Set("Retry-After", pt.RetryAfter)
+	}
+	h.Set("X-Hub-Pass-Through", "true")
+	w.WriteHeader(pt.Status)
+	_, _ = w.Write(pt.Body)
 }

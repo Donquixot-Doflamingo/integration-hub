@@ -80,7 +80,7 @@ type Config struct {
 	// traceparent; every other vendor gets none (DESIGN §16.4, ADR-0013).
 	TraceForwardVendors []string
 	ConfigDir           string // dev registry (backend/config); production nodes fetch snapshots instead (M7)
-	ContractsDir        string // repo-root contracts/, for capability schemas
+	ContractsDir        string // unused since ADR-0023 (schemas live in the config tree); the flag stays for old scripts
 	ConfigWatch         bool   // dev only: rebuild and swap the snapshot when ConfigDir changes
 	DataDir             string // local cache of the last good snapshot (boot fallback)
 	BlobURL             string // snapshot blob store (file:// in phase 1)
@@ -135,7 +135,7 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	fs.StringVar(&c.OTLPEndpoint, "otlp-endpoint", env("HUB_OTLP_ENDPOINT", ""), "OTLP/gRPC endpoint; empty disables trace export")
 	fs.StringVar(&rate, "trace-sample-ratio", env("HUB_TRACE_SAMPLE_RATIO", "0.05"), "head sampling ratio 0..1")
 	fs.StringVar(&c.ConfigDir, "config-dir", env("HUB_CONFIG_DIR", "config"), "registry config directory (dev)")
-	fs.StringVar(&c.ContractsDir, "contracts-dir", env("HUB_CONTRACTS_DIR", "../contracts"), "contracts directory (capability schemas)")
+	fs.StringVar(&c.ContractsDir, "contracts-dir", env("HUB_CONTRACTS_DIR", "../contracts"), "unused since ADR-0023 (kept for old scripts)")
 	fs.StringVar(&c.DataDir, "data-dir", env("HUB_DATA_DIR", ".data"), "local data directory (snapshot cache)")
 	fs.StringVar(&c.BlobURL, "blob-url", env("HUB_BLOB_URL", "file://.data/blobs"), "snapshot blob store URL (file:// in phase 1)")
 	fs.BoolVar(&watch, "config-watch", env("HUB_CONFIG_WATCH", "false") == "true", "dev only: watch config-dir and swap snapshots")

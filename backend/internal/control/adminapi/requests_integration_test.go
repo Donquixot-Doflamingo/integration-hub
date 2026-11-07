@@ -33,8 +33,7 @@ func seed(t *testing.T, pool *pgxpool.Pool, s seedRequest) string {
 		s.policy = "masked"
 	}
 	id := "req_" + core.NewULID(s.at)
-	rec := audit.Record{RequestID: id, CreatedAt: s.at, TenantID: s.tenant, IntegrationID: s.integration, IntegrationVersion: 2,
-		Capability: "events.track@v1", Operation: "default", Mode: "async", Status: s.status, PayloadPolicy: s.policy,
+	rec := audit.Record{RequestID: id, CreatedAt: s.at, TenantID: s.tenant, IntegrationID: s.integration, IntegrationVersion: 2, Operation: "default", Mode: "async", Status: s.status, PayloadPolicy: s.policy,
 		IdempotencyKey: s.idem, ErrorCode: s.code, Attempts: s.attempts, HubOverheadMS: 2.6, VendorMS: 40, CompletedAt: s.at.Add(1500 * time.Millisecond)}
 	b := audit.Batch{Records: []audit.Record{rec}}
 	for i, e := range s.events {

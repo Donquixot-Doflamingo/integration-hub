@@ -6,26 +6,25 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/resolve"
 )
 
-// Discovery (contracts: listIntegrations, getIntegration, getCapability). Every shape here is
-// caller-facing: no vendor, account or integration version, ever (DESIGN §0).
+// Discovery (contracts: listIntegrations, getIntegration). Every shape here is caller-facing: no
+// vendor, account or integration version, ever (DESIGN §0). Operations and their request schemas
+// come from the snapshot's active version (ADR-0023).
 
 type integrationSummary struct {
-	IntegrationID          string   `json:"integration_id"`
-	Capability             string   `json:"capability"`
-	Operations             []string `json:"operations"`
-	DeliveryMode           string   `json:"delivery_mode"`
-	Interactive            bool     `json:"interactive"`
-	Paused                 bool     `json:"paused"`
-	MovesMoneyOrQuota      bool     `json:"moves_money_or_quota"`
-	IdempotencyKeyRequired bool     `json:"idempotency_key_required"`
-	Description            *string  `json:"description"`
+	IntegrationID          string                `json:"integration_id"`
+	Operations             []operationDescriptor `json:"operations"`
+	DeliveryMode           string                `json:"delivery_mode"`
+	Interactive            bool                  `json:"interactive"`
+	Paused                 bool                  `json:"paused"`
+	MovesMoneyOrQuota      bool                  `json:"moves_money_or_quota"`
+	IdempotencyKeyRequired bool                  `json:"idempotency_key_required"`
+	Description            *string               `json:"description"`
 }
 
 type integrationDetail struct {
@@ -35,7 +34,6 @@ type integrationDetail struct {
 	TTLMS          *int64   `json:"ttl_ms"`
 	OnCircuitOpen  string   `json:"on_circuit_open"`
 	CallbackEvents []string `json:"callback_events"`
-	CapabilityURL  string   `json:"capability_url"`
 }
 
 type integrationList struct {
@@ -43,22 +41,17 @@ type integrationList struct {
 	NextCursor *string              `json:"next_cursor"`
 }
 
-type capabilityOperation struct {
-	Name           string          `json:"name"`
-	Description    *string         `json:"description"`
-	Idempotent     bool            `json:"idempotent"`
-	RequestSchema  json.RawMessage `json:"request_schema"`
-	ResponseSchema json.RawMessage `json:"response_schema"`
+// operationDescriptor is the contract OperationDescriptor.
+type operationDescriptor struct {
+	Name          string        `json:"name"`
+	Description   *string       `json:"description"`
+	Idempotent    bool          `json:"idempotent"`
+	RequestSchema requestSchema `json:"request_schema"`
 }
 
-type capabilityDescriptor struct {
-	Capability  string                `json:"capability"`
-	Name        string                `json:"name"`
-	Major       int                   `json:"major"`
-	Minor       int                   `json:"minor"`
-	Description *string               `json:"description"`
-	Interactive bool                  `json:"interactive"`
-	Operations  []capabilityOperation `json:"operations"`
+type requestSchema struct {
+	Body    json.RawMessage `json:"body"`
+	Headers json.RawMessage `json:"headers,omitempty"`
 }
 
 const (
@@ -66,24 +59,19 @@ const (
 	maxPageSize     = 200
 )
 
-// operationNames lists a capability's operations, "default" first, then by name.
-func operationNames(c *registry.Capability) []string {
-	names := make([]string, 0, len(c.Operations))
-	for n := range c.Operations {
-		names = append(names, n)
-	}
-	slices.SortFunc(names, func(a, b string) int {
-		switch {
-		case a == b:
-			return 0
-		case a == "default":
-			return -1
-		case b == "default":
-			return 1
+// operations describes the operations of v, "default" first, then by name.
+func operations(v *registry.IntegrationVersion) []operationDescriptor {
+	out := []operationDescriptor{}
+	for _, name := range v.OperationNames() {
+		op := v.Op(name)
+		d := operationDescriptor{Name: name, Description: optional(op.Description), Idempotent: op.Idempotent,
+			RequestSchema: requestSchema{Body: op.RequestSchema.Body.JSON()}}
+		if h := op.RequestSchema.Headers; h != nil {
+			d.RequestSchema.Headers = h.JSON()
 		}
-		return strings.Compare(a, b)
-	})
-	return names
+		out = append(out, d)
+	}
+	return out
 }
 
 func optional(s string) *string {
@@ -93,11 +81,10 @@ func optional(s string) *string {
 	return &s
 }
 
-func summarize(snap *registry.Snapshot, in *registry.Integration) integrationSummary {
-	c := snap.Capabilities[in.Capability]
+func summarize(in *registry.Integration) integrationSummary {
 	return integrationSummary{
-		IntegrationID: in.Integration, Capability: in.Capability, Operations: operationNames(c),
-		DeliveryMode: string(in.Active().Delivery.Mode), Interactive: c.Interactive, Paused: in.Paused,
+		IntegrationID: in.Integration, Operations: operations(in.Active()),
+		DeliveryMode: string(in.Active().Delivery.Mode), Interactive: in.Interactive, Paused: in.Paused,
 		MovesMoneyOrQuota: in.MovesMoneyOrQuota, IdempotencyKeyRequired: in.MovesMoneyOrQuota,
 		Description: optional(in.Description),
 	}
@@ -124,10 +111,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		}
 		after = string(b)
 	}
-	capability := q.Get("capability")
 	ids := make([]string, 0, len(c.Snap.Integrations))
 	for id, in := range c.Snap.Integrations {
-		if id > after && (capability == "" || in.Capability == capability) && resolve.Granted(in, c.Tenant.Tenant) {
+		if id > after && resolve.Granted(in, c.Tenant.Tenant) {
 			ids = append(ids, id)
 		}
 	}
@@ -138,7 +124,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		out.NextCursor = core.Ptr(base64.RawURLEncoding.EncodeToString([]byte(ids[limit-1])))
 	}
 	for _, id := range ids {
-		out.Items = append(out.Items, summarize(c.Snap, c.Snap.Integrations[id]))
+		out.Items = append(out.Items, summarize(c.Snap.Integrations[id]))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -153,9 +139,8 @@ func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 	d := in.Active().Delivery
 	out := integrationDetail{
-		integrationSummary: summarize(c.Snap, in), Owned: in.OwnerTenant == c.Tenant.Tenant,
+		integrationSummary: summarize(in), Owned: in.OwnerTenant == c.Tenant.Tenant,
 		OnCircuitOpen: string(d.OnCircuitOpen), CallbackEvents: []string{},
-		CapabilityURL: "/v1/capabilities/" + in.Capability,
 	}
 	if d.Mode == registry.ModeWait {
 		out.WaitMS = core.Ptr(int64(d.WaitMS))
@@ -167,35 +152,6 @@ func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) {
 		if !slices.Contains(out.CallbackEvents, sub.Event) {
 			out.CallbackEvents = append(out.CallbackEvents, sub.Event)
 		}
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
-// getCapability shows a capability to a tenant that can use at least one integration bound to it.
-func (s *Server) getCapability(w http.ResponseWriter, r *http.Request) {
-	c, _ := CallerFrom(r.Context())
-	key := r.PathValue("capability")
-	capability, ok := c.Snap.Capabilities[key]
-	visible := false
-	for _, in := range c.Snap.Integrations {
-		if in.Capability == key && resolve.Granted(in, c.Tenant.Tenant) {
-			visible = true
-			break
-		}
-	}
-	if !ok || !visible {
-		WriteError(w, r, &core.CanonicalError{Code: core.CodeCapabilityNotFound, Message: "Unknown capability"})
-		return
-	}
-	name, major, _ := strings.Cut(key, "@v")
-	out := capabilityDescriptor{Capability: key, Name: name, Minor: capability.Minor, Interactive: capability.Interactive}
-	out.Major, _ = strconv.Atoi(major)
-	for _, n := range operationNames(capability) {
-		op := capability.Operations[n]
-		out.Operations = append(out.Operations, capabilityOperation{
-			Name: n, Description: optional(op.Description), Idempotent: op.Idempotent,
-			RequestSchema: op.RequestSchema, ResponseSchema: op.ResponseSchema,
-		})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

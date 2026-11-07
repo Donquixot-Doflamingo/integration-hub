@@ -80,6 +80,34 @@ func redactTree(v any, redact func(string) string) any {
 	return v
 }
 
+// BuildSample is BuildRequest for samples (golden fixtures): it also returns the request without
+// its credential-derived headers and query parameters, which is what the endpoint's request
+// schema checks (ADR-0023: creds.* values are never part of the checked request).
+func (p *Program) BuildSample(in Input) (full, checked core.VendorRequest, err error) {
+	req, credTargets, err := p.build(in)
+	if err != nil {
+		return core.VendorRequest{}, core.VendorRequest{}, err
+	}
+	checked = core.VendorRequest{Method: req.Method, Path: req.Path, Body: req.Body}
+	for name, v := range req.Headers {
+		if !credTargets["headers."+strings.ToLower(name)] {
+			if checked.Headers == nil {
+				checked.Headers = map[string]string{}
+			}
+			checked.Headers[name] = v
+		}
+	}
+	for name, v := range req.Query {
+		if !credTargets["query."+name] {
+			if checked.Query == nil {
+				checked.Query = map[string]string{}
+			}
+			checked.Query[name] = v
+		}
+	}
+	return req, checked, nil
+}
+
 var errNotRequest = errors.New("not a request transformer")
 
 func (p *Program) build(in Input) (core.VendorRequest, map[string]bool, error) {

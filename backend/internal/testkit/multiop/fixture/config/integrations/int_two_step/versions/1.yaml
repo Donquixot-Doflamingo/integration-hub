@@ -2,6 +2,28 @@
 # pair (its own vendor endpoint). The failover target selects the same way.
 integration: int_two_step
 version: 1
+operations:
+  send:
+    description: Send a code to mobile.
+    idempotent: false
+    request_schema:
+      body:
+        type: object
+        required: [mobile]
+        additionalProperties: false
+        properties:
+          mobile: { type: string, pattern: '^\+91[6-9][0-9]{9}$', x-pii: phone }
+  verify:
+    description: Verify the code the user typed.
+    idempotent: true
+    request_schema:
+      body:
+        type: object
+        required: [mobile, code]
+        additionalProperties: false
+        properties:
+          mobile: { type: string, pattern: '^\+91[6-9][0-9]{9}$', x-pii: phone }
+          code: { type: string, pattern: '^[0-9]{4,8}$', x-pii: free_text }
 targets:
   - vendor: stepvendor
     account: sv-primary
@@ -17,6 +39,7 @@ failover:
       verify: { request: TS-VERIFY-REQ@1, response: TS-VERIFY-RES@1 }
 delivery:
   mode: sync
+  ttl: 1h
   on_circuit_open: failover
 audit: { payloads: masked, retention: 30d }
 publish: { author: test, reason: "per-operation pairs" }

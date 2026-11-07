@@ -44,8 +44,7 @@ func overlaid(t *testing.T, base, overlay fs.FS) fs.FS {
 func newPerOpRig(t *testing.T) *adminRig {
 	t.Helper()
 	a := newAdminRigFrom(t, registry.Sources{
-		Config:    overlaid(t, os.DirFS("../../../config"), multiop.Config()),
-		Contracts: overlaid(t, os.DirFS("../../../../contracts"), multiop.Contracts()),
+		Config: overlaid(t, os.DirFS("../../../config"), multiop.Config()),
 	})
 	resetArchive(a)
 	return a
@@ -56,6 +55,10 @@ const (
 	verifyPairJSON = `{"request":"TS-VERIFY-REQ@1","response":"TS-VERIFY-RES@1"}`
 )
 
+// twoStepOps is the operations member of int_two_step (internal/testkit/multiop).
+const twoStepOps = `"operations":{"send":{"description":"Send a code to mobile.","idempotent":false,"request_schema":{"body":{"type":"object","required":["mobile"],"additionalProperties":false,"properties":{"mobile":{"type":"string","pattern":"^\\+91[6-9][0-9]{9}$","x-pii":"phone"}}}}},` +
+	`"verify":{"description":"Verify the code the user typed.","idempotent":true,"request_schema":{"body":{"type":"object","required":["mobile","code"],"additionalProperties":false,"properties":{"mobile":{"type":"string","pattern":"^\\+91[6-9][0-9]{9}$","x-pii":"phone"},"code":{"type":"string","pattern":"^[0-9]{4,8}$","x-pii":"free_text"}}}}}}`
+
 // twoStepSpec is a contract IntegrationSpec of int_two_step; operations is the primary target's
 // operations member ("" omits it). The failover target always has the correct verify pair (it
 // also keeps sv-backup referenced, so no account changes lifecycle state during the test).
@@ -64,7 +67,7 @@ func twoStepSpec(operations string) string {
 	if operations != "" {
 		ops = `,"operations":` + operations
 	}
-	return `{"targets":[{"vendor_id":"stepvendor","account_id":"sv-primary","transformer":` + sendPairJSON + ops + `,"weight":100}],` +
+	return `{` + twoStepOps + `,"targets":[{"vendor_id":"stepvendor","account_id":"sv-primary","transformer":` + sendPairJSON + ops + `,"weight":100}],` +
 		`"failover":[{"vendor_id":"stepvendor","account_id":"sv-backup","transformer":` + sendPairJSON + `,"operations":{"verify":` + verifyPairJSON + `}}],` +
 		`"delivery":{"mode":"sync","on_circuit_open":"failover","pending":"re_resolve"},"webhooks":[],"audit":{"payloads":"masked","retention_ms":2592000000}}`
 }
@@ -107,14 +110,15 @@ func TestPerOperationSpecs(t *testing.T) {
 	verifyPairOf(t, v1, "targets")
 	verifyPairOf(t, v1, "failover")
 
-	// A draft whose single pair would serve verify too (HUB-345) is refused by validate.
+	// A draft whose single pair would serve verify too (HUB-345) is refused by validate: the send
+	// transformer's samples do not fit verify's request schema (ADR-0023 input_schema).
 	mustDo(a, RoleEditor, http.MethodPost, base+"/versions", `{"spec":`+twoStepSpec("")+`,"reason":"one pair for both"}`, 201)
 	for _, tc := range []struct {
 		name, operations, want string
 	}{
-		{"one pair for both operations", "", "operations_have_transformers /targets/0/transformer"},
+		{"one pair for both operations", "", "input_schema /targets/0/transformer/request"},
 		{"undeclared operation", `{"verfy":` + verifyPairJSON + `}`, "operations_have_transformers /targets/0/operations/verfy"},
-		{"verify pair compiled for send", `{"verify":` + sendPairJSON + `}`, "operations_have_transformers /targets/0/operations/verify"},
+		{"verify served by the send pair", `{"verify":` + sendPairJSON + `}`, "input_schema /targets/0/operations/verify/request"},
 	} {
 		mustDo(a, RoleEditor, http.MethodPut, base+"/versions/2", `{"spec":`+twoStepSpec(tc.operations)+`,"reason":"`+tc.name+`"}`, 200)
 		body := mustDo(a, RoleEditor, http.MethodPost, base+"/versions/2/validate", "", 200)
@@ -124,8 +128,9 @@ func TestPerOperationSpecs(t *testing.T) {
 	}
 	// Publishing the last broken draft is refused with the same check and pointer.
 	resp, _ := a.do(RoleEditor, http.MethodPost, base+"/versions/2/publish", `{"expected_active_version":1,"reason":"broken"}`)
-	if resp.Code != 422 || !strings.Contains(resp.Body.String(), `"pointer":"/targets/0/operations/verify"`) ||
-		!strings.Contains(resp.Body.String(), `"keyword":"operations_have_transformers"`) {
+	if resp.Code != 422 || !strings.Contains(resp.Body.String(), `"pointer":"/targets/0/operations/verify/request"`) ||
+		!strings.Contains(resp.Body.String(), `"keyword":"input_schema"`) || !strings.Contains(resp.Body.String(), `"sample":"send"`) ||
+		!strings.Contains(resp.Body.String(), `"field":"/body/code"`) {
 		t.Fatalf("publish of a broken draft: %d %s", resp.Code, resp.Body)
 	}
 

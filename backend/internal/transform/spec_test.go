@@ -13,7 +13,6 @@ type specFile struct {
 	Transformer      string    `yaml:"transformer"`
 	Version          int       `yaml:"version"`
 	Kind             string    `yaml:"kind"`
-	Capability       string    `yaml:"capability"`
 	VendorEndpoint   string    `yaml:"vendor_endpoint"`
 	DocsURL          string    `yaml:"docs_url"`
 	AllowCredsInBody bool      `yaml:"allow_creds_in_body"`
@@ -30,7 +29,7 @@ func specFromYAML(t testing.TB, src string) Spec {
 	if err := yaml.Unmarshal([]byte(src), &f); err != nil {
 		t.Fatalf("yaml: %v", err)
 	}
-	return Spec{ID: f.Transformer, Version: f.Version, Kind: f.Kind, Capability: f.Capability,
+	return Spec{ID: f.Transformer, Version: f.Version, Kind: f.Kind,
 		Request: f.Request, Response: f.Response, Errors: f.Errors, Batch: f.Batch, Session: f.Session, AllowCredsInBody: f.AllowCredsInBody}
 }
 
@@ -85,8 +84,8 @@ func TestParseR1(t *testing.T) {
 }
 
 func TestParseRejects(t *testing.T) {
-	const reqHead = "transformer: X\nversion: 1\nkind: request\ncapability: events.track@v1\n"
-	const respHead = "transformer: R\nversion: 1\nkind: response\ncapability: events.track@v1\n"
+	const reqHead = "transformer: X\nversion: 1\nkind: request\n"
+	const respHead = "transformer: R\nversion: 1\nkind: response\n"
 	tests := []struct {
 		name, src, want string
 	}{

@@ -1,36 +1,24 @@
 package transform
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
 
-func eventsSchema(t testing.TB) []byte {
-	t.Helper()
-	b, err := os.ReadFile("../../../contracts/schemas/capabilities/events.track.v1.request.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
-}
-
-const reqHead = "transformer: X\nversion: 1\nkind: request\ncapability: events.track@v1\nrequest:\n  method: POST\n  path: /x\n"
-const respHead = "transformer: R\nversion: 1\nkind: response\ncapability: events.track@v1\n"
+const reqHead = "transformer: X\nversion: 1\nkind: request\nrequest:\n  method: POST\n  path: /x\n"
+const respHead = "transformer: R\nversion: 1\nkind: response\n"
 
 func compileSrc(t testing.TB, src string) (*Program, error) {
 	t.Helper()
-	return Compile(specFromYAML(t, src), Options{RequestSchema: eventsSchema(t)})
+	return Compile(specFromYAML(t, src), Options{})
 }
 
 func TestCompileRejects(t *testing.T) {
 	tests := []struct {
 		name, src, want string
 	}{
-		{"missing field", reqHead + "  body:\n    id: req.user.idd\n", `transformer X@1: request.body.id: req.user.idd: field "user.idd" is not in the capability schema`},
-		{"missing top-level field", reqHead + "  body:\n    x: req.usr.id\n", `field "usr" is not in the capability schema`},
 		{"res in request mapping", reqHead + "  body:\n    s: res.status\n", "request.body.s: res is not available in request mapping (DESIGN §7.2)"},
-		{"req in response mapping", respHead + "response:\n  status: req.user.id\n", "response.status: req is not available in response mapping"},
+		{"hdr in response mapping", respHead + "response:\n  status: hdr.x\n", "response.status: hdr is not available in response mapping"},
 		{"creds in body", reqHead + "  body:\n    key: creds.passcode\n", "request.body.key: creds.* may only be used in headers or query"},
 		{"unknown variable", reqHead + "  body:\n    x: secrets.key\n", "request.body.x: unknown name secrets"},
 		{"disabled loop builtin", reqHead + "  body:\n    x: 'reduce([1, 2], # + #acc, 0)'\n", "request.body.x: unknown name reduce"},
@@ -44,6 +32,31 @@ func TestCompileRejects(t *testing.T) {
 				t.Fatalf("error %v\nwant %q", err, tt.want)
 			}
 		})
+	}
+}
+
+// The transformer knows no caller schema (ADR-0023): it records the req.* and hdr.* fields it
+// reads, and the registry checks them against each integration operation that uses it.
+func TestCompileRecordsFieldRefs(t *testing.T) {
+	src := reqHead + "  headers:\n    X-Src: hdr[\"X-Request-Source\"] ?? \"api\"\n  body:\n    id: req.user.id\n    again: req.user.id\n    name: req.event.name + req.user.id\n    first: 'map(req.items, #.sku)'\n"
+	p, err := compileSrc(t, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range p.FieldRefs() {
+		got = append(got, r.Path+" "+r.Root+"."+strings.Join(r.Segs, "."))
+	}
+	want := []string{"request.headers.X-Src hdr.X-Request-Source", "request.body.id req.user.id", "request.body.name req.event.name", "request.body.first req.items"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("refs\n got %v\nwant %v", got, want)
+	}
+	resp, err := compileSrc(t, respHead+"response:\n  age: res.body.age\n  who: req.firstName\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refs := resp.FieldRefs(); len(refs) != 1 || refs[0].Root != "req" || refs[0].Segs[0] != "firstName" {
+		t.Fatalf("response refs %+v", refs)
 	}
 }
 

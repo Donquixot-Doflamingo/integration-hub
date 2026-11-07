@@ -1,7 +1,7 @@
 {
   "$comment": "MCP tool contract for hubmcp (backend/cmd/hubmcp). Frozen; edit only via a CCR to contract-steward. JSON Schemas are 2020-12. See README.md in this folder.",
   "contract": "hubmcp-tools",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "server": {
     "name": "hubmcp",
     "title": "Integration Hub",
@@ -17,7 +17,7 @@
     ]
   },
   "rules": [
-    "Tenant tools (no `hub_admin_` prefix) MUST NOT reveal vendor names, account names, integration versions or transformer versions. The server strips the X-Hub-Integration-Version header and never puts it in tool output.",
+    "Tenant tools (no `hub_admin_` prefix) MUST NOT reveal vendor names, account names, integration versions or transformer versions. The server strips the X-Hub-Integration-Version header and never puts it in tool output. A pass-through result (pass_through=true: the integration has no response transformer) is the third party's body exactly as the Hub returned it; hubmcp does not alter it.",
     "The only exception is hub_dry_run, which returns the upstream request shape (secrets redacted) by design. Its description says so.",
     "hub_invoke MUST refuse (without calling the Hub) when the integration has moves_money_or_quota=true and the input lacks confirm=true or idempotency_key. The server checks the flag via getIntegration before every such invoke (cached ≤ 60 s).",
     "Admin read tools (readOnlyHint=true) call only GET operations or the non-mutating POST checks (validate, run goldens, transformer dry-run). They never unseal.",
@@ -52,10 +52,6 @@
   "not_exposed_operations": [
     { "spec": "hub-admin.v1.yaml", "operationId": "getMe", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
     { "spec": "hub-admin.v1.yaml", "operationId": "testAccountConnection", "http_method": "POST", "reason": "Makes a real call to the vendor with the account credentials; run it from the console." },
-    { "spec": "hub-admin.v1.yaml", "operationId": "getCapability", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
-    { "spec": "hub-admin.v1.yaml", "operationId": "listCapabilityVersions", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
-    { "spec": "hub-admin.v1.yaml", "operationId": "createCapability", "http_method": "POST", "reason": "Canonical capability schemas are owned by the platform team and reviewed in PRs." },
-    { "spec": "hub-admin.v1.yaml", "operationId": "createCapabilityVersion", "http_method": "POST", "reason": "Canonical capability schemas are owned by the platform team and reviewed in PRs." },
     { "spec": "hub-admin.v1.yaml", "operationId": "listTransformers", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
     { "spec": "hub-admin.v1.yaml", "operationId": "listTransformerVersions", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
     { "spec": "hub-admin.v1.yaml", "operationId": "getTransformerVersion", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
@@ -83,14 +79,13 @@
       "name": "hub_list_integrations",
       "title": "List integrations",
       "audience": "tenant",
-      "description": "List the integrations this API key's tenant can invoke. Each item gives the integration_id (use it in other hub_* tools), its capability (the shape of the request body, e.g. events.track@v1), the operations it supports, its delivery mode (sync returns a result immediately; wait/async may return 'queued'), whether it is interactive, whether it is paused, and whether it moves money or quota (then hub_invoke needs confirm=true and an idempotency_key). Use this first when the user mentions a third-party action and you don't know the integration id.",
+      "description": "List the integrations this API key's tenant can invoke. Each item gives the integration_id (use it in other hub_* tools), the operations it supports with each operation's request_schema (the JSON Schema of the body to send: fields in required are required, the rest optional), its delivery mode (sync returns a result immediately; wait/async may return 'queued'), whether it is interactive, whether it is paused, and whether it moves money or quota (then hub_invoke needs confirm=true and an idempotency_key). Use this first when the user mentions a third-party action and you don't know the integration id.",
       "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "listIntegrations", "http_method": "GET" } ],
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "capability": { "type": "string", "description": "Optional filter, e.g. events.track@v1.", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" },
           "cursor": { "type": "string", "description": "next_cursor from a previous call." },
           "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
         }
@@ -103,11 +98,10 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["integration_id", "capability", "operations", "delivery_mode", "interactive", "paused", "moves_money_or_quota"],
+              "required": ["integration_id", "operations", "delivery_mode", "interactive", "paused", "moves_money_or_quota"],
               "properties": {
                 "integration_id": { "type": "string" },
-                "capability": { "type": "string" },
-                "operations": { "type": "array", "items": { "type": "string" } },
+                "operations": { "type": "array", "description": "hub-public OperationDescriptor[]: name, description, idempotent, request_schema { body, headers? } (JSON Schema documents).", "items": { "type": "object", "required": ["name", "idempotent", "request_schema"], "properties": { "name": { "type": "string" }, "description": { "type": ["string", "null"] }, "idempotent": { "type": "boolean" }, "request_schema": { "type": "object", "required": ["body"], "properties": { "body": { "type": "object" }, "headers": { "type": "object" } } } } } },
                 "delivery_mode": { "type": "string", "enum": ["sync", "wait", "async", "async_callback"] },
                 "interactive": { "type": "boolean" },
                 "paused": { "type": "boolean" },
@@ -126,10 +120,10 @@
       ],
       "examples": [
         {
-          "input": { "capability": "events.track@v1" },
+          "input": {},
           "output": {
             "items": [
-              { "integration_id": "int_evt_brandA", "capability": "events.track@v1", "operations": ["default"], "delivery_mode": "wait", "interactive": false, "paused": false, "moves_money_or_quota": false, "idempotency_key_required": false, "description": "Brand A product analytics events" }
+              { "integration_id": "int_evt_brandA", "operations": [ { "name": "default", "description": "Track a single event for a user.", "idempotent": true, "request_schema": { "body": { "type": "object", "required": ["user", "event"], "properties": { "user": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "x-pii": "identifier" } } }, "event": { "type": "object", "required": ["name"] } } } } } ], "delivery_mode": "wait", "interactive": false, "paused": false, "moves_money_or_quota": false, "idempotency_key_required": false, "description": "Brand A product analytics events" }
             ],
             "next_cursor": null
           }
@@ -140,10 +134,9 @@
       "name": "hub_describe_integration",
       "title": "Describe an integration",
       "audience": "tenant",
-      "description": "Get everything needed to call one integration correctly: its delivery policy (mode, wait window, TTL, what happens when the upstream is down) and, for each operation, the canonical request and response JSON Schemas. Always call this before hub_invoke or hub_dry_run so you build a body that matches request_schema exactly — unknown fields are rejected. Fields tagged x-pii hold personal data: only send values the user actually provided.",
+      "description": "Get everything needed to call one integration correctly: its delivery policy (mode, wait window, TTL, what happens when the upstream is down) and, for each operation, its request_schema: the JSON Schema of the body (and of any caller headers it reads). Fields listed in required must be sent; the others are optional. Always call this before hub_invoke or hub_dry_run so you build a body that matches request_schema — a mismatch is rejected with VALIDATION_FAILED. There is no response schema: the result is whatever the integration returns. Fields tagged x-pii hold personal data: only send values the user actually provided.",
       "maps_to": [
-        { "spec": "hub-public.v1.yaml", "operationId": "getIntegration", "http_method": "GET" },
-        { "spec": "hub-public.v1.yaml", "operationId": "getCapability", "http_method": "GET" }
+        { "spec": "hub-public.v1.yaml", "operationId": "getIntegration", "http_method": "GET" }
       ],
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
@@ -156,16 +149,15 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": ["integration", "capability"],
+        "required": ["integration"],
         "properties": {
           "integration": {
             "type": "object",
             "description": "hub-public IntegrationDetail.",
-            "required": ["integration_id", "capability", "operations", "delivery_mode", "interactive", "paused", "moves_money_or_quota"],
+            "required": ["integration_id", "operations", "delivery_mode", "interactive", "paused", "moves_money_or_quota"],
             "properties": {
               "integration_id": { "type": "string" },
-              "capability": { "type": "string" },
-              "operations": { "type": "array", "items": { "type": "string" } },
+              "operations": { "type": "array", "description": "hub-public OperationDescriptor[]: name, description, idempotent, request_schema { body, headers? } (JSON Schema documents).", "items": { "type": "object", "required": ["name", "idempotent", "request_schema"], "properties": { "name": { "type": "string" }, "description": { "type": ["string", "null"] }, "idempotent": { "type": "boolean" }, "request_schema": { "type": "object", "required": ["body"], "properties": { "body": { "type": "object" }, "headers": { "type": "object" } } } } } },
               "delivery_mode": { "type": "string" },
               "interactive": { "type": "boolean" },
               "paused": { "type": "boolean" },
@@ -177,41 +169,18 @@
               "callback_events": { "type": "array", "items": { "type": "string" } },
               "description": { "type": ["string", "null"] }
             }
-          },
-          "capability": {
-            "type": "object",
-            "description": "hub-public CapabilityDescriptor (operations[].request_schema / response_schema are JSON Schema documents).",
-            "required": ["capability", "interactive", "operations"],
-            "properties": {
-              "capability": { "type": "string" },
-              "interactive": { "type": "boolean" },
-              "operations": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": ["name", "request_schema", "response_schema"],
-                  "properties": {
-                    "name": { "type": "string" },
-                    "idempotent": { "type": "boolean" },
-                    "request_schema": { "type": "object" },
-                    "response_schema": { "type": "object" }
-                  }
-                }
-              }
-            }
           }
         }
       },
       "safety": [
         "Read-only.",
-        "Composes two caller-API reads; neither exposes vendor/account/version."
+        "One caller-API read; it exposes no vendor/account/version."
       ],
       "examples": [
         {
           "input": { "integration_id": "int_evt_brandA" },
           "output": {
-            "integration": { "integration_id": "int_evt_brandA", "capability": "events.track@v1", "operations": ["default"], "delivery_mode": "wait", "interactive": false, "paused": false, "moves_money_or_quota": false, "idempotency_key_required": false, "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "callback_events": ["delivery.status"], "description": "Brand A product analytics events" },
-            "capability": { "capability": "events.track@v1", "interactive": false, "operations": [ { "name": "default", "idempotent": true, "request_schema": { "type": "object", "required": ["user", "event"] }, "response_schema": { "type": "object", "required": ["status"] } } ] }
+            "integration": { "integration_id": "int_evt_brandA", "operations": [ { "name": "default", "description": "Track a single event for a user.", "idempotent": true, "request_schema": { "body": { "type": "object", "required": ["user", "event"], "properties": { "user": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "x-pii": "identifier" } } }, "event": { "type": "object", "required": ["name"] } } } } } ], "delivery_mode": "wait", "interactive": false, "paused": false, "moves_money_or_quota": false, "idempotency_key_required": false, "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "callback_events": ["delivery.status"], "description": "Brand A product analytics events" }
           }
         }
       ]
@@ -220,7 +189,7 @@
       "name": "hub_dry_run",
       "title": "Dry-run an integration (developer tool)",
       "audience": "tenant",
-      "description": "Show the exact upstream HTTP request the Hub WOULD send for a canonical body, without sending anything (no side effects, no quota used). Use it to check a body before a real call, or when the user is developing an integration. IMPORTANT: unlike every other tenant tool, the result reveals the upstream request shape (URL, headers, body) with secrets replaced by ***; do not present it to end users as the integration's contract, and never build logic on it — it changes whenever the Hub cuts over. Requires an API key with the dry_run scope; otherwise you get FORBIDDEN.",
+      "description": "Show the exact upstream HTTP request the Hub WOULD send for a request body, without sending anything (no side effects, no quota used). Use it to check a body before a real call, or when the user is developing an integration. IMPORTANT: unlike every other tenant tool, the result reveals the upstream request shape (URL, headers, body) with secrets replaced by ***; do not present it to end users as the integration's contract, and never build logic on it — it changes whenever the Hub cuts over. Requires an API key with the dry_run scope; otherwise you get FORBIDDEN.",
       "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "dryRunIntegration", "http_method": "POST" } ],
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
@@ -230,7 +199,8 @@
         "properties": {
           "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
           "operation": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "default": "default" },
-          "body": { "type": "object", "description": "Canonical request body matching the operation's request_schema (see hub_describe_integration)." },
+          "body": { "type": "object", "description": "Request body matching the operation's request_schema.body (see hub_describe_integration)." },
+          "headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Caller headers the operation reads, as declared in its request_schema.headers (see hub_describe_integration). hubmcp forwards only header names declared there and refuses the Hub's own headers (Authorization, Idempotency-Key, Prefer, X-Request-Deadline, X-Hub-Session, traceparent); use the dedicated inputs for those." },
           "session": { "type": "string", "description": "X-Hub-Session from step 1 of a multi-step flow.", "pattern": "^ses_[0-9A-HJKMNP-TV-Z]{26}$" }
         }
       },
@@ -274,7 +244,7 @@
       "name": "hub_invoke",
       "title": "Invoke an integration",
       "audience": "tenant",
-      "description": "Call an integration for real with a canonical body. This has real-world effects (events sent, messages delivered, money or quota possibly consumed). Steps: 1) hub_describe_integration to get the request_schema; 2) build the body; 3) call hub_invoke. Always pass an idempotency_key (a stable string per logical action, e.g. 'order-8821-created') so a retry cannot double-send. If the integration has moves_money_or_quota=true you MUST first show the user what will be sent and get explicit approval, then call with confirm=true. Results: outcome=completed gives the canonical result; outcome=queued means accepted but NOT done yet — tell the user and use hub_get_request with the request_id to follow up; outcome=error gives a canonical error (if retryable is true you may retry with the same idempotency_key after retry_after_ms). For multi-step operations, pass the session returned by step 1.",
+      "description": "Call an integration for real with a request body that matches the operation's request_schema. This has real-world effects (events sent, messages delivered, money or quota possibly consumed). Steps: 1) hub_describe_integration to get the request_schema; 2) build the body; 3) call hub_invoke. Always pass an idempotency_key (a stable string per logical action, e.g. 'order-8821-created') so a retry cannot double-send. If the integration has moves_money_or_quota=true you MUST first show the user what will be sent and get explicit approval, then call with confirm=true. Results: outcome=completed gives the integration's result (any JSON; there is no response schema); outcome=queued means accepted but NOT done yet — tell the user and use hub_get_request with the request_id to follow up; outcome=error gives a canonical error (if retryable is true you may retry with the same idempotency_key after retry_after_ms). When pass_through is true the result is the third party's own response, returned unchanged: any 2xx (also 202) is outcome=completed with the third party's status in http_status; on outcome=error with pass_through=true, error is null and result holds the third party's error body with http_status as its status. For interactive (multi-step) integrations, pass the session returned by step 1.",
       "maps_to": [
         { "spec": "hub-public.v1.yaml", "operationId": "invokeIntegration", "http_method": "POST" },
         { "spec": "hub-public.v1.yaml", "operationId": "invokeIntegrationOperation", "http_method": "POST" },
@@ -287,8 +257,9 @@
         "required": ["integration_id", "body"],
         "properties": {
           "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
-          "operation": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "default": "default", "description": "Omit for single-operation capabilities." },
-          "body": { "type": "object", "description": "Canonical request body matching request_schema." },
+          "operation": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "default": "default", "description": "Operation name from hub_describe_integration. Omit for single-operation integrations." },
+          "body": { "type": "object", "description": "Request body matching the operation's request_schema.body." },
+          "headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Caller headers the operation reads, as declared in its request_schema.headers (see hub_describe_integration). hubmcp forwards only header names declared there and refuses the Hub's own headers (Authorization, Idempotency-Key, Prefer, X-Request-Deadline, X-Hub-Session, traceparent); use the dedicated inputs for those." },
           "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 255, "description": "Strongly recommended; mandatory when moves_money_or_quota is true." },
           "prefer_async": { "type": "boolean", "default": false, "description": "Send Prefer: respond-async (accept a queued answer if the upstream is down)." },
           "deadline_ms": { "type": "integer", "minimum": 1, "maximum": 600000, "description": "X-Request-Deadline." },
@@ -304,7 +275,8 @@
           "http_status": { "type": ["integer", "null"], "description": "null when refused locally." },
           "request_id": { "type": ["string", "null"] },
           "idempotent_replay": { "type": "boolean" },
-          "result": { "type": ["object", "null"], "description": "Canonical response when completed." },
+          "result": { "description": "Response body when completed: the integration's output, any JSON value (a non-JSON body is given as a string). With pass_through=true and outcome=error, the third party's error body. null otherwise." },
+          "pass_through": { "type": "boolean", "description": "true when the Hub returned the third party's status and body unchanged (X-Hub-Pass-Through: true; the integration has no response transformer)." },
           "accepted": {
             "type": ["object", "null"],
             "description": "202 body when queued.",
@@ -321,18 +293,22 @@
       "safety": [
         "Side-effecting. destructiveHint=true so clients prompt the user.",
         "Pre-check: GET integration; if paused, return the error without invoking; if moves_money_or_quota and (confirm != true or no idempotency_key) return outcome=refused, code CONFIRMATION_REQUIRED or IDEMPOTENCY_KEY_REQUIRED, without calling the Hub.",
-        "Never forwards any header that could select a vendor/account/version (none exist in the contract; hubmcp sends only Authorization, Idempotency-Key, Prefer, X-Request-Deadline, X-Hub-Session, traceparent).",
+        "Never forwards any header that could select a vendor/account/version (none exist in the contract). hubmcp sends Authorization, Idempotency-Key, Prefer, X-Request-Deadline, X-Hub-Session, traceparent, plus only the caller headers the operation declares in request_schema.headers.",
         "Strips X-Hub-Integration-Version and X-Hub-Served-By from output.",
         "Never auto-retries a non-retryable error; retries a retryable one at most once and only when idempotency_key is set."
       ],
       "examples": [
         {
           "input": { "integration_id": "int_evt_brandA", "body": { "user": { "id": "u_48213" }, "event": { "name": "order_placed", "timestamp": "2026-10-31T09:15:00Z" } }, "idempotency_key": "order-8821-created" },
-          "output": { "outcome": "completed", "http_status": 200, "request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T6", "idempotent_replay": false, "result": { "status": "ok", "accepted": 1, "rejected": [], "vendor_ref": "a1b2c3d4e5" }, "accepted": null, "session": null, "error": null }
+          "output": { "outcome": "completed", "http_status": 200, "request_id": "req_01J9Z3K8X2V7Q4M6N8P0R2S4T6", "idempotent_replay": false, "result": { "status": "ok", "accepted": 1, "rejected": [], "vendor_ref": "a1b2c3d4e5" }, "pass_through": false, "accepted": null, "session": null, "error": null }
         },
         {
           "input": { "integration_id": "int_evt_brandB", "body": { "user": { "id": "u_1" }, "event": { "name": "signup" } } },
-          "output": { "outcome": "queued", "http_status": 202, "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JM", "idempotent_replay": false, "result": null, "accepted": { "status": "queued", "reason": "circuit_open", "poll": "/v1/requests/req_01J9Z3M1A5B7C9D1E3F5G7H9JM" }, "session": null, "error": null }
+          "output": { "outcome": "queued", "http_status": 202, "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JM", "idempotent_replay": false, "result": null, "pass_through": false, "accepted": { "status": "queued", "reason": "circuit_open", "poll": "/v1/requests/req_01J9Z3M1A5B7C9D1E3F5G7H9JM" }, "session": null, "error": null }
+        },
+        {
+          "input": { "integration_id": "int_age_estimate", "body": { "firstName": "Mich", "lastName": "ael" }, "headers": { "X-Request-Source": "assistant" }, "idempotency_key": "age-michael-1" },
+          "output": { "outcome": "completed", "http_status": 200, "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KR", "idempotent_replay": false, "result": { "count": 21, "name": "Michael", "age": 57 }, "pass_through": true, "accepted": null, "session": null, "error": null }
         }
       ]
     },
@@ -340,7 +316,7 @@
       "name": "hub_get_request",
       "title": "Get request status",
       "audience": "tenant",
-      "description": "Check the status of an earlier hub_invoke by request_id — use it after an outcome=queued. status is one of accepted, in_flight, retry_scheduled, parked (waiting for the upstream to recover), succeeded (result holds the canonical response), failed or dead_lettered (error holds why), expired (it was not delivered before its TTL). Do not poll in a tight loop: wait at least a few seconds between calls and tell the user it is still pending.",
+      "description": "Check the status of an earlier hub_invoke by request_id — use it after an outcome=queued. status is one of accepted, in_flight, retry_scheduled, parked (waiting for the upstream to recover), succeeded (result holds the response body), failed or dead_lettered (error holds why), expired (it was not delivered before its TTL). Do not poll in a tight loop: wait at least a few seconds between calls and tell the user it is still pending.",
       "maps_to": [ { "spec": "hub-public.v1.yaml", "operationId": "getRequestStatus", "http_method": "GET" } ],
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
@@ -358,7 +334,6 @@
         "properties": {
           "request_id": { "type": "string" },
           "integration_id": { "type": "string" },
-          "capability": { "type": "string" },
           "operation": { "type": "string" },
           "mode": { "type": "string" },
           "status": { "type": "string", "enum": ["accepted", "in_flight", "succeeded", "retry_scheduled", "parked", "dead_lettered", "expired", "failed"] },
@@ -366,7 +341,7 @@
           "next_attempt_at": { "type": ["string", "null"] },
           "expires_at": { "type": ["string", "null"] },
           "completed_at": { "type": ["string", "null"] },
-          "result": { "type": ["object", "null"] },
+          "result": { "description": "Response body when succeeded (any JSON value), else null." },
           "error": { "type": ["object", "null"] }
         }
       },
@@ -374,7 +349,7 @@
       "examples": [
         {
           "input": { "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JM" },
-          "output": { "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JM", "integration_id": "int_evt_brandB", "capability": "events.track@v1", "operation": "default", "mode": "async", "status": "parked", "attempts": 1, "next_attempt_at": null, "expires_at": "2026-10-31T15:15:00Z", "completed_at": null, "result": null, "error": null }
+          "output": { "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9JM", "integration_id": "int_evt_brandB", "operation": "default", "mode": "async", "status": "parked", "attempts": 1, "next_attempt_at": null, "expires_at": "2026-10-31T15:15:00Z", "completed_at": null, "result": null, "error": null }
         }
       ]
     },
@@ -791,7 +766,7 @@
       "examples": [
         {
           "input": { "vendor_id": "clevertap" },
-          "output": { "vendor_id": "clevertap", "display_name": "CleverTap", "auth_scheme": "static_headers", "regions": { "in": "https://in1.api.clevertap.com", "us": "https://us1.api.clevertap.com" }, "defaults": { "rate_limit": { "per_account_rps": 50 } }, "webhook_verification": { "scheme": "hmac_sha256", "header": "X-CleverTap-Signature", "max_skew_ms": 300000 }, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "endpoints": [{ "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "created_at": "2026-10-31T09:01:00Z" }], "revision": 3, "created_at": "2026-10-31T09:00:00Z", "updated_at": "2026-10-31T09:00:00Z", "etag": "\"3\"" }
+          "output": { "vendor_id": "clevertap", "display_name": "CleverTap", "auth_scheme": "static_headers", "regions": { "in": "https://in1.api.clevertap.com", "us": "https://us1.api.clevertap.com" }, "defaults": { "rate_limit": { "per_account_rps": 50 } }, "webhook_verification": { "scheme": "hmac_sha256", "header": "X-CleverTap-Signature", "max_skew_ms": 300000 }, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "endpoints": [{ "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "request_schema": { "headers": { "type": "object", "required": ["Content-Type"], "properties": { "Content-Type": { "const": "application/json" } } }, "body": { "type": "object", "required": ["d"], "properties": { "d": { "type": "array", "minItems": 1, "maxItems": 1000 } } } }, "response_schema": null, "created_at": "2026-10-31T09:01:00Z" }], "revision": 3, "created_at": "2026-10-31T09:00:00Z", "updated_at": "2026-10-31T09:00:00Z", "etag": "\"3\"" }
         }
       ]
     },
@@ -810,7 +785,7 @@
         "properties": {
           "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
           "display_name": { "type": "string", "minLength": 1, "maxLength": 128 },
-          "auth_scheme": { "type": "string", "enum": ["static_headers", "bearer", "basic", "query_param", "hmac_signing", "oauth2_client_credentials", "mtls"], "description": "Shape of the vendor auth only. Credential values are set per account in the console or with hubctl, never here." },
+          "auth_scheme": { "type": "string", "enum": ["none", "static_headers", "bearer", "basic", "query_param", "hmac_signing", "oauth2_client_credentials", "mtls"], "description": "Shape of the vendor auth only (none = public API, its accounts have no credentials). Credential values are set per account in the console or with hubctl, never here." },
           "regions": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "format": "uri" }, "description": "Base URL per region, e.g. {\"in\": \"https://in1.api.example.com\"}. Egress is restricted to these hosts." },
           "defaults": { "type": "object", "description": "hub-admin VendorDefaults: rate_limit.per_account_rps, breaker (window_ms, min_calls, failure_ratio, consecutive_timeouts, open_ms, open_max_ms, half_open_probes), health_probe (endpoint, dry, every_ms)." },
           "webhook_verification": { "type": ["object", "null"], "additionalProperties": false, "required": ["scheme"], "description": "How inbound webhooks from this vendor are verified. Any verification secret is set per account in the console, never here.", "properties": { "scheme": { "type": "string", "enum": ["none", "hmac_sha256", "basic", "ip_allowlist"] }, "header": { "type": "string" }, "max_skew_ms": { "type": "integer", "minimum": 0 }, "ip_allowlist": { "type": "array", "items": { "type": "string" } } } },
@@ -856,7 +831,7 @@
         "properties": {
           "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
           "display_name": { "type": "string", "minLength": 1, "maxLength": 128 },
-          "auth_scheme": { "type": "string", "enum": ["static_headers", "bearer", "basic", "query_param", "hmac_signing", "oauth2_client_credentials", "mtls"], "description": "Shape of the vendor auth only. Credential values are set per account in the console or with hubctl, never here." },
+          "auth_scheme": { "type": "string", "enum": ["none", "static_headers", "bearer", "basic", "query_param", "hmac_signing", "oauth2_client_credentials", "mtls"], "description": "Shape of the vendor auth only (none = public API, its accounts have no credentials). Credential values are set per account in the console or with hubctl, never here." },
           "regions": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "format": "uri" }, "description": "Base URL per region, e.g. {\"in\": \"https://in1.api.example.com\"}. Egress is restricted to these hosts." },
           "defaults": { "type": "object", "description": "hub-admin VendorDefaults: rate_limit.per_account_rps, breaker (window_ms, min_calls, failure_ratio, consecutive_timeouts, open_ms, open_max_ms, half_open_probes), health_probe (endpoint, dry, every_ms)." },
           "webhook_verification": { "type": ["object", "null"], "additionalProperties": false, "required": ["scheme"], "description": "How inbound webhooks from this vendor are verified. Any verification secret is set per account in the console, never here.", "properties": { "scheme": { "type": "string", "enum": ["none", "hmac_sha256", "basic", "ip_allowlist"] }, "header": { "type": "string" }, "max_skew_ms": { "type": "integer", "minimum": 0 }, "ip_allowlist": { "type": "array", "items": { "type": "string" } } } },
@@ -884,7 +859,7 @@
       "examples": [
         {
           "input": { "vendor_id": "clevertap", "display_name": "CleverTap", "auth_scheme": "static_headers", "regions": { "in": "https://in1.api.clevertap.com", "us": "https://us1.api.clevertap.com" }, "defaults": { "rate_limit": { "per_account_rps": 80 } }, "webhook_verification": { "scheme": "hmac_sha256", "header": "X-CleverTap-Signature", "max_skew_ms": 300000 }, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "reason": "Vendor raised the per-account limit to 80 rps (VND-221)", "if_match": "\"3\"", "confirm": true },
-          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0MP", "vendor": { "vendor_id": "clevertap", "display_name": "CleverTap", "auth_scheme": "static_headers", "regions": { "in": "https://in1.api.clevertap.com", "us": "https://us1.api.clevertap.com" }, "defaults": { "rate_limit": { "per_account_rps": 80 } }, "webhook_verification": { "scheme": "hmac_sha256", "header": "X-CleverTap-Signature", "max_skew_ms": 300000 }, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "endpoints": [{ "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "created_at": "2026-10-31T09:01:00Z" }], "revision": 4, "created_at": "2026-10-31T09:00:00Z", "updated_at": "2026-11-07T10:00:00Z" } }
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0MP", "vendor": { "vendor_id": "clevertap", "display_name": "CleverTap", "auth_scheme": "static_headers", "regions": { "in": "https://in1.api.clevertap.com", "us": "https://us1.api.clevertap.com" }, "defaults": { "rate_limit": { "per_account_rps": 80 } }, "webhook_verification": { "scheme": "hmac_sha256", "header": "X-CleverTap-Signature", "max_skew_ms": 300000 }, "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "endpoints": [{ "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "request_schema": { "headers": { "type": "object", "required": ["Content-Type"], "properties": { "Content-Type": { "const": "application/json" } } }, "body": { "type": "object", "required": ["d"], "properties": { "d": { "type": "array", "minItems": 1, "maxItems": 1000 } } } }, "response_schema": null, "created_at": "2026-10-31T09:01:00Z" }], "revision": 4, "created_at": "2026-10-31T09:00:00Z", "updated_at": "2026-11-07T10:00:00Z" } }
         }
       ]
     },
@@ -892,7 +867,7 @@
       "name": "hub_admin_list_vendor_endpoints",
       "title": "List vendor endpoints (admin, read-only)",
       "audience": "admin",
-      "description": "Operator tool: list a vendor's endpoint versions (<name>@<version>, method, path, timeouts, idempotency, batch size). Transformers and integration specs reference them as <vendor_id>.<name>@<version>. Requires HUB_ADMIN_TOKEN.",
+      "description": "Operator tool: list a vendor's endpoint versions (<name>@<version>, method, path, timeouts, idempotency, batch size, request_schema, optional response_schema). Transformers and integration specs reference them as <vendor_id>.<name>@<version>. Requires HUB_ADMIN_TOKEN.",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "listVendorEndpoints", "http_method": "GET" }],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
@@ -911,7 +886,7 @@
         "description": "hub-admin VendorEndpointList.",
         "required": ["items", "next_cursor"],
         "properties": {
-          "items": { "type": "array", "items": { "type": "object", "description": "hub-admin VendorEndpoint.", "required": ["endpoint_ref", "name", "version", "method", "path"], "properties": { "endpoint_ref": { "type": "string" }, "name": { "type": "string" }, "version": { "type": "integer" }, "method": { "type": "string" }, "path": { "type": "string" }, "timeout_ms": { "type": "integer" }, "connect_timeout_ms": { "type": "integer" }, "idempotent": { "type": "boolean" }, "batch_max": { "type": ["integer", "null"] }, "stream": { "type": "boolean" }, "created_at": { "type": "string", "format": "date-time" } } } },
+          "items": { "type": "array", "items": { "type": "object", "description": "hub-admin VendorEndpoint.", "required": ["endpoint_ref", "name", "version", "method", "path"], "properties": { "endpoint_ref": { "type": "string" }, "name": { "type": "string" }, "version": { "type": "integer" }, "method": { "type": "string" }, "path": { "type": "string" }, "timeout_ms": { "type": "integer" }, "connect_timeout_ms": { "type": "integer" }, "idempotent": { "type": "boolean" }, "batch_max": { "type": ["integer", "null"] }, "stream": { "type": "boolean" }, "request_schema": { "type": "object", "description": "hub-admin EndpointRequestSchema: JSON Schemas of path, query, headers, body." }, "response_schema": { "type": ["object", "null"] }, "created_at": { "type": "string", "format": "date-time" } } } },
           "next_cursor": { "type": ["string", "null"] }
         }
       },
@@ -921,7 +896,7 @@
       "examples": [
         {
           "input": { "vendor_id": "clevertap" },
-          "output": { "items": [{ "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "created_at": "2026-10-31T09:01:00Z" }], "next_cursor": null }
+          "output": { "items": [{ "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "request_schema": { "headers": { "type": "object", "required": ["Content-Type"], "properties": { "Content-Type": { "const": "application/json" } } }, "body": { "type": "object", "required": ["d"], "properties": { "d": { "type": "array", "minItems": 1, "maxItems": 1000 } } } }, "response_schema": null, "created_at": "2026-10-31T09:01:00Z" }], "next_cursor": null }
         }
       ]
     },
@@ -929,7 +904,7 @@
       "name": "hub_admin_get_vendor_endpoint",
       "title": "Get a vendor endpoint (admin, read-only)",
       "audience": "admin",
-      "description": "Operator tool: get one vendor endpoint version by <name>@<version>. Requires HUB_ADMIN_TOKEN.",
+      "description": "Operator tool: get one vendor endpoint version by <name>@<version>, including its request_schema (what the vendor accepts; request transformer samples are checked against it) and optional informational response_schema. Requires HUB_ADMIN_TOKEN.",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "getVendorEndpoint", "http_method": "GET" }],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
@@ -957,6 +932,8 @@
           "idempotent": { "type": "boolean" },
           "batch_max": { "type": ["integer", "null"] },
           "stream": { "type": "boolean" },
+          "request_schema": { "type": "object", "description": "hub-admin EndpointRequestSchema: JSON Schemas of path, query, headers, body." },
+          "response_schema": { "type": ["object", "null"] },
           "created_at": { "type": "string", "format": "date-time" }
         }
       },
@@ -966,7 +943,7 @@
       "examples": [
         {
           "input": { "vendor_id": "clevertap", "endpoint_ref": "upload@1" },
-          "output": { "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "created_at": "2026-10-31T09:01:00Z" }
+          "output": { "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "request_schema": { "headers": { "type": "object", "required": ["Content-Type"], "properties": { "Content-Type": { "const": "application/json" } } }, "body": { "type": "object", "required": ["d"], "properties": { "d": { "type": "array", "minItems": 1, "maxItems": 1000 } } } }, "response_schema": null, "created_at": "2026-10-31T09:01:00Z" }
         }
       ]
     },
@@ -974,14 +951,14 @@
       "name": "hub_admin_create_vendor_endpoint",
       "title": "Create a vendor endpoint version (admin)",
       "audience": "admin",
-      "description": "Admin write tool: add an endpoint to a vendor, or change one. Endpoint versions are immutable: a new name creates <name>@1, an existing name creates <name>@<n+1>. Existing integrations keep the old version until a new integration version references the new one and is published, so this never changes live traffic by itself. method is the HTTP verb the Hub uses towards the vendor (it does not delete anything in the Hub). Check path and method against the vendor's current API docs. Needs the admin role (FORBIDDEN otherwise).",
+      "description": "Admin write tool: add an endpoint to a vendor, or change one. Endpoint versions are immutable: a new name creates <name>@1, an existing name creates <name>@<n+1>. Existing integrations keep the old version until a new integration version references the new one and is published, so this never changes live traffic by itself. method is the HTTP verb the Hub uses towards the vendor (it does not delete anything in the Hub). request_schema is required: JSON Schemas (2020-12) of the path parameters, query parameters, non-credential headers and body the vendor accepts ({} = nothing besides method and path; list required fields in required). Never declare credential headers or query values: they come from the account. response_schema is optional and only informational. Check path, method and schemas against the vendor's current API docs. Needs the admin role (FORBIDDEN otherwise).",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createVendorEndpoint", "http_method": "POST" }],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
       "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["vendor_id", "name", "method", "path", "idempotent", "reason"],
+        "required": ["vendor_id", "name", "method", "path", "idempotent", "request_schema", "reason"],
         "properties": {
           "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
           "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
@@ -992,6 +969,8 @@
           "idempotent": { "type": "boolean", "description": "True only if the vendor documents that repeating the call is safe; drives retries." },
           "batch_max": { "type": ["integer", "null"], "minimum": 1 },
           "stream": { "type": "boolean", "default": false },
+          "request_schema": { "type": "object", "additionalProperties": false, "description": "hub-admin EndpointRequestSchema. Each key optional; {} = nothing besides method and path.", "properties": { "path": { "type": "object", "description": "JSON Schema of the path parameters object." }, "query": { "type": "object", "description": "JSON Schema of the query parameters object." }, "headers": { "type": "object", "description": "JSON Schema of the non-credential headers object." }, "body": { "type": "object", "description": "JSON Schema of the body." } } },
+          "response_schema": { "type": ["object", "null"], "description": "Optional JSON Schema of the vendor response body. Informational, never enforced." },
           "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
         }
       },
@@ -1001,7 +980,7 @@
         "required": ["change_id", "endpoint"],
         "properties": {
           "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
-          "endpoint": { "type": "object", "description": "hub-admin VendorEndpoint.", "required": ["endpoint_ref", "name", "version", "method", "path"], "properties": { "endpoint_ref": { "type": "string" }, "name": { "type": "string" }, "version": { "type": "integer" }, "method": { "type": "string" }, "path": { "type": "string" }, "timeout_ms": { "type": "integer" }, "connect_timeout_ms": { "type": "integer" }, "idempotent": { "type": "boolean" }, "batch_max": { "type": ["integer", "null"] }, "stream": { "type": "boolean" }, "created_at": { "type": "string", "format": "date-time" } } }
+          "endpoint": { "type": "object", "description": "hub-admin VendorEndpoint.", "required": ["endpoint_ref", "name", "version", "method", "path"], "properties": { "endpoint_ref": { "type": "string" }, "name": { "type": "string" }, "version": { "type": "integer" }, "method": { "type": "string" }, "path": { "type": "string" }, "timeout_ms": { "type": "integer" }, "connect_timeout_ms": { "type": "integer" }, "idempotent": { "type": "boolean" }, "batch_max": { "type": ["integer", "null"] }, "stream": { "type": "boolean" }, "request_schema": { "type": "object", "description": "hub-admin EndpointRequestSchema: JSON Schemas of path, query, headers, body." }, "response_schema": { "type": ["object", "null"] }, "created_at": { "type": "string", "format": "date-time" } } }
         }
       },
       "safety": [
@@ -1012,8 +991,8 @@
       ],
       "examples": [
         {
-          "input": { "vendor_id": "clevertap", "name": "upload", "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "reason": "Upload events endpoint" },
-          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0MQ", "endpoint": { "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "created_at": "2026-10-31T09:01:00Z" } }
+          "input": { "vendor_id": "clevertap", "name": "upload", "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "request_schema": { "headers": { "type": "object", "required": ["Content-Type"], "properties": { "Content-Type": { "const": "application/json" } } }, "body": { "type": "object", "required": ["d"], "properties": { "d": { "type": "array", "minItems": 1, "maxItems": 1000 } } } }, "reason": "Upload events endpoint" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0MQ", "endpoint": { "endpoint_ref": "upload@1", "name": "upload", "version": 1, "method": "POST", "path": "/1/upload", "timeout_ms": 3000, "connect_timeout_ms": 500, "idempotent": true, "batch_max": 1000, "request_schema": { "headers": { "type": "object", "required": ["Content-Type"], "properties": { "Content-Type": { "const": "application/json" } } }, "body": { "type": "object", "required": ["d"], "properties": { "d": { "type": "array", "minItems": 1, "maxItems": 1000 } } } }, "response_schema": null, "created_at": "2026-10-31T09:01:00Z" } }
         }
       ]
     },
@@ -1151,46 +1130,10 @@
       ]
     },
     {
-      "name": "hub_admin_list_capabilities",
-      "title": "List capabilities (admin, read-only)",
-      "audience": "admin",
-      "description": "Operator tool: list the canonical capabilities (e.g. events.track@v1) with their operations and how many integrations use them. An integration and its transformers are bound to one capability key. Requires HUB_ADMIN_TOKEN.",
-      "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "listCapabilities", "http_method": "GET" }],
-      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
-      "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "q": { "type": "string", "maxLength": 128, "description": "Case-insensitive substring of the id or display name." },
-          "cursor": { "type": "string", "maxLength": 512, "description": "next_cursor from a previous call." },
-          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
-        }
-      },
-      "outputSchema": {
-        "type": "object",
-        "description": "hub-admin CapabilityList.",
-        "required": ["items", "next_cursor"],
-        "properties": {
-          "items": { "type": "array", "items": { "type": "object", "required": ["capability", "operations"], "properties": { "capability": { "type": "string" }, "name": { "type": "string" }, "major": { "type": "integer" }, "latest_minor": { "type": "integer" }, "interactive": { "type": "boolean" }, "operations": { "type": "array", "items": { "type": "string" } }, "integrations_using": { "type": "integer" }, "updated_at": { "type": "string", "format": "date-time" } } } },
-          "next_cursor": { "type": ["string", "null"] }
-        }
-      },
-      "safety": [
-        "Read-only (GET); registered only when HUB_ADMIN_TOKEN is set."
-      ],
-      "examples": [
-        {
-          "input": {},
-          "output": { "items": [{ "capability": "events.track@v1", "name": "events.track", "major": 1, "latest_minor": 0, "interactive": false, "operations": ["default"], "integrations_using": 3, "updated_at": "2026-10-31T09:00:00Z" }], "next_cursor": null }
-        }
-      ]
-    },
-    {
       "name": "hub_admin_get_transformer",
       "title": "Get a transformer (admin, read-only)",
       "audience": "admin",
-      "description": "Operator tool: get a transformer with its latest version (YAML, fixtures, goldens summary). Use latest_version as expected_latest_version in hub_admin_create_transformer_version. Requires HUB_ADMIN_TOKEN.",
+      "description": "Operator tool: get a transformer with its latest version (YAML, samples (fixtures), goldens summary). Request transformers name their vendor_endpoint; response transformers have vendor_endpoint null. Use latest_version as expected_latest_version in hub_admin_create_transformer_version. Requires HUB_ADMIN_TOKEN.",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "getTransformer", "http_method": "GET" }],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "viewer" },
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
@@ -1205,12 +1148,11 @@
       "outputSchema": {
         "type": "object",
         "description": "hub-admin Transformer.",
-        "required": ["transformer_id", "kind", "capability", "vendor_endpoint", "latest_version", "latest"],
+        "required": ["transformer_id", "kind", "vendor_endpoint", "latest_version", "latest"],
         "properties": {
           "transformer_id": { "type": "string" },
           "kind": { "type": "string" },
-          "capability": { "type": "string" },
-          "vendor_endpoint": { "type": "string" },
+          "vendor_endpoint": { "type": ["string", "null"] },
           "latest_version": { "type": "integer" },
           "used_by_active_versions": { "type": "integer" },
           "updated_at": { "type": "string", "format": "date-time" },
@@ -1223,7 +1165,7 @@
       "examples": [
         {
           "input": { "transformer_id": "T1" },
-          "output": { "transformer_id": "T1", "kind": "request", "capability": "events.track@v1", "vendor_endpoint": "clevertap.upload@1", "latest_version": 7, "used_by_active_versions": 1, "updated_at": "2026-10-20T08:00:00Z", "latest": { "transformer_id": "T1", "version": 7, "ref": "T1@7", "kind": "request" } }
+          "output": { "transformer_id": "T1", "kind": "request", "vendor_endpoint": "clevertap.upload@1", "latest_version": 7, "used_by_active_versions": 1, "updated_at": "2026-10-20T08:00:00Z", "latest": { "transformer_id": "T1", "version": 7, "ref": "T1@7", "kind": "request" } }
         }
       ]
     },
@@ -1231,22 +1173,21 @@
       "name": "hub_admin_create_transformer_version",
       "title": "Create a transformer version (admin)",
       "audience": "admin",
-      "description": "Admin write tool: store a new transformer version: n+1 of an existing transformer (pass expected_latest_version from hub_admin_get_transformer) or version 1 of a new transformer_id (omit it). The Hub compiles it, type-checks it against the capability schema and runs every golden fixture (at least one is required); if anything fails it answers PUBLISH_VALIDATION_FAILED and nothing is stored, so a transformer with failing goldens cannot exist. Iterate first with hub_admin_dry_run_transformer and hub_admin_run_transformer_goldens on a draft. Vendor payloads must follow the vendor's current API docs: cite them in docs_url. Not live: a version carries traffic only after an integration version references it and is published. Needs the editor role (FORBIDDEN otherwise).",
+      "description": "Admin write tool: store a new transformer version: n+1 of an existing transformer (pass expected_latest_version from hub_admin_get_transformer) or version 1 of a new transformer_id (omit it). kind=request needs vendor_endpoint; kind=response must omit it (a response transformer stands alone and is optional in an integration). The Hub compiles it and runs every sample (fixture; at least one is required). Request samples are input (caller body) + optional input_headers + expected_request: the produced request must equal expected_request (check goldens_pass) and fit the endpoint's request_schema (check endpoint_schema). Response samples are vendor_response + expected_response or expected_error. If anything fails it answers PUBLISH_VALIDATION_FAILED, naming the sample and the JSON pointer of the field, and nothing is stored, so a transformer with failing samples cannot exist. Its field references (req.x, hdr.X) are checked against the operation's request_schema when an integration version using it is validated. Iterate first with hub_admin_dry_run_transformer and hub_admin_run_transformer_goldens on a draft. Vendor payloads must follow the vendor's current API docs: cite them in docs_url. Not live: a version carries traffic only after an integration version references it and is published. Needs the editor role (FORBIDDEN otherwise).",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createTransformerVersion", "http_method": "POST" }],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor", "transport": ["stdio"] },
       "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["transformer_id", "kind", "capability", "vendor_endpoint", "yaml", "fixtures", "reason"],
+        "required": ["transformer_id", "kind", "yaml", "fixtures", "reason"],
         "properties": {
           "transformer_id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" },
           "kind": { "type": "string", "enum": ["request", "response", "inbound"] },
-          "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" },
-          "vendor_endpoint": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$", "description": "<vendor_id>.<endpoint name>@<version>, e.g. clevertap.upload@1." },
+          "vendor_endpoint": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$", "description": "<vendor_id>.<endpoint name>@<version>, e.g. clevertap.upload@1. Required for kind=request (and inbound); omit for kind=response." },
           "expected_latest_version": { "type": ["integer", "null"], "minimum": 1, "description": "latest_version you based this on; omit or null for a new transformer_id. CONFLICT if someone stored a newer one." },
           "yaml": { "type": "string", "minLength": 1, "description": "Transformer DSL source (DESIGN §7)." },
-          "fixtures": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["name"], "description": "Golden fixture (hub-admin GoldenFixture): request transformers use input + expected_request, response transformers vendor_response + expected_response or expected_error.", "properties": { "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" }, "input": { "type": "object" }, "account_config": { "type": "object" }, "expected_request": { "type": "object" }, "vendor_response": { "type": "object" }, "expected_response": { "type": "object" }, "expected_error": { "type": "object" } } } },
+          "fixtures": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["name"], "description": "Sample (hub-admin GoldenFixture): request transformers use input + optional input_headers + expected_request, response transformers vendor_response + expected_response or expected_error.", "properties": { "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" }, "input": { "type": "object" }, "input_headers": { "type": "object", "additionalProperties": { "type": "string" } }, "account_config": { "type": "object" }, "expected_request": { "type": "object" }, "vendor_response": { "type": "object" }, "expected_response": { "type": "object" }, "expected_error": { "type": "object" } } } },
           "docs_url": { "type": ["string", "null"], "format": "uri", "description": "The vendor's current API documentation for this." },
           "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
         }
@@ -1257,7 +1198,7 @@
         "required": ["change_id", "transformer_version"],
         "properties": {
           "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
-          "transformer_version": { "type": "object", "required": ["transformer_id", "version", "ref"], "properties": { "transformer_id": { "type": "string" }, "version": { "type": "integer" }, "ref": { "type": "string" }, "kind": { "type": "string" }, "capability": { "type": "string" }, "vendor_endpoint": { "type": "string" }, "goldens": { "type": "object" }, "author": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } }
+          "transformer_version": { "type": "object", "required": ["transformer_id", "version", "ref"], "properties": { "transformer_id": { "type": "string" }, "version": { "type": "integer" }, "ref": { "type": "string" }, "kind": { "type": "string" }, "vendor_endpoint": { "type": ["string", "null"] }, "goldens": { "type": "object" }, "author": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } }
         }
       },
       "safety": [
@@ -1268,8 +1209,8 @@
       ],
       "examples": [
         {
-          "input": { "transformer_id": "T1", "kind": "request", "capability": "events.track@v1", "vendor_endpoint": "clevertap.upload@1", "expected_latest_version": 7, "yaml": "transformer: T1\nkind: request\ncapability: events.track@v1\nvendor_endpoint: clevertap.upload@1\nrequest:\n  method: POST\n  path: /1/upload\n", "fixtures": [{ "name": "order_placed", "input": { "user": { "id": "u_48213" }, "event": { "name": "order_placed", "timestamp": "2026-10-31T09:15:00Z" } }, "expected_request": { "method": "POST", "path": "/1/upload", "body": { "d": [{ "identity": "u_48213", "type": "event", "evtName": "order_placed", "ts": 1793438100 }] } } }], "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "reason": "Map context.campaign" },
-          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N0", "transformer_version": { "transformer_id": "T1", "version": 8, "ref": "T1@8", "kind": "request", "capability": "events.track@v1", "vendor_endpoint": "clevertap.upload@1", "goldens": { "passed": true, "total": 1, "failed": 0 }, "author": "priya@example.com", "created_at": "2026-10-31T10:00:00Z" } }
+          "input": { "transformer_id": "T1", "kind": "request", "vendor_endpoint": "clevertap.upload@1", "expected_latest_version": 7, "yaml": "transformer: T1\nkind: request\nvendor_endpoint: clevertap.upload@1\nrequest:\n  method: POST\n  path: /1/upload\n", "fixtures": [{ "name": "order_placed", "input": { "user": { "id": "u_48213" }, "event": { "name": "order_placed", "timestamp": "2026-10-31T09:15:00Z" } }, "expected_request": { "method": "POST", "path": "/1/upload", "body": { "d": [{ "identity": "u_48213", "type": "event", "evtName": "order_placed", "ts": 1793438100 }] } } }], "docs_url": "https://developer.clevertap.com/docs/upload-events-api", "reason": "Map context.campaign" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N0", "transformer_version": { "transformer_id": "T1", "version": 8, "ref": "T1@8", "kind": "request", "vendor_endpoint": "clevertap.upload@1", "goldens": { "passed": true, "total": 1, "failed": 0 }, "author": "priya@example.com", "created_at": "2026-10-31T10:00:00Z" } }
         }
       ]
     },
@@ -1277,7 +1218,7 @@
       "name": "hub_admin_run_transformer_goldens",
       "title": "Run transformer goldens (admin, no side effects)",
       "audience": "admin",
-      "description": "Operator tool: run golden fixtures against a stored transformer version (ref) or against an unsaved draft plus fixtures, and get a per-fixture pass/fail with diffs. Nothing is stored. Use it to iterate before hub_admin_create_transformer_version, which runs the same check. Give exactly one of ref, or draft with fixtures. Needs the editor role.",
+      "description": "Operator tool: run samples (golden fixtures) against a stored transformer version (ref) or against an unsaved draft plus fixtures, and get a per-sample pass/fail with diffs against the expected output and, for request samples, schema_errors: each violation of the vendor endpoint's request_schema with the JSON pointer of the field. Nothing is stored. Use it to iterate before hub_admin_create_transformer_version, which runs the same check. Give exactly one of ref, or draft with fixtures. Needs the editor role.",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "runTransformerGoldens", "http_method": "POST" }],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor" },
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
@@ -1287,8 +1228,8 @@
         "oneOf": [{ "required": ["ref"] }, { "required": ["draft", "fixtures"] }],
         "properties": {
           "ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}@[1-9][0-9]*$", "description": "<transformer_id>@<version>, e.g. T1@7." },
-          "draft": { "type": "object", "additionalProperties": false, "required": ["kind", "capability", "vendor_endpoint", "yaml"], "description": "Unsaved transformer (hub-admin TransformerDraft).", "properties": { "kind": { "type": "string", "enum": ["request", "response", "inbound"] }, "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" }, "vendor_endpoint": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$", "description": "<vendor_id>.<endpoint name>@<version>, e.g. clevertap.upload@1." }, "yaml": { "type": "string", "minLength": 1 } } },
-          "fixtures": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["name"], "description": "Golden fixture (hub-admin GoldenFixture): request transformers use input + expected_request, response transformers vendor_response + expected_response or expected_error.", "properties": { "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" }, "input": { "type": "object" }, "account_config": { "type": "object" }, "expected_request": { "type": "object" }, "vendor_response": { "type": "object" }, "expected_response": { "type": "object" }, "expected_error": { "type": "object" } } } }
+          "draft": { "type": "object", "additionalProperties": false, "required": ["kind", "yaml"], "description": "Unsaved transformer (hub-admin TransformerDraft).", "properties": { "kind": { "type": "string", "enum": ["request", "response", "inbound"] }, "vendor_endpoint": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$", "description": "<vendor_id>.<endpoint name>@<version>, e.g. clevertap.upload@1. Required for kind=request (and inbound); omit for kind=response." }, "yaml": { "type": "string", "minLength": 1 } } },
+          "fixtures": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["name"], "description": "Sample (hub-admin GoldenFixture): request transformers use input + optional input_headers + expected_request, response transformers vendor_response + expected_response or expected_error.", "properties": { "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" }, "input": { "type": "object" }, "input_headers": { "type": "object", "additionalProperties": { "type": "string" } }, "account_config": { "type": "object" }, "expected_request": { "type": "object" }, "vendor_response": { "type": "object" }, "expected_response": { "type": "object" }, "expected_error": { "type": "object" } } } }
         }
       },
       "outputSchema": {
@@ -1299,7 +1240,7 @@
           "passed": { "type": "boolean" },
           "total": { "type": "integer" },
           "failed": { "type": "integer" },
-          "results": { "type": "array", "items": { "type": "object", "required": ["fixture", "passed", "diff"], "properties": { "fixture": { "type": "string" }, "passed": { "type": "boolean" }, "diff": { "type": "array", "items": { "type": "object" } }, "error": { "type": ["string", "null"] } } } },
+          "results": { "type": "array", "items": { "type": "object", "required": ["fixture", "passed", "diff"], "properties": { "fixture": { "type": "string" }, "passed": { "type": "boolean" }, "diff": { "type": "array", "items": { "type": "object" } }, "schema_errors": { "type": "array", "items": { "type": "object", "required": ["field", "message"], "properties": { "field": { "type": "string" }, "keyword": { "type": "string" }, "message": { "type": "string" } } } }, "error": { "type": ["string", "null"] } } } },
           "duration_ms": { "type": "integer" }
         }
       },
@@ -1309,7 +1250,7 @@
       "examples": [
         {
           "input": { "ref": "T1@7" },
-          "output": { "passed": true, "total": 2, "failed": 0, "results": [{ "fixture": "order_placed", "passed": true, "diff": [] }, { "fixture": "no_timestamp", "passed": true, "diff": [] }], "duration_ms": 12 }
+          "output": { "passed": true, "total": 2, "failed": 0, "results": [{ "fixture": "order_placed", "passed": true, "diff": [], "schema_errors": [] }, { "fixture": "no_timestamp", "passed": true, "diff": [], "schema_errors": [] }], "duration_ms": 12 }
         }
       ]
     },
@@ -1317,7 +1258,7 @@
       "name": "hub_admin_dry_run_transformer",
       "title": "Dry-run a transformer (admin, no side effects)",
       "audience": "admin",
-      "description": "Operator tool: run a stored transformer version (ref) or an unsaved draft on one input. A request transformer turns a canonical input into the exact vendor request (secrets shown as ***); a response transformer turns a vendor_response into the canonical response or error. account_id injects that account's non-secret config. No upstream call, nothing stored. Give exactly one of ref or draft. Needs the editor role.",
+      "description": "Operator tool: run a stored transformer version (ref) or an unsaved draft on one input. A request transformer turns a caller input (input body + input_headers) into the exact vendor request (secrets shown as ***) and lists any violation of the endpoint's request_schema in schema_errors; a response transformer turns a vendor_response into its output or a canonical error. account_id injects that account's non-secret config. No upstream call, nothing stored. Give exactly one of ref or draft. Needs the editor role.",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "dryRunTransformer", "http_method": "POST" }],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor" },
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
@@ -1327,10 +1268,10 @@
         "oneOf": [{ "required": ["ref"] }, { "required": ["draft"] }],
         "properties": {
           "ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}@[1-9][0-9]*$", "description": "<transformer_id>@<version>, e.g. T1@7." },
-          "draft": { "type": "object", "additionalProperties": false, "required": ["kind", "capability", "vendor_endpoint", "yaml"], "description": "Unsaved transformer (hub-admin TransformerDraft).", "properties": { "kind": { "type": "string", "enum": ["request", "response", "inbound"] }, "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" }, "vendor_endpoint": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$", "description": "<vendor_id>.<endpoint name>@<version>, e.g. clevertap.upload@1." }, "yaml": { "type": "string", "minLength": 1 } } },
+          "draft": { "type": "object", "additionalProperties": false, "required": ["kind", "yaml"], "description": "Unsaved transformer (hub-admin TransformerDraft).", "properties": { "kind": { "type": "string", "enum": ["request", "response", "inbound"] }, "vendor_endpoint": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}\\.[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$", "description": "<vendor_id>.<endpoint name>@<version>, e.g. clevertap.upload@1. Required for kind=request (and inbound); omit for kind=response." }, "yaml": { "type": "string", "minLength": 1 } } },
           "account_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$", "description": "Account whose non-secret config (and redacted credentials) is injected." },
-          "input": { "type": "object", "description": "Canonical request (request transformers)." },
-          "headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Caller headers (hdr.*)." },
+          "input": { "type": "object", "description": "Caller body (request transformers)." },
+          "input_headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Caller headers (hdr.*, request transformers)." },
           "session": { "type": "object" },
           "vendor_response": { "type": "object", "additionalProperties": false, "description": "Vendor response (response transformers).", "properties": { "status": { "type": "integer" }, "headers": { "type": "object", "additionalProperties": { "type": "string" } }, "body": {} } }
         }
@@ -1343,8 +1284,9 @@
           "ok": { "type": "boolean" },
           "kind": { "type": "string" },
           "vendor_request": { "type": ["object", "null"], "properties": { "method": { "type": "string" }, "url": { "type": "string" }, "headers": { "type": "object", "additionalProperties": { "type": "string" } }, "body": {} } },
-          "canonical_response": { "type": ["object", "null"] },
+          "canonical_response": { "type": ["object", "null"], "description": "Response transformer output, exactly what the caller would receive." },
           "canonical_error": { "type": ["object", "null"] },
+          "schema_errors": { "type": "array", "items": { "type": "object", "required": ["field", "message"], "properties": { "field": { "type": "string" }, "keyword": { "type": "string" }, "message": { "type": "string" } } } },
           "compile_errors": { "type": "array", "items": { "type": "object" } },
           "duration_us": { "type": "integer" }
         }
@@ -1356,7 +1298,7 @@
       "examples": [
         {
           "input": { "ref": "T1@7", "account_id": "ct-brandA-in", "input": { "user": { "id": "u_48213" }, "event": { "name": "order_placed", "timestamp": "2026-10-31T09:15:00Z" } } },
-          "output": { "ok": true, "kind": "request", "vendor_request": { "method": "POST", "url": "https://in1.api.clevertap.com/1/upload", "headers": { "Content-Type": "application/json", "X-CleverTap-Passcode": "***" }, "body": { "d": [{ "identity": "u_48213", "type": "event", "evtName": "order_placed", "ts": 1793438100 }] } }, "canonical_response": null, "canonical_error": null, "compile_errors": [], "duration_us": 142 }
+          "output": { "ok": true, "kind": "request", "vendor_request": { "method": "POST", "url": "https://in1.api.clevertap.com/1/upload", "headers": { "Content-Type": "application/json", "X-CleverTap-Passcode": "***" }, "body": { "d": [{ "identity": "u_48213", "type": "event", "evtName": "order_placed", "ts": 1793438100 }] } }, "canonical_response": null, "canonical_error": null, "schema_errors": [], "compile_errors": [], "duration_us": 142 }
         }
       ]
     },
@@ -1364,7 +1306,7 @@
       "name": "hub_admin_list_integrations",
       "title": "List integrations (admin, read-only)",
       "audience": "admin",
-      "description": "Operator tool: list integrations with owner tenant, capability, active and latest version, draft flag, paused flag and current targets (vendor, account, weight). Filters combine with AND. Unlike the tenant tool hub_list_integrations this is the control plane, so vendor and account ids appear. Requires HUB_ADMIN_TOKEN.",
+      "description": "Operator tool: list integrations with owner tenant, interactive flag, operation names, active and latest version, draft flag, paused flag and current targets (vendor, account, weight). Filters combine with AND. Unlike the tenant tool hub_list_integrations this is the control plane, so vendor and account ids appear. Requires HUB_ADMIN_TOKEN.",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "listIntegrations", "http_method": "GET" }],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
@@ -1373,7 +1315,6 @@
         "additionalProperties": false,
         "properties": {
           "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
-          "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" },
           "vendor_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
           "account_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
           "paused": { "type": "boolean", "description": "Filter only." },
@@ -1389,7 +1330,7 @@
         "description": "hub-admin IntegrationList.",
         "required": ["items", "next_cursor"],
         "properties": {
-          "items": { "type": "array", "items": { "type": "object", "required": ["integration_id", "owner_tenant", "capability", "active_version", "latest_version", "has_draft", "paused"], "properties": { "integration_id": { "type": "string" }, "owner_tenant": { "type": "string" }, "capability": { "type": "string" }, "description": { "type": ["string", "null"] }, "active_version": { "type": ["integer", "null"] }, "latest_version": { "type": ["integer", "null"] }, "has_draft": { "type": "boolean" }, "paused": { "type": "boolean" }, "delivery_mode": { "type": ["string", "null"] }, "targets": { "type": "array", "items": { "type": "object" } }, "updated_at": { "type": "string", "format": "date-time" } } } },
+          "items": { "type": "array", "items": { "type": "object", "required": ["integration_id", "owner_tenant", "interactive", "operations", "active_version", "latest_version", "has_draft", "paused"], "properties": { "integration_id": { "type": "string" }, "owner_tenant": { "type": "string" }, "description": { "type": ["string", "null"] }, "interactive": { "type": "boolean" }, "operations": { "type": "array", "items": { "type": "string" }, "description": "Operation names of the active version." }, "active_version": { "type": ["integer", "null"] }, "latest_version": { "type": ["integer", "null"] }, "has_draft": { "type": "boolean" }, "paused": { "type": "boolean" }, "delivery_mode": { "type": ["string", "null"] }, "targets": { "type": "array", "items": { "type": "object" } }, "updated_at": { "type": "string", "format": "date-time" } } } },
           "next_cursor": { "type": ["string", "null"] }
         }
       },
@@ -1399,7 +1340,7 @@
       "examples": [
         {
           "input": { "tenant_id": "orders-service" },
-          "output": { "items": [{ "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "capability": "events.track@v1", "description": "Brand A product analytics events", "active_version": 7, "latest_version": 8, "has_draft": true, "paused": false, "delivery_mode": "wait", "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "weight": 100 }], "updated_at": "2026-10-30T12:00:00Z" }], "next_cursor": null }
+          "output": { "items": [{ "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "description": "Brand A product analytics events", "interactive": false, "operations": ["default"], "active_version": 7, "latest_version": 8, "has_draft": true, "paused": false, "delivery_mode": "wait", "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "weight": 100 }], "updated_at": "2026-10-30T12:00:00Z" }], "next_cursor": null }
         }
       ]
     },
@@ -1407,7 +1348,7 @@
       "name": "hub_admin_get_integration",
       "title": "Get an integration (admin, read-only)",
       "audience": "admin",
-      "description": "Operator tool: get one integration with its active version in full, latest_version and has_draft. Use active_version as expected_active_version for publish, weights and rollback. Requires HUB_ADMIN_TOKEN.",
+      "description": "Operator tool: get one integration with its active version in full (including spec.operations with each operation's request_schema), latest_version and has_draft. Use active_version as expected_active_version for publish, weights and rollback. Requires HUB_ADMIN_TOKEN.",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "getIntegration", "http_method": "GET" }],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_viewer" },
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
@@ -1422,13 +1363,13 @@
       "outputSchema": {
         "type": "object",
         "description": "hub-admin Integration.",
-        "required": ["integration_id", "owner_tenant", "capability", "grants", "moves_money_or_quota", "active_version", "latest_version", "has_draft", "paused"],
+        "required": ["integration_id", "owner_tenant", "grants", "interactive", "moves_money_or_quota", "active_version", "latest_version", "has_draft", "paused"],
         "properties": {
           "integration_id": { "type": "string" },
           "owner_tenant": { "type": "string" },
-          "capability": { "type": "string" },
           "description": { "type": ["string", "null"] },
           "grants": { "type": "array", "items": { "type": "string" } },
+          "interactive": { "type": "boolean" },
           "moves_money_or_quota": { "type": "boolean" },
           "active_version": { "type": ["integer", "null"] },
           "latest_version": { "type": ["integer", "null"] },
@@ -1446,7 +1387,7 @@
       "examples": [
         {
           "input": { "integration_id": "int_evt_brandA" },
-          "output": { "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "capability": "events.track@v1", "description": "Brand A product analytics events", "grants": [], "moves_money_or_quota": false, "active_version": 7, "latest_version": 8, "has_draft": true, "paused": false, "paused_reason": null, "active": { "integration_id": "int_evt_brandA", "version": 7, "state": "published", "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 100 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } } }, "created_at": "2026-06-01T10:00:00Z", "updated_at": "2026-10-30T12:00:00Z" }
+          "output": { "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "description": "Brand A product analytics events", "grants": [], "interactive": false, "moves_money_or_quota": false, "active_version": 7, "latest_version": 8, "has_draft": true, "paused": false, "paused_reason": null, "active": { "integration_id": "int_evt_brandA", "version": 7, "state": "published", "spec": { "operations": { "default": { "description": "Track a single event for a user.", "idempotent": true, "validate_input": true, "request_schema": { "body": { "type": "object", "required": ["user", "event"], "properties": { "user": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "x-pii": "identifier" } } }, "event": { "type": "object", "required": ["name"] } } } } } }, "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 100 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } } }, "created_at": "2026-06-01T10:00:00Z", "updated_at": "2026-10-30T12:00:00Z" }
         }
       ]
     },
@@ -1454,20 +1395,20 @@
       "name": "hub_admin_create_integration",
       "title": "Create an integration (admin)",
       "audience": "admin",
-      "description": "Admin write tool: create an integration: the stable id callers use, its owner tenant, its capability and grants (other tenants allowed to invoke). It carries no traffic until a first version is published (callers get INTEGRATION_PAUSED, reason no_active_version). Next: hub_admin_create_integration_draft with a full spec, hub_admin_validate_integration_version, then hub_admin_publish_integration_version. The integration_id is what callers see, so never put a vendor name, account name or version in it (int_sms_otp, not int_twilio_v2). Set moves_money_or_quota=true when calls spend money or vendor quota (SMS, payments, bureau pulls): callers must then send an Idempotency-Key and hub_invoke needs confirmation. Needs the editor role (FORBIDDEN otherwise).",
+      "description": "Admin write tool: create an integration: the stable id callers use, its owner tenant, grants (other tenants allowed to invoke) and whether it is interactive (its operations are steps of one session a person waits on, X-Hub-Session; sync delivery only; cannot be changed later). The operations and their request schemas (what callers send) are part of each version, not of this call. It carries no traffic until a first version is published (callers get INTEGRATION_PAUSED, reason no_active_version). Next: hub_admin_create_integration_draft with a full spec, hub_admin_validate_integration_version, then hub_admin_publish_integration_version. The integration_id is what callers see, so never put a vendor name, account name or version in it (int_sms_otp, not int_twilio_v2). Set moves_money_or_quota=true when calls spend money or vendor quota (SMS, payments, bureau pulls): callers must then send an Idempotency-Key and hub_invoke needs confirmation. Needs the editor role (FORBIDDEN otherwise).",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createIntegration", "http_method": "POST" }],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor", "transport": ["stdio"] },
       "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["integration_id", "owner_tenant", "capability", "reason"],
+        "required": ["integration_id", "owner_tenant", "reason"],
         "properties": {
           "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$", "description": "Caller-facing id. No vendor, account or version in it." },
           "owner_tenant": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
-          "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@v[1-9][0-9]*$" },
           "description": { "type": ["string", "null"], "maxLength": 1024, "description": "Caller-facing description. No vendor, account or version in it." },
           "grants": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" }, "description": "Other tenant ids allowed to invoke." },
+          "interactive": { "type": "boolean", "default": false, "description": "Operations are steps of one session a person waits on (X-Hub-Session); sync delivery only. Cannot be changed later." },
           "moves_money_or_quota": { "type": "boolean", "default": false },
           "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
         }
@@ -1478,7 +1419,7 @@
         "required": ["change_id", "integration"],
         "properties": {
           "change_id": { "type": "string", "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$", "description": "Change-log entry of this mutation." },
-          "integration": { "type": "object", "description": "hub-admin Integration.", "required": ["integration_id", "owner_tenant", "capability", "grants", "moves_money_or_quota", "active_version", "latest_version", "has_draft", "paused"], "properties": { "integration_id": { "type": "string" }, "owner_tenant": { "type": "string" }, "capability": { "type": "string" }, "description": { "type": ["string", "null"] }, "grants": { "type": "array", "items": { "type": "string" } }, "moves_money_or_quota": { "type": "boolean" }, "active_version": { "type": ["integer", "null"] }, "latest_version": { "type": ["integer", "null"] }, "has_draft": { "type": "boolean" }, "paused": { "type": "boolean" }, "paused_reason": { "type": ["string", "null"] }, "active": { "type": ["object", "null"], "description": "Active IntegrationVersion in full (null in mutation responses or when none)." }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } }
+          "integration": { "type": "object", "description": "hub-admin Integration.", "required": ["integration_id", "owner_tenant", "grants", "interactive", "moves_money_or_quota", "active_version", "latest_version", "has_draft", "paused"], "properties": { "integration_id": { "type": "string" }, "owner_tenant": { "type": "string" }, "description": { "type": ["string", "null"] }, "grants": { "type": "array", "items": { "type": "string" } }, "interactive": { "type": "boolean" }, "moves_money_or_quota": { "type": "boolean" }, "active_version": { "type": ["integer", "null"] }, "latest_version": { "type": ["integer", "null"] }, "has_draft": { "type": "boolean" }, "paused": { "type": "boolean" }, "paused_reason": { "type": ["string", "null"] }, "active": { "type": ["object", "null"], "description": "Active IntegrationVersion in full (null in mutation responses or when none)." }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } }
         }
       },
       "safety": [
@@ -1490,8 +1431,8 @@
       ],
       "examples": [
         {
-          "input": { "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "capability": "events.track@v1", "description": "Brand A product analytics events", "grants": [], "moves_money_or_quota": false, "reason": "Analytics pilot for brand A" },
-          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N1", "integration": { "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "capability": "events.track@v1", "description": "Brand A product analytics events", "grants": [], "moves_money_or_quota": false, "active_version": null, "latest_version": null, "has_draft": false, "paused": false, "paused_reason": null, "active": null, "created_at": "2026-10-31T09:10:00Z", "updated_at": "2026-10-31T09:10:00Z" } }
+          "input": { "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "description": "Brand A product analytics events", "grants": [], "interactive": false, "moves_money_or_quota": false, "reason": "Analytics pilot for brand A" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N1", "integration": { "integration_id": "int_evt_brandA", "owner_tenant": "orders-service", "description": "Brand A product analytics events", "grants": [], "interactive": false, "moves_money_or_quota": false, "active_version": null, "latest_version": null, "has_draft": false, "paused": false, "paused_reason": null, "active": null, "created_at": "2026-10-31T09:10:00Z", "updated_at": "2026-10-31T09:10:00Z" } }
         }
       ]
     },
@@ -1537,7 +1478,7 @@
       "examples": [
         {
           "input": { "integration_id": "int_evt_brandA", "version": 7 },
-          "output": { "integration_id": "int_evt_brandA", "version": 7, "state": "published", "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 100 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "based_on": 6, "author": "priya@example.com", "reason": "Add breaker override", "created_at": "2026-10-29T08:00:00Z", "published_at": "2026-10-29T08:05:00Z", "published_by": "priya@example.com", "snapshot_version": 412 }
+          "output": { "integration_id": "int_evt_brandA", "version": 7, "state": "published", "spec": { "operations": { "default": { "description": "Track a single event for a user.", "idempotent": true, "validate_input": true, "request_schema": { "body": { "type": "object", "required": ["user", "event"], "properties": { "user": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "x-pii": "identifier" } } }, "event": { "type": "object", "required": ["name"] } } } } } }, "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 100 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "based_on": 6, "author": "priya@example.com", "reason": "Add breaker override", "created_at": "2026-10-29T08:00:00Z", "published_at": "2026-10-29T08:05:00Z", "published_by": "priya@example.com", "snapshot_version": 412 }
         }
       ]
     },
@@ -1596,7 +1537,7 @@
         "properties": {
           "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
           "based_on": { "type": ["integer", "null"], "minimum": 1 },
-          "spec": { "type": "object", "description": "Full hub-admin IntegrationSpec: targets (vendor_id, account_id, transformer {request, response}, optional per-operation pairs, weight), failover, delivery, breaker, webhooks, audit. The Hub validates it and answers VALIDATION_FAILED with pointers." },
+          "spec": { "type": "object", "description": "Full hub-admin IntegrationSpec: operations (required; name -> { description, idempotent, validate_input (default true), request_schema { body (JSON Schema, required), headers (JSON Schema, optional) } }; use the name default for a single operation), targets (vendor_id, account_id, transformer {request, response or null for pass-through}, optional per-operation pairs, weight), failover, delivery (ttl_ms omitted = Hub default), breaker, webhooks, audit. The Hub validates the shape and answers VALIDATION_FAILED with pointers; schema and sample checks run at validate and publish." },
           "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
         }
       },
@@ -1618,8 +1559,8 @@
       ],
       "examples": [
         {
-          "input": { "integration_id": "int_evt_brandA", "based_on": 7, "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "reason": "Canary 10% to the new workspace" },
-          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N2", "integration_version": { "integration_id": "int_evt_brandA", "version": 8, "state": "draft", "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "based_on": 7, "author": "priya@example.com", "reason": "Canary 10% to the new workspace", "created_at": "2026-10-31T09:20:00Z", "published_at": null, "published_by": null, "snapshot_version": null } }
+          "input": { "integration_id": "int_evt_brandA", "based_on": 7, "spec": { "operations": { "default": { "description": "Track a single event for a user.", "idempotent": true, "validate_input": true, "request_schema": { "body": { "type": "object", "required": ["user", "event"], "properties": { "user": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "x-pii": "identifier" } } }, "event": { "type": "object", "required": ["name"] } } } } } }, "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "reason": "Canary 10% to the new workspace" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N2", "integration_version": { "integration_id": "int_evt_brandA", "version": 8, "state": "draft", "spec": { "operations": { "default": { "description": "Track a single event for a user.", "idempotent": true, "validate_input": true, "request_schema": { "body": { "type": "object", "required": ["user", "event"], "properties": { "user": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "x-pii": "identifier" } } }, "event": { "type": "object", "required": ["name"] } } } } } }, "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "based_on": 7, "author": "priya@example.com", "reason": "Canary 10% to the new workspace", "created_at": "2026-10-31T09:20:00Z", "published_at": null, "published_by": null, "snapshot_version": null } }
         }
       ]
     },
@@ -1638,7 +1579,7 @@
         "properties": {
           "integration_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$" },
           "version": { "type": "integer", "minimum": 1 },
-          "spec": { "type": "object", "description": "Full hub-admin IntegrationSpec: targets (vendor_id, account_id, transformer {request, response}, optional per-operation pairs, weight), failover, delivery, breaker, webhooks, audit. The Hub validates it and answers VALIDATION_FAILED with pointers." },
+          "spec": { "type": "object", "description": "Full hub-admin IntegrationSpec: operations (required; name -> { description, idempotent, validate_input (default true), request_schema { body (JSON Schema, required), headers (JSON Schema, optional) } }; use the name default for a single operation), targets (vendor_id, account_id, transformer {request, response or null for pass-through}, optional per-operation pairs, weight), failover, delivery (ttl_ms omitted = Hub default), breaker, webhooks, audit. The Hub validates the shape and answers VALIDATION_FAILED with pointers; schema and sample checks run at validate and publish." },
           "reason": { "type": "string", "minLength": 3, "maxLength": 1000, "description": "Why this change is made, in the user's words (e.g. 'Onboard brand A analytics, OPS-123'). Required. Recorded in the change log under the signed-in user's identity, with ' (via hubmcp)' appended." }
         }
       },
@@ -1659,8 +1600,8 @@
       ],
       "examples": [
         {
-          "input": { "integration_id": "int_evt_brandA", "version": 8, "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "reason": "Point the canary at T1@8" },
-          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N3", "integration_version": { "integration_id": "int_evt_brandA", "version": 8, "state": "draft", "spec": { "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "based_on": 7, "author": "priya@example.com", "reason": "Point the canary at T1@8", "created_at": "2026-10-31T09:20:00Z", "published_at": null, "published_by": null, "snapshot_version": null } }
+          "input": { "integration_id": "int_evt_brandA", "version": 8, "spec": { "operations": { "default": { "description": "Track a single event for a user.", "idempotent": true, "validate_input": true, "request_schema": { "body": { "type": "object", "required": ["user", "event"], "properties": { "user": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "x-pii": "identifier" } } }, "event": { "type": "object", "required": ["name"] } } } } } }, "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "reason": "Point the canary at T1@8" },
+          "output": { "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0N3", "integration_version": { "integration_id": "int_evt_brandA", "version": 8, "state": "draft", "spec": { "operations": { "default": { "description": "Track a single event for a user.", "idempotent": true, "validate_input": true, "request_schema": { "body": { "type": "object", "required": ["user", "event"], "properties": { "user": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "x-pii": "identifier" } } }, "event": { "type": "object", "required": ["name"] } } } } } }, "targets": [{ "vendor_id": "clevertap", "account_id": "ct-brandA-in", "transformer": { "request": "T1@7", "response": "R1@2" }, "weight": 90 }, { "vendor_id": "clevertap", "account_id": "ct-brandA-in-v2", "transformer": { "request": "T1@8", "response": "R1@2" }, "weight": 10 }], "failover": [], "delivery": { "mode": "wait", "wait_ms": 3000, "ttl_ms": 21600000, "on_circuit_open": "queue_if_allowed", "pending": "re_resolve" }, "webhooks": [{ "event": "delivery.status", "endpoint_id": "reg_orders_cb" }], "audit": { "payloads": "masked", "retention_ms": 2592000000 } }, "based_on": 7, "author": "priya@example.com", "reason": "Point the canary at T1@8", "created_at": "2026-10-31T09:20:00Z", "published_at": null, "published_by": null, "snapshot_version": null } }
         }
       ]
     },
@@ -1668,7 +1609,7 @@
       "name": "hub_admin_validate_integration_version",
       "title": "Validate an integration version (admin, no side effects)",
       "audience": "admin",
-      "description": "Operator tool: run every publish check on a version (schemas compile, expressions type-check, goldens pass, response conforms, references exist, accounts not retired, weights sum to 100, ...) and get the report. Nothing changes. Always run it, fix every fail, and show the user the result before hub_admin_publish_integration_version. Needs the editor role.",
+      "description": "Operator tool: run every publish check on a version (request schemas compile and every transformer field reference req.x / hdr.X exists in them, sample inputs fit the operation's request_schema (input_schema), samples produce their expected request (goldens_pass) and fit the endpoint's request_schema (endpoint_schema), references exist, accounts not retired, weights sum to 100, ...) and get the report. Nothing changes. Always run it, fix every fail, and show the user the result before hub_admin_publish_integration_version. Needs the editor role.",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "validateIntegrationVersion", "http_method": "POST" }],
       "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "editor" },
       "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },

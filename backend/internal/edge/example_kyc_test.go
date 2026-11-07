@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
@@ -26,16 +25,11 @@ const kycExampleDir = "../../../examples/aadhaar-okyc"
 // (examples/aadhaar-okyc/config/tenants/kyc-onboarding.yaml).
 const kycKey = "hk_test_example_kyc_onboarding_local_only"
 
-// overlaySources is backend/config + contracts/ with the overlay folder dir merged over them; the
-// overlay may only add files.
+// overlaySources is backend/config with the overlay folder dir merged over it (upgraded while
+// the example keeps the pre-ADR-0023 layout, see exampleTree); the overlay may only add files.
 func overlaySources(t testing.TB, dir string) registry.Sources {
 	t.Helper()
-	cfg, contracts := fstest.MapFS{}, fstest.MapFS{}
-	mergeInto(t, cfg, os.DirFS("../../config"))
-	mergeInto(t, contracts, os.DirFS("../../../contracts"))
-	mergeOverlay(t, cfg, os.DirFS(dir+"/config"))
-	mergeOverlay(t, contracts, os.DirFS(dir+"/contracts"))
-	return registry.Sources{Config: cfg, Contracts: contracts}
+	return registry.Sources{Config: exampleTree(t, dir)}
 }
 
 func overlaySnapshot(t testing.TB, dir string) *registry.Snapshot {
@@ -87,12 +81,12 @@ func TestExampleKYCConfigBuilds(t *testing.T) {
 	if v.Audit.Payloads != registry.PayloadSealed || v.Audit.Retention.Std() != 90*24*time.Hour {
 		t.Errorf("audit %+v, want sealed for 90 days", v.Audit)
 	}
-	if c := snap.Capabilities["demo.aadhaar_okyc@v1"]; c == nil || !c.Interactive {
-		t.Error("capability demo.aadhaar_okyc@v1 missing or not interactive")
+	if !in.Interactive {
+		t.Error("int_aadhaar_okyc is not interactive")
 	}
 	target := v.Targets[0]
 	for op, endpoint := range map[string]string{"send_otp": "cashfree-sid.okyc_otp@1", "verify_otp": "cashfree-sid.okyc_verify@1"} {
-		if tf := snap.Transformers[target.Pair(op).Request]; tf == nil || tf.VendorEndpoint != endpoint || tf.Operation != op {
+		if tf := snap.Transformers[target.Pair(op).Request]; tf == nil || tf.VendorEndpoint != endpoint {
 			t.Errorf("%s: request transformer %+v, want endpoint %s", op, tf, endpoint)
 		}
 	}

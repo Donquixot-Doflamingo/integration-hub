@@ -12,7 +12,6 @@ const (
 	CodeForbidden              Code = "FORBIDDEN"
 	CodeIntegrationNotFound    Code = "INTEGRATION_NOT_FOUND"
 	CodeOperationNotFound      Code = "OPERATION_NOT_FOUND"
-	CodeCapabilityNotFound     Code = "CAPABILITY_NOT_FOUND"
 	CodeRequestNotFound        Code = "REQUEST_NOT_FOUND"
 	CodeSessionNotFound        Code = "SESSION_NOT_FOUND"
 	CodeIdempotencyConflict    Code = "IDEMPOTENCY_CONFLICT"
@@ -40,7 +39,7 @@ func (c Code) HTTPStatus() int {
 		return http.StatusUnauthorized
 	case CodeForbidden:
 		return http.StatusForbidden
-	case CodeIntegrationNotFound, CodeOperationNotFound, CodeCapabilityNotFound, CodeRequestNotFound, CodeSessionNotFound:
+	case CodeIntegrationNotFound, CodeOperationNotFound, CodeRequestNotFound, CodeSessionNotFound:
 		return http.StatusNotFound
 	case CodeIdempotencyConflict:
 		return http.StatusConflict

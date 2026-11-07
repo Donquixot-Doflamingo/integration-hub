@@ -88,11 +88,12 @@ func TestFixtureFilesRoundTrip(t *testing.T) {
 func TestNormaliseAndPlaceholders(t *testing.T) {
 	src := "# mapping notes\ntransformer: OTHER\nversion: 99\nkind: request\nrequest:\n  method: POST\n  path: /1/upload\n  headers:\n    X-Key: creds.api_key\n    X-Sig: creds.signing_secret\n"
 	docs := "https://docs.example.test"
-	out, err := normalise(src, "T5", 3, draft{Kind: "request", Capability: "events.track@v1", VendorEndpoint: "acme.upload@1"}, &docs)
+	ep := "acme.upload@1"
+	out, err := normalise(src, "T5", 3, draft{Kind: "request", VendorEndpoint: &ep}, &docs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"# mapping notes", "transformer: T5", "version: 3", "capability: events.track@v1", "vendor_endpoint: acme.upload@1", `docs_url: "https://docs.example.test"`} {
+	for _, want := range []string{"# mapping notes", "transformer: T5", "version: 3", "vendor_endpoint: acme.upload@1", `docs_url: "https://docs.example.test"`} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("no %q in\n%s", want, out)
 		}

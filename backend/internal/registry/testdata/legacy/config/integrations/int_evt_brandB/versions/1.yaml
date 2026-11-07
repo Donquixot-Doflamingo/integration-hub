@@ -1,0 +1,17 @@
+integration: int_evt_brandB
+version: 1
+targets:
+  - vendor: clevertap
+    account: ct-brandB-us
+    transformer: { request: T2@3, response: R1@2 }
+    weight: 100
+delivery:
+  mode: async_callback
+  ttl: 6h
+webhooks:
+  - event: request.completed
+    endpoint: reg_orders_cb
+  - event: request.failed
+    endpoint: reg_orders_cb
+audit: { payloads: masked, retention: 30d }
+publish: { author: platform-team, reason: "brand B needs campaign field" }

@@ -18,7 +18,7 @@ import (
 const usage = `usage: hubctl <command> [flags]
 
 commands:
-  transform test [-config-dir DIR] [-contracts-dir DIR] [-v] [TRANSFORMER...]
+  transform test [-config-dir DIR] [-v] [TRANSFORMER...]
       Run the golden fixtures of every transformer (or only the given IDs, e.g. T1 or T1@7).
       Exit 0 when all pass, 1 when any fails, 2 on usage or config errors.
   creds ...
@@ -63,12 +63,12 @@ func transformTest(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("hubctl transform test", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	configDir := fs.String("config-dir", "config", "registry config directory")
-	contractsDir := fs.String("contracts-dir", "../contracts", "contracts directory (capability schemas)")
+	_ = fs.String("contracts-dir", "", "ignored since ADR-0023 (schemas live in the config tree)")
 	verbose := fs.Bool("v", false, "print passing cases too")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	src := registry.Sources{Config: os.DirFS(*configDir), Contracts: os.DirFS(*contractsDir)}
+	src := registry.Sources{Config: os.DirFS(*configDir)}
 	cfg, err := registry.Load(src)
 	if err != nil {
 		fmt.Fprintf(stderr, "hubctl: config does not load:\n%v\n", err)
@@ -93,8 +93,18 @@ func transformTest(args []string, stdout, stderr io.Writer) int {
 			failed++
 			continue
 		}
+		var ep *registry.Endpoint
+		if tf := cfg.Transformers[ref]; tf.Kind == registry.KindRequest {
+			ep, _ = cfg.Endpoint(tf.VendorEndpoint)
+		}
 		for _, r := range transform.RunGoldens(prog, fixtures) {
-			if r.Passed() {
+			// ADR-0023: a request sample must also produce a request that fits the endpoint's
+			// request_schema (credentials excluded), as transformer creation checks.
+			var schema []registry.Violation
+			if r.Checked != nil && ep != nil {
+				schema = registry.CheckEndpointRequest(ep, *r.Checked)
+			}
+			if r.Passed() && len(schema) == 0 {
 				passed++
 				if *verbose {
 					fmt.Fprintf(stdout, "PASS %s %s\n", r.Transformer, r.Case)
@@ -108,6 +118,9 @@ func transformTest(args []string, stdout, stderr io.Writer) int {
 			}
 			for _, d := range r.Diffs {
 				fmt.Fprintf(stdout, "    %s\n", d)
+			}
+			for _, v := range schema {
+				fmt.Fprintf(stdout, "    endpoint_schema %s: %s\n", v.Field, v.Message)
 			}
 		}
 	}

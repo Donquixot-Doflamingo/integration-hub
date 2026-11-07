@@ -29,6 +29,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/contract"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/mockvendor"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/trackops"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/migrations"
 )
@@ -59,7 +60,6 @@ const t1v8 = `# CleverTap Upload Events API, checked against https://developer.c
 transformer: T1
 version: 8
 kind: request
-capability: events.track@v1
 docs_url: https://developer.clevertap.com/docs/upload-events-api
 vendor_endpoint: clevertap.upload@1
 request:
@@ -85,7 +85,7 @@ const altVendor = `vendor: altvendor
 auth: static_headers
 regions: { in: http://127.0.0.1:1 }
 endpoints:
-  upload@1: { method: POST, path: /1/upload, timeout_ms: 3000, connect_timeout_ms: 500, idempotent: true, batch_max: 1000 }
+  upload@1: { method: POST, path: /1/upload, timeout_ms: 3000, connect_timeout_ms: 500, idempotent: true, batch_max: 1000, request_schema: {} }
 defaults:
   rate_limit: { per_account_rps: 50 }
   breaker: { window_s: 30, min_calls: 20, failure_ratio: 0.5, consecutive_timeouts: 5, open_s: 30, open_max_s: 600, half_open_probes: 3 }
@@ -105,7 +105,6 @@ const tAlt = `# Test-only overlay (HUB-178): the request transformer of the test
 transformer: TALT
 version: 1
 kind: request
-capability: events.track@v1
 docs_url: https://developer.clevertap.com/docs/upload-events-api
 vendor_endpoint: altvendor.upload@1
 request:
@@ -130,7 +129,7 @@ func cutVersion(id string, n int, vendor, account, req string, mode registry.Mod
 	if mode != registry.ModeSync {
 		d += "  polling: true\n"
 	}
-	return "integration: " + id + "\nversion: " + strconv.Itoa(n) + "\ntargets:\n  - vendor: " + vendor + "\n    account: " + account +
+	return "integration: " + id + "\nversion: " + strconv.Itoa(n) + "\n" + trackops.Block + "targets:\n  - vendor: " + vendor + "\n    account: " + account +
 		"\n    transformer: { request: " + req + ", response: R2@1 }\n    weight: 100\ndelivery:\n" + d +
 		"audit: { payloads: masked, retention: 30d }\npublish: { author: itest, reason: \"HUB-178 v" + strconv.Itoa(n) + "\" }\n"
 }
@@ -170,7 +169,7 @@ func cutoverOverlay(t *testing.T, active int, mode registry.Mode, pending regist
 		"int_cut_transformer": {"clevertap", "ct-brandA-in", "T1@8"},
 	}
 	for id, t8 := range v8 {
-		add("integrations/"+id+"/integration.yaml", "integration: "+id+"\nowner_tenant: orders-service\ncapability: events.track@v1\ngrants: []\nactive_version: "+
+		add("integrations/"+id+"/integration.yaml", "integration: "+id+"\nowner_tenant: orders-service\ngrants: []\nactive_version: "+
 			strconv.Itoa(active)+"\ndescription: HUB-178 cutover fixture\n")
 		add("integrations/"+id+"/versions/7.yaml", cutVersion(id, 7, "clevertap", "ct-brandA-in", "T1@7", mode, pending))
 		add("integrations/"+id+"/versions/8.yaml", cutVersion(id, 8, t8[0], t8[1], t8[2], mode, pending))
@@ -180,7 +179,7 @@ func cutoverOverlay(t *testing.T, active int, mode registry.Mode, pending regist
 
 func cutoverSnapshot(t *testing.T, vendorURL string, active int, mode registry.Mode, pending registry.Pending) *registry.Snapshot {
 	t.Helper()
-	snap, err := registry.Build(registry.Sources{Config: cutoverOverlay(t, active, mode, pending), Contracts: os.DirFS("../../../contracts")}, time.Now())
+	snap, err := registry.Build(registry.Sources{Config: cutoverOverlay(t, active, mode, pending)}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

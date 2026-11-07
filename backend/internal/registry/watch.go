@@ -84,10 +84,10 @@ func Watch(ctx context.Context, src Sources, store *Store, opts WatchOptions) er
 	}
 }
 
-// fingerprint summarises names, sizes and modification times of every file in both trees.
+// fingerprint summarises names, sizes and modification times of every config file.
 func fingerprint(src Sources) ([]byte, error) {
 	h := sha256.New()
-	for _, fsys := range []fs.FS{src.Config, src.Contracts} {
+	for _, fsys := range []fs.FS{src.Config} {
 		if fsys == nil {
 			continue
 		}
