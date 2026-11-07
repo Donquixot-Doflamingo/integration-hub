@@ -1,6 +1,6 @@
 ---
 name: contract-change
-description: Contract change flow for the Integration Hub - writing a contract change request (CCR) per docs/process/CONTRACT_CHANGES.md, and for the contract-steward, editing OpenAPI 3.1 / JSON Schema in contracts/ safely, semver bump of info.version, contracts/CHANGELOG.md, examples, no vendor/account/version leakage in the public caller spec, validation, notifying backend and frontend, and the commit order contract to backend to frontend. Use whenever an endpoint, field, query param, error code, webhook event, capability schema or MCP tool shape must be added or changed, when code needs something the contract lacks, or when reviewing a CCR.
+description: Contract change flow for the Integration Hub - writing a contract change request (CCR) per docs/process/CONTRACT_CHANGES.md, and for the contract-steward, editing OpenAPI 3.1 / JSON Schema in contracts/ safely, semver bump of info.version, contracts/CHANGELOG.md, examples, no vendor/account/version leakage in the public caller spec, validation, notifying backend and frontend, and the commit order contract to backend to frontend. Use whenever an endpoint, field, query param, error code, webhook event or MCP tool shape must be added or changed (operation and endpoint request schemas are registry data, not contracts), when code needs something the contract lacks, or when reviewing a CCR.
 ---
 
 # Contract changes
@@ -9,8 +9,10 @@ description: Contract change flow for the Integration Hub - writing a contract c
 Only the **contract-steward** edits it. Everyone else files a **change request (CCR)** and waits.
 
 Files (check the folder; names may grow): `contracts/openapi/hub-admin.v1.yaml` (admin API, used
-by the console), the caller API OpenAPI file next to it, capability and webhook-event JSON Schemas,
-the MCP tool contract, and `contracts/CHANGELOG.md`.
+by the console), the caller API OpenAPI file next to it, webhook-event JSON Schemas, the MCP tool
+contract, and `contracts/CHANGELOG.md`. Request schemas of integration operations and vendor
+endpoints are **not** contracts: they are registry data, edited in the console and versioned with
+the integration or endpoint (ADR-0023). A new integration or a schema change needs no CCR.
 
 ## Part 1: requesting a change (backend, frontend, MCP agents)
 1. Stop coding against the missing shape. Do not edit `contracts/`, do not invent fields, do not
@@ -19,7 +21,7 @@ the MCP tool contract, and `contracts/CHANGELOG.md`.
    Minimum content:
 ```markdown
 ## CCR: add `expires_at` to request status (requested by frontend-engineer, HUB-262)
-- API: caller | admin | event | capability | mcp      -> admin
+- API: caller | admin | event | mcp      -> admin
 - Operation / schema: getRequest (`GET /admin/v1/requests/{request_id}`), schema `RequestDetail`
 - Change: add optional `expires_at` (string, date-time, nullable) to `RequestDetail`
 - Why: DLQ console must show TTL (DESIGN §10.7); currently not exposed
@@ -34,7 +36,7 @@ the MCP tool contract, and `contracts/CHANGELOG.md`.
 Reject or reshape a CCR if:
 - It leaks **vendor names, account names, versions or vendor-specific fields** into the caller API
   (D12, AGENTS.md §3.1). Vendor detail may appear only in the admin API.
-- It is a breaking caller change: use a **new integration ID / capability major** instead (D11).
+- It is a breaking caller change: use a **new integration ID** instead (D11).
 - It is a breaking admin change without the user's approval.
 - It duplicates an existing field or invents a new error envelope (one envelope only, DESIGN §4.3).
 

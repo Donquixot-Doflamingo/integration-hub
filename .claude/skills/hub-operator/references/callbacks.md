@@ -51,7 +51,7 @@ X-Hub-Delivery-Id: dlv_01J9Z5D4E5F6G7H8J9K0M1N2PQ
 
 {"event_id": "evt_...", "type": "request.completed", "integration_id": "int_evt_brandB",
  "operation": "default", "request_id": "req_...", "idempotency_key": "order-8821-created",
- "data": {"status": "succeeded", "result": {...canonical response...}, "attempts": 1}}
+ "data": {"status": "succeeded", "result": {...the response transformer output, or the vendor body in pass-through...}, "attempts": 1}}
 ```
 
 The receiver must:

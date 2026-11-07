@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `docs(skills)` · Rewrite hub-operator for the schema registry model (HUB-437) · HUB-437 · F-23
+  - hub-operator teaches the ADR-0023 onboarding order: vendor, endpoint with its request schema from a sample, account (or none for a public API), request transformer proven by samples, optional response transformer, integration with operations and input schema, validate, publish; console clicks, hubmcp calls and admin API for each step
+  - New worked walk-through: the agify age estimate (`references/onboard-an-api.md`), with what each refusal (`endpoint_schema`, `goldens_pass`, `input_schema`, `schemas_compile`) means
+  - Pass-through, `validate_input`, auth `none`, the Aadhaar OTP flow with operations on the integration, and a vendor switch that warns the output may change without a response transformer reproducing it
+  - The console column now lists the vendor, endpoint, account and transformer pages; contract-change, prd-writing and user-stories skills drop capabilities
 - 2026-11-07 · `docs(tickets)` · Record the HUB-433 latency budget run (HUB-433) · HUB-433 · F-23
   - The sync latency budget holds without capabilities: a 100 ms vendor answers through the Hub at p50 102.1 ms and p99 107.6 ms (1.2 ms and 5.7 ms added)
 - 2026-11-07 · `docs(adr)` · Record the LLM limit and legacy data decisions of HUB-433 (HUB-434) · HUB-434 · F-23

@@ -15,18 +15,18 @@ The admin API uses OIDC tokens with RBAC roles `admin | editor | viewer | tenant
 | Role | Can do (summary) |
 | --- | --- |
 | `viewer` | Read everything (tenant-scoped reads also work for `tenant_viewer` on their own tenants) |
-| `editor` | Transformers (create version, dry-run, goldens), integrations (create, draft, validate, publish, weights, rollback, pause/resume), account connection test, DLQ replay |
-| `admin` | Everything `editor` can, plus tenants, API keys, vendors and endpoints, accounts and credentials, callback endpoints, unseal, DLQ purge, breaker force |
+| `editor` | Transformers (create version, dry-run, samples), integrations (create, draft, validate, publish, weights, rollback, pause/resume), account connection test, DLQ replay |
+| `admin` | Everything `editor` can, plus tenants, API keys, vendors and endpoints (with their request schemas), accounts (with or without credentials) and credentials, callback endpoints, unseal, DLQ purge, breaker force |
 
 The Hub decides: a call above your role answers 403 `FORBIDDEN`, whichever way you use.
 
 ## Console
 
-Sign in at your environment's console URL (OIDC). The left navigation has **Integrations, Health, Requests, DLQ, Transformers, Tenants, Snapshots, Change log**. Action buttons only appear for roles that may use them; destructive actions open a confirmation dialog that asks for a reason.
+Sign in at your environment's console URL (OIDC). The left navigation has **Integrations, Health, Requests, DLQ, Transformers, Vendors, Accounts, Tenants, Snapshots, Change log**. A whole API can be onboarded from these pages ([onboard-an-api.md](onboard-an-api.md)). Action buttons only appear for roles that may use them; destructive actions open a confirmation dialog that asks for a reason.
 
 ## hubctl
 
-Build it from the repo and run it from `backend/` (its `-config-dir config` and `-contracts-dir ../contracts` defaults are relative to `backend/`):
+Build it from the repo and run it from `backend/` (its `-config-dir config` default is relative to `backend/`; `-contracts-dir` is ignored since ADR-0023, because every schema lives in the config tree):
 
 ```bash
 cd backend && make build            # writes bin/hubctl (and hub, mockvendor, hubmcp, hubload)
@@ -46,7 +46,7 @@ Commands that exist today (run `hubctl` alone for the usage text):
 | `plan [-config-dir DIR]` | Diff the files against live, per object and path. Exit 3 when there are changes |
 | `apply -reason TEXT [-config-dir DIR] [-yes]` | Publish the diff through the admin API. Without `-yes` it only prints the actions |
 | `dry-run INTEGRATION BODY.json` | Show the vendor request the active version would send (highest-weight target), credentials redacted, nothing sent |
-| `transform test [-v] [TRANSFORMER...]` | Run golden fixtures (all, or `T1`, `T1@7`) |
+| `transform test [-v] [TRANSFORMER...]` | Run transformer samples (all, or `T1`, `T1@7`), including the check against the vendor endpoint's request schema |
 | `replay -reason TEXT -integration/-tenant/-account/-vendor/-error-code/-from/-to [-dry-run] [-yes]` | Replay dead letters by filter |
 | `creds init-key`, `creds set`, `creds list` | Local dev credential file only (no change log, no connection test) |
 
@@ -94,20 +94,22 @@ Every mutation needs `"reason"` (3 to 1000 characters) and returns a `change_id`
 | Disable / enable tenant | **Tenant → Disable tenant** | `apply` (`disabled`) | — (never) | `updateTenant` |
 | Create API key | Tenant → API keys → **Create API key** | — | `hub_admin_create_api_key` | `createApiKey` |
 | Rotate / revoke API key | **Tenant → API keys → Rotate / Revoke** | — | — (never) | `rotateApiKey`, `revokeApiKey` |
-| Create vendor, add endpoint, update vendor | — | — | `hub_admin_create_vendor`, `hub_admin_create_vendor_endpoint`, `hub_admin_update_vendor` | `createVendor`, `createVendorEndpoint`, `updateVendor` |
-| Create account with credentials | — | — (dev files only) | — (never: secrets) | **`createAccount`, by a human** |
-| Change account config / quota | — | `apply` (accounts file) | `hub_admin_update_account` | `updateAccount` |
-| Test account connection | — | — | — | `testAccountConnection` |
-| Rotate account credentials | — | `creds set` (dev only) | — (never) | **runbook `docs/runbooks/credential-rotation.md`** |
-| Drain / retire account | — | — | — (never) | **`transitionAccountLifecycle`** |
+| Create vendor, update vendor | Vendors → **Create vendor** / vendor → **Edit vendor** | — | `hub_admin_create_vendor`, `hub_admin_update_vendor` | `createVendor`, `updateVendor` |
+| Add endpoint (with its request schema) | Vendor → **Add endpoint** / **New version** (fields from a pasted sample) | — | `hub_admin_create_vendor_endpoint` | `createVendorEndpoint` |
+| Create account without credentials (auth `none` vendor) | Accounts → **Create account** | — (dev files only) | — (`createAccount` is forbidden in MCP) | `createAccount` |
+| Create account with credentials | **Accounts → Create account, by a human** | — (dev files only) | — (never: secrets) | **`createAccount`, by a human** |
+| Change account config / quota | Account → **Edit config and quota** | `apply` (accounts file) | `hub_admin_update_account` | `updateAccount` |
+| Test account connection | Account → **Test connection** | — | — | `testAccountConnection` |
+| Rotate account credentials | **Account → Credentials** | `creds set` (dev only) | — (never) | **runbook `docs/runbooks/credential-rotation.md`** |
+| Drain / retire account | **Account → Lifecycle** | — | — (never) | **`transitionAccountLifecycle`** |
 | Register callback endpoint | Tenant → Callback endpoints → **Register endpoint** | — | `hub_admin_create_registrar_endpoint` | `createRegistrarEndpoint` |
 | Change callback URL | Callback endpoints → **Edit** | — | `hub_admin_update_registrar_endpoint` | `updateRegistrarEndpoint` |
 | Rotate secret / disable / delete callback endpoint | **Callback endpoints → Rotate secret / Disable / Delete** | — | — (never) | `rotateRegistrarSecret`, `updateRegistrarEndpoint`, `deleteRegistrarEndpoint` |
-| Create transformer version | — (view, dry-run and goldens only) | `transform test` locally | `hub_admin_create_transformer_version` | `createTransformerVersion` |
-| Run goldens / dry-run a transformer | Transformers → version → **Run goldens** / **Dry-run** | `transform test` | `hub_admin_run_transformer_goldens`, `hub_admin_dry_run_transformer` | `runTransformerGoldens`, `dryRunTransformer` |
-| Create integration | — | — | `hub_admin_create_integration` | `createIntegration` |
+| Create transformer version (with samples) | Transformers → **New transformer** / transformer → **New version** → **Run samples on this draft** → **Create <ref>** | `transform test` locally | `hub_admin_create_transformer_version` | `createTransformerVersion` |
+| Run samples / dry-run a transformer | Transformers → version → **Run samples for <ref>** / **Dry-run** | `transform test` | `hub_admin_run_transformer_goldens`, `hub_admin_dry_run_transformer` | `runTransformerGoldens`, `dryRunTransformer` |
+| Create integration | Integrations → **Create integration** | — | `hub_admin_create_integration` | `createIntegration` |
 | Edit integration grants / description / money flag | — | `apply` (integration.yaml) | — | `updateIntegration` |
-| Draft, validate, publish a version | Integration → **Edit a new draft** → Create draft → **Publish vN** | `apply` (new version file) | `hub_admin_create_integration_draft`, `hub_admin_update_integration_draft`, `hub_admin_validate_integration_version`, `hub_admin_publish_integration_version` | `createIntegrationDraft`, `updateIntegrationDraft`, `validateIntegrationVersion`, `publishIntegrationVersion` |
+| Draft (operations with input schema, targets), validate, publish a version | Integration → **Edit a new draft** → Create draft → **Publish vN** | `apply` (new version file) | `hub_admin_create_integration_draft`, `hub_admin_update_integration_draft`, `hub_admin_validate_integration_version`, `hub_admin_publish_integration_version` | `createIntegrationDraft`, `updateIntegrationDraft`, `validateIntegrationVersion`, `publishIntegrationVersion` |
 | Change weights (canary) | Integration → **Set weights** | `apply` (new version file) | `hub_admin_set_integration_weights` | `updateIntegrationWeights` |
 | Roll back | Integration → version history → **Roll back to vN** | `apply` (new version file with the old content) | `hub_admin_rollback_integration` | `rollbackIntegration` |
 | Compare versions | Integration → **Compare selected versions** | `plan` | `hub_admin_diff_integration_versions` | `diffIntegrationVersions` |
@@ -118,4 +120,4 @@ Every mutation needs `"reason"` (3 to 1000 characters) and returns a `change_id`
 | Unseal sealed payloads | **Requests → request (admin)** | — | — (never) | `unsealRequest` |
 | Breaker force open / close | **Health** | — | — (never; `hub_admin_breaker_states` reads) | `forceOpenBreaker`, `forceCloseBreaker`, `clearBreakerForce` |
 
-**Local development only.** The Hub can also load the registry from files (`backend/config/`, `HUB_CONFIG_DIR`) and, started with `-config-watch`, publishes every change to that folder. That is how the dev config and `examples/` add vendors, accounts, transformers and integrations that `hubctl apply` refuses; local secrets go in with `hubctl creds set`. Never use it for a shared environment.
+**Local development only.** The Hub can also load the registry from files (`backend/config/`, `HUB_CONFIG_DIR`) and, started with `-config-watch`, publishes every change to that folder. That is how the dev config and `examples/` add vendors, endpoints, accounts, transformers and integrations that `hubctl apply` refuses; local secrets go in with `hubctl creds set`. Never use it for a shared environment.

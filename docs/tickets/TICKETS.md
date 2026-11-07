@@ -3590,7 +3590,7 @@ Shipped (frontend-engineer, branch `feat/HUB-436-console-schema-registry`): no c
 
 ### HUB-437 — Skills, MCP docs, product docs and examples docs without capabilities
 - **Epic:** EP-14 · **Type:** docs · **Area:** docs
-- **Status:** todo · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
+- **Status:** in-progress · **Depends on:** HUB-433, HUB-436 · **Feature:** F-23 · **Stories:** US-23xx
 - **Branch:** `docs/HUB-437-docs-no-capabilities`
 
 Rewrite hub-operator, hub-transformers, consumer skill and MCP setup docs, PRD, user stories, feature docs (new F-23), TECH_SPEC, DESIGN pointer and example READMEs per [ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md).
