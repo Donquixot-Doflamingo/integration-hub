@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(frontend)` · Create integrations and edit drafts in a form editor (HUB-292) · HUB-292 · F-19
+  - Editors create an integration in the console and land on its first draft
+  - Drafts open in a form beside the YAML editor: targets with vendor, account, weight and transformers, a transformer pair per operation for multi-operation capabilities (for example Aadhaar send_otp and verify_otp), delivery and audit; the weights total is shown live
+  - Publish check failures appear on the field they concern; the integration page lists per-operation transformers
 - 2026-11-07 · `feat(frontend)` · Add account pages with write-only credentials and rotation (HUB-291) · HUB-291 · F-19
   - Admins create vendor accounts with their credentials in the console; secret values are typed in password fields, cleared from the page as soon as the form is sent and never shown again
   - Credential rotation is a guided flow: add the next credential, test it, promote it, then delete the previous one (admins only); editors can test an account's connection

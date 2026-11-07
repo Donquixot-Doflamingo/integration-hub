@@ -1,10 +1,12 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import AsyncView from '$lib/components/AsyncView.svelte';
 	import ChangeNotice from '$lib/components/ChangeNotice.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import RoleGate from '$lib/components/RoleGate.svelte';
+	import { takeFlash } from '$lib/stores/flash.svelte';
 	import DraftEditor from './DraftEditor.svelte';
 	import type { PageData } from './$types';
 
@@ -19,6 +21,10 @@
 		changeId: string | null;
 		requestId: string | null;
 	} | null>(null);
+	// "Created integration ..." from the create page (HUB-292).
+	onMount(() => {
+		notice = takeFlash() ?? notice;
+	});
 </script>
 
 <PageHeader
@@ -40,6 +46,7 @@
 				integration={b.integration}
 				draft={b.draft}
 				diff={data.diff}
+				lookups={data.lookups}
 				onnotice={(message, changeId, requestId) => (notice = { message, changeId, requestId })}
 			/>
 		{/snippet}

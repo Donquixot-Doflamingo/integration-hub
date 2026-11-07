@@ -16,6 +16,11 @@ test('publish: diff first, reason required, change id shown', async ({ page }) =
 	await expect(
 		page.getByRole('region', { name: 'Changes against the active version' })
 	).toContainText('v7 to v8');
+	// The draft opens in the form editor (HUB-292); the YAML tab shows the same spec.
+	await expect(page.getByRole('listitem', { name: /^Target 2/ }).getByLabel('Account')).toHaveValue(
+		'ct-brandA-in-v2'
+	);
+	await page.getByRole('button', { name: 'YAML' }).click();
 	await expect(page.getByLabel(/^Spec/)).toHaveValue(/ct-brandA-in-v2/);
 
 	const trigger = page.getByRole('button', { name: 'Publish v8' });

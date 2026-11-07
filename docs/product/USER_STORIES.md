@@ -532,6 +532,14 @@ Stories: US-2001, US-2002, US-2003, US-2004, US-2101, US-2102
 - **Given** a draining account, **when** I retire it, **then** I type its id and give a reason; a `RETIRE_BLOCKED` refusal shows the Hub's reason.
 - **Given** the editor role, **when** I open an account, **then** I can test its connection but see no rotation, edit or lifecycle control; viewers only read; tenant viewers see no accounts.
 
+### US-1909 — Create an integration and edit its draft in a form
+**As an** integration admin, **I want** to create an integration and build its draft in a form (targets, per-operation transformers, delivery, weights), **so that** I do not hand-write YAML for routine changes. · **Must**
+- **Given** the editor role, **when** I create an integration with a reason, **then** its first draft opens and shows the change log id.
+- **Given** a multi-operation capability such as the Aadhaar example (`send_otp`, `verify_otp`), **when** I edit a target, **then** I can keep an operation on the default transformer pair or give it its own (`TargetRef.operations`).
+- **Given** a saved draft, **when** a publish check fails with a JSON pointer, **then** the message shows on the field the pointer names (or in a summary for parts only the YAML tab edits).
+- **Given** the targets, **when** I change a weight, **then** the total is shown live and a draft whose weights do not total 100 is not saved.
+- **Given** a valid draft, **when** I publish, **then** I see the diff against the active version and confirm with a reason; rollback stays one dialog with a reason.
+
 ## F-20 Hub MCP server (`hubmcp`)
 
 ### US-2001 — Discover integrations from Claude

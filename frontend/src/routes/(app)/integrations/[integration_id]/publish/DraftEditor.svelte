@@ -27,9 +27,13 @@
 	import { REASON_MAX, REASON_MIN } from '$lib/reason';
 	import { summarize } from '$lib/utils/diff';
 	import { formatUtc } from '$lib/utils/format';
-	import { specToYaml } from '$lib/utils/spec-yaml';
+	import { parseSpecYaml, specToYaml } from '$lib/utils/spec-yaml';
+	import type { IntegrationSpec } from '$lib/api/types';
+	import type { Lookups } from './+page';
 	import ChecksList from './ChecksList.svelte';
 	import SpecEditor from './SpecEditor.svelte';
+	import SpecForm from './SpecForm.svelte';
+	import { formProblems, forForm, starterSpec } from './spec-form';
 	import {
 		reportFromError,
 		reportProblems,
@@ -47,24 +51,74 @@
 		integration,
 		draft,
 		diff,
+		lookups,
 		onnotice
 	}: {
 		integration: Integration;
 		draft: IntegrationVersion | null;
 		diff: Promise<ApiResult<VersionDiff> | null>;
+		/** What the structured editor offers (HUB-292). */
+		lookups: Promise<Lookups>;
 		onnotice: (message: string, changeId: string | null, requestId: string | null) => void;
 	} = $props();
 
 	const id = $derived(integration.integration_id);
 	const active = $derived(integration.active_version);
 
-	// The editor keeps its own text across data reloads (saving reloads the page data).
-	const initial = untrack(() => specToYaml((draft ?? integration.active)?.spec ?? {}));
+	// The editor keeps its own text across data reloads (saving reloads the page data). A first
+	// draft (no version at all yet) starts from a skeleton spec.
+	const initial = untrack(() =>
+		specToYaml((draft ?? integration.active)?.spec ?? starterSpec(false))
+	);
 	let text = $state(initial);
 	let saved = $state(initial);
 	let savedVersion = $state<number | null>(null);
 	const version = $derived(savedVersion ?? draft?.version ?? null);
-	const dirty = $derived(text !== saved);
+
+	// HUB-292: a structured form over the same spec, or the YAML text. The form edits `formSpec`;
+	// what is saved (and what the YAML tab starts from) is its YAML rendering.
+	const firstParse = untrack(() => parseSpecYaml(initial));
+	let mode = $state<'form' | 'yaml'>(firstParse.ok ? 'form' : 'yaml');
+	let formSpec = $state<IntegrationSpec>(forForm(firstParse.ok ? firstParse.value : {}));
+	let switchError = $state<string | null>(null);
+	const current = $derived(mode === 'form' ? specToYaml($state.snapshot(formSpec)) : text);
+	const dirty = $derived(current !== saved);
+	let looked = $state.raw<Lookups>({
+		operations: [],
+		interactive: false,
+		vendors: [],
+		accounts: [],
+		transformers: []
+	});
+	$effect(() => {
+		let live = true;
+		lookups.then((l) => {
+			if (live) looked = l;
+		});
+		return () => {
+			live = false;
+		};
+	});
+	let formAttempted = $state(false);
+	const consoleProblems = $derived(
+		mode === 'form' ? formProblems(formSpec, looked.operations) : []
+	);
+
+	function showForm() {
+		const parsed = parseSpecYaml(text);
+		if (!parsed.ok) {
+			switchError = `Fix the YAML first${parsed.line ? ` (line ${parsed.line})` : ''}: ${parsed.message}`;
+			return;
+		}
+		switchError = null;
+		formSpec = forForm(parsed.value);
+		mode = 'form';
+	}
+	function showYaml() {
+		text = current;
+		switchError = null;
+		mode = 'yaml';
+	}
 
 	let draftReason = $state('');
 	let saving = $state(false);
@@ -96,16 +150,21 @@
 
 	const save: SubmitFunction = ({ cancel }) => {
 		if (saving) return cancel();
+		if (mode === 'form' && consoleProblems.length) {
+			formAttempted = true;
+			return cancel();
+		}
 		saving = true;
 		saveError = null;
 		saveFields = {};
 		problems = [];
-		const sent = text;
+		const sent = current;
 		return async ({ result, update }) => {
 			try {
 				if (result.type === 'success') {
 					const d = result.data as ActionSuccessData<SavedDraft>;
 					saved = sent;
+					if (mode === 'yaml') text = sent;
 					savedVersion = d.result.version;
 					report = d.result.report;
 					draftReason = '';
@@ -181,13 +240,46 @@
 	{#if dirty}<p class="dirty" role="status"><Icon name="alert" size={14} />Unsaved changes</p>{/if}
 </section>
 
+<div class="modes" role="group" aria-label="Editor">
+	<button type="button" class="btn" aria-pressed={mode === 'form'} onclick={showForm}>Form</button>
+	<button type="button" class="btn" aria-pressed={mode === 'yaml'} onclick={showYaml}>YAML</button>
+	<span class="fk-hint"
+		>Both edit the same draft. The form covers targets, per-operation transformers, delivery and
+		audit; YAML covers everything (comments are not kept).</span
+	>
+</div>
+{#if switchError}<p class="fk-error" role="alert">
+		<Icon name="alert" size={14} />{switchError}
+	</p>{/if}
+
 <form class="draft" method="POST" action="?/saveDraft" use:enhance={save} novalidate>
-	<SpecEditor
-		bind:value={text}
-		problems={allProblems}
-		error={saveFields.spec ?? null}
-		disabled={saving}
-	/>
+	{#if mode === 'form'}
+		<input type="hidden" name="spec" value={current} />
+		{#if saveFields.spec}<p class="fk-error" role="alert">{saveFields.spec}</p>{/if}
+		<SpecForm
+			bind:spec={formSpec}
+			operations={looked.operations}
+			vendors={looked.vendors}
+			accounts={looked.accounts}
+			transformers={looked.transformers}
+			problems={[...allProblems, ...(formAttempted ? consoleProblems : [])]}
+			disabled={saving}
+		/>
+		{#if formAttempted && consoleProblems.length}
+			<p class="fk-error" role="alert">
+				<Icon name="alert" size={14} />Fix the {consoleProblems.length === 1
+					? 'problem'
+					: `${consoleProblems.length} problems`} marked above before saving.
+			</p>
+		{/if}
+	{:else}
+		<SpecEditor
+			bind:value={text}
+			problems={allProblems}
+			error={saveFields.spec ?? null}
+			disabled={saving}
+		/>
+	{/if}
 	{#if version}<input type="hidden" name="version" value={version} />{/if}
 	{#if !version && active}<input type="hidden" name="based_on" value={active} />{/if}
 	<div class="field">
@@ -336,6 +428,19 @@
 		gap: var(--space-1);
 		color: var(--status-warn);
 		font-weight: 700;
+	}
+	.modes {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2);
+		margin-bottom: var(--space-3);
+		max-width: 72rem;
+	}
+	.modes [aria-pressed='true'] {
+		border-color: var(--signal);
+		background: var(--signal-wash);
+		color: var(--ink);
 	}
 	.draft {
 		display: grid;

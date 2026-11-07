@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **261** · done: **177** · todo: **60** · other (in-progress/in-review/blocked): **24**
+Total tickets: **261** · done: **177** · todo: **59** · other (in-progress/in-review/blocked): **25**
 
 ## Epics
 
@@ -2558,15 +2558,15 @@ Accounts (a vendor's credentials and quota) can only be created by calling the a
 
 ### HUB-292 — Console: create an integration, edit drafts, validate and publish
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-19xx
-- **Branch:** `feat/HUB-292-console-integration-authoring`
+- **Status:** in-review · **Depends on:** HUB-290 · **Feature:** F-19 · **Stories:** US-1909
+- **Branch:** `feat/HUB-292-console-integration-authoring` (delivered on `feat/HUB-290-console-authoring`)
 
 The console shows integrations and versions but cannot create one or edit a draft. Add create integration, a draft editor (targets, per-operation transformers, delivery, weights), validate with the report shown inline, a diff against the active version, and publish/rollback with a reason.
 
 **Acceptance criteria**
-- [ ] Create integration and draft, edit, validate (errors inline), diff, publish with reason
-- [ ] Per-operation targets (`TargetRef.operations`) editable
-- [ ] e2e against the real stack (`scripts/dev-up.sh`)
+- [x] Create integration and draft, edit, validate (errors inline), diff, publish with reason (`integrations/new/page.test.ts`; `publish/form-editor.test.ts` "shows the validation report at the field its pointer names", weights; `e2e-real/integrations.test.ts` create, inline `/delivery` check, publish, diff, rollback)
+- [x] Per-operation targets (`TargetRef.operations`) editable (`publish/spec-form.test.ts` Aadhaar round trip, `form-editor.test.ts` int_aadhaar_okyc; `e2e-real/aadhaar.test.ts` verify_otp on its own pair, wrong pair caught by `operations_have_transformers` on that field)
+- [x] e2e against the real stack (`scripts/dev-up.sh`) (`e2e-real/integrations.test.ts` 5, `e2e-real/aadhaar.test.ts` 1; `npm run test:e2e:real`)
 
 ### HUB-293 — Console: create transformer versions and run goldens
 - **Epic:** EP-10 · **Type:** feat · **Area:** frontend

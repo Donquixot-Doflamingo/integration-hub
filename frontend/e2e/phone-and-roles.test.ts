@@ -8,6 +8,8 @@ import { expectNoSeriousA11yViolations, signIn, type Role } from './helpers';
 const PAGES = [
 	'/integrations',
 	'/integrations/int_evt_brandA',
+	'/integrations/new',
+	'/integrations/int_evt_brandA/publish',
 	'/health',
 	'/requests',
 	'/requests/req_01J9Z3K8X2V7Q4M6N8P0R2S4T6',
