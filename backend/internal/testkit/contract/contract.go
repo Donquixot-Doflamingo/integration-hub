@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -165,6 +166,14 @@ func (s *Spec) Check(ex Exchange) error {
 	}
 	if ex.Header.Get("X-Hub-Pass-Through") == "true" {
 		route = passThroughRoute(route)
+		// A non-JSON vendor body has no decoder in kin-openapi; the contract gives it the
+		// schemaless */* media type (RawBody), so only its presence there is checked.
+		if mt, _, _ := mime.ParseMediaType(ex.Header.Get("Content-Type")); mt != "" && !strings.Contains(mt, "json") {
+			if def := route.Operation.Responses.Default(); def == nil || def.Value == nil || def.Value.Content.Get("*/*") == nil {
+				return fmt.Errorf("%s: pass-through %s body of %s is not contracted (no */* default response)", s.name, mt, route.Operation.OperationID)
+			}
+			opts.ExcludeResponseBody = true
+		}
 	}
 	in := &openapi3filter.RequestValidationInput{Request: req, PathParams: params, Route: route, Options: opts}
 	var errs []error

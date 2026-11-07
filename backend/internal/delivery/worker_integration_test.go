@@ -491,3 +491,85 @@ func TestParkedDrainUsesPromotedCredential(t *testing.T) {
 		t.Fatalf("drain sent passcode %v, want the promoted one", got)
 	}
 }
+
+// passThroughSnap is the rig's snapshot with int_evt_brandA's versions stripped of their
+// response transformer: every attempt is a pass-through (ADR-0023).
+func passThroughSnap(snap *registry.Snapshot) *registry.Snapshot {
+	cp := *snap
+	cp.Integrations = map[string]*registry.Integration{}
+	for k, v := range snap.Integrations {
+		c := *v
+		if k == "int_evt_brandA" {
+			c.Versions = map[int]*registry.IntegrationVersion{}
+			for n, iv := range v.Versions {
+				ivc := *iv
+				ivc.Targets = append([]registry.Target(nil), iv.Targets...)
+				for i := range ivc.Targets {
+					ivc.Targets[i].Transformer.Response = registry.TransformerRef{}
+				}
+				c.Versions[n] = &ivc
+			}
+		}
+		cp.Integrations[k] = &c
+	}
+	return &cp
+}
+
+// TestWorkerPassThrough (ADR-0023): a queued request of an operation without a response
+// transformer stores the vendor's body as its result (JSON as it is, anything else as a JSON
+// string), while vendor errors keep the default classification and the canonical UPSTREAM_*
+// outcome (only the synchronous answer passes the vendor's status through).
+func TestWorkerPassThrough(t *testing.T) {
+	text := "accepted, 1 event"
+	cases := []struct {
+		name       string
+		behaviour  mockvendor.Behaviour
+		wantStatus string
+		wantResult string // JSON of hub.request_results.result; "" = none
+		wantReason string // dead letter reason
+	}{
+		{"JSON body is the result", mockvendor.Behaviour{Status: 200, Body: json.RawMessage(`{"status":"success","processed":1}`)}, "succeeded", `{"status":"success","processed":1}`, ""},
+		{"non-JSON body is a JSON string", mockvendor.Behaviour{Status: 200, BodyRaw: &text, Headers: map[string]string{"Content-Type": "text/plain"}}, "succeeded", `"accepted, 1 event"`, ""},
+		{"empty body is null", mockvendor.Behaviour{Status: 204}, "succeeded", `null`, ""},
+		{"4xx dead-letters as UPSTREAM_REJECTED", mockvendor.Behaviour{Status: 404, Body: json.RawMessage(`{"error":"no such user"}`)}, "dead_lettered", "", "UPSTREAM_REJECTED"},
+		{"5xx is retried", mockvendor.Behaviour{Status: 503, Body: json.RawMessage(`{"error":"down"}`)}, "retry_scheduled", "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := newRig(t)
+			r.snaps.s.Store(passThroughSnap(r.snaps.Snapshot()))
+			r.route(c.behaviour)
+			env := r.enqueue("int_evt_brandA", 6*time.Hour)
+			if r.process() != 1 {
+				t.Fatal("not claimed")
+			}
+			if s, _ := r.status(env.RequestID); s != c.wantStatus {
+				t.Fatalf("status %s, want %s", s, c.wantStatus)
+			}
+			if c.wantResult != "" {
+				var got []byte
+				if err := r.db.QueryRow(t.Context(), `SELECT result FROM hub.request_results WHERE request_id = $1`, env.RequestID).Scan(&got); err != nil {
+					t.Fatal(err)
+				}
+				var g, w any
+				_ = json.Unmarshal(got, &g)
+				_ = json.Unmarshal([]byte(c.wantResult), &w)
+				if !jsonEqual(g, w) {
+					t.Fatalf("result %s, want %s", got, c.wantResult)
+				}
+			}
+			if c.wantReason != "" {
+				var reason string
+				if err := r.db.QueryRow(t.Context(), `SELECT reason FROM hub.dead_letters WHERE request_id = $1`, env.RequestID).Scan(&reason); err != nil || reason != c.wantReason {
+					t.Fatalf("dead letter reason %q, want %s (%v)", reason, c.wantReason, err)
+				}
+			}
+		})
+	}
+}
+
+func jsonEqual(a, b any) bool {
+	x, _ := json.Marshal(a)
+	y, _ := json.Marshal(b)
+	return string(x) == string(y)
+}

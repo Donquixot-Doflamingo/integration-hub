@@ -225,6 +225,66 @@ func TestInvoke(t *testing.T) {
 			},
 		},
 		{
+			name: "declared caller header is forwarded",
+			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "headers": map[string]any{"x-request-source": "checkout"}},
+			replies: func(h *fakeHub) {
+				h.on("invokeIntegration", h.pub("invokeIntegration", 200, "transformed"))
+			},
+			want: want{outcome: "completed", httpStatus: 200.0, invokes: 1},
+			check: func(t *testing.T, h *fakeHub, _ toolOutcome) {
+				if got := h.callsTo("invokeIntegration")[0].Header.Get("X-Request-Source"); got != "checkout" {
+					t.Errorf("X-Request-Source = %q, want checkout", got)
+				}
+			},
+		},
+		{
+			name: "undeclared caller header is refused locally",
+			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "headers": map[string]any{"X-Vendor-Account": "ct-brandA-in"}},
+			want: want{outcome: "error", code: "VALIDATION_FAILED"},
+			check: func(t *testing.T, _ *fakeHub, out toolOutcome) {
+				if msg, _ := out.field(t, "error", "message").(string); !strings.Contains(msg, "not declared") {
+					t.Errorf("message: %s", out.json)
+				}
+			},
+		},
+		{
+			name: "a Hub header in headers is refused locally",
+			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "headers": map[string]any{"Idempotency-Key": "k"}},
+			want: want{outcome: "error", code: "VALIDATION_FAILED"},
+			check: func(t *testing.T, _ *fakeHub, out toolOutcome) {
+				if msg, _ := out.field(t, "error", "message").(string); !strings.Contains(msg, "dedicated input") {
+					t.Errorf("message: %s", out.json)
+				}
+			},
+		},
+		{
+			name: "pass-through success is completed with the third party's body",
+			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody},
+			replies: func(h *fakeHub) {
+				h.on("invokeIntegration", reply{status: 200, body: []byte("age=29"),
+					header: map[string]string{"X-Hub-Pass-Through": "true", "Content-Type": "text/plain"}})
+			},
+			want: want{outcome: "completed", httpStatus: 200.0, invokes: 1},
+			check: func(t *testing.T, _ *fakeHub, out toolOutcome) {
+				if out.field(t, "pass_through") != true || out.field(t, "result") != "age=29" {
+					t.Errorf("pass-through result: %s", out.json)
+				}
+			},
+		},
+		{
+			name: "pass-through vendor error is an error without a canonical error",
+			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "idempotency_key": "k6"},
+			replies: func(h *fakeHub) {
+				h.on("invokeIntegration", reply{status: 404, body: []byte(`{"message":"no such user"}`), header: map[string]string{"X-Hub-Pass-Through": "true"}})
+			},
+			want: want{outcome: "error", httpStatus: 404.0, invokes: 1},
+			check: func(t *testing.T, _ *fakeHub, out toolOutcome) {
+				if out.field(t, "pass_through") != true || out.field(t, "error") != nil || out.field(t, "result", "message") != "no such user" {
+					t.Errorf("pass-through error: %s", out.json)
+				}
+			},
+		},
+		{
 			name: "vendor-selecting argument is refused locally",
 			args: map[string]any{"integration_id": "int_evt_brandA", "body": trackBody, "vendor": "clevertap"},
 			want: want{outcome: "error", code: "VALIDATION_FAILED"},
