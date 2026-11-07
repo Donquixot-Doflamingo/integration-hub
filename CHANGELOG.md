@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `fix(scripts)` · Stop dev-up when the database points at missing snapshot files (HUB-430) · HUB-430 · F-19
+  - After a fresh clone over a dev database from an earlier run, `make dev-up` now stops with the cause instead of starting a console whose Integrations, Tenants, Vendors, Accounts and Transformers pages all fail with INTERNAL_ERROR
+  - `DEV_RESET=1 make dev-up` recreates the docker compose Postgres and Redis and starts clean; a database named with HUB_PG_DSN is never dropped
 - 2026-11-07 · `docs(tickets)` · Close out the merged work and record the CI latency numbers (HUB-429) · HUB-429 · F-18
   - 31 tickets merged in #28 to #39 marked done with their merge subjects; open criteria that need staging hardware move to HUB-422
   - Follow-ups filed: HUB-319 to HUB-321 (contract requests, MCP snippet checks in real clients) and HUB-423 to HUB-428 (backend bugs found by the console authoring work)
