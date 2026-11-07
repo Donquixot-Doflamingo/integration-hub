@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-07 · `feat(frontend)` · Add a schema editor that builds fields from a pasted sample · HUB-436 · F-23
+  - Operators paste a sample JSON and get its fields (name, type, nested objects and arrays), then tick each field required or optional, describe it, add or remove fields
+  - "Edit as JSON Schema" shows the same JSON Schema 2020-12 document as text; edits are checked and flow back into the field list, and keywords without a column (minLength, pattern, x-pii, ...) are kept
+  - Optional parts left empty are not sent
 - 2026-11-07 · `feat(frontend)` · Move the console to hub-admin 2.0.0 without capabilities · HUB-436 · F-23
   - No capability column, filter, picker or field is left: the integrations list shows each integration's operations (and "interactive"), the request explorer shows the operation, transformers show their vendor endpoint or "none" for response transformers
   - Creating an integration asks whether it is interactive and says that this can never change; its first draft starts with one operation, `default`
