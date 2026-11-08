@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **16**
+Total tickets: **290** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **17**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 14 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 15 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3725,6 +3725,20 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 - [x] estimate@1 allows 10 s to connect and 15 s in total
 - [x] The examples use their own `hub_examples` database unless HUB_PG_DSN is set, and create it when missing
 - [x] Example tests and the offline run.sh pass with a fresh database
+
+### HUB-448 — Secrets with JSON/URL-special characters are stored unmasked in audit trail and logs
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-progress · **Depends on:** HUB-084 · **Feature:** F-18 · **Stories:** —
+- **Branch:** `fix/HUB-448-redact-escaped-secrets`
+
+A reviewer proved with a throwaway test that a credential such as `pa&ss<w>"rd\1` is stored unmasked in the `request.transformed` and `vendor.responded` events (policies full and masked) and in the dead letter's `last_vendor_request` / `last_vendor_response`. `audit.Trail.redact` replaced credential values only as raw bytes inside payloads that were already JSON-encoded (`json.Marshal` escapes `& < > " \` and non-ASCII), and upstream URLs percent-encode query values. The logger's `telemetry.SecretSet` had the same gap: an error or message carrying a JSON body or URL with the secret in an encoded form was not masked.
+
+**Acceptance criteria**
+- [ ] Each registered secret is also redacted in its JSON-escaped forms (with and without HTML escaping), URL query- and path-escaped forms and base64 forms (standard and URL alphabets), in the audit trail and in the log redactor; forms are matched longest first; derived forms equal to the raw value or shorter than the 6-byte minimum are skipped
+- [ ] Tests for `pa&ss<w>"rd\1`, `päss wörd`, `a+b/c=d`, `tok%en` and a plain value cover request.transformed / vendor.responded under full and masked, the dead-letter source (`Trail.Stored`) and the redacting slog handler; they fail without the fix; non-secret text is unchanged
+- [ ] The log denylist also covers `x-api-key`, `access_token`, `client_secret`, `refresh_token`
+- [ ] Audit and telemetry tests with `-race`, `go vet` and golangci-lint green
+
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
