@@ -3728,16 +3728,16 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 
 ### HUB-448 — Secrets with JSON/URL-special characters are stored unmasked in audit trail and logs
 - **Epic:** EP-14 · **Type:** fix · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-084 · **Feature:** F-18 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-084 · **Feature:** F-18 · **Stories:** —
 - **Branch:** `fix/HUB-448-redact-escaped-secrets`
 
 A reviewer proved with a throwaway test that a credential such as `pa&ss<w>"rd\1` is stored unmasked in the `request.transformed` and `vendor.responded` events (policies full and masked) and in the dead letter's `last_vendor_request` / `last_vendor_response`. `audit.Trail.redact` replaced credential values only as raw bytes inside payloads that were already JSON-encoded (`json.Marshal` escapes `& < > " \` and non-ASCII), and upstream URLs percent-encode query values. The logger's `telemetry.SecretSet` had the same gap: an error or message carrying a JSON body or URL with the secret in an encoded form was not masked.
 
 **Acceptance criteria**
-- [ ] Each registered secret is also redacted in its JSON-escaped forms (with and without HTML escaping), URL query- and path-escaped forms and base64 forms (standard and URL alphabets), in the audit trail and in the log redactor; forms are matched longest first; derived forms equal to the raw value or shorter than the 6-byte minimum are skipped
-- [ ] Tests for `pa&ss<w>"rd\1`, `päss wörd`, `a+b/c=d`, `tok%en` and a plain value cover request.transformed / vendor.responded under full and masked, the dead-letter source (`Trail.Stored`) and the redacting slog handler; they fail without the fix; non-secret text is unchanged
-- [ ] The log denylist also covers `x-api-key`, `access_token`, `client_secret`, `refresh_token`
-- [ ] Audit and telemetry tests with `-race`, `go vet` and golangci-lint green
+- [x] Each registered secret is also redacted in its JSON-escaped forms (with and without HTML escaping), URL query- and path-escaped forms and base64 forms (standard and URL alphabets), in the audit trail and in the log redactor; forms are matched longest first; derived forms equal to the raw value or shorter than the 6-byte minimum are skipped
+- [x] Tests for `pa&ss<w>"rd\1`, `päss wörd`, `a+b/c=d`, `tok%en` and a plain value cover request.transformed / vendor.responded under full and masked, the dead-letter source (`Trail.Stored`) and the redacting slog handler; they fail without the fix; non-secret text is unchanged
+- [x] The log denylist also covers `x-api-key`, `access_token`, `client_secret`, `refresh_token`
+- [x] Audit and telemetry tests with `-race`, `go vet` and golangci-lint green
 
 ### Critical path (Release 1)
 
