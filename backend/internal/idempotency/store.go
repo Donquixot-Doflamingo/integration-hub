@@ -79,6 +79,9 @@ const (
 	Completed
 	// Conflict: the key was claimed with a different body hash (Outcome.RequestID).
 	Conflict
+	// CompletedNotStored: Outcome.RequestID succeeded but its response was not kept for replay
+	// (see MarkCompleted). The vendor was already called; the request must not run again.
+	CompletedNotStored
 )
 
 func (s State) String() string {
@@ -91,6 +94,8 @@ func (s State) String() string {
 		return "completed"
 	case Conflict:
 		return "conflict"
+	case CompletedNotStored:
+		return "completed_not_stored"
 	default:
 		return "invalid"
 	}
@@ -144,10 +149,10 @@ func (o *Options) withDefaults() {
 
 // Store is safe for concurrent use.
 type Store struct {
-	rdb                      redis.Scripter
-	opts                     Options
-	m                        storeMetrics
-	begin, complete, release *redis.Script
+	rdb                                 redis.Scripter
+	opts                                Options
+	m                                   storeMetrics
+	begin, complete, release, tombstone *redis.Script
 }
 
 // New returns a store on rdb (*redis.Client, *redis.ClusterClient and *redis.Ring all satisfy
@@ -157,7 +162,7 @@ func New(rdb redis.Scripter, m *telemetry.Metrics, opts Options) *Store {
 	opts.withDefaults()
 	return &Store{
 		rdb: rdb, opts: opts, m: newStoreMetrics(m),
-		begin: redis.NewScript(beginSrc), complete: redis.NewScript(completeSrc), release: redis.NewScript(releaseSrc),
+		begin: redis.NewScript(beginSrc), complete: redis.NewScript(completeSrc), release: redis.NewScript(releaseSrc), tombstone: redis.NewScript(tombstoneSrc),
 	}
 }
 
@@ -174,7 +179,7 @@ func BodyHash(operation string, body []byte) string {
 // Warm loads the scripts into Redis so the first request does not pay the EVAL fallback.
 // Call it at startup; failure is not fatal (Begin falls back to EVAL).
 func (s *Store) Warm(ctx context.Context) error {
-	for _, sc := range []*redis.Script{s.begin, s.complete, s.release} {
+	for _, sc := range []*redis.Script{s.begin, s.complete, s.release, s.tombstone} {
 		if err := sc.Load(ctx, s.rdb).Err(); err != nil {
 			return &UnavailableError{Op: "warm", Err: err}
 		}
@@ -183,7 +188,7 @@ func (s *Store) Warm(ctx context.Context) error {
 }
 
 // Begin claims k for requestID, or reports who holds it. Fresh means the caller holds the key
-// for Options.LeaseTTL and must end with Complete or Release. Calling Begin again with the
+// for Options.LeaseTTL and must end with Complete, MarkCompleted or Release. Calling Begin again with the
 // same requestID while the claim is held returns Fresh again.
 func (s *Store) Begin(ctx context.Context, k Key, bodyHash, requestID string) (Outcome, error) {
 	if err := validKey(k); err != nil {
@@ -223,13 +228,16 @@ func parseBegin(vals []any) (Outcome, error) {
 	switch tag {
 	case "f":
 		return Outcome{State: Fresh}, nil
-	case "x", "p":
+	case "x", "p", "t":
 		rid, ok := str(1)
 		if !ok {
 			break
 		}
-		if tag == "x" {
+		switch tag {
+		case "x":
 			return Outcome{State: Conflict, RequestID: rid}, nil
+		case "t":
+			return Outcome{State: CompletedNotStored, RequestID: rid}, nil
 		}
 		return Outcome{State: InProgress, RequestID: rid}, nil
 	case "c":
@@ -293,6 +301,38 @@ func (s *Store) Complete(ctx context.Context, k Key, requestID string, r Respons
 	default:
 		s.m.completeError.Inc()
 		return &UnavailableError{Op: "complete", Err: fmt.Errorf("unexpected complete reply %d", n)}
+	}
+}
+
+// MarkCompleted records that requestID succeeded although its response could not be stored by
+// Complete (ErrTooLarge, or Redis failed meanwhile). The record is kept until the TTL from the
+// first claim, and every later Begin with the same key and body answers CompletedNotStored, so
+// the vendor is not called again. ErrNotOwner means requestID no longer holds the key.
+func (s *Store) MarkCompleted(ctx context.Context, k Key, requestID string) error {
+	if err := validKey(k); err != nil {
+		return err
+	}
+	if requestID == "" {
+		return fmt.Errorf("%w: request id is required", ErrInvalidInput)
+	}
+	ctx, cancel := context.WithTimeout(ctx, s.opts.Timeout)
+	defer cancel()
+	start := time.Now()
+	n, err := s.tombstone.Run(ctx, s.rdb, []string{s.redisKey(k)}, requestID).Int64()
+	s.m.complete.Observe(time.Since(start).Seconds())
+	switch {
+	case err != nil:
+		s.m.tombstoneError.Inc()
+		return &UnavailableError{Op: "mark_completed", Err: err}
+	case n == 1:
+		s.m.tombstoneOK.Inc()
+		return nil
+	case n == 0 || n == -1:
+		s.m.tombstoneNotOwner.Inc()
+		return ErrNotOwner
+	default:
+		s.m.tombstoneError.Inc()
+		return &UnavailableError{Op: "mark_completed", Err: fmt.Errorf("unexpected mark_completed reply %d", n)}
 	}
 }
 

@@ -17,20 +17,21 @@ const (
 type storeMetrics struct {
 	begin, complete, release prometheus.Observer
 
-	hitMiss, hitInProgress, hitReplay, hitConflict, hitError prometheus.Counter
+	hitMiss, hitInProgress, hitReplay, hitConflict, hitCompletedNotStored, hitError prometheus.Counter
 
 	completeOK, completeNotOwner, completeTooLarge, completeNotReplayable, completeError prometheus.Counter
+	tombstoneOK, tombstoneNotOwner, tombstoneError                                       prometheus.Counter
 	releaseOK, releaseMissing, releaseNotOwner, releaseError                             prometheus.Counter
 }
 
 func newStoreMetrics(m *telemetry.Metrics) storeMetrics {
 	hits := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "idempotency_hits_total",
-		Help: "Idempotency-Key lookups by result: miss (claimed), in_progress, replay, conflict, error (Redis unavailable).",
+		Help: "Idempotency-Key lookups by result: miss (claimed), in_progress, replay, conflict, completed_not_stored, error (Redis unavailable).",
 	}, []string{"result"})
 	writes := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "idempotency_writes_total",
-		Help: "Idempotency record writes by op (complete, release) and result.",
+		Help: "Idempotency record writes by op (complete, mark_completed, release) and result.",
 	}, []string{"op", "result"})
 	m.Registry.MustRegister(hits, writes)
 	return storeMetrics{
@@ -38,17 +39,21 @@ func newStoreMetrics(m *telemetry.Metrics) storeMetrics {
 		complete: m.RedisOpDuration.WithLabelValues(opComplete),
 		release:  m.RedisOpDuration.WithLabelValues(opRelease),
 
-		hitMiss:       hits.WithLabelValues("miss"),
-		hitInProgress: hits.WithLabelValues("in_progress"),
-		hitReplay:     hits.WithLabelValues("replay"),
-		hitConflict:   hits.WithLabelValues("conflict"),
-		hitError:      hits.WithLabelValues("error"),
+		hitMiss:               hits.WithLabelValues("miss"),
+		hitInProgress:         hits.WithLabelValues("in_progress"),
+		hitReplay:             hits.WithLabelValues("replay"),
+		hitConflict:           hits.WithLabelValues("conflict"),
+		hitCompletedNotStored: hits.WithLabelValues("completed_not_stored"),
+		hitError:              hits.WithLabelValues("error"),
 
 		completeOK:            writes.WithLabelValues("complete", "stored"),
 		completeNotOwner:      writes.WithLabelValues("complete", "not_owner"),
 		completeTooLarge:      writes.WithLabelValues("complete", "too_large"),
 		completeNotReplayable: writes.WithLabelValues("complete", "not_replayable"),
 		completeError:         writes.WithLabelValues("complete", "error"),
+		tombstoneOK:           writes.WithLabelValues("mark_completed", "marked"),
+		tombstoneNotOwner:     writes.WithLabelValues("mark_completed", "not_owner"),
+		tombstoneError:        writes.WithLabelValues("mark_completed", "error"),
 		releaseOK:             writes.WithLabelValues("release", "released"),
 		releaseMissing:        writes.WithLabelValues("release", "missing"),
 		releaseNotOwner:       writes.WithLabelValues("release", "not_owner"),
@@ -66,6 +71,8 @@ func (m *storeMetrics) hit(s State) prometheus.Counter {
 		return m.hitReplay
 	case Conflict:
 		return m.hitConflict
+	case CompletedNotStored:
+		return m.hitCompletedNotStored
 	default:
 		return m.hitError
 	}

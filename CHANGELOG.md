@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `feat(idempotency)` · Keep a key whose response could not be stored (HUB-450) · HUB-450 · F-10
+  - The store can mark a key "completed, response not stored"; a later Begin with the same body answers CompletedNotStored until the record's TTL instead of letting the request run again
+  - New counters: idempotency_hits_total{result="completed_not_stored"} and idempotency_writes_total{op="mark_completed"}
 - 2026-11-08 · `fix(edge)` · Refuse a request body with anything after the JSON object (HUB-450) · HUB-450 · F-05
   - A body like `{"a":1}]` or `{"a":1} }` now answers 400 VALIDATION_FAILED instead of passing and failing later as a retryable 500 persist_failed; trailing whitespace is still accepted
 - 2026-11-08 · `docs(tickets)` · File HUB-450 for the request edge findings (HUB-450) · HUB-450 · F-05
