@@ -61,8 +61,8 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | F-23 | HUB-431–HUB-459 | 12 | 0 |
-| **Total** | | | | **287** | **204** |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | F-23 | HUB-431–HUB-459 | 13 | 0 |
+| **Total** | | | | **288** | **204** |
 
 ## Sizing
 
@@ -105,7 +105,7 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | F-15 | Account lifecycle & credential rotation | EP-07, EP-13 | 7 |
 | F-16 | Admin API, RBAC & change log | EP-08 | 19 |
 | F-17 | hubctl & config-as-code | EP-08 | 5 |
-| F-18 | Observability: metrics, traces, alerts, dashboards, load tests | EP-09, EP-13 | 27 |
+| F-18 | Observability: metrics, traces, alerts, dashboards, load tests | EP-09, EP-13 | 28 |
 | F-19 | Admin console (SvelteKit frontend) | EP-10 | 45 |
 | F-20 | Hub MCP server (`hubmcp`) | EP-11 | 14 |
 | F-21 | Consumer Claude skill & Go SDK (`hubclient`) | EP-04, EP-11 | 8 |

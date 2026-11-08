@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **287** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **14**
+Total tickets: **288** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **15**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **287** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 12 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 13 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3692,6 +3692,23 @@ Found by the product owner running `AGIFY_TARGET=live examples/agify-age/run.sh 
 - [ ] Profile the slowest packages and tests (go test -json timings from CI)
 - [ ] Run independent packages in parallel with a database and Redis DB per package, or split the job into shards
 - [ ] itest under 6 minutes in CI on three consecutive runs; job limit back to 10 minutes
+
+### HUB-444 — A claim can take more of one vendor than its free slots
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-412 · **Feature:** F-18 · **Stories:** —
+- **Branch:** `fix/HUB-444-worker-claim-reservations`
+
+`TestNoisyNeighbour` (c) failed in CI on PR #46: healthy account B's async p99 was 388 ms while A refused connections (bound 370 ms). B had 10 envelopes put back by its own worker cap and 388 ms of queue wait for 21 ms at the vendor. Two gaps in the room-aware claim (HUB-412):
+1. A freshly accepted envelope had no target hint (the outbox `account_id` / `endpoint_id` was only written on put-back or park), so a claim took a burst of one target past its cap.
+2. The free room counted only started attempts. The claim loop claims again as soon as a worker slot frees, before the previous claim's goroutines took their slots, so a target's free slots could be claimed twice.
+The extras went back to the queue and waited for a later claim. Fast machines never showed it; a slow, shared CI runner did.
+
+**Acceptance criteria**
+- [x] The gateway writes the resolved (account, endpoint) as the outbox claim hint at accept (still only a filter: the worker re-resolves, D10)
+- [x] A claimed envelope reserves its target's slot until its attempt takes a slot or ends; rooms subtract reservations
+- [x] `TestClaimDoesNotRetakeReservedSlots` (integration) fails without either half and passes with both; `TestClaimReservesSlotsUntilTheAttemptStarts` (unit)
+- [x] Queue, delivery and edge integration suites and `make test` green; golangci-lint clean; ISOLATION.md updated
+
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.

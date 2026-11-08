@@ -77,6 +77,12 @@ type Envelope struct {
 	ExpiresAt      time.Time         `json:"expires_at"`
 	Trace          map[string]string `json:"trace,omitempty"`
 	CreatedAt      time.Time         `json:"created_at"`
+	// TargetAccount and TargetEndpoint are the target the gateway resolved at accept, written to
+	// the outbox row as its claim hint (account_id, endpoint_id) so a claim never takes more of a
+	// target than its free slots (HUB-444). Not stored in the envelope: the worker still resolves
+	// the target at send time (D10).
+	TargetAccount  string `json:"-"`
+	TargetEndpoint string `json:"-"`
 }
 
 // RequestIDTime returns the creation time encoded in a request id's ULID (millisecond

@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(delivery)` · Never claim more of a vendor than its free worker slots (HUB-444) · HUB-444 · F-18
+  - A healthy vendor's async requests no longer bounce back to the queue when they arrive in a burst while another vendor misbehaves: each request carries its vendor target from accept, and claimed requests hold their slot until they start
 - 2026-11-08 · `ci(backend)` · Fall back to the Prometheus image for promtool in CI (HUB-442) · HUB-442 · F-23
   - When GitHub's release download stays down, the monitoring job runs the same promtool version from the official prom/prometheus image instead of failing
 - 2026-11-08 · `ci(backend)` · Retry the promtool download in the monitoring job (HUB-442) · HUB-442 · F-23

@@ -74,6 +74,10 @@ type Worker struct {
 
 	mu       sync.Mutex
 	inflight map[queue.Target]int
+	// reserved counts envelopes claimed for a target whose attempt has not started yet. rooms()
+	// subtracts them, so a claim cannot take a target's free slots twice while the previous
+	// claim's goroutines are still starting (HUB-444).
+	reserved map[queue.Target]int
 	waited   bool // the no-snapshot wait was logged
 	metrics  workerMetrics
 }
@@ -206,6 +210,7 @@ func (w *Worker) Run(ctx context.Context) {
 			}
 		}
 		claimed, err := w.claim(ctx, n)
+		w.reserve(claimed)
 		for range n - len(claimed) {
 			<-slots
 		}
@@ -239,6 +244,7 @@ func (w *Worker) ProcessOnce(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	w.reserve(claimed)
 	sem := make(chan struct{}, w.concurrency())
 	var wg sync.WaitGroup
 	for _, c := range claimed {
@@ -292,11 +298,50 @@ func (w *Worker) rooms() []queue.TargetRoom {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	limit := w.targetCap()
-	out := make([]queue.TargetRoom, 0, len(w.inflight))
+	out := make([]queue.TargetRoom, 0, len(w.inflight)+len(w.reserved))
 	for t, n := range w.inflight {
-		out = append(out, queue.TargetRoom{Target: t, Slots: max(limit-n, 0)})
+		out = append(out, queue.TargetRoom{Target: t, Slots: max(limit-n-w.reserved[t], 0)})
+	}
+	for t, r := range w.reserved {
+		if _, ok := w.inflight[t]; !ok {
+			out = append(out, queue.TargetRoom{Target: t, Slots: max(limit-r, 0)})
+		}
 	}
 	return out
+}
+
+// reserve holds one slot of each claimed envelope's target until its attempt starts or ends.
+func (w *Worker) reserve(claimed []queue.Claimed) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, c := range claimed {
+		if c.Target == nil {
+			continue
+		}
+		if w.reserved == nil {
+			w.reserved = map[queue.Target]int{}
+		}
+		w.reserved[*c.Target]++
+	}
+}
+
+// unreserver returns a func that gives c's reservation back once; later calls do nothing.
+func (w *Worker) unreserver(c queue.Claimed) func() {
+	if c.Target == nil {
+		return func() {}
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			if n := w.reserved[*c.Target] - 1; n > 0 {
+				w.reserved[*c.Target] = n
+			} else {
+				delete(w.reserved, *c.Target)
+			}
+		})
+	}
 }
 
 // InFlight returns the attempts in flight for (account, endpoint) (tests, debugging).
@@ -307,6 +352,8 @@ func (w *Worker) InFlight(account, endpoint string) int {
 }
 
 func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
+	unreserve := w.unreserver(c) // the claim's slot reservation ends when the attempt takes a slot, or here
+	defer unreserve()
 	env := c.Envelope
 	ctx, span := w.startAttempt(ctx, c)
 	defer span.End()
@@ -431,6 +478,7 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 		RequestID: env.RequestID, Snap: snap, Res: res, Body: body, Hdr: hdr, Session: sessionData, Trail: trail, Timings: &timings,
 		FirstAttempt: c.Attempt, Live: c.Attempt == 1 && c.Status == core.StateAccepted, // drained and retried: not live
 		Acquire: func(t queue.Target) bool {
+			unreserve()
 			if !w.acquire(t) {
 				return false
 			}
