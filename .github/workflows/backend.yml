@@ -148,11 +148,21 @@ jobs:
       - name: Install promtool (pinned release, checksum verified)
         run: |
           tgz="$RUNNER_TEMP/prometheus.tar.gz"
-          # GitHub release downloads answer 504 at times (HUB-442): retry with a pause; the checksum still decides.
-          curl -sSfL --retry 6 --retry-delay 10 --retry-all-errors -o "$tgz" "https://github.com/prometheus/prometheus/releases/download/v${PROMTOOL_VERSION}/prometheus-${PROMTOOL_VERSION}.linux-amd64.tar.gz"
-          echo "${PROMTOOL_SHA256}  $tgz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/bin"
-          tar -xzf "$tgz" -C "$RUNNER_TEMP/bin" --strip-components=1 "prometheus-${PROMTOOL_VERSION}.linux-amd64/promtool"
+          # GitHub release downloads answer 504 at times (HUB-442): retry with a pause; the checksum still decides.
+          if curl -sSfL --retry 4 --retry-delay 10 --retry-all-errors -o "$tgz" "https://github.com/prometheus/prometheus/releases/download/v${PROMTOOL_VERSION}/prometheus-${PROMTOOL_VERSION}.linux-amd64.tar.gz"; then
+            echo "${PROMTOOL_SHA256}  $tgz" | sha256sum -c -
+            tar -xzf "$tgz" -C "$RUNNER_TEMP/bin" --strip-components=1 "prometheus-${PROMTOOL_VERSION}.linux-amd64/promtool"
+          else
+            # Fallback when the release download is down: the same promtool version from the official
+            # image on Docker Hub, run with the workspace mounted at the same path.
+            echo "::warning::promtool release download failed; using prom/prometheus:v${PROMTOOL_VERSION}"
+            docker pull -q "prom/prometheus:v${PROMTOOL_VERSION}"
+            printf '#!/bin/sh\nexec docker run --rm -u "$(id -u):$(id -g)" -v "%s:%s" -w "$PWD" --entrypoint promtool "prom/prometheus:v%s" "$@"\n' \
+              "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$PROMTOOL_VERSION" > "$RUNNER_TEMP/bin/promtool"
+            chmod +x "$RUNNER_TEMP/bin/promtool"
+          fi
+          "$RUNNER_TEMP/bin/promtool" --version
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Alert rules and dashboards (make monitoring)
         run: make monitoring

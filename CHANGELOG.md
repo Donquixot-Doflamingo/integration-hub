@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `ci(backend)` · Fall back to the Prometheus image for promtool in CI (HUB-442) · HUB-442 · F-23
+  - When GitHub's release download stays down, the monitoring job runs the same promtool version from the official prom/prometheus image instead of failing
 - 2026-11-08 · `ci(backend)` · Retry the promtool download in the monitoring job (HUB-442) · HUB-442 · F-23
   - The monitoring job no longer fails when GitHub's release download answers 504 once; it retries up to 6 times and still verifies the checksum
 - 2026-11-08 · `ci(backend)` · Give the integration test job 20 minutes (HUB-442) · HUB-442 · F-23
