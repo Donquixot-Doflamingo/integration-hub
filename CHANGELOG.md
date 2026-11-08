@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
+  - The names are joined with a space ("harsh Khandelwal"), which agify answers with an age; joined without one it answered age null
+  - The endpoint allows 10 s to connect, enough for slow DNS plus TLS to agify
+  - The examples use their own hub_examples database, so they no longer see the console's published configuration
 - 2026-11-08 · `fix(delivery)` · Never claim more of a vendor than its free worker slots (HUB-444) · HUB-444 · F-18
   - A healthy vendor's async requests no longer bounce back to the queue when they arrive in a burst while another vendor misbehaves: each request carries its vendor target from accept, and claimed requests hold their slot until they start
 - 2026-11-08 · `ci(backend)` · Fall back to the Prometheus image for promtool in CI (HUB-442) · HUB-442 · F-23

@@ -86,7 +86,7 @@ func TestExampleAgifyAge(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.scenario, func(t *testing.T) {
 			scenario(t, c.scenario)
-			rec := invoke(t, `{"firstName": "har", "lastName": "sh"}`)
+			rec := invoke(t, `{"firstName": "harsh", "lastName": "Khandelwal"}`)
 			if rec.Code != c.status {
 				t.Fatalf("status %d, want %d: %s", rec.Code, c.status, rec.Body)
 			}
@@ -111,7 +111,7 @@ func TestExampleAgifyAge(t *testing.T) {
 				t.Fatal("no vendor call")
 			}
 			last := calls[len(calls)-1]
-			if last.Method != http.MethodGet || last.Path != "/" || len(last.Query["name"]) != 1 || last.Query["name"][0] != "harsh" {
+			if last.Method != http.MethodGet || last.Path != "/" || len(last.Query["name"]) != 1 || last.Query["name"][0] != "harsh Khandelwal" {
 				t.Fatalf("vendor request %+v", last)
 			}
 			if http.Header(last.Headers).Get("Authorization") != "" || len(last.Query) != 1 {
@@ -123,9 +123,9 @@ func TestExampleAgifyAge(t *testing.T) {
 	t.Run("caller mistakes are refused without a vendor call", func(t *testing.T) {
 		scenario(t, "found")
 		for name, body := range map[string]string{
-			"no lastName":   `{"firstName": "har"}`,
-			"empty name":    `{"firstName": "", "lastName": "sh"}`,
-			"unknown field": `{"firstName": "har", "lastName": "sh", "age": 3}`,
+			"no lastName":   `{"firstName": "harsh"}`,
+			"empty name":    `{"firstName": "", "lastName": "Khandelwal"}`,
+			"unknown field": `{"firstName": "harsh", "lastName": "Khandelwal", "age": 3}`,
 		} {
 			rec := invoke(t, body)
 			if rec.Code != 400 || !strings.Contains(rec.Body.String(), "VALIDATION_FAILED") {

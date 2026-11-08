@@ -3,8 +3,8 @@
 Your service sends a first and last name; the Hub asks [agify.io](https://agify.io/documentation) for an age estimate and returns only the age:
 
 ```text
-POST /v1/integrations/int_age_by_name/invoke   {"firstName": "har", "lastName": "sh"}
-  -> Hub -> GET https://api.agify.io/?name=harsh   (vendor answers {"count":1744,"name":"harsh","age":29})
+POST /v1/integrations/int_age_by_name/invoke   {"firstName": "harsh", "lastName": "Khandelwal"}
+  -> Hub -> GET https://api.agify.io/?name=harsh%20Khandelwal   (vendor answers {"count":1744,"name":"harsh Khandelwal","age":29})
   <- 200 {"age": 29}
 ```
 
@@ -28,7 +28,7 @@ examples/agify-age/run.sh serve                # start and keep running; call it
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `AGIFY_TARGET` | `mock` | `mock` (mockvendor on this machine, nothing leaves it) or `live` (`https://api.agify.io`; `run.sh` switches the account's region) |
-| `FIRST_NAME`, `LAST_NAME` | `har`, `sh` | the body sent to the Hub (with the mock target, mockvendor always answers the scenario file) |
+| `FIRST_NAME`, `LAST_NAME` | `harsh`, `Khandelwal` | the body sent to the Hub (with the mock target, mockvendor always answers the scenario file) |
 | `HUB_PG_DSN`, `HUB_REDIS_ADDR`, `HUB_DEMO_HTTP`, `MOCKVENDOR_ADDR`, … | see `../lib/local-hub.sh` | databases and ports |
 
 `run.sh` builds the binaries, merges this folder over `backend/config` into `.demo/agify-age/`, starts mockvendor (mock target only) and a gateway on `127.0.0.1:18080`, programs the scenario and makes the call. There is no `hubctl creds set` step: an auth `none` account has nothing to store. The live target needs direct outbound HTTPS from the gateway: the Hub's upstream client never uses an environment proxy (it would bypass the egress allowlist), so behind a proxy-only network the live call answers 503 `UPSTREAM_UNAVAILABLE`.
@@ -38,7 +38,7 @@ examples/agify-age/run.sh serve                # start and keep running; call it
 ```bash
 curl -s http://127.0.0.1:18080/v1/integrations/int_age_by_name/invoke \
   -H 'Authorization: Bearer hk_test_example_age_demo_local_only' -H 'Content-Type: application/json' \
-  -d '{"firstName": "har", "lastName": "sh"}'
+  -d '{"firstName": "harsh", "lastName": "Khandelwal"}'
 ```
 
 ```json
@@ -49,7 +49,7 @@ Output of the default (offline) run on the build machine, ports as the defaults:
 
 ```text
 > POST /v1/integrations/int_age_by_name/invoke
-> {"firstName": "har", "lastName": "sh"}
+> {"firstName": "harsh", "lastName": "Khandelwal"}
 < HTTP 200 in 0.001647s
 < X-Hub-Request-Id: req_01M6TA4C1RNFY06WPTJS60CX7X
 < X-Hub-Served-By: primary
@@ -62,7 +62,7 @@ The other answers:
 
 | Case | What the vendor answers | What the caller gets |
 | --- | --- | --- |
-| Found (`found`) | 200 `{"count":1744,"name":"harsh","age":29}` | 200 `{"age":29}` |
+| Found (`found`) | 200 `{"count":1744,"name":"harsh Khandelwal","age":29}` | 200 `{"age":29}` |
 | Unknown name (`unknown-name`) | 200 `{"count":0,"name":"xqzvbn","age":null}` | 200 `{}` (a null field is left out: no age) |
 | Free allowance used up (`rate-limited`) | 429 `{"error":"Request limit reached"}`, `X-Rate-Limit-Reset: 30` | 429 `UPSTREAM_RATE_LIMITED`, retryable, `retry_after_ms: 30000` |
 | Invalid name | 422 `{"error":"Invalid 'name' parameter"}` | 422 `UPSTREAM_REJECTED` "The age could not be estimated for this name" |
@@ -79,12 +79,12 @@ The caller never sees the vendor: not its name, its `count`, the name echo or it
 | `config/accounts/agify-public.yaml` | The account: no credentials, no `credentials_ref`; region `public`, `run.sh` switches it to `mock` |
 | `config/tenants/age-demo.yaml` | The caller; local test key `hk_test_example_age_demo_local_only` (stored as its sha256) |
 | `config/integrations/int_age_by_name/` | Operation `default`: `request_schema.body` with `firstName` and `lastName` required (`x-pii: name`), `validate_input: true`; `sync`, `fail_fast`, `masked` audit, no `Idempotency-Key` needed |
-| `config/transformers/AGIFY-REQ` | `query.name: req.firstName + req.lastName`, samples `harsh` and `unicode` (input → expected vendor request; each must also fit the endpoint's `request_schema`) |
+| `config/transformers/AGIFY-REQ` | `query.name: req.firstName + " " + req.lastName`, samples `harsh` and `unicode` (input → expected vendor request; each must also fit the endpoint's `request_schema`) |
 | `config/transformers/AGIFY-RES` | `response.age: res.body.age` and the error rules; samples `found`, `unknown_name`, `rate_limited`, `invalid_name`, `bad_gateway`, `malformed_200` |
 | `mockvendor/*.json` | Scenario files (`found`, `unknown-name`, `rate-limited`), loaded by `run.sh` and the tests |
 | `run.sh` | The demo (uses `../lib/local-hub.sh`) |
 
-The mapping concatenates the names as the integration owner asked (`har` + `sh` → `harsh`). agify's docs recommend the full name with a space ("Sarah Johnson"); to send that, the request transformer would read `req.firstName + " " + req.lastName` and its samples would change accordingly.
+The mapping joins the names with a space (`harsh` + `Khandelwal` → `harsh Khandelwal`), as agify's docs recommend. Joined without a space (`harshKhandelwal`), agify knows no such name and answers `age: null`, so the caller would get `{}` (checked live on 2026-11-08, HUB-445).
 
 ## Tests
 
@@ -94,4 +94,4 @@ go test -race -count=1 -run TestExampleAgifyConfigBuilds ./internal/edge/       
 go test -race -count=1 -tags integration -run TestExampleAgifyAge -v ./internal/edge/     # through the gateway
 ```
 
-`TestExampleAgifyConfigBuilds` builds the overlay (every sample runs; a failing one refuses the snapshot) and checks auth `none`, the account without credentials, the endpoint schema and that every scenario file answers on `GET /`. `TestExampleAgifyAge` runs `int_age_by_name` through the gateway against mockvendor with each scenario file (every region points at mockvendor: tests never call agify.io), validates every answer against `contracts/openapi/hub-public.v1.yaml`, checks the vendor got `GET /?name=harsh` with no credential, that nothing of the vendor reaches the caller, and that caller mistakes are refused without a vendor call.
+`TestExampleAgifyConfigBuilds` builds the overlay (every sample runs; a failing one refuses the snapshot) and checks auth `none`, the account without credentials, the endpoint schema and that every scenario file answers on `GET /`. `TestExampleAgifyAge` runs `int_age_by_name` through the gateway against mockvendor with each scenario file (every region points at mockvendor: tests never call agify.io), validates every answer against `contracts/openapi/hub-public.v1.yaml`, checks the vendor got `GET /?name=harsh Khandelwal` with no credential, that nothing of the vendor reaches the caller, and that caller mistakes are refused without a vendor call.
