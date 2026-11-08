@@ -3727,7 +3727,7 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 - [x] Example tests and the offline run.sh pass with a fresh database
 ### HUB-454 — Credential cache noise and stale loader; a failed listener leaves the process hanging
 - **Epic:** EP-14 · **Type:** fix · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-084 · **Feature:** F-07 · **Stories:** US-0701
+- **Status:** in-review · **Depends on:** HUB-084 · **Feature:** F-07 · **Stories:** US-0701
 - **Branch:** `fix/HUB-454-creds-and-run-lifecycle`
 
 Reviewer findings:
@@ -3736,12 +3736,12 @@ Reviewer findings:
 3. When a listener failed at runtime the context was not cancelled, so `wg.Wait()` blocked on the watchers and the process never exited with code 1; a second SIGTERM was swallowed until `run` returned.
 
 **Acceptance criteria**
-- [ ] Miss-triggered reloads back off exponentially after consecutive failures, up to the periodic refresh interval; a failure is logged once per state change and recovery once
-- [ ] `credentials decrypted` is not logged, and `creds_decrypts_total` not incremented, when nothing was decrypted
-- [ ] A missing secrets file is an empty store (one warning at startup naming the path); an unreadable, corrupt or undecryptable file stays an error
-- [ ] The key file and secrets file are re-opened on every refresh; the rotation log line is a warning when nothing loaded
-- [ ] A listener that fails at runtime cancels the role and `Run` returns that error; the first signal restores default handling so a second one terminates
-- [ ] Readiness behaviour in the ops docs unchanged
+- [x] Miss-triggered reloads back off exponentially after consecutive failures, up to the periodic refresh interval; a failure is logged once per state change and recovery once
+- [x] `credentials decrypted` is not logged, and `creds_decrypts_total` not incremented, when nothing was decrypted
+- [x] A missing secrets file is an empty store (one warning at startup naming the path); an unreadable, corrupt or undecryptable file stays an error
+- [x] The key file and secrets file are re-opened on every refresh; the rotation log line is a warning when nothing loaded
+- [x] A listener that fails at runtime cancels the role and `Run` returns that error; the first signal restores default handling so a second one terminates
+- [x] Readiness behaviour in the ops docs unchanged
 
 
 ### Critical path (Release 1)

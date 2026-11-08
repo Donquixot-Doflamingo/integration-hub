@@ -30,6 +30,9 @@ type Options struct {
 	Metrics *telemetry.Metrics
 	// ExtraChecks are added to the readiness checks (later milestones: snapshot loaded).
 	ExtraChecks []Check
+	// WrapListener, when set, wraps each bound listener before it serves (tests inject a listener
+	// that fails at runtime).
+	WrapListener func(name string, ln net.Listener) net.Listener
 	// Secrets is the process's redaction set (the logger's). Run adds the secrets of cfg (the
 	// Postgres password, the audit mask key) and the data plane adds decrypted credentials. nil
 	// means a fresh set.
@@ -130,20 +133,27 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 			ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
 			BaseContext:       func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
 		}
+		if opts.WrapListener != nil {
+			ln = opts.WrapListener(h.name, ln)
+		}
 		lns = append(lns, listener{name: h.name, srv: srv, ln: ln})
 		if opts.OnListen != nil {
 			opts.OnListen(h.name, ln.Addr().String())
 		}
 	}
 
+	// loopCtx ends when ctx does or when a listener fails: either way the watchers below must
+	// stop, or wg.Wait never returns (HUB-454).
+	loopCtx, cancelLoops := context.WithCancel(ctx)
+	defer cancelLoops()
 	serveErr := make(chan error, len(lns))
 	var wg sync.WaitGroup
 	if cfg.ConfigWatch {
-		wg.Go(func() { reg.watch(ctx) })
+		wg.Go(func() { reg.watch(loopCtx) })
 	}
-	wg.Go(func() { reg.follow(ctx) }) // every role follows published snapshots (HUB-171)
+	wg.Go(func() { reg.follow(loopCtx) }) // every role follows published snapshots (HUB-171)
 	if cfg.Role == Scheduler {
-		wg.Go(func() { reg.pruneLoop(ctx) })
+		wg.Go(func() { reg.pruneLoop(loopCtx) })
 	}
 	for _, l := range lns {
 		wg.Go(func() {
@@ -162,6 +172,7 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	case runErr = <-serveErr:
 		log.ErrorContext(ctx, "server failed, shutting down", slog.String("error", runErr.Error()))
 	}
+	cancelLoops()
 
 	start := time.Now()
 	ready.Store(false)

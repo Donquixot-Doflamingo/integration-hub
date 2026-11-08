@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(roles)` · Exit when a listener fails and let a second signal terminate (HUB-454) · HUB-454 · F-07
+  - A gateway, worker, scheduler or admin whose listener dies at runtime now exits with code 1 instead of hanging on its background loops
+  - After the first SIGINT/SIGTERM the default signal handling is restored, so a second one ends the process while it drains
 - 2026-11-08 · `fix(roles)` · Re-open the credential key and file on every refresh (HUB-454) · HUB-454 · F-07
   - Running `hubctl creds init-key` or `creds set` after the gateway or worker started now takes effect on the next refresh, without a restart
   - A missing key or secrets file warns once (naming the path) and is logged again only when it appears
