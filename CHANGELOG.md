@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(callbacks)` · Resolve A and AAAA separately in the SSRF guard (HUB-452) · HUB-452 · F-11
+  - A callback no longer times out on a network whose resolver never answers AAAA, or when an unreachable AAAA address sorts first; the other family is used at once
+  - Each address gets an equal share of the remaining 5 s; every resolved address is still vetted and refused when private, loopback, link-local, metadata, mapped or NAT64
+  - Registering a callback URL no longer waits for the silent address family
 - 2026-11-08 · `docs(tickets)` · File HUB-452 for three callbacks defects (HUB-452) · HUB-452 · F-11
   - Backlog entry for the SSRF guard AAAA stall, the over-claiming dispatcher and disabled endpoints burning retries
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
