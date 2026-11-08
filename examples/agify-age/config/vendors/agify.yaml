@@ -23,8 +23,10 @@ endpoints:
   estimate@1:
     method: GET
     path: /
-    timeout_ms: 3000
-    connect_timeout_ms: 1000
+    # A public internet API: DNS + TCP + TLS from far away can take well over a second on a cold
+    # connection, and the connect timeout covers all three (HUB-442).
+    timeout_ms: 10000
+    connect_timeout_ms: 5000
     idempotent: true
     # What the endpoint accepts (ADR-0023): AGIFY-REQ's samples must fit it.
     request_schema:
