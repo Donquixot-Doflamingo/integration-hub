@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `docs(tickets)` · File HUB-449 for the delivery correctness fixes (HUB-449) · HUB-449 · F-09
+  - The backlog lists the four delivery bugs found in review: replay expiry, callback payload shape, truncated and redirect responses
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
   - The names are joined with a space ("harsh Khandelwal"), which agify answers with an age; joined without one it answered age null
   - The endpoint allows 10 s to connect, enough for slow DNS plus TLS to agify

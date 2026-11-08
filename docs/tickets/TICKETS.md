@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **16**
+Total tickets: **290** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **17**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 14 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 15 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3725,6 +3725,24 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 - [x] estimate@1 allows 10 s to connect and 15 s in total
 - [x] The examples use their own `hub_examples` database unless HUB_PG_DSN is set, and create it when missing
 - [x] Example tests and the offline run.sh pass with a fresh database
+
+### HUB-449 — Delivery correctness: replay expiry, callback payload shape, truncated and redirect responses
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-progress · **Depends on:** HUB-444 · **Feature:** F-09 · **Stories:** US-0901
+- **Branch:** `fix/HUB-449-delivery-correctness`
+
+Four confirmed bugs found in review of the delivery path:
+1. **Replay expiry.** `Outbox.Replay` reset the `expires_at` column but the envelope JSON kept the original one, and the worker reads the JSON: a dead letter replayed after its original TTL (default 6 h, DLQ retention 14 days) was claimed and expired at once, never delivered.
+2. **Callback payload shape.** `request.completed` needs an object result, but pass-through results (ADR-0023) can be an array, a string or empty (204). The enqueue failed inside the terminal transaction, rolling back the Succeed: the request was reclaimed after the visibility timeout, the vendor was called again, and after two crashes it was dead-lettered as poison although the vendor had succeeded each time.
+3. **Truncated responses.** A vendor body over `MaxResponseBytes` was flagged `Truncated` but only audited: the caller got a 200 with a cut body.
+4. **Redirects.** The upstream client never follows redirects, but only status >= 400 counted as an error: a 301/302/307/308 mapped to success with an empty or garbage output, and the breaker recorded success.
+
+**Acceptance criteria**
+- [ ] Replay writes the new expiry into the envelope JSON; a replay after the original TTL is delivered, not expired
+- [ ] A callback payload problem never fails or rolls back a request's terminal transition; the vendor is called once
+- [ ] A truncated vendor response is a failed attempt (pass-through and transformer paths)
+- [ ] An unmatched 3xx is UPSTREAM_REJECTED, non-retryable, without the Location in the message; a transformer's explicit `errors:` rules still match first
+- [ ] Each fix has a test that failed before it; queue, delivery, callbacks and transform suites green
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
