@@ -3728,7 +3728,7 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 
 ### HUB-452 — Callbacks: AAAA stall in the SSRF guard, over-claiming dispatcher, disabled endpoints burn retries
 - **Epic:** EP-14 · **Type:** fix · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-119 · **Feature:** F-11 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-119 · **Feature:** F-11 · **Stories:** —
 - **Branch:** `fix/HUB-452-callbacks`
 
 Reviewer findings on `backend/internal/callbacks`:
@@ -3737,10 +3737,10 @@ Reviewer findings on `backend/internal/callbacks`:
 3. **Disabled endpoints burn attempts (low).** A disabled endpoint is held with `endpoint_disabled`, but every try counts as one of the 11 attempts, so after about 20 h disabled the callbacks are dead-lettered although the comment says they resume once re-enabled.
 
 **Acceptance criteria**
-- [ ] Guard looks up A and AAAA in parallel, takes the first family that answers and falls back to the other, vets every resolved address (refuse the host if any is refused), and gives each address an equal share of the remaining time
-- [ ] Tests: resolver that never answers one family, dead first address, all private still refused, mixed public+private refused
-- [ ] One claim returns at most n rows (single LIMIT over the union) and Run's token accounting does not depend on how many rows came back; integration test with a due backlog plus expired in-flight rows
-- [ ] A disabled endpoint reschedules without counting the attempt (fixed capped hold); documented in F-11
+- [x] Guard looks up A and AAAA in parallel, takes the first family that answers and falls back to the other, vets every resolved address (refuse the host if any is refused), and gives each address an equal share of the remaining time
+- [x] Tests: resolver that never answers one family, dead first address, all private still refused, mixed public+private refused
+- [x] One claim returns at most n rows (single LIMIT over the union) and Run's token accounting does not depend on how many rows came back; integration test with a due backlog plus expired in-flight rows
+- [x] A disabled endpoint reschedules without counting the attempt (fixed capped hold); documented in F-11
 
 
 ### Critical path (Release 1)

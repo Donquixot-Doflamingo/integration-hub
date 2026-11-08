@@ -121,8 +121,8 @@ type receiver struct {
 	inflight, maxInflight, delay atomic.Int64
 	mu                           sync.Mutex
 	headers                      []http.Header
-	bodies   [][]byte
-	secrets  [][]byte
+	bodies                       [][]byte
+	secrets                      [][]byte
 }
 
 // first returns the headers and body of the first request.
@@ -246,6 +246,7 @@ func TestDispatcherAttemptOutcomes(t *testing.T) {
 		status     int
 		want       string
 		errClass   string
+		hold       bool // the attempt is given back, nothing audited
 		hits       int64
 		httpStatus int
 	}{
@@ -258,7 +259,8 @@ func TestDispatcherAttemptOutcomes(t *testing.T) {
 		{name: "endpoint of another tenant dead-letters", endpoint: "reg_other_tenant", attempt: 1, want: statusDeadLettered, errClass: errTenantMismatch},
 		{name: "secret not loaded retried", endpoint: "reg_nosecret", attempt: 1, want: statusRetryScheduled, errClass: errSecretUnavailable},
 		{name: "ssrf blocked retried", endpoint: "reg_private", attempt: 1, want: statusRetryScheduled, errClass: errSSRFBlocked},
-		{name: "disabled endpoint held, not sent", endpoint: "reg_off", attempt: 1, want: statusRetryScheduled, errClass: errEndpointDisabled},
+		// Held on the last attempt of the schedule too: not sent, not counted, never dead-lettered.
+		{name: "disabled endpoint held, not sent", endpoint: "reg_off", attempt: 3, want: statusRetryScheduled, errClass: errEndpointDisabled, hold: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fx := newDispatchFixture(t, DispatcherOptions{})
@@ -271,6 +273,18 @@ func TestDispatcherAttemptOutcomes(t *testing.T) {
 			o, ok := fx.store.outcome(row.ID)
 			if !ok || o.Status != tc.want || o.Error != tc.errClass || o.HTTPStatus != tc.httpStatus {
 				t.Fatalf("outcome = %+v (recorded %v), want %s/%s/%d", o, ok, tc.want, tc.errClass, tc.httpStatus)
+			}
+			if o.Hold != tc.hold || (tc.hold && o.RetryIn != disabledHold) {
+				t.Fatalf("outcome hold = %v retry in %v, want hold %v (%v)", o.Hold, o.RetryIn, tc.hold, disabledHold)
+			}
+			if tc.hold {
+				if n := len(fx.sink.all()); n != 0 {
+					t.Fatalf("a hold emitted %d audit events", n)
+				}
+				if got := testutil.ToFloat64(fx.d.deliveries.WithLabelValues("orders-service", tc.want)); got != 1 {
+					t.Fatalf("callback_deliveries_total{%s} = %v", tc.want, got)
+				}
+				return
 			}
 			if tc.want == statusRetryScheduled {
 				base := []time.Duration{5 * time.Second, 30 * time.Second}[tc.attempt-1]

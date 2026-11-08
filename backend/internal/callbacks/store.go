@@ -32,6 +32,9 @@ type outcome struct {
 	HTTPStatus int    // 0 = no response
 	Error      string // error class, "" when delivered
 	RetryIn    time.Duration
+	// Hold: nothing was sent (the endpoint is disabled), so the attempt that was counted at claim
+	// is given back and the row waits RetryIn without using up the retry schedule (HUB-452).
+	Hold bool
 }
 
 // store is the dispatcher's view of hub.callback_deliveries (pgStore in production).
@@ -106,11 +109,12 @@ SET status = $3,
     next_attempt_at = CASE WHEN $3 = 'retry_scheduled' THEN now() + $4 * interval '1 millisecond' ELSE next_attempt_at END,
     delivered_at = CASE WHEN $3 = 'delivered' THEN now() END,
     last_http_status = $5, last_error = $6,
+    attempts = CASE WHEN $7 THEN greatest(attempts - 1, 0) ELSE attempts END,
     claimed_by = NULL, claimed_until = NULL, updated_at = now()
 WHERE delivery_id = $1 AND status = 'in_flight' AND claimed_by = $2`
 
 func (s pgStore) record(ctx context.Context, id, worker string, o outcome) (bool, error) {
-	tag, err := s.pool.Exec(ctx, recordOutcome, id, worker, o.Status, o.RetryIn.Milliseconds(), nullable(o.HTTPStatus), nullable(o.Error))
+	tag, err := s.pool.Exec(ctx, recordOutcome, id, worker, o.Status, o.RetryIn.Milliseconds(), nullable(o.HTTPStatus), nullable(o.Error), o.Hold)
 	if err != nil {
 		return false, fmt.Errorf("callbacks: record %s: %w", id, err)
 	}

@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(callbacks)` · Hold deliveries for a disabled endpoint without using attempts (HUB-452) · HUB-452 · F-11
+  - Callbacks for a disabled endpoint wait 5 minutes between looks and keep their full retry schedule, so they are no longer dead-lettered after about 20 hours and are delivered once the endpoint is enabled again
+  - A hold writes no `callback.delivered` audit event because nothing is sent
 - 2026-11-08 · `fix(callbacks)` · Never claim more callback rows than free senders (HUB-452) · HUB-452 · F-11
   - After a dispatcher crash the callback sender no longer runs more than `Senders` attempts at once, leaks goroutines, or hangs at shutdown
 - 2026-11-08 · `fix(callbacks)` · Resolve A and AAAA separately in the SSRF guard (HUB-452) · HUB-452 · F-11

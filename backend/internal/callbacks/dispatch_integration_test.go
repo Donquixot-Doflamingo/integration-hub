@@ -26,15 +26,15 @@ import (
 
 // tenantReceiver is a tenant endpoint that verifies every callback and counts deliveries.
 type tenantReceiver struct {
-	srv      *httptest.Server
-	fail     atomic.Int64 // answer 500 to this many requests first
+	srv  *httptest.Server
+	fail atomic.Int64 // answer 500 to this many requests first
 	// delay (ns) slows every answer; inflight/maxInflight count concurrent requests.
 	delay, inflight, maxInflight atomic.Int64
-	mu       sync.Mutex
-	byID     map[string]int
-	bodies   [][]byte
-	verified atomic.Int64
-	rejected atomic.Int64
+	mu                           sync.Mutex
+	byID                         map[string]int
+	bodies                       [][]byte
+	verified                     atomic.Int64
+	rejected                     atomic.Int64
 }
 
 func newTenantReceiver(t *testing.T, secret string) *tenantReceiver {
@@ -453,6 +453,48 @@ func TestRunWithBacklogAndAbandonedRowsStaysWithinSenders(t *testing.T) {
 	stop()
 	if m := it.rcv.maxInflight.Load(); m > 4 {
 		t.Fatalf("%d concurrent requests with 4 senders", m)
+	}
+}
+
+// TestDisabledEndpointDoesNotBurnAttempts (HUB-452): a delivery for a disabled endpoint is looked
+// at again and again without using up the 11-attempt schedule, never dead-letters, and is
+// delivered as attempt 1 once the endpoint is enabled.
+func TestDisabledEndpointDoesNotBurnAttempts(t *testing.T) {
+	it := newITest(t)
+	ev := sampleEvents()["failed"]
+	it.enqueue(t, ev)
+	id := deliveryIDs(t, it.pool, ev.RequestID)[0]
+	d := it.dispatcher(t, audit.Discard{}, DispatcherOptions{})
+	ep := it.snaps.s.Registrar["reg_orders_cb"]
+	cycle := func() {
+		t.Helper()
+		if _, err := it.pool.Exec(t.Context(), `UPDATE hub.callback_deliveries SET next_attempt_at = now() WHERE delivery_id = $1`, id); err != nil {
+			t.Fatal(err)
+		}
+		rows, err := d.deps.store.claim(t.Context(), d.ID(), 1, 30*time.Second)
+		if err != nil || len(rows) != 1 {
+			t.Fatalf("claim = %d rows, %v", len(rows), err)
+		}
+		d.attempt(t.Context(), rows[0])
+	}
+	ep.Disabled = true
+	for i := range 15 { // more than the 11 attempts of the schedule
+		cycle()
+		if r := readRow(t, it.pool, id); r.status != statusRetryScheduled || r.attempts != 0 || r.lastError != errEndpointDisabled {
+			t.Fatalf("cycle %d: row = %+v, want retry_scheduled, 0 attempts, endpoint_disabled", i, r)
+		}
+	}
+	var wait time.Duration
+	if err := it.pool.QueryRow(t.Context(), `SELECT next_attempt_at - now() FROM hub.callback_deliveries WHERE delivery_id = $1`, id).Scan(&wait); err != nil {
+		t.Fatal(err)
+	}
+	if wait < disabledHold-time.Minute || wait > disabledHold {
+		t.Fatalf("held for %v, want about %v", wait, disabledHold)
+	}
+	ep.Disabled = false
+	cycle()
+	if r := readRow(t, it.pool, id); r.status != statusDelivered || r.attempts != 1 {
+		t.Fatalf("after re-enable row = %+v, want delivered on attempt 1", r)
 	}
 }
 
