@@ -6,6 +6,18 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `ci(backend)` · Fall back to the Prometheus image for promtool in CI (HUB-442) · HUB-442 · F-23
+  - When GitHub's release download stays down, the monitoring job runs the same promtool version from the official prom/prometheus image instead of failing
+- 2026-11-08 · `ci(backend)` · Retry the promtool download in the monitoring job (HUB-442) · HUB-442 · F-23
+  - The monitoring job no longer fails when GitHub's release download answers 504 once; it retries up to 6 times and still verifies the checksum
+- 2026-11-08 · `ci(backend)` · Give the integration test job 20 minutes (HUB-442) · HUB-442 · F-23
+  - The backend integration tests no longer get cancelled at 10 minutes; they take about 9 to 10 minutes since EP-14. HUB-443 is filed to make them faster
+- 2026-11-08 · `ci(backend)` · Build golangci-lint from the module proxy in CI (HUB-442) · HUB-442 · F-23
+  - The lint job no longer depends on downloading the golangci-lint release binary from GitHub, which failed with 504 twice on PR #46; it builds the same pinned version from the Go module proxy
+- 2026-11-08 · `ci(backend)` · Run the backend CI when examples change (HUB-442) · HUB-442 · F-23
+  - A change under examples/ now runs the backend tests that load the examples; until now only the hygiene check ran on such PRs
+- 2026-11-08 · `fix(examples)` · Give the agify example time to connect over the internet (HUB-442) · HUB-442 · F-23
+  - `AGIFY_TARGET=live` no longer times out on a cold connection: the endpoint allows 5 s to connect (DNS, TCP and TLS) and 10 s in total, instead of 1 s and 3 s
 - 2026-11-07 · `test(frontend)` · Wait for page data to settle before the axe check (HUB-436) · HUB-436 · F-19
   - The accessibility check in the console e2e no longer measures a page that is still dimmed while it reloads after a change, which made it report false contrast failures at random
 - 2026-11-07 · `docs(tickets)` · Record the HUB-435 examples and agify work (HUB-435) · HUB-435 · F-23

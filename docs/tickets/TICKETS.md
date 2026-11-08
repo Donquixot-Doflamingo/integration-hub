@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **285** · done: **204** · todo: **68** · other (in-progress/in-review/blocked): **13**
+Total tickets: **287** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **14**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **285** · done: **204** · todo: **68** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 10 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 12 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3666,6 +3666,32 @@ Concurrency inside the backend track (once the named prerequisite is done):
 - **EP-08 read endpoints:** HUB-200/201 can start once HUB-080 exists; mutations wait for EP-07.
 - **EP-09:** HUB-233/234 can run during M7.
 
+
+### HUB-442 — agify example times out on a real internet connection
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-435 · **Feature:** F-23 · **Stories:** US-2301
+- **Branch:** `fix/HUB-442-agify-example-timeouts`
+
+Found by the product owner running `AGIFY_TARGET=live examples/agify-age/run.sh serve` from India: every call answered `UPSTREAM_TIMEOUT`. The endpoint gave the vendor 1 s to connect, and the connect timeout covers DNS, TCP and the TLS handshake, which on a cold connection to a distant public API takes longer. The example copied timeouts meant for vendors on a nearby network.
+
+**Acceptance criteria**
+- [x] `estimate@1` allows 5 s to connect and 10 s in total, with a comment saying why
+- [x] The example's tests and the offline `run.sh` still pass
+- [x] The backend CI also runs when `examples/` changes (its tests load the examples; before, such PRs only ran hygiene)
+- [x] The lint job builds golangci-lint from the Go module proxy (`install-mode: goinstall`), so a failing GitHub release download no longer fails CI
+- [x] The monitoring job retries the promtool release download (checksum unchanged) and, if GitHub's release download is still down, falls back to the same promtool version from the official `prom/prometheus` image
+- [x] The itest job's limit is 20 min (it took 540-618 s against a 10 min limit and was cancelled on main and on this PR); HUB-443 makes the suite faster
+
+### HUB-443 — Make the backend integration suite fast again
+- **Epic:** EP-14 · **Type:** perf · **Area:** infra
+- **Status:** todo · **Depends on:** HUB-442 · **Feature:** F-23 · **Stories:** —
+
+`make itest` takes 540-618 s in CI since EP-14 and runs packages one at a time (`-p 1`). HUB-442 raised the job limit from 10 to 20 minutes so it stops being cancelled; this ticket brings it back well under 10.
+
+**Acceptance criteria**
+- [ ] Profile the slowest packages and tests (go test -json timings from CI)
+- [ ] Run independent packages in parallel with a database and Redis DB per package, or split the job into shards
+- [ ] itest under 6 minutes in CI on three consecutive runs; job limit back to 10 minutes
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
