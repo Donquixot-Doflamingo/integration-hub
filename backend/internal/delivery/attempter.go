@@ -263,6 +263,20 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 		return r
 	}
 
+	if att.Truncated {
+		// The body exceeded the response cap and was cut: neither a pass-through body nor a
+		// transformer's input can be trusted. UPSTREAM_REJECTED because the same call returns
+		// the same oversized body, so it is never retried (UPSTREAM_UNAVAILABLE would be, by
+		// code), and the breaker does not count it: it says nothing about the vendor's health.
+		// The audit trail already holds vendor.responded with truncated=true.
+		adm.record(a.now(), upstream.OutcomeIgnore)
+		a.Log.WarnContext(ctx, "upstream response truncated", slog.String("integration", integration), slog.Int("status", att.Response.Status))
+		s := att.Response.Status
+		r.Err = &core.CanonicalError{Code: core.CodeUpstreamRejected, Message: "The upstream response was too large to process",
+			Reason: core.Ptr("response_truncated"), Upstream: &core.Upstream{Status: &s}}
+		return r
+	}
+
 	if respProg == nil {
 		a.passThrough(j, &r, n, att, adm)
 		return r
