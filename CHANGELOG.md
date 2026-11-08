@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(control)` · Explain an unloadable snapshot, and re-check the archive under its lock before overwriting it (HUB-451) · HUB-451 · F-16
+  - When the newest archived snapshot cannot be loaded, the admin API answers 500 INTERNAL_ERROR naming the snapshot version and the cause (meta.snapshot_version, meta.cause) instead of a bare "Internal error"
+  - Nodes log one ERROR naming the version and the way out, repeated at most every 10 minutes, instead of a warning every 5 s
+  - The config-directory archive and the legacy upgrade check the latest version under the archive lock, so a console publish that lands in between is no longer overwritten by an older tree
 - 2026-11-08 · `fix(control)` · Publish without the connection deadlock, and archive the snapshot with its change in one transaction (HUB-451) · HUB-451 · F-16
   - Many concurrent admin edits no longer hang every admin database call: waiting for the edit lock holds no pool connection
   - A snapshot and its change-log row commit together; a failed change-log write no longer leaves a live snapshot without a change

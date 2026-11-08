@@ -203,6 +203,10 @@ func (a *Archive) PublishWith(ctx context.Context, src registry.Sources, snap *r
 	return version, true, nil
 }
 
+// ErrArchiveRefused marks a PublishOptions.Guard refusal: the caller's earlier read of the
+// archive is stale, so nothing was written.
+var ErrArchiveRefused = errors.New("archive publish refused")
+
 // ErrNoSnapshot means the archive is empty.
 var ErrNoSnapshot = errors.New("no archived snapshot")
 
