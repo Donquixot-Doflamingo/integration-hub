@@ -2,7 +2,7 @@
 
 An operator can onboard a new API from the console alone: no code, no PR, no contract change (ADR-0023). This page walks through every step with a real public API, the age estimate of [agify.io](https://agify.io/documentation), and shows the console clicks, the hubmcp tool calls and the admin API for each. The runnable version is `examples/agify-age/`; the backend proof is `TestAgifyOnboardedWithoutCapabilities` (`backend/cmd/hub/internal/roles/agify_integration_test.go`) and the console proof is `frontend/e2e/onboarding.test.ts`.
 
-**The goal.** Callers send `{"firstName": "Mich", "lastName": "ael"}`. The Hub calls `GET https://api.agify.io/?name=Michael`. Agify answers `{"count": 21, "name": "Michael", "age": 57}`. Callers get back only `{"age": 57}`.
+**The goal.** Callers send `{"firstName": "harsh", "lastName": "Khandelwal"}`. The Hub calls `GET https://api.agify.io/?name=harsh%20Khandelwal`. Agify answers `{"count": 1744, "name": "harsh Khandelwal", "age": 29}`. Callers get back only `{"age": 29}`.
 
 ## Contents
 - [The pieces and the order](#the-pieces-and-the-order)
@@ -24,7 +24,7 @@ An operator can onboard a new API from the console alone: no code, no PR, no con
 | 1 | Vendor | `agify`, auth scheme `none`, region `global` → `https://api.agify.io` | `admin` |
 | 2 | Endpoint | `agify.estimate@1`: `GET /`, query `name` required | `admin` |
 | 3 | Account | `agify-public`, no credentials | `admin` |
-| 4 | Request transformer | `AGE-REQ@1`: `query.name = req.firstName + req.lastName`, one sample | `editor` |
+| 4 | Request transformer | `AGE-REQ@1`: `query.name = req.firstName + " " + req.lastName`, one sample | `editor` |
 | 5 | Response transformer | `AGE-RES@1`: `age = res.body.age`, one sample (optional) | `editor` |
 | 6 | Integration | `int_age_estimate`, operation `default` with required `firstName` and `lastName` | `editor` |
 | 7 | Publish | v1, `sync` | `editor` |
@@ -51,7 +51,7 @@ Use `none` only for APIs that need no credentials at all. Any other scheme needs
 
 The endpoint declares what the vendor accepts: `query`, `headers`, `body` and `path` parameters, each a JSON Schema whose `required` list marks required fields. Every other field is optional. Leave out a part the endpoint does not take. Never declare credential headers or query values set from `creds.*`: they are not checked.
 
-- **Console:** Vendors → `agify` → **Add endpoint** → Name `estimate`, Method `GET`, Path `/` → in **Query parameters**, **Paste a sample** `{ "name": "Michael" }` → **Generate fields** → tick **name required** → reason → **Add endpoint**. The endpoint page then lists `name  string  Required`.
+- **Console:** Vendors → `agify` → **Add endpoint** → Name `estimate`, Method `GET`, Path `/` → in **Query parameters**, **Paste a sample** `{ "name": "harsh Khandelwal" }` → **Generate fields** → tick **name required** → reason → **Add endpoint**. The endpoint page then lists `name  string  Required`.
 - **MCP:**
   ```json
   hub_admin_create_vendor_endpoint {
@@ -92,20 +92,22 @@ request:
   method: GET
   path: /
   query:
-    name: req.firstName + req.lastName
+    name: 'req.firstName + " " + req.lastName'
 ```
+
+Join with a space: agify expects the full name ("harsh Khandelwal" answers age 29); joined without one ("harshKhandelwal") it knows no such name and answers `age: null`. Quote an expression that contains `" "` so YAML keeps it as one string.
 
 Sample `full_name`:
 ```json
 { "name": "full_name",
-  "input": { "firstName": "Mich", "lastName": "ael" },
-  "expected_request": { "method": "GET", "path": "/", "query": { "name": "Michael" } } }
+  "input": { "firstName": "harsh", "lastName": "Khandelwal" },
+  "expected_request": { "method": "GET", "path": "/", "query": { "name": "harsh Khandelwal" } } }
 ```
 
 - **Console:** Transformers → **New transformer** → Transformer id `AGE-REQ`, Kind `request`, Vendor endpoint `agify.estimate@1`, vendor documentation URL, paste the YAML into **Source (transformer YAML)** → Sample 1: Name `full_name`, **Input body**, **Expected vendor request** (and **Add sample** for more) → **Run samples on this draft**. **Create AGE-REQ@1** stays disabled until the exact draft passes; a failing sample shows "Why sample … fails" with the field (for example `/query/name: must NOT have fewer than 1 characters`). Then **Create AGE-REQ@1** → reason → confirm.
 - **MCP:**
   1. `hub_admin_run_transformer_goldens {"draft": {"kind": "request", "vendor_endpoint": "agify.estimate@1", "yaml": "..."}, "fixtures": [<sample>]}` → per sample `passed`, `diff` and `schema_errors` (`field`, `message`).
-  2. Optional: `hub_admin_dry_run_transformer {"draft": {...}, "account_id": "agify-public", "input": {"firstName": "Mich", "lastName": "ael"}}` → the vendor request and `schema_errors`.
+  2. Optional: `hub_admin_dry_run_transformer {"draft": {...}, "account_id": "agify-public", "input": {"firstName": "harsh", "lastName": "Khandelwal"}}` → the vendor request and `schema_errors`.
   3. `hub_admin_create_transformer_version {"transformer_id": "AGE-REQ", "kind": "request", "vendor_endpoint": "agify.estimate@1", "yaml": "...", "fixtures": [<sample>], "docs_url": "https://agify.io/documentation", "reason": "Name from first and last name"}` → `AGE-REQ@1`, or 422 with `details[]` (`keyword` `goldens_pass` or `endpoint_schema`, `field` such as `/query/name`, the sample name). Nothing is stored on a refusal.
 - **Admin API:** `runTransformerGoldens`, `dryRunTransformer`, `createTransformerVersion` (`POST /admin/v1/transformers/AGE-REQ/versions`).
 
@@ -132,8 +134,8 @@ Sample `known_name`:
 ```json
 { "name": "known_name",
   "vendor_response": { "status": 200, "headers": { "Content-Type": "application/json" },
-                       "body": { "count": 21, "name": "Michael", "age": 57 } },
-  "expected_response": { "age": 57 } }
+                       "body": { "count": 1744, "name": "harsh Khandelwal", "age": 29 } },
+  "expected_response": { "age": 29 } }
 ```
 
 - **Console:** Transformers → **New transformer** → id `AGE-RES`, Kind `response` (no vendor endpoint field), source, Sample 1 with **Vendor response** and **Expected output** → **Run samples on this draft** → **Create AGE-RES@1**.
@@ -186,7 +188,7 @@ Create the id first, then its first draft. The draft holds the **operations** (t
 
 Leave `response` out (or `null`) for pass-through.
 
-- **Console:** on the draft form, **Operation default** → Description (shown to callers), tick **Idempotent**, keep the **Check live calls against the request schema** switch on → in **Request body**, **Paste a sample** `{ "firstName": "Mich", "lastName": "ael" }` → **Generate fields** (generated fields start required; untick the optional ones). Add **Request headers** only if the transformer reads `hdr.*`. **Add operation** for multi-step flows. Then **Add target** → Vendor `agify`, Account `agify-public`, Weight 100, Request transformer `AGE-REQ@1`, Response transformer (optional) `AGE-RES@1` → Mode `sync` → Why this version → **Create draft**.
+- **Console:** on the draft form, **Operation default** → Description (shown to callers), tick **Idempotent**, keep the **Check live calls against the request schema** switch on → in **Request body**, **Paste a sample** `{ "firstName": "harsh", "lastName": "Khandelwal" }` → **Generate fields** (generated fields start required; untick the optional ones). Add **Request headers** only if the transformer reads `hdr.*`. **Add operation** for multi-step flows. Then **Add target** → Vendor `agify`, Account `agify-public`, Weight 100, Request transformer `AGE-REQ@1`, Response transformer (optional) `AGE-RES@1` → Mode `sync` → Why this version → **Create draft**.
 - **MCP:** `hub_admin_create_integration_draft {"integration_id": "int_age_estimate", "spec": {...above...}, "reason": "First version"}` → version 1. Fix it later with `hub_admin_update_integration_draft` (full spec).
 - **Admin API:** `createIntegrationDraft`, `updateIntegrationDraft`.
 
@@ -213,10 +215,10 @@ Nodes pick the new snapshot up within about 10 s.
 ```bash
 curl -s -i -X POST "$HUB_BASE_URL/v1/integrations/int_age_estimate/invoke" \
   -H "Authorization: Bearer $HUB_API_KEY" -H "Content-Type: application/json" \
-  -d '{"firstName": "Mich", "lastName": "ael"}'
-# 200 {"age": 57}
+  -d '{"firstName": "harsh", "lastName": "Khandelwal"}'
+# 200 {"age": 29}
 # without lastName: 400 VALIDATION_FAILED (details[] names /lastName)
-# with v2 published without AGE-RES: 200 {"count": 21, "name": "Michael", "age": 57}, X-Hub-Pass-Through: true
+# with v2 published without AGE-RES: 200 {"count": 1744, "name": "harsh Khandelwal", "age": 29}, X-Hub-Pass-Through: true
 ```
 
 - `hubctl dry-run int_age_estimate body.json` (or MCP `hub_dry_run`, key scope `dry_run`) shows the request the active version would send. Nothing is sent.

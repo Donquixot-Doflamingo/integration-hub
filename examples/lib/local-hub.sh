@@ -20,7 +20,13 @@ HUB_DEMO_OPS="${HUB_DEMO_OPS:-127.0.0.1:18090}"
 MOCKVENDOR_ADDR="${MOCKVENDOR_ADDR:-127.0.0.1:8099}"
 MOCKVENDOR_CONTROL_ADDR="${MOCKVENDOR_CONTROL_ADDR:-127.0.0.1:8098}"
 HUB_URL="http://$HUB_DEMO_HTTP"
-export HUB_PG_DSN="${HUB_PG_DSN:-postgres://hub:hub@localhost:5432/hub?sslmode=disable}"
+# The examples use their own database unless HUB_PG_DSN is set: sharing the dev stack's database
+# (make dev-up, the console) made an example's gateway see the console's published snapshots
+# (HUB-445). hub_setup creates hub_examples when it is missing.
+if [ -z "${HUB_PG_DSN:-}" ]; then
+  export HUB_PG_DSN="postgres://hub:hub@localhost:5432/hub_examples?sslmode=disable"
+  _hub_own_db=hub_examples
+fi
 export HUB_REDIS_ADDR="${HUB_REDIS_ADDR:-localhost:6379}"
 export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,::1}" no_proxy="${no_proxy:-localhost,127.0.0.1,::1}"
 
@@ -30,6 +36,22 @@ _hub_pids=()
 
 hub_log() { printf '\033[2m%s\033[0m %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 hub_die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+# _hub_ensure_db NAME: create database NAME on the local dev Postgres when it does not exist yet,
+# through the docker compose service or psql, whichever is there.
+_hub_ensure_db() {
+  local db="$1" admin="postgres://hub:hub@localhost:5432/hub?sslmode=disable"
+  local q="SELECT 1 FROM pg_database WHERE datname = '$db'"
+  local compose=(docker compose -f "$_hub_root/deploy/docker-compose.yml")
+  if command -v docker >/dev/null 2>&1 && [ -n "$("${compose[@]}" ps -q postgres 2>/dev/null)" ]; then
+    "${compose[@]}" exec -T postgres psql -U hub -d hub -tAc "$q" | grep -q 1 ||
+      "${compose[@]}" exec -T postgres createdb -U hub "$db"
+  elif command -v psql >/dev/null 2>&1; then
+    psql "$admin" -tAc "$q" | grep -q 1 || psql "$admin" -qc "CREATE DATABASE $db"
+  else
+    return 1
+  fi
+}
 
 # _merge_overlay SRC DST: copy every file of SRC into DST, refusing to overwrite (the overlay
 # only adds objects, like the Go tests' mergeOverlay).
@@ -54,6 +76,10 @@ hub_setup() {
   command -v python3 >/dev/null || hub_die "python3 is required"
   hub_log "building the Hub binaries (backend/bin)"
   make -C "$_hub_root/backend" build >/dev/null
+  if [ -n "${_hub_own_db:-}" ]; then
+    _hub_ensure_db "$_hub_own_db" >/dev/null 2>"$state/migrate.log" ||
+      hub_die "cannot create the $_hub_own_db database (is Postgres up? docker compose -f deploy/docker-compose.yml up -d), or set HUB_PG_DSN; see $state/migrate.log"
+  fi
   hub_log "checking Postgres ($HUB_PG_DSN) and migrating"
   "$_hub_bin/hub" migrate >/dev/null 2>"$state/migrate.log" ||
     hub_die "cannot migrate $HUB_PG_DSN (is Postgres up? docker compose -f deploy/docker-compose.yml up -d); see $state/migrate.log"

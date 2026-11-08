@@ -2,13 +2,13 @@
 # Age by name through a local Hub (HUB-435): int_age_by_name turns {firstName, lastName} into
 # GET https://api.agify.io?name=<firstName><lastName> and returns only {"age"}. See README.md.
 #
-#   examples/agify-age/run.sh                     # offline: mockvendor answers like agify ("harsh", 29)
+#   examples/agify-age/run.sh                     # offline: mockvendor answers like agify ("harsh Khandelwal", 29)
 #   examples/agify-age/run.sh unknown-name        # another mock scenario (see mockvendor/*.json)
 #   examples/agify-age/run.sh rate-limited
 #   AGIFY_TARGET=live examples/agify-age/run.sh   # the real public API (free, small daily allowance)
 #   examples/agify-age/run.sh serve               # start and keep running; call it yourself
 #
-# Optional: FIRST_NAME (default har), LAST_NAME (default sh), HUB_PG_DSN, HUB_REDIS_ADDR, and the
+# Optional: FIRST_NAME (default harsh), LAST_NAME (default Khandelwal), HUB_PG_DSN, HUB_REDIS_ADDR, and the
 # ports of ../lib/local-hub.sh. Postgres + Redis must be up.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -18,8 +18,8 @@ source "$root/examples/lib/local-hub.sh"
 
 target="${AGIFY_TARGET:-mock}"
 scenario="${1:-found}"
-first="${FIRST_NAME:-har}"
-last="${LAST_NAME:-sh}"
+first="${FIRST_NAME:-harsh}"
+last="${LAST_NAME:-Khandelwal}"
 export HUB_DEMO_KEY=hk_test_example_age_demo_local_only # local test key (tenant age-demo)
 
 hub_setup "${HUB_DEMO_STATE_DIR:-$root/.demo/agify-age}" "$here"

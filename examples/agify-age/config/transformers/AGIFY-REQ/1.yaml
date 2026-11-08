@@ -1,8 +1,9 @@
 # EXAMPLE ONLY (HUB-435). agify.io age estimate, checked on 2026-11-07 against
 # https://agify.io/documentation/api/reference (AGENTS §3.3): GET https://api.agify.io?name=<name>.
-# The name is the first name followed by the last name, as the integration owner asked
-# ({"firstName": "har", "lastName": "sh"} -> ?name=harsh). The docs recommend sending the full name
-# ("Sarah Johnson"); a mapping with a space would be 'req.firstName + " " + req.lastName'.
+# The name is the full name, first and last joined by a space, as the docs recommend ("Sarah
+# Johnson"): {"firstName": "harsh", "lastName": "Khandelwal"} -> ?name=harsh Khandelwal, which agify
+# answers with age 29. Joined without a space ("harshKhandelwal") agify knows no such name and
+# answers age null (checked live on 2026-11-08, HUB-445).
 # No credential: the vendor's auth scheme is none (a paid key would go in query.apikey from creds.*).
 transformer: AGIFY-REQ
 version: 1
@@ -13,4 +14,4 @@ request:
   method: GET
   path: /
   query:
-    name: req.firstName + req.lastName
+    name: 'req.firstName + " " + req.lastName'

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **288** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **15**
+Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **16**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **288** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 13 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 14 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3709,6 +3709,22 @@ The extras went back to the queue and waited for a later claim. Fast machines ne
 - [x] `TestClaimDoesNotRetakeReservedSlots` (integration) fails without either half and passes with both; `TestClaimReservesSlotsUntilTheAttemptStarts` (unit)
 - [x] Queue, delivery and edge integration suites and `make test` green; golangci-lint clean; ISOLATION.md updated
 
+
+### HUB-445 — The agify example still fails live: wrong name join, slow DNS, shared database
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-442 · **Feature:** F-23 · **Stories:** US-2301
+- **Branch:** `fix/HUB-445-agify-space-own-db`
+
+Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called from that network):
+1. **Name join.** agify answers `{"count":0,"name":"harshKhandelwal","age":null}` for the names joined without a space, and age 29 for "harsh Khandelwal". The example sent the joined form, so even a successful call would return `{}`.
+2. **Slow DNS.** DNS for api.agify.io took up to 5 s, then about 1 s for TCP + TLS. The connect timeout covers all three, so 5 s was still too tight.
+3. **Shared database.** The example's gateway shared the dev stack's database and saw the console's published snapshots: a warning every 5 s, refused only because the blob path was outside the example's folder.
+
+**Acceptance criteria**
+- [x] AGIFY-REQ joins with a space (`req.firstName + " " + req.lastName`); samples, mock scenario, tests, README and the hub-operator walkthrough follow
+- [x] estimate@1 allows 10 s to connect and 15 s in total
+- [x] The examples use their own `hub_examples` database unless HUB_PG_DSN is set, and create it when missing
+- [x] Example tests and the offline run.sh pass with a fresh database
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
