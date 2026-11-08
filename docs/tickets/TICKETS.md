@@ -3767,6 +3767,6 @@ Four bugs in `backend/internal/transform`, found by review and reproduced by run
 **Acceptance criteria**
 - [x] Any `$`-prefixed identifier (`$env`) is rejected at compile time in body, headers, query, auth and session; existing transformers still compile
 - [x] currencyMinor knows the full ISO 4217 minor-unit table and refuses an unknown currency code
-- [ ] NaN and ±Inf anywhere in a request or response transformer's output fail with an EvalError (TRANSFORM_FAILED)
+- [x] NaN and ±Inf anywhere in a request or response transformer's output fail with an EvalError (TRANSFORM_FAILED)
 - [ ] format() formats whole-number floats as integers and returns an error on a bad verb or wrong type (`%!`)
 - [ ] Each bug has a failing table-driven test first; `go test -race ./internal/transform/...` and the config-loading packages are green

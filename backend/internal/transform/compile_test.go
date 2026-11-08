@@ -27,7 +27,7 @@ func TestCompileRejects(t *testing.T) {
 		{"$env creds in header", reqHead + "  headers:\n    Authorization: '\"Bearer \" + $env.creds.token'\n", "request.headers.Authorization: $env is not available"},
 		{"$env creds in session", respHead + "session:\n  tok: $env.creds.token\nresponse:\n  a: res.status\n", "$env is not available"},
 		{"$env whole environment", reqHead + "  body:\n    key: toJSON($env)\n", "request.body.key: $env is not available"},
-		{"unknown variable",reqHead + "  body:\n    x: secrets.key\n", "request.body.x: unknown name secrets"},
+		{"unknown variable", reqHead + "  body:\n    x: secrets.key\n", "request.body.x: unknown name secrets"},
 		{"disabled loop builtin", reqHead + "  body:\n    x: 'reduce([1, 2], # + #acc, 0)'\n", "request.body.x: unknown name reduce"},
 		{"syntax error", reqHead + "  body:\n    x: req.user.id ==\n", "request.body.x: syntax:"},
 		{"too deep", reqHead + "  body:\n    x: " + strings.Repeat("(", 30) + "1" + strings.Repeat(")", 30) + "\n", "request.body.x: expression is nested 30 deep, limit 24"},

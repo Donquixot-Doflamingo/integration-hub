@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(transform)` · Fail a transformer run that produces NaN or Inf (HUB-447) · HUB-447 · F-04
+  - A division by zero in a mapping (`req.a / req.b`) now fails the call as TRANSFORM_FAILED before it leaves the Hub; it no longer breaks body encoding or sends "+Inf" as a header or query value
 - 2026-11-08 · `fix(transform)` · Use the full ISO 4217 minor-unit table in currencyMinor (HUB-447) · HUB-447 · F-04
   - `currencyMinor("1000", "XOF")` is 1000, not 100000: every zero-decimal currency (XOF, XAF, XPF, UGX, ISK and others), the 3-digit ones and CLF/UYW (4) are known
   - An unknown currency code is refused instead of being assumed to have 2 decimals
