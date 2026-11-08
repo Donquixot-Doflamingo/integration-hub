@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(delivery)` · Hold the drain while the shared breaker state is unreadable (HUB-453) · HUB-453 · F-12
+  - When Redis is down the scheduler no longer releases parked requests at the full account rate against a vendor whose circuit may be open; it holds them and resumes when the state is readable
+  - New gauge `drain_held{reason}` and logs `drain.held` / `drain.resumed`
 - 2026-11-08 · `fix(delivery)` · Do not count a credential cache miss as a delivery attempt (HUB-453) · HUB-453 · F-09
   - A credential outage no longer dead-letters healthy requests: a request whose account credentials are not in the cache waits 5 s without using up its retry schedule
   - New metric `worker_credentials_deferred_total{account}` and WARN log `worker.credentials_unavailable` show it to operators
