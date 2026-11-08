@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(transform)` · Make format() work on JSON numbers and fail on a bad layout (HUB-447) · HUB-447 · F-04
+  - `format("%d", req.n)` and `format("%s", req.n)` print `3` for a JSON number 3, and `format("%v", 1000000.0)` prints `1000000`; `%.2f` still prints a float
+  - A layout with a bad verb, a wrong argument type or the wrong number of arguments fails the call as TRANSFORM_FAILED instead of sending `%!d(float64=3)` to the vendor
 - 2026-11-08 · `fix(transform)` · Fail a transformer run that produces NaN or Inf (HUB-447) · HUB-447 · F-04
   - A division by zero in a mapping (`req.a / req.b`) now fails the call as TRANSFORM_FAILED before it leaves the Hub; it no longer breaks body encoding or sends "+Inf" as a header or query value
 - 2026-11-08 · `fix(transform)` · Use the full ISO 4217 minor-unit table in currencyMinor (HUB-447) · HUB-447 · F-04

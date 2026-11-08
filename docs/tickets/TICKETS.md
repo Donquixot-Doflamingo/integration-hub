@@ -3755,7 +3755,7 @@ Anything that delays these tickets delays Release 1. The admin console and MCP t
 
 ### HUB-447 — Transformer bugs: creds guard bypass, zero-decimal currencies, NaN/Inf, format()
 - **Epic:** EP-14 · **Type:** fix · **Area:** backend
-- **Status:** in-progress · **Depends on:** — · **Feature:** F-04 · **Stories:** —
+- **Status:** in-review · **Depends on:** — · **Feature:** F-04 · **Stories:** —
 - **Branch:** `fix/HUB-447-transform-bugs`
 
 Four bugs in `backend/internal/transform`, found by review and reproduced by running code:
@@ -3768,5 +3768,5 @@ Four bugs in `backend/internal/transform`, found by review and reproduced by run
 - [x] Any `$`-prefixed identifier (`$env`) is rejected at compile time in body, headers, query, auth and session; existing transformers still compile
 - [x] currencyMinor knows the full ISO 4217 minor-unit table and refuses an unknown currency code
 - [x] NaN and ±Inf anywhere in a request or response transformer's output fail with an EvalError (TRANSFORM_FAILED)
-- [ ] format() formats whole-number floats as integers and returns an error on a bad verb or wrong type (`%!`)
-- [ ] Each bug has a failing table-driven test first; `go test -race ./internal/transform/...` and the config-loading packages are green
+- [x] format() formats whole-number floats as integers and returns an error on a bad verb or wrong type (`%!`)
+- [x] Each bug has a failing table-driven test first; `go test -race ./internal/transform/...` and the config-loading packages are green
