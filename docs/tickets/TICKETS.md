@@ -3677,6 +3677,7 @@ Found by the product owner running `AGIFY_TARGET=live examples/agify-age/run.sh 
 **Acceptance criteria**
 - [x] `estimate@1` allows 5 s to connect and 10 s in total, with a comment saying why
 - [x] The example's tests and the offline `run.sh` still pass
+- [x] The backend CI also runs when `examples/` changes (its tests load the examples; before, such PRs only ran hygiene)
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.

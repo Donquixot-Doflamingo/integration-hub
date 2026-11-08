@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `ci(backend)` · Run the backend CI when examples change (HUB-442) · HUB-442 · F-23
+  - A change under examples/ now runs the backend tests that load the examples; until now only the hygiene check ran on such PRs
 - 2026-11-08 · `fix(examples)` · Give the agify example time to connect over the internet (HUB-442) · HUB-442 · F-23
   - `AGIFY_TARGET=live` no longer times out on a cold connection: the endpoint allows 5 s to connect (DNS, TCP and TLS) and 10 s in total, instead of 1 s and 3 s
 - 2026-11-07 · `test(frontend)` · Wait for page data to settle before the axe check (HUB-436) · HUB-436 · F-19

@@ -5,10 +5,10 @@ name: backend
 
 on:
   pull_request:
-    paths: ["backend/**", "contracts/**", "deploy/**", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "contracts/**", "deploy/**", "examples/**", ".github/workflows/backend.yml"]
   push:
     branches: [main]
-    paths: ["backend/**", "contracts/**", "deploy/**", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "contracts/**", "deploy/**", "examples/**", ".github/workflows/backend.yml"]
 
 concurrency:
   group: backend-${{ github.ref }}
