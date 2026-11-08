@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **16**
+Total tickets: **290** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **17**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 14 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 15 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3725,6 +3725,25 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 - [x] estimate@1 allows 10 s to connect and 15 s in total
 - [x] The examples use their own `hub_examples` database unless HUB_PG_DSN is set, and create it when missing
 - [x] Example tests and the offline run.sh pass with a fresh database
+### HUB-454 — Credential cache noise and stale loader; a failed listener leaves the process hanging
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-progress · **Depends on:** HUB-084 · **Feature:** F-07 · **Stories:** US-0701
+- **Branch:** `fix/HUB-454-creds-and-run-lifecycle`
+
+Reviewer findings:
+1. Every cache miss kicks a reload (1 per second at most). With the secrets file missing each reload reads the file, counts `creds_decrypts_total` and logs two lines, a pair per second under traffic. A missing secrets file was an error, so a gateway on the dev config with no `hubctl creds set` run warned every 150 s forever.
+2. A key file missing at start made the loader an empty one for the life of the process: `hubctl creds init-key` later never took effect, and the rotation ping logged `credentials reloaded after rotation` at Info with an empty cache.
+3. When a listener failed at runtime the context was not cancelled, so `wg.Wait()` blocked on the watchers and the process never exited with code 1; a second SIGTERM was swallowed until `run` returned.
+
+**Acceptance criteria**
+- [ ] Miss-triggered reloads back off exponentially after consecutive failures, up to the periodic refresh interval; a failure is logged once per state change and recovery once
+- [ ] `credentials decrypted` is not logged, and `creds_decrypts_total` not incremented, when nothing was decrypted
+- [ ] A missing secrets file is an empty store (one warning at startup naming the path); an unreadable, corrupt or undecryptable file stays an error
+- [ ] The key file and secrets file are re-opened on every refresh; the rotation log line is a warning when nothing loaded
+- [ ] A listener that fails at runtime cancels the role and `Run` returns that error; the first signal restores default handling so a second one terminates
+- [ ] Readiness behaviour in the ops docs unchanged
+
+
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
