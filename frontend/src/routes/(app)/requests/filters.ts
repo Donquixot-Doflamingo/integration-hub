@@ -1,4 +1,5 @@
 import type { RequestState, SearchRequestsQuery } from '$lib/api/types';
+import { droppedFields, SLUG_PROBLEM, type FilterProblems } from '$lib/utils/filter-problems';
 import { pagingParams, parsePaging, type Paging } from '$lib/utils/paging';
 import { lastRange, normalizeTime, timeChip, toLocalInput } from '$lib/utils/time';
 
@@ -150,25 +151,54 @@ export function chipValue(
 	return filters[key] ?? '';
 }
 
-/** The search form -> filters (empty fields dropped; times from `datetime-local`, read as UTC). */
-export function filtersFromForm(form: FormData): { filters: Filters; limit: number | null } {
+const problemMessages: Record<FilterKey, string> = {
+	tenant_id: SLUG_PROBLEM,
+	integration_id: SLUG_PROBLEM,
+	vendor_id: SLUG_PROBLEM,
+	account_id: SLUG_PROBLEM,
+	idempotency_key: 'Use at most 256 characters.',
+	status: 'Pick a listed status.',
+	code: 'Use upper-case codes of letters, digits and "_", e.g. UPSTREAM_TIMEOUT.',
+	from: 'Enter a valid date and time.',
+	to: 'Enter a valid date and time.'
+};
+
+/**
+ * The search form -> filters (empty fields dropped; times from `datetime-local`, read as UTC).
+ * `problems` names each non-empty field that did not fit its rule: the page marks it and does not
+ * search, rather than listing everything with the filter silently gone (HUB-455).
+ */
+export function filtersFromForm(form: FormData): {
+	filters: Filters;
+	limit: number | null;
+	problems: FilterProblems<FilterKey>;
+} {
 	const params = new URLSearchParams();
+	const raw: Partial<Record<FilterKey, string>> = {};
 	for (const key of TEXT_KEYS) {
 		const v = form.get(key);
-		if (typeof v === 'string' && v.trim()) params.set(key, v.trim());
+		if (typeof v === 'string' && v.trim()) {
+			params.set(key, v.trim());
+			raw[key] = v.trim();
+		}
 	}
 	const status = form.getAll('status').filter((v): v is string => typeof v === 'string');
 	if (status.length) params.set('status', status.join(','));
 	const code = form.get('code');
 	if (typeof code === 'string' && code.trim())
 		params.set('code', list(code.toUpperCase().replace(/\s+/g, ',')).join(','));
+	if (params.get('code')) raw.code = params.get('code')!;
 	for (const key of ['from', 'to'] as const) {
-		const v = normalizeTime(String(form.get(key) ?? ''));
+		const text = String(form.get(key) ?? '').trim();
+		if (text) raw[key] = text;
+		const v = normalizeTime(text);
 		if (v) params.set(key, v);
 	}
 	const limit = Number(form.get('limit'));
+	const filters = parseSearch(params).filters;
 	return {
-		filters: parseSearch(params).filters,
+		filters,
+		problems: droppedFields(raw, filters, problemMessages),
 		limit: Number.isFinite(limit) && limit > 0 ? limit : null
 	};
 }

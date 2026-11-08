@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(frontend)` · Mark filter values that do not fit instead of silently dropping them (HUB-455) · HUB-455 · F-19
+  - Requests, DLQ and change-log filters: a value such as tenant "ab" or "my tenant" now shows a message under its field (and a summary alert) and the search does not run, instead of listing everything with no chip
+  - In the DLQ this keeps replay and purge counts tied to exactly the filters the operator sees
+
 - 2026-11-08 · `fix(frontend)` · Let an expired session sign in again from error panels and action callbacks (HUB-455) · HUB-455 · F-19
   - An "Unauthorized" error panel offers a Sign in link (back to the same page) instead of a Retry that repeats the 401
   - Goldens, dry run, connection test, DLQ count, draft save and the authoring forms follow the action's sign-in redirect instead of showing "Try again" forever

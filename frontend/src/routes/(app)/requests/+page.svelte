@@ -1,6 +1,9 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import FieldError from '$lib/components/FieldError.svelte';
+	import FormProblems from '$lib/components/FormProblems.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import ListView from '$lib/components/ListView.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -9,6 +12,7 @@
 	import { sectionFor } from '$lib/nav';
 	import { requestStatus } from '$lib/status';
 	import { formatDurationMs, formatNumber, formatUtc } from '$lib/utils/format';
+	import type { FilterProblems } from '$lib/utils/filter-problems';
 	import { DEFAULT_PAGE_SIZE, PAGE_SIZES, type Paging } from '$lib/utils/paging';
 	import type { PageData } from './$types';
 	import {
@@ -22,7 +26,8 @@
 		searchFor,
 		toLocalInput,
 		without,
-		type Filters
+		type Filters,
+		type FilterKey
 	} from './filters';
 
 	let { data }: { data: PageData } = $props();
@@ -48,12 +53,35 @@
 		{ label: 'Last 7 days', ms: 7 * 86_400_000 }
 	];
 
+	// Filters whose text does not fit its rule: marked, and the search does not run (HUB-455).
+	let problems = $state.raw<FilterProblems<FilterKey>>({});
+	const problemItems = $derived(
+		(Object.entries(problems) as [FilterKey, string][]).map(([k, message]) => ({
+			label: filterLabels[k],
+			message
+		}))
+	);
+	// New URL state (a search, a chip removed): the marks belonged to the old form text.
+	$effect(() => {
+		void data.state;
+		problems = {};
+	});
+
 	function onsubmit(e: SubmitEvent) {
 		// Without JS the browser submits the GET form as is; with JS, build a clean URL.
 		e.preventDefault();
-		const { filters: next, limit } = filtersFromForm(
-			new FormData(e.currentTarget as HTMLFormElement)
-		);
+		const form = e.currentTarget as HTMLFormElement;
+		const { filters: next, limit, problems: found } = filtersFromForm(new FormData(form));
+		problems = found;
+		// A value that does not fit is not searched without: mark it and stay (HUB-455).
+		if (Object.keys(found).length) {
+			tick().then(() =>
+				form
+					.querySelector<HTMLElement>('[aria-invalid="true"][aria-describedby$="-error"]')
+					?.focus()
+			);
+			return;
+		}
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- hrefFor builds on resolve()
 		goto(hrefFor(next, firstPage(limit ?? DEFAULT_PAGE_SIZE)), { keepFocus: true, noScroll: true });
 	}
@@ -63,6 +91,8 @@
 	title={section.label}
 	summary="Search requests by tenant, integration, status, error code, time and idempotency key. Newest first."
 />
+
+<FormProblems title="Fix these filters before searching" items={problemItems} />
 
 <form class="filters" method="GET" action={base} {onsubmit} aria-label="Search requests">
 	<div class="row">
@@ -77,11 +107,14 @@
 				<input
 					id="q-tenant"
 					name="tenant_id"
+					aria-invalid={problems.tenant_id ? 'true' : undefined}
+					aria-describedby={problems.tenant_id ? 'q-tenant-error' : undefined}
 					value={filters.tenant_id ?? ''}
 					maxlength="64"
 					placeholder="orders-service"
 					autocomplete="off"
 				/>
+				<FieldError id="q-tenant-error" message={problems.tenant_id} />
 			{/if}
 		</div>
 		<div class="field">
@@ -89,33 +122,42 @@
 			<input
 				id="q-integration"
 				name="integration_id"
+				aria-invalid={problems.integration_id ? 'true' : undefined}
+				aria-describedby={problems.integration_id ? 'q-integration-error' : undefined}
 				value={filters.integration_id ?? ''}
 				maxlength="64"
 				placeholder="int_evt_brandA"
 				autocomplete="off"
 			/>
+			<FieldError id="q-integration-error" message={problems.integration_id} />
 		</div>
 		<div class="field">
 			<label for="q-code">Error codes <span class="hint">(comma-separated, any of)</span></label>
 			<input
 				id="q-code"
 				name="code"
+				aria-invalid={problems.code ? 'true' : undefined}
+				aria-describedby={problems.code ? 'q-code-error' : undefined}
 				value={(filters.code ?? []).join(', ')}
 				maxlength="256"
 				placeholder="UPSTREAM_TIMEOUT"
 				autocomplete="off"
 			/>
+			<FieldError id="q-code-error" message={problems.code} />
 		</div>
 		<div class="field grow">
 			<label for="q-idem">Idempotency key</label>
 			<input
 				id="q-idem"
 				name="idempotency_key"
+				aria-invalid={problems.idempotency_key ? 'true' : undefined}
+				aria-describedby={problems.idempotency_key ? 'q-idem-error' : undefined}
 				value={filters.idempotency_key ?? ''}
 				maxlength="256"
 				placeholder="order-8821-created"
 				autocomplete="off"
 			/>
+			<FieldError id="q-idem-error" message={problems.idempotency_key} />
 		</div>
 		{#if !access.tenantScoped}
 			<div class="field">
@@ -123,22 +165,28 @@
 				<input
 					id="q-vendor"
 					name="vendor_id"
+					aria-invalid={problems.vendor_id ? 'true' : undefined}
+					aria-describedby={problems.vendor_id ? 'q-vendor-error' : undefined}
 					value={filters.vendor_id ?? ''}
 					maxlength="64"
 					placeholder="clevertap"
 					autocomplete="off"
 				/>
+				<FieldError id="q-vendor-error" message={problems.vendor_id} />
 			</div>
 			<div class="field">
 				<label for="q-account">Account</label>
 				<input
 					id="q-account"
 					name="account_id"
+					aria-invalid={problems.account_id ? 'true' : undefined}
+					aria-describedby={problems.account_id ? 'q-account-error' : undefined}
 					value={filters.account_id ?? ''}
 					maxlength="64"
 					placeholder="ct-brandA-in"
 					autocomplete="off"
 				/>
+				<FieldError id="q-account-error" message={problems.account_id} />
 			</div>
 		{/if}
 	</div>

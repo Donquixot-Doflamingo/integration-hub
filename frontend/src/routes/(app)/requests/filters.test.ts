@@ -101,7 +101,21 @@ describe('searchFor / filtersFromForm', () => {
 				code: ['UPSTREAM_TIMEOUT', 'UPSTREAM_REJECTED'],
 				from: '2026-10-31T09:00:00Z'
 			},
+			problems: {},
 			limit: 25
 		});
+	});
+
+	it('names the fields whose text was dropped instead of silently searching without them (HUB-455)', () => {
+		const f = new FormData();
+		f.set('tenant_id', 'ab');
+		f.set('integration_id', 'my tenant');
+		f.set('vendor_id', 'clevertap');
+		f.set('code', 'UPSTREAM_TIMEOUT 9bad');
+		f.set('from', '2026-13-45T09:00');
+		const r = filtersFromForm(f);
+		expect(Object.keys(r.problems).sort()).toEqual(['code', 'from', 'integration_id', 'tenant_id']);
+		expect(r.problems.tenant_id).toMatch(/3 to 64/);
+		expect(r.filters.vendor_id).toBe('clevertap');
 	});
 });
