@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(frontend)` · Let an operator clear an account's daily quota (HUB-455) · HUB-455 · F-19
+  - Emptying the daily quota field now sends `daily: null` instead of answering "Nothing changed"
+  - Emptying the rate field explains that the rate cannot be removed (the contract has no null for it)
+
 - 2026-11-08 · `fix(frontend)` · Show failed lookups and read every vendor in the authoring pickers (HUB-455) · HUB-455 · F-19
   - The publish editor and the transformer forms list which lookups failed (vendors, accounts, transformers, a vendor's endpoints) instead of showing empty pickers with no message
   - Endpoint suggestions now cover all vendors, not only the first 25
