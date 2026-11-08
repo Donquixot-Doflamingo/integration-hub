@@ -3679,6 +3679,7 @@ Found by the product owner running `AGIFY_TARGET=live examples/agify-age/run.sh 
 - [x] The example's tests and the offline `run.sh` still pass
 - [x] The backend CI also runs when `examples/` changes (its tests load the examples; before, such PRs only ran hygiene)
 - [x] The lint job builds golangci-lint from the Go module proxy (`install-mode: goinstall`), so a failing GitHub release download no longer fails CI
+- [x] The monitoring job retries the promtool release download (6 tries, 10 s apart; checksum unchanged)
 - [x] The itest job's limit is 20 min (it took 540-618 s against a 10 min limit and was cancelled on main and on this PR); HUB-443 makes the suite faster
 
 ### HUB-443 — Make the backend integration suite fast again

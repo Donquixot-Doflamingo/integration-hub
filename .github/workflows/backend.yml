@@ -148,7 +148,8 @@ jobs:
       - name: Install promtool (pinned release, checksum verified)
         run: |
           tgz="$RUNNER_TEMP/prometheus.tar.gz"
-          curl -sSfL -o "$tgz" "https://github.com/prometheus/prometheus/releases/download/v${PROMTOOL_VERSION}/prometheus-${PROMTOOL_VERSION}.linux-amd64.tar.gz"
+          # GitHub release downloads answer 504 at times (HUB-442): retry with a pause; the checksum still decides.
+          curl -sSfL --retry 6 --retry-delay 10 --retry-all-errors -o "$tgz" "https://github.com/prometheus/prometheus/releases/download/v${PROMTOOL_VERSION}/prometheus-${PROMTOOL_VERSION}.linux-amd64.tar.gz"
           echo "${PROMTOOL_SHA256}  $tgz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/bin"
           tar -xzf "$tgz" -C "$RUNNER_TEMP/bin" --strip-components=1 "prometheus-${PROMTOOL_VERSION}.linux-amd64/promtool"
