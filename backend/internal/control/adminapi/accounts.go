@@ -137,17 +137,13 @@ func accessPage[T any](r *http.Request, ids []string, item func(id string) T) ([
 }
 
 // accessSnapshot returns the current registry snapshot (the publisher's view, else Deps.Snapshot).
+//
+// It shares the cached snapshot of the integrations and vendors handlers (rebuilt only when the
+// archive's checksum changes): a read used to gunzip and fully rebuild the snapshot every time,
+// and stamped BuiltAt with "now", which objectTimes then used as a moving created/updated time
+// for objects older than the change log (HUB-451).
 func (s *Server) accessSnapshot(ctx context.Context) (*registry.Snapshot, error) {
-	if s.d.Publisher != nil {
-		_, snap, err := s.d.Publisher.Current(ctx)
-		return snap, err
-	}
-	if s.d.Snapshot != nil {
-		if snap := s.d.Snapshot(); snap != nil {
-			return snap, nil
-		}
-	}
-	return nil, errors.New("no registry snapshot")
+	return s.snapshot(ctx)
 }
 
 func (s *Server) accessRotator() (*control.Rotator, error) {

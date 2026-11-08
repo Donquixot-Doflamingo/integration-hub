@@ -3,7 +3,6 @@ package adminapi
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +17,7 @@ import (
 // An unloadable newest snapshot answers an actionable error (HUB-451): the version and the
 // cause, no file path, a stable meta entry, instead of "Internal error".
 func TestFailExplainsAnUnloadableSnapshot(t *testing.T) {
-	s, _ := testServer(t, Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	s, _ := testServer(t, Deps{Log: slog.New(slog.DiscardHandler)})
 	cases := []struct {
 		name string
 		err  error

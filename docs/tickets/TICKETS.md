@@ -3727,7 +3727,7 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 - [x] Example tests and the offline run.sh pass with a fresh database
 ### HUB-451 — Control plane: publish deadlock, non-atomic publish and change log, unexplained 500 on an unloadable snapshot
 - **Epic:** EP-14 · **Type:** fix · **Area:** backend
-- **Status:** in-progress · **Depends on:** — · **Feature:** F-16 · **Stories:** —
+- **Status:** in-review · **Depends on:** — · **Feature:** F-16 · **Stories:** —
 - **Branch:** `fix/HUB-451-control-plane`
 
 Reviewer findings on the admin API, the publisher and the snapshot archive:
@@ -3741,13 +3741,13 @@ Reviewer findings on the admin API, the publisher and the snapshot archive:
 8. Tenants / accounts / api-keys / registrar reads rebuilt the snapshot from the blob on every call.
 
 **Acceptance criteria**
-- [ ] Concurrent edits (more than the pool size) all finish; the edit lock holds no pool connection
-- [ ] Snapshot and change-log row commit in one transaction; `snapshot_version` is set only when a snapshot was written
-- [ ] An unloadable newest snapshot answers an actionable error naming the version and cause; nodes log one ERROR naming the version and the fix, rate-limited
-- [ ] The config-directory archive and the legacy upgrade check the latest version under the archive lock
-- [ ] Empty or unknown `owner_tenant` is 400 VALIDATION_FAILED at `/owner_tenant`
-- [ ] Malformed cursors are 400; API-key scopes are sorted and unique
-- [ ] Access reads reuse a snapshot cached by archive checksum
+- [x] Concurrent edits (more than the pool size) all finish; the edit lock holds no pool connection
+- [x] Snapshot and change-log row commit in one transaction; `snapshot_version` is set only when a snapshot was written
+- [x] An unloadable newest snapshot answers an actionable error naming the version and cause; nodes log one ERROR naming the version and the fix, rate-limited
+- [x] The config-directory archive and the legacy upgrade check the latest version under the archive lock
+- [x] Empty or unknown `owner_tenant` is 400 VALIDATION_FAILED at `/owner_tenant`
+- [x] Malformed cursors are 400; API-key scopes are sorted and unique
+- [x] Access reads reuse a snapshot cached by archive checksum
 
 ### Critical path (Release 1)
 

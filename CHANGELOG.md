@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `perf(adminapi)` · Reuse the cached snapshot for tenants, accounts, API keys and registrar reads (HUB-451) · HUB-451 · F-16
+  - These reads no longer unzip and rebuild the whole snapshot on every call, and the created/updated time of an object older than the change log stays fixed instead of moving to "now"
+  - Docs: the F-16 failure modes and OBSERVABILITY describe the HUB-451 behaviour
 - 2026-11-08 · `fix(adminapi)` · Refuse an empty owner, malformed cursors and repeated key scopes (HUB-451) · HUB-451 · F-16
   - Creating an integration without an owner_tenant is a 400 at /owner_tenant instead of a 201 integration that could never be published
   - A pagination cursor that does not belong to the list is a 400 on every list (change log, integrations, versions, accounts, tenants, vendors, snapshots, breakers); clients no longer loop on page 1

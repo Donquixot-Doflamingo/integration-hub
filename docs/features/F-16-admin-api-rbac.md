@@ -50,7 +50,7 @@ Without an API, every operation (publish, pause, replay, rotate) is SQL or a red
 | `tenant_viewer` | own tenant's integrations and requests | no | no | no | no |
 
 1. Admin API is off the request path (DESIGN §17: 2 replicas).
-2. Every mutation writes `change_log` in the same transaction; rejected without `reason`.
+2. Every mutation writes `change_log` in the same transaction as the snapshot it publishes (HUB-451); rejected without `reason`. A change that archives nothing (identical content) is logged without `snapshot_version`.
 3. Destructive actions (DLQ purge, retire, breaker force) require an explicit confirmation field in the body.
 4. Responses never include credential values or signing secrets.
 5. `tenant_viewer` responses hide vendor/account names (proposed, keeps the caller invariant for tenant users).
@@ -77,6 +77,9 @@ OIDC tokens validated (issuer, audience, expiry); CSRF not applicable for bearer
 | --- | --- | --- |
 | Admin plane down | Gateways keep last snapshot | Nothing |
 | Concurrent edits | ETag mismatch → 412 | — |
+| Concurrent edits inside one replica | Serialised by an in-process semaphore that holds no database connection (HUB-451); across replicas the archive transaction's advisory lock plus a base-version check re-runs the loser's edit on the newer tree | Nothing, or 409 after 5 lost races |
+| Change-log write fails | The snapshot and its change-log row commit in one transaction, so neither exists; credentials written before the edit are rolled back | 500 |
+| Newest archived snapshot cannot be loaded (corrupt or missing blob, validation tightened) | Reads and edits are refused (nothing can start from it); nodes keep serving their snapshot | 500 INTERNAL_ERROR naming the snapshot version and the cause, `meta.cause = snapshot_unloadable`, `meta.snapshot_version` (the contract has no 503 or dedicated code) |
 
 ## Testing
 - **Contract**: every response validated against `hub-admin.v1.yaml`.
@@ -99,3 +102,4 @@ HUB-200 – HUB-229 (EP-08, filter `feature: F-16`).
 | 2026-10-31 | Created | docs agent |
 | 2026-11-02 | Shipped in M7 (see docs/milestones/M7.md) | backend-engineer |
 | 2026-11-07 | Admin API 2.0.0: no capability resources; endpoint request schemas, samples, operations (ADR-0023, HUB-437) | docs-keeper |
+| 2026-11-08 | Publish deadlock, atomic snapshot + change log, unloadable-snapshot error, archive guards (HUB-451) | backend-engineer |
