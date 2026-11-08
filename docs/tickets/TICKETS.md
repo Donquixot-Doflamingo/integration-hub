@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **16**
+Total tickets: **290** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **17**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 14 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 15 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3752,3 +3752,17 @@ HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 
 - HUB-237 — Runbooks and M8 summary
 
 Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-446 — Old stored snapshot blocks every admin call; connects wait for a silent AAAA lookup
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-445 · **Feature:** F-23 · **Stories:** US-2301
+- **Branch:** `fix/HUB-446-snapshot-upgrade-and-dialer`
+
+Found while onboarding a public API from the console on the product owner's Mac (2026-11-08):
+1. **Unloadable snapshot.** A snapshot archived by the console before ADR-0023 held a response transformer with a `vendor_endpoint`. The upgrade of old blobs (format 1 without capabilities) did not drop it, so `Build` refused the blob and every admin read answered a bare 500 `INTERNAL_ERROR`, every write a publish-check failure naming an unrelated object.
+2. **Silent AAAA lookup.** The product owner's DNS never answers AAAA queries. `net.Dialer` resolves A and AAAA together and waits for both (5 s), so every connect to a vendor timed out (`UPSTREAM_TIMEOUT`) although curl connected in 40 ms.
+
+**Acceptance criteria**
+- [x] Old blobs without capabilities upgrade their transformer files too (capability, operation, and `vendor_endpoint` of a response transformer); the checksum still covers the files as archived
+- [x] The default upstream dialer looks up IPv4 and IPv6 separately and dials the first family that answers, falls back to the other, gives each address an equal share of the connect timeout, and reports a timeout as a timeout
+- [x] Tests: blob upgrade regression; dialer with a silent family, a dead first address, nothing resolving

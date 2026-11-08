@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(registry)` · Upgrade old snapshots whose response transformer still names an endpoint (HUB-446) · HUB-446 · F-23
+  - A dev or staging database that holds a snapshot archived before ADR-0023 loads again instead of answering 500 on every admin call
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
   - The names are joined with a space ("harsh Khandelwal"), which agify answers with an age; joined without one it answered age null
   - The endpoint allows 10 s to connect, enough for slow DNS plus TLS to agify

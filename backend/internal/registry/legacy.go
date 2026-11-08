@@ -89,7 +89,7 @@ func UpgradeLegacy(config, contracts fs.FS) (fstest.MapFS, *Legacy, error) {
 		case strings.HasPrefix(name, "vendors/") && strings.HasSuffix(name, ".yaml"):
 			b, err = upgradeVendor(b)
 		case strings.HasPrefix(name, "transformers/") && strings.HasSuffix(name, ".yaml"):
-			b, err = removeKeys(b, "capability", "operation")
+			b, err = upgradeTransformer(b)
 		case strings.HasPrefix(name, "integrations/") && strings.HasSuffix(name, "/integration.yaml"):
 			var key string
 			b, key, err = lg.UpgradeIntegrationDoc(b)
@@ -291,6 +291,42 @@ func upgradeVendor(doc []byte) ([]byte, error) {
 		return doc, nil
 	}
 	return marshal(root)
+}
+
+// upgradeTransformer drops what transformer files carried before ADR-0023: the capability and
+// operation they served, and the vendor_endpoint of a response transformer (response transformers
+// stand alone now; the console used to write one).
+func upgradeTransformer(doc []byte) ([]byte, error) {
+	root, m, err := mapping(doc)
+	if err != nil {
+		return nil, err
+	}
+	changed := removeKey(m, "capability")
+	changed = removeKey(m, "operation") || changed
+	if scalar(m, "kind") == "response" {
+		changed = removeKey(m, "vendor_endpoint") || changed
+	}
+	if !changed {
+		return doc, nil
+	}
+	return marshal(root)
+}
+
+// UpgradeTransformerFiles applies upgradeTransformer to every transformers/*.yaml of a tree that
+// has no capabilities (blob format 1 written after capabilities were gone but before the console
+// stopped writing a vendor_endpoint on response transformers). It changes the map in place.
+func UpgradeTransformerFiles(files fstest.MapFS) error {
+	for name, f := range files {
+		if !strings.HasPrefix(name, "transformers/") || !strings.HasSuffix(name, ".yaml") {
+			continue
+		}
+		b, err := upgradeTransformer(f.Data)
+		if err != nil {
+			return fmt.Errorf("upgrade %s: %w", name, err)
+		}
+		files[name] = &fstest.MapFile{Data: b}
+	}
+	return nil
 }
 
 func removeKeys(doc []byte, keys ...string) ([]byte, error) {
