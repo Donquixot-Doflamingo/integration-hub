@@ -329,21 +329,6 @@ func UpgradeTransformerFiles(files fstest.MapFS) error {
 	return nil
 }
 
-func removeKeys(doc []byte, keys ...string) ([]byte, error) {
-	root, m, err := mapping(doc)
-	if err != nil {
-		return nil, err
-	}
-	changed := false
-	for _, k := range keys {
-		changed = removeKey(m, k) || changed
-	}
-	if !changed {
-		return doc, nil
-	}
-	return marshal(root)
-}
-
 func mapping(doc []byte) (*yaml.Node, *yaml.Node, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(doc, &root); err != nil {

@@ -10,11 +10,11 @@ import (
 )
 
 func TestResolvingDialerDoesNotWaitForASilentFamily(t *testing.T) {
-	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	tests := []struct {
 		name    string
@@ -61,11 +61,11 @@ func TestResolvingDialerDoesNotWaitForASilentFamily(t *testing.T) {
 
 // A dead first address must not use the whole connect timeout: the second one is still tried.
 func TestResolvingDialerSharesTimeAcrossAddresses(t *testing.T) {
-	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	d := &resolvingDialer{base: &net.Dialer{}, lookup: func(ctx context.Context, network, host string) ([]netip.Addr, error) {
 		if network == "ip6" {

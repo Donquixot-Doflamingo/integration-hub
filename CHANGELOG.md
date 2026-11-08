@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(upstream)` · Satisfy the linters on the dialer tests and drop an unused helper (HUB-446) · HUB-446 · F-23
+  - No user-visible change: CI lint is green again (errcheck, noctx, unused)
 - 2026-11-08 · `fix(upstream)` · Connect to vendors without waiting for a silent AAAA lookup (HUB-446) · HUB-446 · F-23
   - Calls to a vendor no longer time out on networks whose DNS never answers IPv6 queries; each resolved address gets an equal share of the connect timeout
 - 2026-11-08 · `fix(registry)` · Upgrade old snapshots whose response transformer still names an endpoint (HUB-446) · HUB-446 · F-23
