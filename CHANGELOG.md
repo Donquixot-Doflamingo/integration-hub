@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(frontend)` · Show a retry panel instead of tenant-viewer pages when /me fails (HUB-455) · HUB-455 · F-19
+  - An admin whose /me call failed (not 401) no longer sees Accounts and Vendors as forbidden, an empty Tenants list or false 404s: every page shows "Could not load your access" with Retry, and one successful retry reloads all data
+  - Unknown access is never treated as a tenant viewer
+
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
   - The names are joined with a space ("harsh Khandelwal"), which agify answers with an age; joined without one it answered age null
   - The endpoint allows 10 s to connect, enough for slow DNS plus TLS to agify
