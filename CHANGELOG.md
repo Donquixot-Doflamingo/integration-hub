@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `docs(tickets)` · Mark HUB-453 in review with its follow-ups (HUB-453) · HUB-453 · F-09
+  - HUB-453 is in review; two follow-ups are noted on it (a flaky queue test, and the audit row of a queue-level poison dead letter)
 - 2026-11-08 · `fix(delivery)` · Hold the drain while the shared breaker state is unreadable (HUB-453) · HUB-453 · F-12
   - When Redis is down the scheduler no longer releases parked requests at the full account rate against a vendor whose circuit may be open; it holds them and resumes when the state is readable
   - New gauge `drain_held{reason}` and logs `drain.held` / `drain.resumed`

@@ -3728,7 +3728,7 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 
 ### HUB-453 — Outbox: one bad envelope blocks a whole batch, expiry loop can spin, credential misses burn attempts
 - **Epic:** EP-14 · **Type:** fix · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-444 · **Feature:** F-09 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-444 · **Feature:** F-09 · **Stories:** —
 - **Branch:** `fix/HUB-453-outbox-resilience`
 
 Four resilience bugs found in review of the queue and the delivery worker:
@@ -3738,11 +3738,12 @@ Four resilience bugs found in review of the queue and the delivery worker:
 4. **Drain fails open.** With the shared breaker state unreadable (Redis down) the drain assumes "long closed" and releases parked envelopes at 100 % of the account rate.
 
 **Acceptance criteria**
-- [ ] An undecodable envelope is dead-lettered (reason `poison`, never the payload in a log) and the rest of the claimed batch is returned; same for `DueExpiries`
-- [ ] The expiry sweep stops when a pass makes no progress, checks ctx, and skips a row that keeps failing (bounded retries with backoff, one log per stuck row)
-- [ ] A credential cache miss defers the envelope without counting an attempt, with a bounded delay, and is visible in a metric and a log
-- [ ] The drain holds while the breaker state is unreadable (one log, a metric) and resumes when it is readable again
-- [ ] A failing test per bug first; queue and delivery unit and integration suites green with `-race`
+- [x] An undecodable envelope is dead-lettered (reason `poison`, never the payload in a log) and the rest of the claimed batch is returned; same for `DueExpiries`
+- [x] The expiry sweep stops when a pass makes no progress, checks ctx, and skips a row that keeps failing (bounded retries with backoff, one log per stuck row)
+- [x] A credential cache miss defers the envelope without counting an attempt, with a bounded delay, and is visible in a metric and a log
+- [x] The drain holds while the breaker state is unreadable (one log, a metric) and resumes when it is readable again
+- [x] A failing test per bug first (the expiry one is a unit test that did not compile before); queue and delivery unit and integration suites green with `-race`; golangci-lint clean
+- Follow-ups: `TestReleaseInArrivalOrder` is flaky (ids made in one millisecond are not ULID-ordered); a poison envelope dead-lettered by the queue leaves its audit request row non-terminal
 
 ### Critical path (Release 1)
 
