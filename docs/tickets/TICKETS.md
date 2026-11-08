@@ -3755,7 +3755,7 @@ Anything that delays these tickets delays Release 1. The admin console and MCP t
 
 ### HUB-450 — Edge: idempotency key released after a successful call, trailing JSON junk accepted, scope and integration enumeration
 - **Epic:** EP-14 · **Type:** fix · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-088 · **Feature:** F-05 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-088 · **Feature:** F-05 · **Stories:** —
 - **Branch:** `fix/HUB-450-edge-fixes`
 
 Reviewer findings on the request edge:
@@ -3767,8 +3767,8 @@ Reviewer findings on the request edge:
 Findings 3 and 4 are reported, not changed: the frozen caller contract says request status needs scope `invoke` (no 403 declared on `getRequestStatus`) and documents 403 `not_granted` on invoke. Both need a contract change request (see the final report of this ticket).
 
 **Acceptance criteria**
-- [ ] A 200/202 whose replay copy cannot be stored never releases the key; the key is kept as "completed, response not stored" and a retry answers 409 `IDEMPOTENCY_CONFLICT` (reason `completed_not_stored`) until the key's TTL
-- [ ] Failures (not 200/202) still release the key
-- [ ] A trailing `]`, `}` or second JSON value after the body is 400 `VALIDATION_FAILED`; trailing whitespace is accepted
-- [ ] Table-driven tests written first and failing for each fixed finding
-- [ ] Findings 3 and 4 written up as contract change requests
+- [x] A 200/202 whose replay copy cannot be stored never releases the key; the key is kept as "completed, response not stored" and a retry answers 409 `IDEMPOTENCY_CONFLICT` (reason `completed_not_stored`) until the key's TTL
+- [x] Failures (not 200/202) still release the key
+- [x] A trailing `]`, `}` or second JSON value after the body is 400 `VALIDATION_FAILED`; trailing whitespace is accepted
+- [x] Table-driven tests written first and failing for each fixed finding
+- [x] Findings 3 and 4 written up as contract change requests
