@@ -463,7 +463,9 @@ func (o *Outbox) PruneDeadLetters(ctx context.Context, db DB, retention time.Dur
 
 // Replay puts a dead letter back as accepted, due now (dead_lettered → accepted; operator
 // replay, DESIGN §10.6). The worker re-resolves and re-transforms. A dead letter whose body was
-// erased (EraseDeadLetters) has nothing to deliver: ErrLost.
+// erased (EraseDeadLetters) has nothing to deliver: ErrLost. The new expiry is written to the
+// column and into the envelope JSON: the worker checks the JSON's, so a stale one would expire
+// a late replay unattempted (HUB-449).
 func (o *Outbox) Replay(ctx context.Context, db DB, id string, expiresAt time.Time) error {
 	now := o.now()
 	tag, err := db.Exec(ctx, `
@@ -473,8 +475,9 @@ func (o *Outbox) Replay(ctx context.Context, db DB, id string, expiresAt time.Ti
 			RETURNING request_id, tenant_id, integration_id, envelope)
 		INSERT INTO hub.outbox (request_id, status, pool, tenant_id, integration_id, attempt, next_attempt_at, expires_at, envelope, created_at)
 		SELECT request_id, 'accepted', CASE WHEN envelope->>'pool' = 'llm' THEN 'llm' ELSE 'messaging' END,
-			tenant_id, integration_id, 0, $2, $3, jsonb_set(envelope, '{attempt}', '0'), $2 FROM dl`,
-		id, now, expiresAt)
+			tenant_id, integration_id, 0, $2, $3, 
+			jsonb_set(jsonb_set(envelope, '{attempt}', '0'), '{expires_at}', to_jsonb($4::text)), $2 FROM dl`,
+		id, now, expiresAt, expiresAt.UTC().Format(time.RFC3339Nano))
 	return guarded(tag, err, "replay", id)
 }
 

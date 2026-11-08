@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(queue)` · Carry the new expiry into a replayed dead letter's envelope (HUB-449) · HUB-449 · F-09
+  - A dead letter replayed after its original TTL is now delivered; before, the worker read the old expiry from the envelope and expired it without an attempt
 - 2026-11-08 · `docs(tickets)` · File HUB-449 for the delivery correctness fixes (HUB-449) · HUB-449 · F-09
   - The backlog lists the four delivery bugs found in review: replay expiry, callback payload shape, truncated and redirect responses
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
