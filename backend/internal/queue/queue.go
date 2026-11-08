@@ -51,6 +51,9 @@ type Claimed struct {
 	Status       core.State // state before the claim (accepted or retry_scheduled; in_flight when reclaimed)
 	ClaimedUntil time.Time
 	Crashes      int // times a claim on it expired without an outcome (poison detector)
+	// Target is the row's (account, endpoint) hint when it has one (ClaimWithin only). The worker
+	// reserves one of that target's slots from the claim until the attempt starts (HUB-444).
+	Target *Target
 }
 
 // Outbox is the Postgres Queue (DESIGN §11.2) on hub.outbox and hub.dead_letters. Every method
@@ -97,11 +100,15 @@ func (o *Outbox) enqueue(ctx context.Context, db DB, env core.Envelope, claimBy 
 		status, claimedBy, claimedUntil = core.StateInFlight, claimBy, o.now().Add(claimFor)
 		env.Attempt = 1 // the gateway's immediate attempt
 	}
+	var account, endpoint any // the claim hint, when the gateway resolved a target (HUB-444)
+	if env.TargetAccount != "" && env.TargetEndpoint != "" {
+		account, endpoint = env.TargetAccount, env.TargetEndpoint
+	}
 	_, err = db.Exec(ctx, `INSERT INTO hub.outbox (request_id, status, pool, tenant_id, integration_id, attempt, next_attempt_at,
-			expires_at, ordering_key, claimed_by, claimed_until, envelope, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			expires_at, ordering_key, claimed_by, claimed_until, envelope, created_at, account_id, endpoint_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 		env.RequestID, string(status), PoolOf(env), env.Tenant, env.IntegrationID, env.Attempt, env.NextAttemptAt,
-		env.ExpiresAt, env.OrderingKey, claimedBy, claimedUntil, body, env.CreatedAt)
+		env.ExpiresAt, env.OrderingKey, claimedBy, claimedUntil, body, env.CreatedAt, account, endpoint)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return ErrDuplicate
@@ -167,7 +174,7 @@ func (o *Outbox) ClaimWithin(ctx context.Context, db DB, worker, pool string, n,
 		UPDATE hub.outbox o SET status = 'in_flight', claimed_by = $1, claimed_until = $5,
 			attempt = o.attempt + 1, crashes = o.crashes + CASE WHEN pick.prev = 'in_flight' THEN 1 ELSE 0 END, updated_at = $4
 		FROM pick WHERE o.request_id = pick.request_id
-		RETURNING o.request_id, pick.prev, o.attempt, o.claimed_until, o.crashes, o.envelope`,
+		RETURNING o.request_id, pick.prev, o.attempt, o.claimed_until, o.crashes, o.envelope, o.account_id, o.endpoint_id`,
 		worker, pool, n, now, now.Add(o.visibility()), accounts, endpoints, slots, max(perTarget, 0))
 	if err != nil {
 		return nil, fmt.Errorf("queue: claim: %w", err)
@@ -178,7 +185,8 @@ func (o *Outbox) ClaimWithin(ctx context.Context, db DB, worker, pool string, n,
 		var c Claimed
 		var id, prev string
 		var body []byte
-		if err := rows.Scan(&id, &prev, &c.Attempt, &c.ClaimedUntil, &c.Crashes, &body); err != nil {
+		var account, endpoint *string
+		if err := rows.Scan(&id, &prev, &c.Attempt, &c.ClaimedUntil, &c.Crashes, &body, &account, &endpoint); err != nil {
 			return nil, fmt.Errorf("queue: claim scan: %w", err)
 		}
 		attempt := c.Attempt
@@ -186,6 +194,9 @@ func (o *Outbox) ClaimWithin(ctx context.Context, db DB, worker, pool string, n,
 			return nil, fmt.Errorf("queue: decode envelope %s: %w", id, err)
 		}
 		c.Attempt, c.Status = attempt, core.State(prev) // the row's attempt, not the stored envelope's
+		if account != nil && endpoint != nil {
+			c.Target = &Target{Account: *account, Endpoint: *endpoint}
+		}
 		out = append(out, c)
 	}
 	return out, rows.Err()

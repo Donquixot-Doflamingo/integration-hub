@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
@@ -125,6 +126,52 @@ func TestWorkerTargetCap(t *testing.T) {
 	}
 	if got := r.w.InFlight(targetA.Account, targetA.Endpoint); got != 0 {
 		t.Fatalf("%d still in flight", got)
+	}
+}
+
+// TestClaimDoesNotRetakeReservedSlots is HUB-444: the claim loop claims again as soon as a worker
+// slot frees, before the previous claim's goroutines have taken their target slots. Each claimed
+// envelope therefore reserves its target's slot from the claim on: a second claim right after the
+// first takes nothing more of a full target. Without the reservation the second claim saw the
+// same free room and took another cap's worth, which went straight back to the queue as
+// "target at cap" and waited for a later claim (seen in CI as a healthy account's queue wait
+// growing while another account refused connections).
+func TestClaimDoesNotRetakeReservedSlots(t *testing.T) {
+	r := newRig(t)
+	r.w.Concurrency, r.w.TargetCap = 16, 2
+	for range 5 { // with the hint the gateway writes at accept
+		r.enqueueWith("int_evt_brandA", 6*time.Hour, func(e *core.Envelope) {
+			e.TargetAccount, e.TargetEndpoint = targetA.Account, targetA.Endpoint
+		}, false)
+	}
+	first, err := r.w.claim(t.Context(), 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 2 {
+		t.Fatalf("first claim took %d of A, want its cap 2", len(first))
+	}
+	for _, c := range first {
+		if c.Target == nil || *c.Target != targetA {
+			t.Fatalf("claimed envelope target hint %v, want %v", c.Target, targetA)
+		}
+	}
+	r.w.reserve(first) // what Run does before starting the attempts
+	second, err := r.w.claim(t.Context(), 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second) != 0 {
+		t.Fatalf("second claim before any attempt started took %d more of A, want 0", len(second))
+	}
+	// One claimed envelope ends without an attempt: its slot is free again for the next claim.
+	r.w.unreserver(first[0])()
+	third, err := r.w.claim(t.Context(), 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(third) != 1 {
+		t.Fatalf("claim after one reservation ended took %d, want 1", len(third))
 	}
 }
 

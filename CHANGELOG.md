@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(delivery)` · Never claim more of a vendor than its free worker slots (HUB-444) · HUB-444 · F-18
+  - A healthy vendor's async requests no longer bounce back to the queue when they arrive in a burst while another vendor misbehaves: each request carries its vendor target from accept, and claimed requests hold their slot until they start
 - 2026-11-07 · `test(frontend)` · Wait for page data to settle before the axe check (HUB-436) · HUB-436 · F-19
   - The accessibility check in the console e2e no longer measures a page that is still dimmed while it reloads after a change, which made it report false contrast failures at random
 - 2026-11-07 · `docs(tickets)` · Record the HUB-435 examples and agify work (HUB-435) · HUB-435 · F-23

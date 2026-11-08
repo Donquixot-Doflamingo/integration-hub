@@ -90,6 +90,11 @@ func (s *Server) envelope(ctx context.Context, r *http.Request, p *prepared) cor
 		env.SessionID = &id
 	}
 	env.Trace = envelopeTrace(ctx)
+	// The claim hint (HUB-444): the target resolved now, so a worker's claim takes no more of
+	// this (account, endpoint) than its free slots. Only a filter: the worker re-resolves (D10).
+	if tf := p.caller.Snap.Transformers[p.res.Pair().Request]; tf != nil && p.res.Target.Account != "" {
+		env.TargetAccount, env.TargetEndpoint = p.res.Target.Account, tf.VendorEndpoint
+	}
 	return env
 }
 
