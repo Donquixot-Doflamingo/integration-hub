@@ -309,7 +309,7 @@ func (a *Attempter) passThrough(j Job, r *Result, n int, att upstream.Attempt, a
 	r.PassThrough = &PassThrough{Status: status, ContentType: att.Response.Headers.Get("Content-Type"),
 		RetryAfter: att.Response.Headers.Get("Retry-After"), Body: att.Raw}
 	var vce *core.CanonicalError
-	if status >= 400 {
+	if transform.IsFailureStatus(status) {
 		vce = transform.Classify(status)
 		EnrichVendorError(vce, att.Response, a.now())
 	}

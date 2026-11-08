@@ -71,6 +71,7 @@ stateDiagram-v2
 10. Separate worker pools for messaging vs LLM (DESIGN §17).
 11. **Claiming (HUB-412, ADR-0019).** The worker claims continuously: as soon as one of its `HUB_WORKER_CONCURRENCY` slots frees, it claims `min(HUB_WORKER_CLAIM_BATCH, free slots)`, so no envelope waits for another envelope's attempt to finish. It claims only what it can start at once, so shutdown just stops claiming and lets the attempts in flight finish. Each `(account, endpoint)` may hold at most `HUB_WORKER_TARGET_CAP` slots; envelopes over it are put back unattempted (F-13 rule 9).
 12. **Startup (HUB-406).** A worker claims nothing until the first registry snapshot is loaded (`worker.waiting_for_snapshot`), so a restart with a backlog neither panics nor counts crashes toward the poison detector; an envelope somehow claimed without a snapshot is put back unattempted.
+13. **Redirects (HUB-449).** The upstream client never follows redirects. A 3xx that no `errors:` rule of the response transformer matches (and any 3xx of a pass-through operation) fails the attempt as `UPSTREAM_REJECTED`, `retryable: false`, reason `upstream_redirect`, with a fixed message that never carries the `Location`. The breaker records it as a response, not an outage (like any rejection). 304 is not failed: only a request transformer that sets `If-None-Match` or `If-Modified-Since` can cause one, and the response expression maps it (`res.status == 304`).
 
 ## Data model impact
 `outbox` (indexes `(status, next_attempt_at)`, `(status, account_id, endpoint_id)`), `dead_letters` (DESIGN §18.2).

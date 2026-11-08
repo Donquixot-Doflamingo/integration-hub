@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(transform)` · Fail an attempt whose vendor answer is an unfollowed redirect (HUB-449) · HUB-449 · F-09
+  - A vendor 3xx (except 304) with no matching errors: rule is UPSTREAM_REJECTED, not retried, for pass-through and response transformers; before, it mapped to a success with an empty or garbage result
+  - The caller's message never carries the redirect's Location
 - 2026-11-08 · `fix(callbacks)` · Never let a callback payload problem undo a request's terminal transition (HUB-449) · HUB-449 · F-11
   - request.completed carries any JSON result (array, string, number, null for an empty 204 body), as the contract already allows; before, only objects were accepted
   - A callback whose payload is unusable is skipped, logged and counted (callback_enqueue_skipped_total{reason="invalid_payload"}); the request stays succeeded and the vendor is no longer called again
