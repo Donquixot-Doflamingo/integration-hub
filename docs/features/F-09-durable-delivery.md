@@ -87,6 +87,8 @@ Integration version `delivery: { mode, wait_ms, ttl, retry? }`; without `ttl` th
 | Metric | `worker_inflight{pool}` | slots in use (HUB-412) |
 | Log | `queue.poison_envelope` | ERROR, once per envelope: `request_id`, `reason=poison`; never the payload (HUB-453) |
 | Log | `expire failed; the envelope is skipped with a growing backoff` | ERROR, once per stuck request id: `request_id`, `error` (HUB-453) |
+| Metric | `worker_credentials_deferred_total{account}` | envelopes put back unattempted on a credential cache miss (HUB-453) |
+| Log | `worker.credentials_unavailable` | WARN: `account`, `hold` (HUB-453) |
 | Log | `worker.waiting_for_snapshot` | INFO, once per start before the first snapshot (HUB-406) |
 | Trace | spans `worker.claim`, `upstream` linked to the original trace via envelope `traceparent` | |
 | Alert | `queue_oldest_age_s` > 2 min | page |
@@ -104,6 +106,7 @@ Envelope stores the canonical body; it falls under the same payload policy as au
 | A stored envelope that no longer decodes (older format) | Dead-lettered as `poison` when a claim or the expiry pass reads it; the rest of the batch is delivered (HUB-453) | Nothing new (the operator sees it in the DLQ) |
 | Worker starts before its first snapshot | Claims nothing until it loads; no crash counted | Nothing (delivery starts once the snapshot is in) |
 | An expired envelope whose expiry keeps failing (no longer pending, failing terminal hook) | The sweep skips it with a backoff of 1 s doubling to 10 min and logs it once; the sweep ends when a pass makes no progress, so newer expiries and the scheduler's other work continue (HUB-453) | Nothing new |
+| Credential cache has no entry for the account (credential store outage) | The worker puts the envelope back for 5 s without counting an attempt, so the retry schedule is not spent and nothing is dead-lettered by the outage; the TTL still bounds the wait (HUB-453) | Nothing new (a sync caller still gets a retryable `UPSTREAM_UNAVAILABLE`) |
 | One vendor slow or hanging | Holds at most its target cap of slots; others keep claiming | Other vendors unaffected (`docs/tech/ISOLATION.md`) |
 
 ## Testing

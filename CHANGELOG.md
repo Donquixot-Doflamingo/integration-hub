@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(delivery)` · Do not count a credential cache miss as a delivery attempt (HUB-453) · HUB-453 · F-09
+  - A credential outage no longer dead-letters healthy requests: a request whose account credentials are not in the cache waits 5 s without using up its retry schedule
+  - New metric `worker_credentials_deferred_total{account}` and WARN log `worker.credentials_unavailable` show it to operators
 - 2026-11-08 · `fix(delivery)` · Stop the expiry sweep from spinning on envelopes it cannot expire (HUB-453) · HUB-453 · F-09
   - An expired envelope whose expiry keeps failing no longer makes the scheduler loop forever (probes and drain starve) or block newer expiries behind it
   - Such an envelope is logged once and skipped with a backoff of 1 s doubling to 10 min; the sweep also stops when the scheduler is shutting down

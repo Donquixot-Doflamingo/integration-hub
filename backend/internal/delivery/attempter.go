@@ -101,6 +101,10 @@ type Result struct {
 	OverCap  bool
 	Account  string
 	Endpoint string
+	// CredentialsUnavailable reports that the credential cache had no entry for the account
+	// (HUB-453): nothing was sent and no breaker outcome was recorded, so the worker puts the
+	// envelope back without counting an attempt.
+	CredentialsUnavailable bool
 }
 
 // PassThrough is a vendor answer returned unchanged (ADR-0023): only Content-Type and
@@ -185,6 +189,7 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	in, c, ce := a.Input(ctx, j.Snap, j.Res, j.Body, j.Hdr, j.Trail)
 	if ce != nil {
 		r.Err = ce
+		r.CredentialsUnavailable = ce.Reason != nil && *ce.Reason == "credentials_unavailable"
 		return r
 	}
 	in.Session = j.Session
