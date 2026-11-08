@@ -3728,7 +3728,7 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 
 ### HUB-449 — Delivery correctness: replay expiry, callback payload shape, truncated and redirect responses
 - **Epic:** EP-14 · **Type:** fix · **Area:** backend
-- **Status:** in-progress · **Depends on:** HUB-444 · **Feature:** F-09 · **Stories:** US-0901
+- **Status:** in-review · **Depends on:** HUB-444 · **Feature:** F-09 · **Stories:** US-0901
 - **Branch:** `fix/HUB-449-delivery-correctness`
 
 Four confirmed bugs found in review of the delivery path:
@@ -3738,11 +3738,11 @@ Four confirmed bugs found in review of the delivery path:
 4. **Redirects.** The upstream client never follows redirects, but only status >= 400 counted as an error: a 301/302/307/308 mapped to success with an empty or garbage output, and the breaker recorded success.
 
 **Acceptance criteria**
-- [ ] Replay writes the new expiry into the envelope JSON; a replay after the original TTL is delivered, not expired
-- [ ] A callback payload problem never fails or rolls back a request's terminal transition; the vendor is called once
-- [ ] A truncated vendor response is a failed attempt (pass-through and transformer paths)
-- [ ] An unmatched 3xx is UPSTREAM_REJECTED, non-retryable, without the Location in the message; a transformer's explicit `errors:` rules still match first
-- [ ] Each fix has a test that failed before it; queue, delivery, callbacks and transform suites green
+- [x] Replay writes the new expiry into the envelope JSON; a replay after the original TTL is delivered, not expired
+- [x] A callback payload problem never fails or rolls back a request's terminal transition; the vendor is called once
+- [x] A truncated vendor response is a failed attempt (pass-through and transformer paths): UPSTREAM_REJECTED, reason response_truncated, not retryable, not counted by the breaker
+- [x] An unmatched 3xx is UPSTREAM_REJECTED, non-retryable, without the Location in the message; a transformer's explicit `errors:` rules still match first
+- [x] Each fix has a test that failed before it; queue, delivery, callbacks and transform suites green
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.

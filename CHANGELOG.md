@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `docs(features)` · Document the delivery correctness rules and close out HUB-449 (HUB-449) · HUB-449 · F-09
+  - F-09 lists the replay expiry and terminal callback rules next to the redirect and truncation ones; the ticket is in review
 - 2026-11-08 · `fix(delivery)` · Fail an attempt whose vendor response was cut at the size cap (HUB-449) · HUB-449 · F-09
   - A vendor body over 4 MiB is no longer returned as a result (a garbage string in pass-through, res.text for a transformer): the attempt fails as UPSTREAM_REJECTED, reason response_truncated, and is not retried
   - The circuit breaker does not count it as an outage
