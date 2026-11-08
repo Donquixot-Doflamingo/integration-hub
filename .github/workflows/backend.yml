@@ -90,7 +90,9 @@ jobs:
 
   itest:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The suite takes ~9-10 min since EP-14 (runs: 540-618 s); 10 min cancelled it on main and on
+    # PR #46. HUB-443 tracks making it faster.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

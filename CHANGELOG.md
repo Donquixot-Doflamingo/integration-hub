@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `ci(backend)` · Give the integration test job 20 minutes (HUB-442) · HUB-442 · F-23
+  - The backend integration tests no longer get cancelled at 10 minutes; they take about 9 to 10 minutes since EP-14. HUB-443 is filed to make them faster
 - 2026-11-08 · `ci(backend)` · Build golangci-lint from the module proxy in CI (HUB-442) · HUB-442 · F-23
   - The lint job no longer depends on downloading the golangci-lint release binary from GitHub, which failed with 504 twice on PR #46; it builds the same pinned version from the Go module proxy
 - 2026-11-08 · `ci(backend)` · Run the backend CI when examples change (HUB-442) · HUB-442 · F-23
