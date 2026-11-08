@@ -84,17 +84,9 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 		return dp, nil
 	}
 
-	var loader creds.Loader = emptyLoader{}
 	path := strings.TrimPrefix(cfg.CredSource, "localfile://")
-	switch lf, err := creds.OpenLocalFile(path, cfg.DevKeyFile); {
-	case err == nil:
-		loader = lf
-	case errors.Is(err, fs.ErrNotExist):
-		// Dev without `hubctl creds init-key`: start, but every vendor call fails closed with
-		// 503 credentials_unavailable until credentials exist.
-		log.WarnContext(ctx, "no credential key file; vendor calls will fail until credentials are set (hubctl creds)",
-			slog.String("key_file", cfg.DevKeyFile))
-	default:
+	loader, err := newReopeningLoader(ctx, path, cfg.DevKeyFile, log)
+	if err != nil {
 		return nil, err
 	}
 	cache, err := creds.NewCache(loader, secrets, m, creds.CacheOptions{Logger: log})
@@ -237,9 +229,89 @@ func (dp *dataPlane) shutdown() {
 	}
 }
 
-// emptyLoader serves no credentials.
-type emptyLoader struct{}
+// logRotationReload reports a reload triggered by a hub:creds ping truthfully: Info only when
+// the cache now serves every account it is asked for.
+func logRotationReload(ctx context.Context, log *slog.Logger, cache *creds.Cache, account string, err error) {
+	wanted, served := cache.Served()
+	switch {
+	case err != nil:
+		log.WarnContext(ctx, "credential reload after rotation failed", slog.String("account", account), slog.String("error", err.Error()))
+	case served < wanted:
+		log.WarnContext(ctx, "credential reload after rotation loaded nothing for some accounts",
+			slog.String("account", account), slog.Int("accounts_wanted", wanted), slog.Int("accounts_served", served))
+	default:
+		log.InfoContext(ctx, "credentials reloaded after rotation", slog.String("account", account))
+	}
+}
 
-func (emptyLoader) Load(context.Context, []string) (map[string]creds.AccountSecrets, error) {
-	return map[string]creds.AccountSecrets{}, nil
+// reopeningLoader reads the dev key file and the encrypted secrets file anew on every load, so
+// `hubctl creds init-key` / `creds set` after the process started take effect on the next
+// refresh. A missing key file serves no credentials (every vendor call fails closed with 503
+// credentials_unavailable); an unreadable or corrupt key or file is an error. Each missing state
+// is logged once, when it starts, and the way out of it once.
+type reopeningLoader struct {
+	path, keyFile string
+	log           *slog.Logger
+
+	mu                      sync.Mutex
+	keyMissing, fileMissing bool
+}
+
+// newReopeningLoader fails when the key file exists but is unusable; a missing key file or
+// secrets file is a warning (once) and an empty store.
+func newReopeningLoader(ctx context.Context, path, keyFile string, log *slog.Logger) (*reopeningLoader, error) {
+	l := &reopeningLoader{path: path, keyFile: keyFile, log: log}
+	if _, err := creds.ReadKeyFile(keyFile); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	l.note(ctx, l.keyAbsent(), l.fileAbsent())
+	return l, nil
+}
+
+func (l *reopeningLoader) keyAbsent() bool {
+	_, err := os.Stat(l.keyFile)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+func (l *reopeningLoader) fileAbsent() bool {
+	_, err := os.Stat(l.path)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// note logs state changes of the two files.
+func (l *reopeningLoader) note(ctx context.Context, keyMissing, fileMissing bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	switch {
+	case keyMissing && !l.keyMissing:
+		l.log.WarnContext(ctx, "no credential key file; vendor calls will fail until credentials are set (hubctl creds)",
+			slog.String("key_file", l.keyFile))
+	case !keyMissing && l.keyMissing:
+		l.log.InfoContext(ctx, "credential key file found", slog.String("key_file", l.keyFile))
+	}
+	switch {
+	case fileMissing && !keyMissing && !l.fileMissing:
+		l.log.WarnContext(ctx, "no credentials file; accounts have no credentials until they are set (hubctl creds set)",
+			slog.String("path", l.path))
+	case !fileMissing && l.fileMissing:
+		l.log.InfoContext(ctx, "credentials file found", slog.String("path", l.path))
+	}
+	l.keyMissing = keyMissing
+	if !keyMissing { // without a key the file's state is not reported
+		l.fileMissing = fileMissing
+	}
+}
+
+func (l *reopeningLoader) Load(ctx context.Context, ids []string) (map[string]creds.AccountSecrets, error) {
+	lf, err := creds.OpenLocalFile(l.path, l.keyFile)
+	if errors.Is(err, fs.ErrNotExist) {
+		l.note(ctx, true, l.fileAbsent())
+		return map[string]creds.AccountSecrets{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	fileMissing := l.fileAbsent()
+	l.note(ctx, false, fileMissing)
+	return lf.Load(ctx, ids)
 }

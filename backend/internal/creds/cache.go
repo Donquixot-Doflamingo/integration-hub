@@ -194,6 +194,21 @@ func (c *Cache) Warm(ctx context.Context, accountIDs []string) error {
 	return c.reloadLocked(ctx)
 }
 
+// Served reports how many accounts the cache is asked to serve and how many have a live
+// entry now, for callers that must say truthfully whether a reload loaded anything.
+func (c *Cache) Served() (wanted, served int) {
+	c.mu.Lock()
+	ids := slices.Clone(c.wanted)
+	c.mu.Unlock()
+	g, now := c.gen.Load(), c.opts.Now()
+	for _, id := range ids {
+		if e := g.active[id]; e != nil && now.Before(e.expires) {
+			served++
+		}
+	}
+	return len(ids), served
+}
+
 // Refresh reloads the current account set now.
 func (c *Cache) Refresh(ctx context.Context) error {
 	c.mu.Lock()
