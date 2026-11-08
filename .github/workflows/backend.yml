@@ -34,6 +34,9 @@ jobs:
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.15.0
+          # Build the pinned version from the Go module proxy instead of downloading the release
+          # binary from GitHub: the release download answered 504 twice in a row (HUB-442).
+          install-mode: goinstall
           working-directory: backend
 
   sqlc:

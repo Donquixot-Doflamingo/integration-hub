@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `ci(backend)` · Build golangci-lint from the module proxy in CI (HUB-442) · HUB-442 · F-23
+  - The lint job no longer depends on downloading the golangci-lint release binary from GitHub, which failed with 504 twice on PR #46; it builds the same pinned version from the Go module proxy
 - 2026-11-08 · `ci(backend)` · Run the backend CI when examples change (HUB-442) · HUB-442 · F-23
   - A change under examples/ now runs the backend tests that load the examples; until now only the hygiene check ran on such PRs
 - 2026-11-08 · `fix(examples)` · Give the agify example time to connect over the internet (HUB-442) · HUB-442 · F-23
