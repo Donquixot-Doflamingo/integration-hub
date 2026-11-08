@@ -28,7 +28,7 @@
 
 <nav class="pager" aria-label="Pagination">
 	<p class="where" role="status">
-		Page {pageNumber(paging)}: {count}
+		{pageNumber(paging) === null ? 'This page' : `Page ${pageNumber(paging)}`}: {count}
 		{count === 1 ? noun.replace(/s$/, '') : noun}{next ? ', more after this page' : ''}.
 	</p>
 	<!-- A single page needs no Previous / Next (HUB-287: two inert buttons looked clickable). -->
