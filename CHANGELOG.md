@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `test(scripts)` · Add make test-scripts and close out HUB-456 (HUB-456) · HUB-456 · F-23
+  - `make test-scripts` runs the hermetic shell tests for the dev tooling; HUB-456 is in review with what was and was not run
 - 2026-11-08 · `fix(examples)` · Keep the examples off the dev stack's ports and processes (HUB-456) · HUB-456 · F-23
   - The examples' mockvendor now defaults to 127.0.0.1:18099/18098, so running an example while `make dev-up` is up can no longer reset or reprogram the dev stack's mockvendor
   - An example refuses to start, naming the port and the likely culprit, when a port it needs is already listening; it programs only the mockvendor it started, and fails when its own process died instead of trusting another listener's healthz

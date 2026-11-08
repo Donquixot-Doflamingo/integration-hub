@@ -106,11 +106,11 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | F-16 | Admin API, RBAC & change log | EP-08 | 19 |
 | F-17 | hubctl & config-as-code | EP-08 | 5 |
 | F-18 | Observability: metrics, traces, alerts, dashboards, load tests | EP-09, EP-13 | 28 |
-| F-19 | Admin console (SvelteKit frontend) | EP-10 | 46 |
+| F-19 | Admin console (SvelteKit frontend) | EP-10 | 45 |
 | F-20 | Hub MCP server (`hubmcp`) | EP-11 | 14 |
 | F-21 | Consumer Claude skill & Go SDK (`hubclient`) | EP-04, EP-11 | 8 |
 | F-22 | Release-2 features | EP-12 | 18 |
-| F-23 | Schema registry: operations on the integration, request schemas on the endpoint | EP-14 | 13 |
+| F-23 | Schema registry: operations on the integration, request schemas on the endpoint | EP-14 | 14 |
 
 ## Parallel work and critical path
 

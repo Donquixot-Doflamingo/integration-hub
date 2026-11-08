@@ -3727,7 +3727,7 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 - [x] Example tests and the offline run.sh pass with a fresh database
 ### HUB-456 — Dev tooling: examples clobber the dev stack, orphan processes, unsafe pid handling, compose ports on all interfaces
 - **Epic:** EP-14 · **Type:** fix · **Area:** infra
-- **Status:** in-progress · **Depends on:** HUB-445, HUB-286 · **Feature:** F-23 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-445, HUB-286 · **Feature:** F-23 · **Stories:** —
 - **Branch:** `fix/HUB-456-dev-tooling`
 
 Reviewer findings on `scripts/dev-up.sh`, `scripts/dev-down.sh`, `examples/lib/local-hub.sh` and `deploy/docker-compose.yml`:
@@ -3742,16 +3742,19 @@ Reviewer findings on `scripts/dev-up.sh`, `scripts/dev-down.sh`, `examples/lib/l
 9. The snapshot check only tests that the latest blob file exists; an archived snapshot that cannot be loaded surfaces late as INTERNAL_ERROR.
 
 **Acceptance criteria**
-- [ ] Examples default to ports outside the dev stack's range (mockvendor 18099/18098), refuse to start when a port they need is already listening (message names the port and the likely culprit), and send control calls only to the mockvendor they started
-- [ ] Examples write pid files and kill stale ones (command line verified) at setup
-- [ ] `dev-up.sh` stops what it started when it fails, never on success; the "already in use" message names `scripts/dev-down.sh` and the live or stale pid file
-- [ ] `DEV_STATE` may be relative
-- [ ] `dev-up.sh` and `dev-down.sh` verify the command line of every pid before treating it as ours or signalling it
-- [ ] Compose binds Postgres and Redis to 127.0.0.1; nothing relied on the wider binding
-- [ ] `hub_post` prints the raw body when it is not JSON
-- [ ] Credentials are created and recreated together (key and encrypted file)
-- [ ] The snapshot check message tells how to read `.dev-stack/logs/admin.log` and to use `DEV_RESET=1`
-- [ ] Shell tests under `scripts/tests/` pass; `bash -n` clean
+- [x] Examples default to ports outside the dev stack's range (mockvendor 18099/18098), refuse to start when a port they need is already listening (message names the port and the likely culprit), and send control calls only to the mockvendor they started
+- [x] Examples write pid files and kill stale ones (command line verified) at setup
+- [x] `dev-up.sh` stops what it started when it fails, never on success; the "already in use" message names `scripts/dev-down.sh` and the live or stale pid file
+- [x] `DEV_STATE` may be relative
+- [x] `dev-up.sh` and `dev-down.sh` verify the command line of every pid before treating it as ours or signalling it
+- [x] Compose binds Postgres and Redis to 127.0.0.1; nothing relied on the wider binding
+- [x] `hub_post` prints the raw body when it is not JSON
+- [x] Credentials are created and recreated together (key and encrypted file)
+- [x] The snapshot check message tells how to read `.dev-stack/logs/admin.log` and to use `DEV_RESET=1`
+- [x] Shell tests under `scripts/tests/` pass (`make test-scripts`); `bash -n` clean
+
+Not verified by running: a full `scripts/dev-up.sh` / `dev-down.sh` / any `examples/*/run.sh` end to end (a live dev stack shares this machine's ports, Postgres and Redis). The failure-trap path of dev-up was exercised up to its port check only. Archived-snapshot detection is a warning after start (the hub binary has no archive verifier; no Go change). Follow-up idea: a CI job for `make test-scripts`.
+
 
 ### Critical path (Release 1)
 
