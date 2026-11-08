@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `docs(tickets)` · Open HUB-456 for the dev tooling fixes (HUB-456) · HUB-456 · F-23
+  - HUB-456 lists nine reviewer findings on the dev stack scripts, the examples' shared helper and the compose ports, each with an acceptance criterion
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
   - The names are joined with a space ("harsh Khandelwal"), which agify answers with an age; joined without one it answered age null
   - The endpoint allows 10 s to connect, enough for slow DNS plus TLS to agify

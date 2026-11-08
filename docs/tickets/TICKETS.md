@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **16**
+Total tickets: **290** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **17**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 14 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 15 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3725,6 +3725,34 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 - [x] estimate@1 allows 10 s to connect and 15 s in total
 - [x] The examples use their own `hub_examples` database unless HUB_PG_DSN is set, and create it when missing
 - [x] Example tests and the offline run.sh pass with a fresh database
+### HUB-456 — Dev tooling: examples clobber the dev stack, orphan processes, unsafe pid handling, compose ports on all interfaces
+- **Epic:** EP-14 · **Type:** fix · **Area:** infra
+- **Status:** in-progress · **Depends on:** HUB-445, HUB-286 · **Feature:** F-23 · **Stories:** —
+- **Branch:** `fix/HUB-456-dev-tooling`
+
+Reviewer findings on `scripts/dev-up.sh`, `scripts/dev-down.sh`, `examples/lib/local-hub.sh` and `deploy/docker-compose.yml`:
+1. **Examples clobber the dev stack (high).** The examples' default mockvendor ports (8099/8098) are the dev stack's. With `make dev-up` running, an example's mockvendor fails to bind, the readiness wait succeeds against the dev stack's healthz, and `mock_scenario` resets the dev stack's mockvendor and replaces its routes. An orphan example gateway on 18080/18090 answers the same way.
+2. **Orphans.** `trap ... EXIT` does not run on SIGKILL, so an example's gateway and mockvendor outlive it.
+3. **dev-up failure leaves processes running** and the next run reports "port N is already in use" without pointing at `dev-down.sh`.
+4. A relative `DEV_STATE` breaks the console start and the blob URL (they run after a `cd`).
+5. **Pid files are trusted blindly.** A pid reused after a reboot gives a false "already running", and `dev-down.sh` would TERM/KILL an unrelated process.
+6. Compose publishes Postgres (hub/hub) and Redis (no auth) on all interfaces.
+7. `hub_post` prints nothing for a non-JSON body (the `||` fallback tests sed, not python).
+8. Credentials are created only when `dev.key` is missing: an interrupted first run leaves `dev-secrets.enc` missing or truncated for good.
+9. The snapshot check only tests that the latest blob file exists; an archived snapshot that cannot be loaded surfaces late as INTERNAL_ERROR.
+
+**Acceptance criteria**
+- [ ] Examples default to ports outside the dev stack's range (mockvendor 18099/18098), refuse to start when a port they need is already listening (message names the port and the likely culprit), and send control calls only to the mockvendor they started
+- [ ] Examples write pid files and kill stale ones (command line verified) at setup
+- [ ] `dev-up.sh` stops what it started when it fails, never on success; the "already in use" message names `scripts/dev-down.sh` and the live or stale pid file
+- [ ] `DEV_STATE` may be relative
+- [ ] `dev-up.sh` and `dev-down.sh` verify the command line of every pid before treating it as ours or signalling it
+- [ ] Compose binds Postgres and Redis to 127.0.0.1; nothing relied on the wider binding
+- [ ] `hub_post` prints the raw body when it is not JSON
+- [ ] Credentials are created and recreated together (key and encrypted file)
+- [ ] The snapshot check message tells how to read `.dev-stack/logs/admin.log` and to use `DEV_RESET=1`
+- [ ] Shell tests under `scripts/tests/` pass; `bash -n` clean
+
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
