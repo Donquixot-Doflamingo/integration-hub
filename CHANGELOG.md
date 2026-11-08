@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(edge)` · Refuse a request body with anything after the JSON object (HUB-450) · HUB-450 · F-05
+  - A body like `{"a":1}]` or `{"a":1} }` now answers 400 VALIDATION_FAILED instead of passing and failing later as a retryable 500 persist_failed; trailing whitespace is still accepted
 - 2026-11-08 · `docs(tickets)` · File HUB-450 for the request edge findings (HUB-450) · HUB-450 · F-05
   - HUB-450 records four edge findings: the released idempotency key, trailing JSON junk, the unchecked requests_read scope and integration enumeration; the last two are reported for a contract change
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23

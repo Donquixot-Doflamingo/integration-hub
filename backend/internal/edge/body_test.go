@@ -103,11 +103,38 @@ func TestBodyLimitsAtTheEdge(t *testing.T) {
 }
 
 func TestBodyMustBeOneJSONObject(t *testing.T) {
-	for _, b := range []string{`[1,2]`, `{"a":1}{"b":2}`, `nope`, `null`, ``} {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(b))
-		if _, _, ce := readJSONBody(req, 1024); ce == nil || ce.Code != core.CodeValidationFailed {
-			t.Errorf("%q accepted: %+v", b, ce)
-		}
+	tests := []struct {
+		name string
+		body string
+		ok   bool
+	}{
+		{"array", `[1,2]`, false},
+		{"second value", `{"a":1}{"b":2}`, false},
+		{"not json", `nope`, false},
+		{"null", `null`, false},
+		{"empty", ``, false},
+		{"whitespace only", " \n ", false},
+		{"trailing bracket", `{"a":1}]`, false},
+		{"trailing brace", `{"a":1} }`, false},
+		{"trailing comma", `{"a":1},`, false},
+		{"trailing word", `{"a":1} x`, false},
+		{"trailing whitespace", "{\"a\":1} \r\n\t ", true},
+		{"leading whitespace", " {\"a\":1}", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(tt.body))
+			_, _, ce := readJSONBody(req, 1024)
+			if tt.ok {
+				if ce != nil {
+					t.Fatalf("%q refused: %+v", tt.body, ce)
+				}
+				return
+			}
+			if ce == nil || ce.Code != core.CodeValidationFailed || ce.Reason == nil || *ce.Reason != "schema" {
+				t.Fatalf("%q accepted or wrong error: %+v", tt.body, ce)
+			}
+		})
 	}
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"a": 1.5}`))
 	body, raw, ce := readJSONBody(req, DefaultBodyLimit)
