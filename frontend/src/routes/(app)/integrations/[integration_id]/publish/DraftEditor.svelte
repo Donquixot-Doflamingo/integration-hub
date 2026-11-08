@@ -21,6 +21,7 @@
 	} from '$lib/api/types';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ErrorPanel from '$lib/components/ErrorPanel.svelte';
+	import FormProblems from '$lib/components/FormProblems.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import DiffSplit from '$lib/components/diff/DiffSplit.svelte';
@@ -258,6 +259,10 @@
 
 <form class="draft" method="POST" action="?/saveDraft" use:enhance={save} novalidate>
 	{#if mode === 'form'}
+		<FormProblems
+			title="Some pickers are empty because their lists did not load. Type the values, or reload."
+			items={looked.problems.map((message) => ({ message }))}
+		/>
 		<input type="hidden" name="spec" value={current} />
 		{#if saveFields.spec}<p class="fk-error" role="alert">{saveFields.spec}</p>{/if}
 		<SpecForm

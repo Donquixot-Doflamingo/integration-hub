@@ -269,6 +269,20 @@ describe('publish page', () => {
 		expect(await screen.findByRole('alert')).toHaveTextContent(/could not run the publish checks/);
 	});
 
+	it('says which lookups failed instead of leaving pickers silently empty (HUB-455)', async () => {
+		server.use(mockError('listVendors', 500), mockError('listAccounts', 403));
+		const data = (await load({
+			fetch,
+			url: new URL(`http://console.test/integrations/${ID}/publish`),
+			params: { integration_id: ID },
+			parent: async () => ({ access: accessFromRoles(['editor']) })
+		} as never)) as { lookups: Promise<{ problems: string[] }> };
+		const { problems } = await data.lookups;
+		expect(problems).toHaveLength(2);
+		expect(problems[0]).toMatch(/vendors/);
+		expect(problems[1]).toMatch(/accounts/);
+	});
+
 	it('is read only for viewers', async () => {
 		const data = (await load({
 			fetch,

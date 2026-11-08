@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(frontend)` · Show failed lookups and read every vendor in the authoring pickers (HUB-455) · HUB-455 · F-19
+  - The publish editor and the transformer forms list which lookups failed (vendors, accounts, transformers, a vendor's endpoints) instead of showing empty pickers with no message
+  - Endpoint suggestions now cover all vendors, not only the first 25
+
 - 2026-11-08 · `fix(frontend)` · Mark filter values that do not fit instead of silently dropping them (HUB-455) · HUB-455 · F-19
   - Requests, DLQ and change-log filters: a value such as tenant "ab" or "my tenant" now shows a message under its field (and a summary alert) and the search does not run, instead of listing everything with no chip
   - In the DLQ this keeps replay and purge counts tied to exactly the filters the operator sees

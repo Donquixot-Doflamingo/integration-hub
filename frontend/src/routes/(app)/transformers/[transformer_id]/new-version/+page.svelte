@@ -2,6 +2,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import AsyncView from '$lib/components/AsyncView.svelte';
+	import FormProblems from '$lib/components/FormProblems.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import RoleGate from '$lib/components/RoleGate.svelte';
 	import type { PageData } from './$types';
@@ -21,6 +22,10 @@
 <RoleGate access={data.access} ops={['createTransformerVersion', 'runTransformerGoldens']}>
 	<AsyncView result={data.start} noun="transformer {id}" onretry={invalidateAll}>
 		{#snippet children(s)}
+			<FormProblems
+				title="Some endpoint suggestions are missing"
+				items={s.problems.map((message) => ({ message }))}
+			/>
 			{#key s.transformer.latest_version}
 				<p class="fk-note">
 					Based on {s.transformer.latest.ref} by {s.transformer.latest.author}: {s.transformer
