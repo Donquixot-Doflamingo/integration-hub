@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(scripts)` · Harden the dev stack scripts against stale state and failed starts (HUB-456) · HUB-456 · F-23
+  - dev-up and dev-down only trust a pid file when the process behind it runs the Hub binary; a pid reused after a reboot is no longer reported as "already running" and is never signalled
+  - A dev-up that fails after starting processes stops them again; the "port already in use" message names scripts/dev-down.sh and the stale pid files it removed
+  - DEV_STATE may be relative; the dev key and encrypted credentials are recreated together when either is missing or unreadable
+  - dev-up warns, with the log to read and DEV_RESET=1, when a hub role logs "archived snapshot not loaded"
 - 2026-11-08 · `fix(deploy)` · Publish the compose Postgres and Redis on loopback only (HUB-456) · HUB-456 · F-23
   - The dev Postgres (hub/hub) and Redis (no password) are no longer reachable from the LAN on Linux hosts; local tools still connect on localhost
 - 2026-11-08 · `docs(tickets)` · Open HUB-456 for the dev tooling fixes (HUB-456) · HUB-456 · F-23

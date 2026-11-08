@@ -15,7 +15,9 @@
 #   5. The console dev server (Vite), signed in through the admin's dev issuer and talking to the
 #      real /admin/v1 through the console's same-origin proxy.
 #
-# Everything runs in the background; logs and pids live in $DEV_STATE (default .dev-stack/).
+# Everything runs in the background; logs and pids live in $DEV_STATE (default .dev-stack/; a
+# relative path is taken from where you run the command). If a step fails, what this run started is
+# stopped again. A pid file is only trusted when its process runs the Hub binary (HUB-456).
 # Works on macOS arm64 (Homebrew Go + node@22, Colima) and on Linux. Needs: go, node 22, npm, curl.
 #
 # Settings (environment):
@@ -30,7 +32,13 @@
 #                                snapshots from an earlier run whose files are gone (HUB-430)
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/pids.sh
+source "$here/lib/pids.sh"
+root="$(cd "$here/.." && pwd)"
+# A relative DEV_STATE is relative to where the command was typed, not to the places this script
+# cd's into (the console runs inside frontend/).
+state="$(abs_path "${DEV_STATE:-$root/.dev-stack}")"
 cd "$root"
 
 # Homebrew's node@22 is keg-only on macOS (CLAUDE.md); prefer it when present.
@@ -41,7 +49,7 @@ export PATH
 # Loopback traffic must never go through a corporate or sandbox proxy.
 export NO_PROXY="${NO_PROXY:+$NO_PROXY,}localhost,127.0.0.1,::1" no_proxy="${no_proxy:+$no_proxy,}localhost,127.0.0.1,::1"
 
-state="${DEV_STATE:-$root/.dev-stack}"
+bin="$root/backend/bin"
 console_port="${DEV_CONSOLE_PORT:-5173}"
 gw_port="${DEV_GATEWAY_PORT:-8080}"
 admin_port="${DEV_ADMIN_PORT:-8081}"
@@ -66,10 +74,42 @@ need curl "brew install curl"
 node_major="$(node -p 'process.versions.node.split(".")[0]')"
 [ "$node_major" = 22 ] || die "node 22 is required (found $(node --version)); on macOS: brew install node@22"
 
-if [ -f "$state/pids/console.pid" ] && kill -0 "$(cat "$state/pids/console.pid")" 2>/dev/null; then
-  die "the stack is already running (scripts/dev-down.sh stops it)"
-fi
+stack_names=(console scheduler worker gateway admin mockvendor)
+# Every pid file is checked against its process's command line, not just console.pid: a pid that was
+# reused (reboot) is not our stack, and a stack that lost its console may still have live hub roles.
+live="" stale=""
+for n in "${stack_names[@]}"; do
+  f="$state/pids/$n.pid"
+  case "$(pidfile_status "$f" "$(dev_needle "$n" "$bin")")" in
+  live) live+=" $n" ;;
+  stale)
+    rm -f "$f" # not ours any more: nothing to stop, nothing to keep
+    stale+=" $n.pid"
+    ;;
+  esac
+done
+[ -z "$live" ] || die "the stack is already running (live:$live; pid files in $state/pids).
+  scripts/dev-down.sh stops it (DEV_STATE=$state scripts/dev-down.sh if you set DEV_STATE)."
 mkdir -p "$state/pids" "$state/logs"
+
+# From here on, a failed run stops what this run started (a die after step 3 used to leave the hub
+# roles running and the next run blaming "port in use"). Never on success: ok=1 is set at the end.
+ok=0
+cleanup_failed_run() {
+  local rc=$? n
+  trap - EXIT INT TERM HUP
+  if [ "$ok" != 1 ]; then
+    for n in "${stack_names[@]}"; do
+      # Only pid files of this run exist here: the check above removed or refused the old ones.
+      if [ -f "$state/pids/$n.pid" ]; then stop_pidfile "$state/pids/$n.pid" "$(dev_needle "$n" "$bin")" >/dev/null; fi
+    done
+    printf '\033[31mdev-up:\033[0m failed; stopped what this run had started (logs: %s/logs)\n' "$state" >&2
+    [ "$rc" != 0 ] || rc=1
+  fi
+  exit "$rc"
+}
+trap cleanup_failed_run EXIT
+trap 'exit 130' INT TERM HUP
 
 # ---- 1. Postgres and Redis -------------------------------------------------------------------
 use_docker="${DEV_DOCKER:-auto}"
@@ -99,7 +139,12 @@ redis_host="${HUB_REDIS_ADDR%:*}"
 redis_port="${HUB_REDIS_ADDR##*:}"
 port_open "$redis_host" "$redis_port" || die "Redis is not reachable at $HUB_REDIS_ADDR (start it, or run Docker/Colima so compose can)"
 for p in "$console_port" "$gw_port" "$admin_port" "$mv_port" "$mv_ctl_port"; do
-  port_open "$host" "$p" && die "port $p is already in use (set the DEV_*_PORT variables to move this stack)"
+  if port_open "$host" "$p"; then
+    die "port $p is already in use. If an earlier dev-up (or this stack from another terminal) holds it, run
+  scripts/dev-down.sh${DEV_STATE:+ (with DEV_STATE=$state)} first; otherwise another program owns the port:
+  set the DEV_*_PORT variables to move this stack.
+  No live pid file of this stack in $state/pids${stale:+ (stale pid files removed:$stale, their processes are gone or belong to other programs)}; a process started by hand or by another checkout's dev-up may hold it (lsof -nP -iTCP:$p -sTCP:LISTEN)."
+  fi
 done
 
 # ---- 2. Build, migrate, seed ------------------------------------------------------------------
@@ -111,7 +156,6 @@ if [ "${DEV_SKIP_BUILD:-0}" != 1 ]; then
     (cd frontend && npm ci --no-audit --no-fund >"$state/logs/npm-ci.log" 2>&1) || { tail -30 "$state/logs/npm-ci.log" >&2; die "npm ci failed"; }
   fi
 fi
-bin="$root/backend/bin"
 [ -x "$bin/hub" ] || die "backend/bin/hub is missing (run without DEV_SKIP_BUILD=1)"
 
 say "applying database migrations"
@@ -150,6 +194,20 @@ if [[ "$latest_ref" == file://* ]] && [ ! -f "${latest_ref#file://}" ]; then
   fi
 fi
 
+# The check above only sees a missing file. A snapshot file that exists but cannot be loaded (for
+# example from an older build, or cut short) shows up in the hub logs instead: after the roles are
+# ready, warn_unloadable_snapshot reads what this run logged. (The hub binary has no archive
+# verifier, so there is no earlier check.)
+warn_unloadable_snapshot() { # warn_unloadable_snapshot <name>... : log offsets were taken before the start
+  local n v hits=""
+  for n in "$@"; do
+    v="logstart_$n"
+    if tail -c +"$(( ${!v:-0} + 1 ))" "$state/logs/$n.log" 2>/dev/null | grep -q 'archived snapshot not loaded'; then hits+=" $n"; fi
+  done
+  [ -z "$hits" ] || printf '\033[33mdev-up:\033[0m warning: %s logged "archived snapshot not loaded".\n  The latest archived snapshot exists but could not be loaded, so admin pages may fail with INTERNAL_ERROR.\n  Read %s/logs/admin.log (search "archived snapshot not loaded") for the cause.\n  To start from a clean dev database: scripts/dev-down.sh, then DEV_RESET=1 make dev-up (docker compose Postgres only).\n' "${hits# }" "$state" >&2
+  return 0
+}
+
 # The registry seed: the dev config with its vendor regions and callback receiver pointed at this
 # stack's mockvendor (which answers 200 {} on any path). The admin archives it as the first
 # snapshot when the archive is empty; after that, published changes win (ADR-0010).
@@ -161,7 +219,15 @@ done
 
 # Dev credentials: a local key and encrypted file for this stack only (random values; never shown).
 export HUB_DEV_KEY_FILE="$state/dev.key" HUB_CRED_SOURCE="localfile://$state/dev-secrets.enc"
-if [ ! -f "$HUB_DEV_KEY_FILE" ]; then
+# The key and the encrypted file are made together: an interrupted first run used to leave a key and
+# a missing or truncated file that was never recreated. `hubctl creds list` decrypts the file, so a
+# damaged one is detected too.
+creds_ok() {
+  [ -f "$HUB_DEV_KEY_FILE" ] && [ -s "$state/dev-secrets.enc" ] &&
+    [ "$("$bin/hubctl" creds list 2>/dev/null | cut -f1 | grep -cxE 'ct-brandA-in|ct-brandB-us|reg_orders_cb')" = 3 ]
+}
+if ! creds_ok; then
+  rm -f "$HUB_DEV_KEY_FILE" "$state/dev-secrets.enc"
   rand() { head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
   "$bin/hubctl" creds init-key >/dev/null
   "$bin/hubctl" creds set ct-brandA-in account_id=DEV-ACCOUNT-A "passcode=$(rand 12)" >/dev/null
@@ -178,6 +244,7 @@ export HUB_AUDIT_MASK_KEY
 start() { # start <name> <command...>: background process with its log and pid file
   local name="$1"
   shift
+  printf -v "logstart_$name" '%s' "$(wc -c <"$state/logs/$name.log" 2>/dev/null || echo 0)"
   nohup "$@" </dev/null >>"$state/logs/$name.log" 2>&1 &
   echo $! >"$state/pids/$name.pid"
 }
@@ -211,6 +278,7 @@ start scheduler "$bin/hub" scheduler -ops-addr "$host:$((ops_base + 3))" -data-d
 wait_url "http://$host:$((ops_base + 1))/readyz" gateway
 wait_url "http://$host:$((ops_base + 2))/readyz" worker
 wait_url "http://$host:$((ops_base + 3))/readyz" scheduler
+warn_unloadable_snapshot admin gateway worker scheduler
 
 # ---- 4. Sample traffic -------------------------------------------------------------------------
 dev_key=hk_test_dev_orders_service_local_only # test value, documented in backend/config/README.md
@@ -242,6 +310,8 @@ say "starting the console on $console_url"
     start console npm run dev -- --host localhost --port "$console_port" --strictPort
 )
 wait_url "$console_url/login" console 300
+
+ok=1 # success: the cleanup trap must leave the stack running
 
 cat <<EOF
 
