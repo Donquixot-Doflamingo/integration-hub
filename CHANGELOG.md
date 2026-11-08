@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(adminapi)` · Make Edit callbacks with credential side effects safe to re-run (HUB-451) · HUB-451 · F-16
+  - Creating an account or registrar endpoint that loses a race with another admin replica no longer fails with a spurious 409 on its own credentials; the secret is stored once and removed only if the whole request fails
+  - Rotating a registrar secret after a lost race keeps the previous secret as the overlap secret instead of the request's own first write
+  - Updating a vendor after a lost race no longer merges stale metadata from the first attempt
 - 2026-11-08 · `perf(adminapi)` · Reuse the cached snapshot for tenants, accounts, API keys and registrar reads (HUB-451) · HUB-451 · F-16
   - These reads no longer unzip and rebuild the whole snapshot on every call, and the created/updated time of an object older than the change log stays fixed instead of moving to "now"
   - Docs: the F-16 failure modes and OBSERVABILITY describe the HUB-451 behaviour

@@ -698,6 +698,7 @@ func (s *Server) updateVendor(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return control.Change{}, fmt.Errorf("%w: vendor %q", control.ErrNotFound, id)
 		}
+		m = vendorMeta{} // the callback may run again: do not merge into what the last run left
 		if err := readMeta(t.Get, vendorMetaFile(id), &m); err != nil {
 			return control.Change{}, err
 		}

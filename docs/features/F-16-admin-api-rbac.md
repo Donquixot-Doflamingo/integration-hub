@@ -54,7 +54,8 @@ Without an API, every operation (publish, pause, replay, rotate) is SQL or a red
 3. Destructive actions (DLQ purge, retire, breaker force) require an explicit confirmation field in the body.
 4. Responses never include credential values or signing secrets.
 5. `tenant_viewer` responses hide vendor/account names (proposed, keeps the caller invariant for tenant users).
-6. Mutations through the API, `hubctl` and the console all go through the same publish pipeline (DESIGN §8.2).
+6. `Publisher.Edit` callbacks must be repeatable (HUB-451): after a lost cross-replica race the edit re-runs on the newer tree. A callback may change only the tree and variables it assigns on every run; a side effect outside it (credential store writes) is done once, remembered by the request (a flag), skipped on a re-run and undone only when Edit fails. Never overwrite an entry someone else wrote. Reference: createAccount, createRegistrarEndpoint, rotateRegistrarSecret.
+7. Mutations through the API, `hubctl` and the console all go through the same publish pipeline (DESIGN §8.2).
 
 ## Data model impact
 `change_log` table (DESIGN §18.2); role bindings (OIDC group → role mapping, config).
@@ -103,3 +104,4 @@ HUB-200 – HUB-229 (EP-08, filter `feature: F-16`).
 | 2026-11-02 | Shipped in M7 (see docs/milestones/M7.md) | backend-engineer |
 | 2026-11-07 | Admin API 2.0.0: no capability resources; endpoint request schemas, samples, operations (ADR-0023, HUB-437) | docs-keeper |
 | 2026-11-08 | Publish deadlock, atomic snapshot + change log, unloadable-snapshot error, archive guards (HUB-451) | backend-engineer |
+| 2026-11-08 | Edit callbacks are repeatable; side-effect rules (HUB-451) | backend-engineer |

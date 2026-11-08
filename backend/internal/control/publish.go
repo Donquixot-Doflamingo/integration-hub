@@ -34,6 +34,9 @@ type Publisher struct {
 	// retire guard (DESIGN §6.5); may be nil (counts as zero).
 	Guard func(ctx context.Context, snap *registry.Snapshot, account string) (pinned, sessions int, err error)
 	Now   func() time.Time
+	// SimulateRace, when set, is asked inside the archive transaction whether another replica
+	// archived a version in between (true makes the edit re-run, like a lost race). Tests only.
+	SimulateRace func() bool
 }
 
 // Result is a published change.
@@ -158,7 +161,7 @@ func (p *Publisher) commit(ctx context.Context, t *tree, ch Change) (Result, err
 			if !exists {
 				latest.Version = 0
 			}
-			if latest.Version != t.baseVersion {
+			if latest.Version != t.baseVersion || (p.SimulateRace != nil && p.SimulateRace()) {
 				return errStaleBase
 			}
 			return nil

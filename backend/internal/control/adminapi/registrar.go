@@ -226,11 +226,15 @@ func (s *Server) createRegistrar(w http.ResponseWriter, r *http.Request) {
 			return control.Change{}, err
 		}
 		t.Put(registrarPath(id), append([]byte("# Created through the admin API (createRegistrarEndpoint). The signing secret lives only in the credential store.\n"), doc...))
-		sec := creds.AccountSecrets{Active: creds.NewSlot(creds.AccountSecrets{}, map[string]string{creds.SigningSecretKey: secret}, nil, s.d.Now())}
-		if err := rot.PutCredentials(ctx, id, &sec, true); err != nil {
-			return control.Change{}, err
+		// The callback may run again (Publisher.Edit re-runs it after losing a cross-replica
+		// race): the entry this request already wrote is kept, never created a second time.
+		if !stored {
+			sec := creds.AccountSecrets{Active: creds.NewSlot(creds.AccountSecrets{}, map[string]string{creds.SigningSecretKey: secret}, nil, s.d.Now())}
+			if err := rot.PutCredentials(ctx, id, &sec, true); err != nil {
+				return control.Change{}, err
+			}
+			stored = true
 		}
-		stored = true
 		return control.Change{Actor: principal(r).Actor(), Action: "createRegistrarEndpoint", ObjectType: "registrar_endpoint", ObjectID: id,
 			Reason: reason, After: registrarAudit(e)}, nil
 	})
@@ -415,9 +419,19 @@ func (s *Server) rotateRegistrarSecret(w http.ResponseWriter, r *http.Request) {
 			return control.Change{}, err
 		}
 		secretID = sid
-		cur, found, err := rot.ReadCredentials(secretID)
-		if err != nil {
-			return control.Change{}, err
+		// On a re-run (Publisher.Edit lost a cross-replica race) the store already holds this
+		// request's own rotation: start again from the secrets read before it was written.
+		var cur creds.AccountSecrets
+		found := false
+		if written {
+			if prev != nil {
+				cur, found = *prev, true
+			}
+		} else {
+			var rerr error
+			if cur, found, rerr = rot.ReadCredentials(secretID); rerr != nil {
+				return control.Change{}, rerr
+			}
 		}
 		next := creds.AccountSecrets{Active: creds.NewSlot(cur, map[string]string{creds.SigningSecretKey: secret}, nil, now)}
 		var until *time.Time

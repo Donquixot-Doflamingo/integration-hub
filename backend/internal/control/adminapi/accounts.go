@@ -407,7 +407,8 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 	// The credential store is only needed when the vendor's scheme takes credentials: an auth
 	// none account (ADR-0023) can be created on an admin without one.
 	var rot *control.Rotator
-	created := false
+	created := false // this request wrote the credential entry (kept across re-runs of the callback)
+	var sec creds.AccountSecrets
 	ctx := r.Context()
 	res, err := pub.Edit(ctx, func(t control.Tree, snap *registry.Snapshot) (control.Change, error) {
 		path := "accounts/" + id + ".yaml"
@@ -452,11 +453,15 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		if rot, err = s.accessRotator(); err != nil {
 			return control.Change{}, err
 		}
-		sec := creds.AccountSecrets{Active: creds.NewSlot(creds.AccountSecrets{}, body.Credentials, body.CredentialExpiresAt, s.d.Now())}
-		if err := rot.PutCredentials(ctx, id, &sec, true); err != nil {
-			return control.Change{}, err
+		// The callback may run again (Publisher.Edit re-runs it after losing a cross-replica
+		// race): the entry this request already wrote is kept, never created a second time.
+		if !created {
+			sec = creds.AccountSecrets{Active: creds.NewSlot(creds.AccountSecrets{}, body.Credentials, body.CredentialExpiresAt, s.d.Now())}
+			if err := rot.PutCredentials(ctx, id, &sec, true); err != nil {
+				return control.Change{}, err
+			}
+			created = true
 		}
-		created = true
 		return control.Change{Actor: principal(r).Actor(), Action: "createAccount", ObjectType: "account", ObjectID: id, Reason: reason,
 			After: map[string]any{"vendor": a.Vendor, "region": a.Region, "config": a.Config, "quota": a.Quota, "credentials": sec.Views()}}, nil
 	})
