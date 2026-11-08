@@ -23,12 +23,18 @@ type SnapshotSource interface {
 // caller's transaction should fail and be retried rather than drop the callback.
 var ErrNoSnapshot = errors.New("callbacks: no registry snapshot loaded")
 
+// ErrInvalidPayload marks an Enqueue error caused by the event's own content (it does not
+// marshal or break the contract schema), as opposed to the database or the snapshot. No row was
+// written and tx is untouched.
+var ErrInvalidPayload = errors.New("callbacks: invalid event payload")
+
 // Skip reasons: bounded label values of callback_enqueue_skipped_total.
 const (
 	skipUnknownVersion  = "unknown_version"
 	skipUnknownEndpoint = "unknown_endpoint"
 	skipTenantMismatch  = "tenant_mismatch"
 	skipDisabled        = "endpoint_disabled"
+	skipInvalidPayload  = "invalid_payload"
 )
 
 // EnqueueOptions tune an Enqueuer. Zero values take the defaults.
@@ -68,7 +74,7 @@ func NewEnqueuer(snaps SnapshotSource, m *telemetry.Metrics, opts EnqueueOptions
 		}, []string{"event"}),
 		skipped: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "callback_enqueue_skipped_total",
-			Help: "Subscriptions not enqueued: unknown version or endpoint, or an endpoint of another tenant.",
+			Help: "Subscriptions not enqueued: unknown version or endpoint, an endpoint of another tenant or a disabled one, or an event whose payload is unusable (invalid_payload).",
 		}, []string{"reason"}),
 	}
 	for _, c := range []prometheus.Collector{e.enqueued, e.skipped} {
@@ -135,6 +141,21 @@ func (e *Enqueuer) skip(ctx context.Context, ev *Event, reason, endpoint string)
 		slog.String("endpoint_id", endpoint), slog.String("event", string(ev.Data.Type())))
 }
 
+// EnqueueTerminal is Enqueue for a request's terminal event: a problem with the event's own
+// payload never fails the caller's transaction. A terminal transition that rolled back because
+// of a callback would leave the request in flight, to be reclaimed and the vendor called again
+// (HUB-449). The callback is then not enqueued: it is counted in callback_enqueue_skipped_total
+// (reason invalid_payload) and logged by request and event type, never with the payload or the
+// validator's message, which can quote it. Database and snapshot errors still fail the caller.
+func (e *Enqueuer) EnqueueTerminal(ctx context.Context, tx pgx.Tx, ev *Event) (int, error) {
+	n, err := e.Enqueue(ctx, tx, ev)
+	if errors.Is(err, ErrInvalidPayload) {
+		e.skip(ctx, ev, skipInvalidPayload, "")
+		return 0, nil
+	}
+	return n, err
+}
+
 const insertDelivery = `
 INSERT INTO hub.callback_deliveries (delivery_id, event_id, event_type, request_id, tenant_id,
     integration_id, integration_version, endpoint_id, subscription, payload, traceparent)
@@ -164,12 +185,12 @@ func (e *Enqueuer) Enqueue(ctx context.Context, tx pgx.Tx, ev *Event) (int, erro
 	}
 	body, err := ev.Marshal(e.opts.Now())
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("%w: %w", ErrInvalidPayload, err)
 	}
 	typ := ev.Data.Type()
 	if e.opts.Validator != nil {
 		if err := e.opts.Validator.Validate(typ, body); err != nil {
-			return 0, err
+			return 0, fmt.Errorf("%w: %w", ErrInvalidPayload, err)
 		}
 	}
 	// The terminal transition's span (worker attempt or wait-mode edge): the delivery span links

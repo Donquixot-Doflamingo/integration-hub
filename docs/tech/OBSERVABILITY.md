@@ -117,7 +117,7 @@ Label value sets (phase 1 planning numbers, revisit at open question DESIGN §20
 | `callback_dlq_count` | gauge | deliveries | — | `callbacks` (each dispatcher, every 15 s) | callback DLQ size (`status='dead_lettered'`) |
 | `metric_series_overflow_total` | counter | observations | `metric` | `telemetry` | observations folded into `__overflow__` because a capped metric reached its series cap (HUB-230); any increase means the cap or the label set needs review |
 | `callback_enqueued_total` | counter | deliveries | `event` | `callbacks` | deliveries written by `Enqueue` inside the state-change transaction (HUB-120) |
-| `callback_enqueue_skipped_total` | counter | subscriptions | `reason` (`unknown_version`, `unknown_endpoint`, `tenant_mismatch`) | `callbacks` | subscriptions that could not be honoured; any increase is a config problem |
+| `callback_enqueue_skipped_total` | counter | subscriptions | `reason` (`unknown_version`, `unknown_endpoint`, `tenant_mismatch`, `endpoint_disabled`, `invalid_payload`) | `callbacks` | subscriptions that could not be honoured; any increase is a config problem. `invalid_payload` is a bug: a terminal event whose payload does not marshal or break the contract schema is skipped, not allowed to fail the request's transition (HUB-449) |
 | `webhook_inbound_total` | counter | webhooks | `vendor, account, outcome` (`accepted`, `bad_signature`, `replay`, `uncorrelated`) | `webhooks` | |
 | `transform_duration_ms` | histogram | ms | `kind` (`request`,`response`,`error`,`stream`) | `transform` | M2 budget in prod |
 | `transform_budget_exceeded_total` | counter | events | `transformer, limit` (`nodes`,`output_size`,`time`) | `transform` | |

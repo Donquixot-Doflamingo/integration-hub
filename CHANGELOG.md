@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(callbacks)` · Never let a callback payload problem undo a request's terminal transition (HUB-449) · HUB-449 · F-11
+  - request.completed carries any JSON result (array, string, number, null for an empty 204 body), as the contract already allows; before, only objects were accepted
+  - A callback whose payload is unusable is skipped, logged and counted (callback_enqueue_skipped_total{reason="invalid_payload"}); the request stays succeeded and the vendor is no longer called again
 - 2026-11-08 · `fix(queue)` · Carry the new expiry into a replayed dead letter's envelope (HUB-449) · HUB-449 · F-09
   - A dead letter replayed after its original TTL is now delivered; before, the worker read the old expiry from the envelope and expired it without an attempt
 - 2026-11-08 · `docs(tickets)` · File HUB-449 for the delivery correctness fixes (HUB-449) · HUB-449 · F-09
