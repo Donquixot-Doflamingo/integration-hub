@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(frontend)` · Order request timeline events by time, not by seq (HUB-455) · HUB-455 · F-19
+  - A replayed request's events (which restart seq) no longer land between the original events or show negative gaps; seq only breaks ties
+
 - 2026-11-08 · `fix(frontend)` · Stop showing a wrong page number after 20 pages (HUB-455) · HUB-455 · F-19
   - Past page 21 the pager says "This page" instead of a wrong "Page 21", and Previous no longer jumps back to the first page when the back trail ends (it steps back one page at a time and is hidden where the trail ends)
 
