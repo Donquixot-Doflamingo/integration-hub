@@ -118,9 +118,26 @@ func NewArchive(pool *pgxpool.Pool, blobs BlobStore) *Archive {
 // archiveLockKey serialises publishers (pg_advisory_xact_lock).
 const archiveLockKey = 0x4855425f534e4150 // "HUB_SNAP"
 
+// PublishOptions hooks into the archive transaction (HUB-451).
+type PublishOptions struct {
+	// Guard runs under the archive lock, before anything is written, with the newest archived
+	// snapshot (exists false when the archive is empty). An error refuses the publish: callers
+	// that decided on an earlier read (config-directory archive, legacy upgrade) re-check here.
+	Guard func(latest Meta, exists bool) error
+	// InTx runs in the same transaction (published false: nothing was written and version is the
+	// unchanged latest). An error rolls the snapshot back, so the change log and the archive
+	// never disagree.
+	InTx func(ctx context.Context, tx pgx.Tx, version int64, published bool) error
+}
+
 // Publish records snap (built from src) as the next archive version. If the latest archived
 // snapshot already has the same checksum nothing is written and published is false.
 func (a *Archive) Publish(ctx context.Context, src registry.Sources, snap *registry.Snapshot, author, reason string) (version int64, published bool, err error) {
+	return a.PublishWith(ctx, src, snap, author, reason, PublishOptions{})
+}
+
+// PublishWith is Publish with a Guard and an in-transaction hook.
+func (a *Archive) PublishWith(ctx context.Context, src registry.Sources, snap *registry.Snapshot, author, reason string, opt PublishOptions) (version int64, published bool, err error) {
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		return 0, false, fmt.Errorf("archive: begin: %w", err)
@@ -131,11 +148,27 @@ func (a *Archive) Publish(ctx context.Context, src registry.Sources, snap *regis
 	}
 	q := db.New(tx)
 	latest, err := q.LatestSnapshot(ctx)
+	exists := true
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
+		exists = false
 	case err != nil:
 		return 0, false, fmt.Errorf("archive: latest: %w", err)
-	case latest.Checksum == snap.Checksum:
+	}
+	if opt.Guard != nil {
+		if err := opt.Guard(Meta{Version: latest.Version, Checksum: latest.Checksum, Author: latest.Author}, exists); err != nil {
+			return 0, false, err
+		}
+	}
+	if exists && latest.Checksum == snap.Checksum {
+		if opt.InTx != nil {
+			if err := opt.InTx(ctx, tx, latest.Version, false); err != nil {
+				return 0, false, err
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return 0, false, fmt.Errorf("archive: commit: %w", err)
+			}
+		}
 		return latest.Version, false, nil
 	}
 	version = latest.Version + 1
@@ -147,22 +180,66 @@ func (a *Archive) Publish(ctx context.Context, src registry.Sources, snap *regis
 	if err != nil {
 		return 0, false, fmt.Errorf("archive: store blob: %w", err)
 	}
+	committed := false
+	defer func() {
+		if !committed { // the blob of a rolled-back version must not outlive it
+			_ = a.blobs.Delete(context.WithoutCancel(ctx), ref)
+		}
+	}()
 	if _, err := q.InsertSnapshot(ctx, db.InsertSnapshotParams{
 		Version: version, Checksum: snap.Checksum, BlobRef: ref, Author: author, Reason: reason,
 	}); err != nil {
 		return 0, false, fmt.Errorf("archive: insert: %w", err)
 	}
+	if opt.InTx != nil {
+		if err := opt.InTx(ctx, tx, version, true); err != nil {
+			return 0, false, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, false, fmt.Errorf("archive: commit: %w", err)
 	}
+	committed = true
 	return version, true, nil
 }
 
 // ErrNoSnapshot means the archive is empty.
 var ErrNoSnapshot = errors.New("no archived snapshot")
 
+// SnapshotLoadError: the newest archived snapshot cannot be loaded (blob missing or unreadable,
+// corrupt, or no longer valid). Every admin read and write starts from it, so the admin answers
+// with Reason instead of a bare internal error.
+type SnapshotLoadError struct {
+	Version int64
+	Cause   error
+}
+
+func (e *SnapshotLoadError) Error() string {
+	return fmt.Sprintf("archive: snapshot v%d cannot be loaded: %v", e.Version, e.Cause)
+}
+
+// Unwrap exposes the cause (registry.ErrCorruptBlob, os.ErrNotExist, ...).
+func (e *SnapshotLoadError) Unwrap() error { return e.Cause }
+
+// Reason is the cause in words that are safe to show an operator: no secrets and no file paths
+// (the blob store's own errors name them).
+func (e *SnapshotLoadError) Reason() string {
+	switch {
+	case errors.Is(e.Cause, os.ErrNotExist):
+		return "its blob is missing from the blob store"
+	case errors.Is(e.Cause, registry.ErrCorruptBlob):
+		msg := e.Cause.Error()
+		if len(msg) > 300 {
+			msg = msg[:300] + "..."
+		}
+		return msg
+	}
+	return "its blob could not be read from the blob store"
+}
+
 // Latest loads, rebuilds and verifies the newest archived snapshot. A blob that does not
-// rebuild to its recorded checksum is refused (registry.ErrCorruptBlob).
+// rebuild to its recorded checksum is refused (registry.ErrCorruptBlob). A snapshot that cannot
+// be loaded is a *SnapshotLoadError naming its version.
 func (a *Archive) Latest(ctx context.Context, now time.Time) (*registry.Snapshot, registry.Sources, int64, error) {
 	row, err := db.New(a.pool).LatestSnapshot(ctx)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -173,11 +250,14 @@ func (a *Archive) Latest(ctx context.Context, now time.Time) (*registry.Snapshot
 	}
 	data, err := a.blobs.Get(ctx, row.BlobRef)
 	if err != nil {
-		return nil, registry.Sources{}, 0, fmt.Errorf("archive: read blob v%d: %w", row.Version, err)
+		if ctx.Err() != nil {
+			return nil, registry.Sources{}, 0, fmt.Errorf("archive: read blob v%d: %w", row.Version, err)
+		}
+		return nil, registry.Sources{}, 0, &SnapshotLoadError{Version: row.Version, Cause: err}
 	}
 	snap, src, err := registry.Unpack(data, row.Checksum, now)
 	if err != nil {
-		return nil, registry.Sources{}, 0, fmt.Errorf("archive: snapshot v%d: %w", row.Version, err)
+		return nil, registry.Sources{}, 0, &SnapshotLoadError{Version: row.Version, Cause: err}
 	}
 	return snap, src, row.Version, nil
 }

@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(control)` · Publish without the connection deadlock, and archive the snapshot with its change in one transaction (HUB-451) · HUB-451 · F-16
+  - Many concurrent admin edits no longer hang every admin database call: waiting for the edit lock holds no pool connection
+  - A snapshot and its change-log row commit together; a failed change-log write no longer leaves a live snapshot without a change
+  - A publish that changes nothing records its change without a snapshot version, so the snapshot list no longer credits it to the wrong author
+  - Edits that raced with another replica re-run on the newer tree instead of overwriting it
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
   - The names are joined with a space ("harsh Khandelwal"), which agify answers with an age; joined without one it answered age null
   - The endpoint allows 10 s to connect, enough for slow DNS plus TLS to agify
