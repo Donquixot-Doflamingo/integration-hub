@@ -61,8 +61,8 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | F-23 | HUB-431–HUB-459 | 14 | 0 |
-| **Total** | | | | **289** | **204** |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | F-23 | HUB-431–HUB-459 | 15 | 0 |
+| **Total** | | | | **290** | **204** |
 
 ## Sizing
 
@@ -98,7 +98,7 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | F-08 | Audit trail | EP-04, EP-05, EP-13 | 10 |
 | F-09 | Durable delivery: outbox, worker, wait/async/async_callback | EP-05, EP-13 | 12 |
 | F-10 | Idempotency | EP-05 | 1 |
-| F-11 | Outbound callbacks & registrar (signed webhooks, SSRF guard) | EP-05 | 5 |
+| F-11 | Outbound callbacks & registrar (signed webhooks, SSRF guard) | EP-05 | 6 |
 | F-12 | Circuit breaker, parking & ramped drain | EP-06 | 17 |
 | F-13 | Rate limits & bulkheads | EP-06, EP-13 | 5 |
 | F-14 | Integration versioning & cutover (weights, shadow, rollback) | EP-07 | 14 |

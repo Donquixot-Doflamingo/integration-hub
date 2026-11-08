@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `docs(tickets)` · File HUB-452 for three callbacks defects (HUB-452) · HUB-452 · F-11
+  - Backlog entry for the SSRF guard AAAA stall, the over-claiming dispatcher and disabled endpoints burning retries
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
   - The names are joined with a space ("harsh Khandelwal"), which agify answers with an age; joined without one it answered age null
   - The endpoint allows 10 s to connect, enough for slow DNS plus TLS to agify
