@@ -213,6 +213,7 @@
 				id="q-from"
 				name="from"
 				type="datetime-local"
+				step="1"
 				value={toLocalInput(filters.from)}
 				aria-invalid={data.state.problem ? 'true' : undefined}
 				aria-describedby={data.state.problem ? 'q-range-problem' : 'q-range-hint'}
@@ -224,6 +225,7 @@
 				id="q-to"
 				name="to"
 				type="datetime-local"
+				step="1"
 				value={toLocalInput(filters.to)}
 				aria-invalid={data.state.problem ? 'true' : undefined}
 				aria-describedby={data.state.problem ? 'q-range-problem' : 'q-range-hint'}

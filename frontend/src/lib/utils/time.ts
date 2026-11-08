@@ -15,9 +15,14 @@ export function normalizeTime(raw: string | null | undefined): string | null {
 	return Number.isNaN(t) || `${new Date(t).toISOString().slice(0, 19)}Z` !== iso ? null : iso;
 }
 
-/** Value for `<input type="datetime-local">` (shown as UTC): `2026-10-31T09:00`. */
+/**
+ * Value for `<input type="datetime-local" step="1">` (shown as UTC): `2026-10-31T09:00`, or with
+ * seconds when they are not zero: `2026-10-31T09:00:30`. Cutting to minutes shifted a bound taken
+ * from a shared URL the moment Search was pressed (HUB-455).
+ */
 export function toLocalInput(iso: string | undefined): string {
-	return iso ? iso.slice(0, 16) : '';
+	if (!iso) return '';
+	return iso.slice(17, 19) === '00' || iso.length < 19 ? iso.slice(0, 16) : iso.slice(0, 19);
 }
 
 /** Quick ranges ending now, as absolute times so the URL stays shareable. */

@@ -146,6 +146,7 @@
 				id="cl-from"
 				name="from"
 				type="datetime-local"
+				step="1"
 				value={toLocalInput(filters.from)}
 				aria-invalid={data.state.problem ? 'true' : undefined}
 				aria-describedby={data.state.problem ? 'cl-range-problem' : undefined}
@@ -157,6 +158,7 @@
 				id="cl-to"
 				name="to"
 				type="datetime-local"
+				step="1"
 				value={toLocalInput(filters.to)}
 				aria-invalid={data.state.problem ? 'true' : undefined}
 				aria-describedby={data.state.problem ? 'cl-range-problem' : undefined}

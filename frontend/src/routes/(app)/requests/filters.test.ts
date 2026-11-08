@@ -63,6 +63,13 @@ describe('times', () => {
 
 	it('toLocalInput', () => expect(toLocalInput('2026-10-31T09:00:00Z')).toBe('2026-10-31T09:00'));
 
+	it('keeps the seconds of a bound through the form (HUB-455)', () => {
+		expect(toLocalInput('2026-10-31T09:00:30Z')).toBe('2026-10-31T09:00:30');
+		const f = new FormData();
+		f.set('from', toLocalInput('2026-10-31T09:00:30Z'));
+		expect(filtersFromForm(f).filters.from).toBe('2026-10-31T09:00:30Z');
+	});
+
 	it('lastRange ends at the next full minute', () => {
 		const now = Date.parse('2026-10-31T09:15:20Z');
 		expect(lastRange(3_600_000, now)).toEqual({

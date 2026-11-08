@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(frontend)` · Keep the seconds of a time bound when Search is pressed (HUB-455) · HUB-455 · F-19
+  - Opening /requests?from=...T09:00:30Z and pressing Search no longer moves the bound to 09:00:00; the time fields accept seconds (requests, DLQ, change log)
+
 - 2026-11-08 · `fix(frontend)` · Order request timeline events by time, not by seq (HUB-455) · HUB-455 · F-19
   - A replayed request's events (which restart seq) no longer land between the original events or show negative gaps; seq only breaks ties
 

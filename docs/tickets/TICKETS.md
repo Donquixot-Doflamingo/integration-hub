@@ -3728,7 +3728,7 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 
 ### HUB-455 — Console: admin shown as tenant viewer when /me fails, expired sessions cannot recover, filters silently dropped, empty lookups
 - **Epic:** EP-14 · **Type:** fix · **Area:** frontend
-- **Status:** in-progress · **Depends on:** HUB-436 · **Feature:** F-19 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-436 · **Feature:** F-19 · **Stories:** —
 - **Branch:** `fix/HUB-455-console-error-states`
 
 A code review of the console found states where it lies to the operator or leaves them stuck:
@@ -3744,13 +3744,13 @@ A code review of the console found states where it lies to the operator or leave
 10. `toLocalInput` drops seconds, so Search shifts a `from`/`to` bound.
 
 **Acceptance criteria**
-- [ ] 1: unknown access shows an ErrorPanel with Retry on every role-dependent page; unknown is never tenant-scoped
-- [ ] 2: UNAUTHORIZED errors link to sign-in; `redirect` results are applied in every custom `enhance` callback
-- [ ] 3: an invalid filter value shows a field error (aria-invalid, described-by) and the search does not run
-- [ ] 4: lookup failures are shown; all vendors are read by following cursors
-- [ ] 5: an emptied quota field sends `null`
-- [ ] 6-10: fixed with a failing test first, or reported as not done
-- [ ] `npm run check && npm run lint && npm test` green
+- [x] 1: unknown access shows an ErrorPanel with Retry on every role-dependent page; unknown is never tenant-scoped
+- [x] 2: UNAUTHORIZED errors link to sign-in; `redirect` results are applied in every custom `enhance` callback
+- [x] 3: an invalid filter value shows a field error (aria-invalid, described-by) and the search does not run
+- [x] 4: lookup failures are shown; all vendors are read by following cursors
+- [x] 5: an emptied quota field sends `null`
+- [x] 6-10: fixed with a failing test first, or reported as not done
+- [x] `npm run check && npm run lint && npm test` green
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.

@@ -282,6 +282,7 @@
 				id="d-from"
 				name="from"
 				type="datetime-local"
+				step="1"
 				value={toLocalInput(filters.from)}
 				aria-invalid={data.state.problem ? 'true' : undefined}
 				aria-describedby={data.state.problem ? 'd-range-problem' : 'd-range-hint'}
@@ -293,6 +294,7 @@
 				id="d-to"
 				name="to"
 				type="datetime-local"
+				step="1"
 				value={toLocalInput(filters.to)}
 				aria-invalid={data.state.problem ? 'true' : undefined}
 				aria-describedby={data.state.problem ? 'd-range-problem' : 'd-range-hint'}
