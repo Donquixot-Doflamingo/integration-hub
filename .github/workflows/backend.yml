@@ -5,10 +5,10 @@ name: backend
 
 on:
   pull_request:
-    paths: ["backend/**", "contracts/**", "deploy/**", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "contracts/**", "deploy/**", "examples/**", ".github/workflows/backend.yml"]
   push:
     branches: [main]
-    paths: ["backend/**", "contracts/**", "deploy/**", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "contracts/**", "deploy/**", "examples/**", ".github/workflows/backend.yml"]
 
 concurrency:
   group: backend-${{ github.ref }}
@@ -34,6 +34,9 @@ jobs:
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.15.0
+          # Build the pinned version from the Go module proxy instead of downloading the release
+          # binary from GitHub: the release download answered 504 twice in a row (HUB-442).
+          install-mode: goinstall
           working-directory: backend
 
   sqlc:
@@ -87,7 +90,9 @@ jobs:
 
   itest:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The suite takes ~9-10 min since EP-14 (runs: 540-618 s); 10 min cancelled it on main and on
+    # PR #46. HUB-443 tracks making it faster.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -143,10 +148,21 @@ jobs:
       - name: Install promtool (pinned release, checksum verified)
         run: |
           tgz="$RUNNER_TEMP/prometheus.tar.gz"
-          curl -sSfL -o "$tgz" "https://github.com/prometheus/prometheus/releases/download/v${PROMTOOL_VERSION}/prometheus-${PROMTOOL_VERSION}.linux-amd64.tar.gz"
-          echo "${PROMTOOL_SHA256}  $tgz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/bin"
-          tar -xzf "$tgz" -C "$RUNNER_TEMP/bin" --strip-components=1 "prometheus-${PROMTOOL_VERSION}.linux-amd64/promtool"
+          # GitHub release downloads answer 504 at times (HUB-442): retry with a pause; the checksum still decides.
+          if curl -sSfL --retry 4 --retry-delay 10 --retry-all-errors -o "$tgz" "https://github.com/prometheus/prometheus/releases/download/v${PROMTOOL_VERSION}/prometheus-${PROMTOOL_VERSION}.linux-amd64.tar.gz"; then
+            echo "${PROMTOOL_SHA256}  $tgz" | sha256sum -c -
+            tar -xzf "$tgz" -C "$RUNNER_TEMP/bin" --strip-components=1 "prometheus-${PROMTOOL_VERSION}.linux-amd64/promtool"
+          else
+            # Fallback when the release download is down: the same promtool version from the official
+            # image on Docker Hub, run with the workspace mounted at the same path.
+            echo "::warning::promtool release download failed; using prom/prometheus:v${PROMTOOL_VERSION}"
+            docker pull -q "prom/prometheus:v${PROMTOOL_VERSION}"
+            printf '#!/bin/sh\nexec docker run --rm -u "$(id -u):$(id -g)" -v "%s:%s" -w "$PWD" --entrypoint promtool "prom/prometheus:v%s" "$@"\n' \
+              "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$PROMTOOL_VERSION" > "$RUNNER_TEMP/bin/promtool"
+            chmod +x "$RUNNER_TEMP/bin/promtool"
+          fi
+          "$RUNNER_TEMP/bin/promtool" --version
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Alert rules and dashboards (make monitoring)
         run: make monitoring

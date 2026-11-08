@@ -61,8 +61,8 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | F-23 | HUB-431–HUB-459 | 11 | 0 |
-| **Total** | | | | **286** | **204** |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | F-23 | HUB-431–HUB-459 | 13 | 0 |
+| **Total** | | | | **288** | **204** |
 
 ## Sizing
 
@@ -110,7 +110,7 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | F-20 | Hub MCP server (`hubmcp`) | EP-11 | 14 |
 | F-21 | Consumer Claude skill & Go SDK (`hubclient`) | EP-04, EP-11 | 8 |
 | F-22 | Release-2 features | EP-12 | 18 |
-| F-23 | Schema registry: operations on the integration, request schemas on the endpoint | EP-14 | 10 |
+| F-23 | Schema registry: operations on the integration, request schemas on the endpoint | EP-14 | 12 |
 
 ## Parallel work and critical path
 
