@@ -45,7 +45,7 @@ Vendor mappings scattered in caller code are untested and diverge. Mappings in t
 1. Compile once per snapshot; never parse or compile per request (DESIGN §7.1).
 2. Expressions type-check at compile. The transformer knows no caller schema (ADR-0023): its `req.*` / `hdr.*` reads (`Program.FieldRefs`) are checked at integration validate/publish against each operation that uses it (`schemas_compile`); request samples' produced requests are checked against the vendor endpoint's `request_schema` (`endpoint_schema`, credentials excluded) and their inputs against the operation (`input_schema`).
 3. Purity: no network, no disk, no loops beyond `map`/`filter`; limits on expression depth, output bytes and runtime per transform (exact values in TECH_SPEC).
-4. `creds.*` allowed only in header/query/auth targets unless `allow_creds_in_body: true` (DESIGN §7.2).
+4. `creds.*` allowed only in header/query/auth targets unless `allow_creds_in_body: true` (DESIGN §7.2). Any `$`-prefixed identifier (`$env`) is rejected at compile, because `$env.creds` would reach the secrets past this rule (HUB-447).
 5. Values that differ per account come from `account.config.*`; a new transformer only when shape changes (DESIGN §3.3).
 6. Error rules evaluated in order; first match wins; no match → default classification of DESIGN §10.2.
 7. A transformer version is immutable; references are `Name@version`.

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **16**
+Total tickets: **290** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **17**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 14 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 15 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3752,3 +3752,21 @@ HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 
 - HUB-237 — Runbooks and M8 summary
 
 Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-447 — Transformer bugs: creds guard bypass, zero-decimal currencies, NaN/Inf, format()
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-progress · **Depends on:** — · **Feature:** F-04 · **Stories:** —
+- **Branch:** `fix/HUB-447-transform-bugs`
+
+Four bugs in `backend/internal/transform`, found by review and reproduced by running code:
+1. **creds guard bypass.** The compiler looked only for the identifier `creds`, so `$env.creds.token` or `$env["creds"].token` put credentials into the vendor body (rule "creds only in headers/query") or session, and a header built that way was not marked a credential target, so the Authorization value showed up in the schema-checked request.
+2. **Zero-decimal currencies.** `currencyMinor("1000", "XOF")` returned 100000 (100x overcharge): only JPY, KRW, VND and CLP were known as zero-decimal.
+3. **NaN and Inf.** `req.a / req.b` with b = 0 gave +Inf and passed; the body then failed to encode, or "+Inf" was sent as a header or query value.
+4. **format().** JSON numbers are float64, so `format("%d", req.n)` gave `%!d(float64=3)`, `%s` gave `%!s(float64=3)` and `%v` of 1000000.0 gave `1e+06`, all silently.
+
+**Acceptance criteria**
+- [x] Any `$`-prefixed identifier (`$env`) is rejected at compile time in body, headers, query, auth and session; existing transformers still compile
+- [ ] currencyMinor knows the full ISO 4217 minor-unit table and refuses an unknown currency code
+- [ ] NaN and ±Inf anywhere in a request or response transformer's output fail with an EvalError (TRANSFORM_FAILED)
+- [ ] format() formats whole-number floats as integers and returns an error on a bad verb or wrong type (`%!`)
+- [ ] Each bug has a failing table-driven test first; `go test -race ./internal/transform/...` and the config-loading packages are green

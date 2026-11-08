@@ -61,8 +61,8 @@ IDs are never reused. New tickets take the next free number **inside their epic'
 | EP-11 | MCP server + consumer skill + SDK | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | F-23 | HUB-431–HUB-459 | 14 | 0 |
-| **Total** | | | | **289** | **204** |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | F-23 | HUB-431–HUB-459 | 15 | 0 |
+| **Total** | | | | **290** | **204** |
 
 ## Sizing
 
@@ -89,9 +89,9 @@ Feature ids map to `docs/features/F-XX-*.md` (index: `docs/features/README.md`, 
 | F-01 | Repo foundation, dev environment & CI | EP-00, EP-01 | 27 |
 | F-02 | Mock vendor (programmable fake vendor) | EP-01 | 3 |
 | F-03 | Config registry & snapshots | EP-02 | 12 |
-| F-04 | Transformation engine & golden fixtures | EP-03 | 16 |
+| F-04 | Transformation engine & golden fixtures | EP-03 | 17 |
 | F-03 | Config registry & snapshots | EP-02 | 12 |
-| F-04 | Transformation engine & golden fixtures | EP-03 | 16 |
+| F-04 | Transformation engine & golden fixtures | EP-03 | 17 |
 | F-05 | Tenant auth, grants & edge validation | EP-04 | 4 |
 | F-06 | Sync invoke path & canonical error envelope | EP-04 | 8 |
 | F-07 | Credentials & vendor auth schemes | EP-04 | 2 |

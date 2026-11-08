@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(transform)` · Reject $env so creds cannot bypass the placement rule (HUB-447) · HUB-447 · F-04
+  - `$env.creds.token` and `$env["creds"].token` no longer compile: credentials cannot reach the vendor body or a session, and a header can no longer carry one without being treated as a credential
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
   - The names are joined with a space ("harsh Khandelwal"), which agify answers with an age; joined without one it answered age null
   - The endpoint allows 10 s to connect, enough for slow DNS plus TLS to agify
