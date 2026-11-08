@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(callbacks)` · Never claim more callback rows than free senders (HUB-452) · HUB-452 · F-11
+  - After a dispatcher crash the callback sender no longer runs more than `Senders` attempts at once, leaks goroutines, or hangs at shutdown
 - 2026-11-08 · `fix(callbacks)` · Resolve A and AAAA separately in the SSRF guard (HUB-452) · HUB-452 · F-11
   - A callback no longer times out on a network whose resolver never answers AAAA, or when an unreachable AAAA address sorts first; the other family is used at once
   - Each address gets an equal share of the remaining 5 s; every resolved address is still vetted and refused when private, loopback, link-local, metadata, mapped or NAT64

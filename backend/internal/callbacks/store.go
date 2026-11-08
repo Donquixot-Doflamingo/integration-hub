@@ -51,15 +51,18 @@ type pgStore struct{ pool *pgxpool.Pool }
 // claimDue takes due rows and rows whose claim expired (dispatcher died mid-attempt), each with
 // its own partial index, skipping rows other dispatchers hold. The CTEs are MATERIALIZED so the
 // LIMIT holds: an inlined LIMIT ... SKIP LOCKED subquery may be re-run and update more rows.
+// Each CTE can return up to $2 rows, so the union is cut to $2 again (abandoned rows first, then
+// due rows by age): a claim never returns more rows than the dispatcher has free senders (HUB-452).
+// Rows locked by a CTE but not picked are released when the statement ends.
 const claimDue = `
 WITH due AS MATERIALIZED (
-    SELECT delivery_id FROM hub.callback_deliveries
+    SELECT delivery_id, next_attempt_at AS ord FROM hub.callback_deliveries
     WHERE status IN ('pending', 'retry_scheduled') AND next_attempt_at <= now()
     ORDER BY next_attempt_at
     LIMIT $2
     FOR UPDATE SKIP LOCKED
 ), abandoned AS MATERIALIZED (
-    SELECT delivery_id FROM hub.callback_deliveries
+    SELECT delivery_id, claimed_until AS ord FROM hub.callback_deliveries
     WHERE status = 'in_flight' AND claimed_until < now()
     ORDER BY claimed_until
     LIMIT $2
@@ -68,7 +71,15 @@ WITH due AS MATERIALIZED (
 UPDATE hub.callback_deliveries d
 SET status = 'in_flight', claimed_by = $1, claimed_until = now() + $3 * interval '1 millisecond',
     attempts = d.attempts + 1, updated_at = now()
-WHERE d.delivery_id IN (SELECT delivery_id FROM due UNION SELECT delivery_id FROM abandoned)
+WHERE d.delivery_id IN (
+    SELECT delivery_id FROM (
+        SELECT delivery_id, 0 AS pri, ord FROM abandoned
+        UNION ALL
+        SELECT delivery_id, 1 AS pri, ord FROM due
+    ) picked
+    ORDER BY pri, ord
+    LIMIT $2
+)
 RETURNING d.delivery_id, d.event_id, d.event_type, d.request_id, d.tenant_id, d.integration_id,
     d.integration_version, d.endpoint_id, d.subscription, d.payload, d.attempts, coalesce(d.traceparent, '')`
 

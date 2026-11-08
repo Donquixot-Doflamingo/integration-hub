@@ -251,8 +251,15 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		cctx, cancel := context.WithTimeout(work, 5*time.Second)
 		claimed, err := d.deps.store.claim(cctx, d.opts.ID, n, d.opts.Visibility)
 		cancel()
-		for range n - len(claimed) {
+		// Hand back the tokens of the rows not claimed. The count of tokens in circulation never
+		// depends on what the store returned: each started attempt returns exactly the token it
+		// holds, and a store that returns more than n rows (it must not; HUB-452) makes the
+		// surplus rows wait for a token of their own instead of exceeding Senders.
+		for range max(n-len(claimed), 0) {
 			slots <- struct{}{}
+		}
+		if len(claimed) > n {
+			d.deps.Log.WarnContext(ctx, "callback.claim_overflow", slog.Int("asked", n), slog.Int("got", len(claimed)))
 		}
 		if err != nil {
 			if ctx.Err() == nil {
@@ -262,8 +269,11 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		} else {
 			backoff = d.opts.PollInterval
 		}
-		for _, row := range claimed {
+		for i, row := range claimed {
 			wg.Go(func() {
+				if i >= n {
+					<-slots // surplus row: take a token of its own (returned below)
+				}
 				defer func() { slots <- struct{}{} }()
 				d.attempt(work, row)
 			})
