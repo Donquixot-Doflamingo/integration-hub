@@ -85,6 +85,7 @@ Integration version `delivery: { mode, wait_ms, ttl, retry? }`; without `ttl` th
 | Metric | async accept latency (edge timing of 202) | NFR-02 |
 | Log | `state_transition` | request_id, from, to, attempt |
 | Metric | `worker_inflight{pool}` | slots in use (HUB-412) |
+| Log | `queue.poison_envelope` | ERROR, once per envelope: `request_id`, `reason=poison`; never the payload (HUB-453) |
 | Log | `worker.waiting_for_snapshot` | INFO, once per start before the first snapshot (HUB-406) |
 | Trace | spans `worker.claim`, `upstream` linked to the original trace via envelope `traceparent` | |
 | Alert | `queue_oldest_age_s` > 2 min | page |
@@ -99,6 +100,7 @@ Envelope stores the canonical body; it falls under the same payload policy as au
 | Worker killed mid-flight | Reclaimed after visibility timeout; at-least-once to vendor, guarded completion | One completion, one callback |
 | Postgres down | Async invoke 503; workers idle | 503 retryable |
 | Poison envelope | DLQ after 2 crashes | `request.failed` |
+| A stored envelope that no longer decodes (older format) | Dead-lettered as `poison` when a claim or the expiry pass reads it; the rest of the batch is delivered (HUB-453) | Nothing new (the operator sees it in the DLQ) |
 | Worker starts before its first snapshot | Claims nothing until it loads; no crash counted | Nothing (delivery starts once the snapshot is in) |
 | One vendor slow or hanging | Holds at most its target cap of slots; others keep claiming | Other vendors unaffected (`docs/tech/ISOLATION.md`) |
 

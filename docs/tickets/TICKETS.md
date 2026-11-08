@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **16**
+Total tickets: **290** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **17**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 14 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 15 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3725,6 +3725,25 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 - [x] estimate@1 allows 10 s to connect and 15 s in total
 - [x] The examples use their own `hub_examples` database unless HUB_PG_DSN is set, and create it when missing
 - [x] Example tests and the offline run.sh pass with a fresh database
+
+### HUB-453 — Outbox: one bad envelope blocks a whole batch, expiry loop can spin, credential misses burn attempts
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-progress · **Depends on:** HUB-444 · **Feature:** F-09 · **Stories:** —
+- **Branch:** `fix/HUB-453-outbox-resilience`
+
+Four resilience bugs found in review of the queue and the delivery worker:
+1. **Head-of-line block in the queue.** `ClaimWithin` commits the batch as `in_flight` before decoding, then discards every claimed row when one envelope does not decode (for example an older stored format that sorts first). Whole batches wait for the 30 s visibility, `crashes` rises and good envelopes are dead-lettered as poison. `DueExpiries` fails the same way, so the scheduler's expiry pass never runs.
+2. **Expiry loop can spin.** `Scheduler.expire` ignores a failed `Transitions.Expire`, so the row stays due; with 100 or more such rows the `for` loop never ends (no sleep, no ctx check), with fewer they block newer expiries.
+3. **Credential misses burn attempts.** A credential cache miss returns a retryable error without touching the vendor, but the worker counts it on the 8-step schedule: a credential outage of about 2 h dead-letters healthy requests.
+4. **Drain fails open.** With the shared breaker state unreadable (Redis down) the drain assumes "long closed" and releases parked envelopes at 100 % of the account rate.
+
+**Acceptance criteria**
+- [ ] An undecodable envelope is dead-lettered (reason `poison`, never the payload in a log) and the rest of the claimed batch is returned; same for `DueExpiries`
+- [ ] The expiry sweep stops when a pass makes no progress, checks ctx, and skips a row that keeps failing (bounded retries with backoff, one log per stuck row)
+- [ ] A credential cache miss defers the envelope without counting an attempt, with a bounded delay, and is visible in a metric and a log
+- [ ] The drain holds while the breaker state is unreadable (one log, a metric) and resumes when it is readable again
+- [ ] A failing test per bug first; queue and delivery unit and integration suites green with `-race`
+
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
