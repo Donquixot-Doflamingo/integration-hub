@@ -6,7 +6,7 @@ import { contractMocks } from '$lib/api/mocks/contract.gen';
 import { mockError, mockOperation, mswPath } from '$lib/api/mocks/handlers';
 import { server } from '$lib/api/mocks/server';
 import { accessFromRoles, type Access } from '$lib/auth/roles';
-import { runAction, useActions } from '$lib/testing/forms';
+import { applied, runAction, useActions } from '$lib/testing/forms';
 import Page from './+page.svelte';
 import { load } from './+page';
 import { actions } from './+page.server';
@@ -244,6 +244,29 @@ describe('publish page', () => {
 		expect(checks).toHaveTextContent('Weights total 100');
 		expect(checks).toHaveTextContent('Fail');
 		expect(screen.getByRole('button', { name: 'Publish v8' })).toBeDisabled();
+	});
+
+	it('applies the sign-in redirect when the session expired during the checks (HUB-455)', async () => {
+		useActions(actions, { params: { integration_id: ID }, session: null });
+		const { user } = await renderPublish();
+		await user.click(screen.getByRole('button', { name: 'Run publish checks on v8' }));
+		await waitFor(() => expect(applied).toHaveLength(1));
+		expect(applied[0]).toMatchObject({ type: 'redirect', status: 303 });
+	});
+
+	it('shows a message when the publish checks cannot run at all (HUB-455)', async () => {
+		useActions(
+			{
+				...actions,
+				validate: () => {
+					throw new Error('boom');
+				}
+			},
+			{ params: { integration_id: ID } }
+		);
+		const { user } = await renderPublish();
+		await user.click(screen.getByRole('button', { name: 'Run publish checks on v8' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent(/could not run the publish checks/);
 	});
 
 	it('is read only for viewers', async () => {

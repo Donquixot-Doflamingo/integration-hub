@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(frontend)` · Let an expired session sign in again from error panels and action callbacks (HUB-455) · HUB-455 · F-19
+  - An "Unauthorized" error panel offers a Sign in link (back to the same page) instead of a Retry that repeats the 401
+  - Goldens, dry run, connection test, DLQ count, draft save and the authoring forms follow the action's sign-in redirect instead of showing "Try again" forever
+  - "Run publish checks" shows a message when the checks cannot run, instead of silently returning to normal
+
 - 2026-11-08 · `fix(frontend)` · Show a retry panel instead of tenant-viewer pages when /me fails (HUB-455) · HUB-455 · F-19
   - An admin whose /me call failed (not 401) no longer sees Accounts and Vendors as forbidden, an empty Tenants list or false 404s: every page shows "Could not load your access" with Retry, and one successful retry reloads all data
   - Unknown access is never treated as a tenant viewer

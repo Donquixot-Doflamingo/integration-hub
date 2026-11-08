@@ -7,7 +7,7 @@ import { mockError, mswPath } from '$lib/api/mocks/handlers';
 import { server } from '$lib/api/mocks/server';
 import { accessFromRoles, type Access } from '$lib/auth/roles';
 import type { Role } from '$lib/api/types';
-import { runAction, useActions } from '$lib/testing/forms';
+import { applied, runAction, useActions } from '$lib/testing/forms';
 import Page from './+page.svelte';
 import { load } from './+page';
 import { actions } from './+page.server';
@@ -248,6 +248,15 @@ describe('bulk actions on the server', () => {
 			dry_run: false,
 			reason: REASON
 		});
+	});
+
+	it('applies the sign-in redirect when the session expired during a count (HUB-455)', async () => {
+		useActions(actions, { session: null });
+		const user = await renderAt();
+		await user.click(screen.getByRole('button', { name: /Replay matching/ }));
+		await vi.waitFor(() => expect(applied).toHaveLength(1));
+		expect(applied[0]).toMatchObject({ type: 'redirect', status: 303 });
+		expect(screen.queryByText(/Try again/)).toBeNull();
 	});
 
 	it('sends the user back to sign in when the session expired', async () => {

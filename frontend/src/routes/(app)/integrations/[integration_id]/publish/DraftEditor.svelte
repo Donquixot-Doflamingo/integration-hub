@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { enhance } from '$app/forms';
+	import { applyAction, enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import {
 		fromPlainError,
@@ -170,6 +170,8 @@
 					await update({ reset: false });
 				} else if (result.type === 'failure') {
 					failure(result.data as ActionFailureData);
+				} else if (result.type === 'redirect') {
+					await applyAction(result);
 				} else {
 					saveError = new HubApiError({
 						status: result.status ?? 500,
@@ -193,6 +195,14 @@
 					report = (result.data as ActionSuccessData<ValidationReport>).result;
 				} else if (result.type === 'failure') {
 					failure(result.data as ActionFailureData);
+				} else if (result.type === 'redirect') {
+					await applyAction(result);
+				} else {
+					saveError = new HubApiError({
+						status: result.status ?? 500,
+						code: 'UNEXPECTED_RESPONSE',
+						message: 'The console could not run the publish checks. Try again.'
+					});
 				}
 			} finally {
 				checking = false;

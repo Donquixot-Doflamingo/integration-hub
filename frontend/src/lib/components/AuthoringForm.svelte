@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { tick } from 'svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { enhance } from '$app/forms';
+	import { applyAction, enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import {
 		fromPlainError,
@@ -114,6 +114,8 @@
 					form
 						?.querySelector<HTMLElement>('[aria-invalid="true"], .fk-summary, [role="alert"]')
 						?.focus?.();
+				} else if (result.type === 'redirect') {
+					await applyAction(result);
 				} else {
 					error = new HubApiError({
 						status: result.type === 'error' ? (result.status ?? 500) : 500,

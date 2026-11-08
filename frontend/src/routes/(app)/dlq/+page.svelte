@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { enhance } from '$app/forms';
+	import { applyAction, enhance } from '$app/forms';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fromPlainError, type ActionFailureData, type ActionSuccessData } from '$lib/api/actions';
@@ -98,6 +98,9 @@
 										message: 'The filters could not be counted.'
 									})
 								};
+					} else if (result.type === 'redirect') {
+						// The session expired: the action answered with the sign-in redirect (HUB-455).
+						await applyAction(result);
 					} else {
 						countError = {
 							kind,
