@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(examples)` · Keep the examples off the dev stack's ports and processes (HUB-456) · HUB-456 · F-23
+  - The examples' mockvendor now defaults to 127.0.0.1:18099/18098, so running an example while `make dev-up` is up can no longer reset or reprogram the dev stack's mockvendor
+  - An example refuses to start, naming the port and the likely culprit, when a port it needs is already listening; it programs only the mockvendor it started, and fails when its own process died instead of trusting another listener's healthz
+  - Pid files under .demo/<example>/pids let the next run stop a gateway or mockvendor left by a SIGKILLed run (after checking the command line)
+  - The example output prints a non-JSON response body (an HTML 502) as received instead of nothing
 - 2026-11-08 · `fix(scripts)` · Harden the dev stack scripts against stale state and failed starts (HUB-456) · HUB-456 · F-23
   - dev-up and dev-down only trust a pid file when the process behind it runs the Hub binary; a pid reused after a reboot is no longer reported as "already running" and is never signalled
   - A dev-up that fails after starting processes stops them again; the "port already in use" message names scripts/dev-down.sh and the stale pid files it removed

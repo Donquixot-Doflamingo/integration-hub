@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared helpers for the runnable examples (HUB-351, HUB-352, HUB-353): start a local Hub gateway
 # (and mockvendor) with the repository's dev config plus one example overlay, on ports that do
-# not clash with `make run` / `make mockvendor`. Source it; do not run it.
+# not clash with `make run` / `make mockvendor` / `make dev-up`. Source it; do not run it.
 #
 #   source "$root/examples/lib/local-hub.sh"
 #   hub_setup <state-dir> <overlay-dir>     # build, merge config, migrate, dev key
@@ -10,15 +10,22 @@
 #   hub_start [--mockvendor]                # start the gateway (and mockvendor), wait until ready
 #   mock_scenario <file.json>               # program mockvendor with a scenario file
 #
+# Safety (HUB-456): the default ports (gateway 18080/18090, mockvendor 18099/18098) are outside the
+# dev stack's (8080/8081/8098/8099/5173/19190-19193). hub_start refuses to start when a port it needs
+# is already listening, mock_scenario only talks to the mockvendor this script started, and pid files
+# under <state>/pids let the next hub_setup stop an orphan left by a SIGKILLed or crashed run
+# (only after checking the process is the Hub binary).
+#
 # Needs: Go (to build), curl, python3, and Postgres + Redis
 # (docker compose -f deploy/docker-compose.yml up -d). Everything stays on this machine except
 # what a sandbox target explicitly calls.
 
-# Ports (override with the environment). mockvendor's must match the overlay's mock region.
+# Ports (override with the environment). hub_setup rewrites the overlay's mock region to
+# MOCKVENDOR_ADDR. Never default to 8099/8098: those are `make dev-up`'s mockvendor.
 HUB_DEMO_HTTP="${HUB_DEMO_HTTP:-127.0.0.1:18080}"
 HUB_DEMO_OPS="${HUB_DEMO_OPS:-127.0.0.1:18090}"
-MOCKVENDOR_ADDR="${MOCKVENDOR_ADDR:-127.0.0.1:8099}"
-MOCKVENDOR_CONTROL_ADDR="${MOCKVENDOR_CONTROL_ADDR:-127.0.0.1:8098}"
+MOCKVENDOR_ADDR="${MOCKVENDOR_ADDR:-127.0.0.1:18099}"
+MOCKVENDOR_CONTROL_ADDR="${MOCKVENDOR_CONTROL_ADDR:-127.0.0.1:18098}"
 HUB_URL="http://$HUB_DEMO_HTTP"
 # The examples use their own database unless HUB_PG_DSN is set: sharing the dev stack's database
 # (make dev-up, the console) made an example's gateway see the console's published snapshots
@@ -33,6 +40,9 @@ export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,::1}" no_proxy="${no_proxy:-loc
 _hub_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 _hub_bin="$_hub_root/backend/bin"
 _hub_pids=()
+_hub_mock_pid="" # set only when this script started the mockvendor it will program
+# shellcheck source=../../scripts/lib/pids.sh
+source "$_hub_root/scripts/lib/pids.sh"
 
 hub_log() { printf '\033[2m%s\033[0m %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 hub_die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -53,6 +63,49 @@ _hub_ensure_db() {
   fi
 }
 
+# _hub_listening HOST:PORT: succeeds when something accepts connections there.
+_hub_listening() { (exec 3<>"/dev/tcp/${1%:*}/${1##*:}") 2>/dev/null; }
+
+# _hub_listener_pids PORT: pids listening on PORT (needs lsof; prints nothing without it).
+_hub_listener_pids() {
+  command -v lsof >/dev/null 2>&1 || return 0
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null || true
+}
+
+# _hub_require_free ADDR WHAT: stop with a clear message when ADDR is already listening, instead of
+# starting a process that cannot bind and then talking to whatever owns the port.
+_hub_require_free() {
+  local addr="$1" what="$2" port="${1##*:}" owner
+  _hub_listening "$addr" || return 0
+  owner="$(_hub_listener_pids "$port" | head -1)"
+  hub_die "port $port ($what, $addr) is already in use${owner:+ by pid $owner ($(pid_cmdline "$owner" | cut -c1-100))}.
+  Likely culprit: the dev stack (make dev-up; scripts/dev-down.sh stops it), or an earlier example run
+  that was killed and left its gateway or mockvendor running (stale pid files: $_hub_root/.demo/*/pids).
+  Free the port, or move this run with HUB_DEMO_HTTP, HUB_DEMO_OPS, MOCKVENDOR_ADDR, MOCKVENDOR_CONTROL_ADDR.
+  This script does not start anything on, or send control calls to, a port it does not own."
+}
+
+# _hub_pidfile_needle NAME: the command line fragment that identifies NAME's process.
+_hub_pidfile_needle() {
+  case "$1" in
+  mockvendor) printf '%s\n' "$_hub_bin/mockvendor" ;;
+  *) printf '%s\n' "$_hub_bin/hub $1" ;;
+  esac
+}
+
+# _hub_stop_stale: stop gateways and mockvendors left by earlier example runs (SIGKILL, crash:
+# the EXIT trap does not run). Only pids whose command line is this checkout's Hub binary are
+# signalled; any other pid file is just removed.
+_hub_stop_stale() {
+  local f name st
+  for f in "$_hub_root"/.demo/*/pids/*.pid; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f" .pid)"
+    st="$(stop_pidfile "$f" "$(_hub_pidfile_needle "$name")")"
+    [ "$st" != live ] || hub_log "stopped a $name left running by an earlier example run ($f)"
+  done
+}
+
 # _merge_overlay SRC DST: copy every file of SRC into DST, refusing to overwrite (the overlay
 # only adds objects, like the Go tests' mergeOverlay).
 _merge_overlay() {
@@ -71,7 +124,8 @@ _merge_overlay() {
 hub_setup() {
   local state="$1" overlay="$2"
   HUB_DEMO_STATE="$state"
-  mkdir -p "$state"
+  mkdir -p "$state/pids"
+  _hub_stop_stale
   command -v curl >/dev/null || hub_die "curl is required"
   command -v python3 >/dev/null || hub_die "python3 is required"
   hub_log "building the Hub binaries (backend/bin)"
@@ -90,7 +144,8 @@ hub_setup() {
   fi
   cp -R "$_hub_root/backend/config" "$state/config"
   _merge_overlay "$overlay/config" "$state/config"
-  # Point every mock region at the mockvendor this script starts.
+  # Point every mock region at the mockvendor this script starts (the configs say 127.0.0.1:8099,
+  # the dev stack's port, which the examples do not use).
   if [ "$MOCKVENDOR_ADDR" != "127.0.0.1:8099" ]; then
     find "$state/config/vendors" -name '*.yaml' -exec sed -i.bak "s#http://127.0.0.1:8099#http://$MOCKVENDOR_ADDR#g" {} +
     find "$state/config/vendors" -name '*.bak' -delete
@@ -112,39 +167,81 @@ hub_set_region() {
 }
 
 _hub_cleanup() {
-  for p in "${_hub_pids[@]}"; do kill "$p" 2>/dev/null || true; done
+  local p
+  trap - EXIT
+  for p in ${_hub_pids[@]+"${_hub_pids[@]}"}; do kill "$p" 2>/dev/null || true; done
   wait 2>/dev/null || true
+  rm -f "$HUB_DEMO_STATE"/pids/*.pid
 }
 
+# _hub_spawn NAME CMD...: run in the background with its log and pid file; sets _hub_last_pid.
+_hub_spawn() {
+  local name="$1"
+  shift
+  "$@" 2>"$HUB_DEMO_STATE/$name.log" &
+  _hub_last_pid=$!
+  _hub_pids+=("$_hub_last_pid")
+  echo "$_hub_last_pid" >"$HUB_DEMO_STATE/pids/$name.pid"
+}
+
+# _wait_url URL NAME PID: wait for URL to answer while PID (the process this script started) is alive.
+# A child that died (for example, it could not bind) is a failure even if something else answers.
 _wait_url() {
   for _ in $(seq 1 150); do
+    kill -0 "$3" 2>/dev/null || break
     curl -fsS "$1" >/dev/null 2>&1 && return 0
     sleep 0.2
   done
-  hub_log "$2 did not become ready at $1; last log lines:"
+  hub_log "$2 did not become ready at $1 (pid $3); last log lines:"
   tail -20 "$HUB_DEMO_STATE/$2.log" >&2 || true
   exit 1
 }
 
+# _hub_verify_listener PID PORT NAME: PID must be what listens on PORT (when lsof can tell).
+_hub_verify_listener() {
+  local pids
+  kill -0 "$1" 2>/dev/null || hub_die "$3 (pid $1) exited right after start; see $HUB_DEMO_STATE/$3.log"
+  command -v lsof >/dev/null 2>&1 || return 0
+  pids="$(_hub_listener_pids "$2")"
+  case " $(echo $pids) " in
+  *" $1 "*) ;;
+  *) hub_die "port $2 is held by pid ${pids:-?}, not by the $3 this script started (pid $1); refusing to continue" ;;
+  esac
+}
+
 hub_start() {
-  trap _hub_cleanup EXIT
+  # Check every port before starting anything, so a refusal leaves nothing behind.
+  _hub_require_free "$HUB_DEMO_HTTP" "example gateway"
+  _hub_require_free "$HUB_DEMO_OPS" "example gateway ops"
   if [ "${1:-}" = "--mockvendor" ]; then
-    "$_hub_bin/mockvendor" -addr "$MOCKVENDOR_ADDR" -control-addr "$MOCKVENDOR_CONTROL_ADDR" 2>"$HUB_DEMO_STATE/mockvendor.log" &
-    _hub_pids+=("$!")
-    _wait_url "http://$MOCKVENDOR_CONTROL_ADDR/__control/healthz" mockvendor
+    _hub_require_free "$MOCKVENDOR_ADDR" "example mockvendor"
+    _hub_require_free "$MOCKVENDOR_CONTROL_ADDR" "example mockvendor control"
   fi
-  "$_hub_bin/hub" gateway -http-addr "$HUB_DEMO_HTTP" -ops-addr "$HUB_DEMO_OPS" \
+  trap _hub_cleanup EXIT
+  trap 'exit 130' INT TERM HUP
+  mkdir -p "$HUB_DEMO_STATE/pids"
+  if [ "${1:-}" = "--mockvendor" ]; then
+    _hub_spawn mockvendor "$_hub_bin/mockvendor" -addr "$MOCKVENDOR_ADDR" -control-addr "$MOCKVENDOR_CONTROL_ADDR"
+    _hub_mock_pid="$_hub_last_pid"
+    _wait_url "http://$MOCKVENDOR_CONTROL_ADDR/__control/healthz" mockvendor "$_hub_mock_pid"
+    _hub_verify_listener "$_hub_mock_pid" "${MOCKVENDOR_CONTROL_ADDR##*:}" mockvendor
+  fi
+  _hub_spawn gateway "$_hub_bin/hub" gateway -http-addr "$HUB_DEMO_HTTP" -ops-addr "$HUB_DEMO_OPS" \
     -config-dir "$HUB_DEMO_STATE/config" \
     -data-dir "$HUB_DEMO_STATE/data" -blob-url "file://$HUB_DEMO_STATE/data/blobs" \
-    -ready-drain 100ms -log-level "${HUB_LOG_LEVEL:-warn}" 2>"$HUB_DEMO_STATE/gateway.log" &
-  _hub_pids+=("$!")
-  _wait_url "http://$HUB_DEMO_OPS/readyz" gateway
+    -ready-drain 100ms -log-level "${HUB_LOG_LEVEL:-warn}"
+  _wait_url "http://$HUB_DEMO_OPS/readyz" gateway "$_hub_last_pid"
+  _hub_verify_listener "$_hub_last_pid" "${HUB_DEMO_OPS##*:}" gateway
   hub_log "gateway ready on $HUB_URL (logs: $HUB_DEMO_STATE/gateway.log)"
 }
 
 # mock_scenario FILE: reset mockvendor, then PUT every route of the scenario file
 # ({"description", "routes": {id: RouteSpec}}, contracts/openapi/mockvendor.v1.yaml).
 mock_scenario() {
+  # Control calls reset the mockvendor's routes: only ever send them to the one this script started.
+  [ -n "$_hub_mock_pid" ] || hub_die "mock_scenario needs hub_start --mockvendor: refusing to program a mockvendor this script did not start"
+  _hub_verify_listener "$_hub_mock_pid" "${MOCKVENDOR_CONTROL_ADDR##*:}" mockvendor
+  pid_matches "$_hub_mock_pid" "$_hub_bin/mockvendor" || hub_die "pid $_hub_mock_pid is not the mockvendor this script started"
   python3 - "$1" "http://$MOCKVENDOR_CONTROL_ADDR" <<'PY'
 import json, sys, urllib.request
 path, base = sys.argv[1], sys.argv[2]
@@ -178,7 +275,13 @@ hub_post() {
   out="$(curl "${args[@]}" -X POST --data "$body" "$HUB_URL$path")"
   printf '< HTTP %s in %ss\n' "${out% *}" "${out#* }"
   grep -i '^x-hub-' "$HUB_DEMO_STATE/last.headers" | tr -d '\r' | sed 's/^/< /'
-  python3 -m json.tool "$HUB_DEMO_STATE/last.body" 2>/dev/null | sed 's/^/< /' || sed 's/^/< /' "$HUB_DEMO_STATE/last.body"
+  # Pretty-print JSON; any other body (an HTML 502 from a proxy, plain text) is printed as it came.
+  if python3 -m json.tool "$HUB_DEMO_STATE/last.body" >"$HUB_DEMO_STATE/last.pretty" 2>/dev/null; then
+    sed 's/^/< /' "$HUB_DEMO_STATE/last.pretty"
+  else
+    sed 's/^/< /' "$HUB_DEMO_STATE/last.body"
+    [ ! -s "$HUB_DEMO_STATE/last.body" ] || echo
+  fi
   HUB_LAST_STATUS="${out% *}"
 }
 
