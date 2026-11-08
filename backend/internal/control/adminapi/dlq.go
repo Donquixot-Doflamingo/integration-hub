@@ -134,7 +134,7 @@ func scanDeadLetter(row pgx.Row, snap *registry.Snapshot, extra ...any) (deadLet
 }
 
 func (s *Server) listDeadLetters(w http.ResponseWriter, r *http.Request) {
-	limit, cursor, err := page(r)
+	limit, cursor, err := page(r, 2)
 	if err != nil {
 		s.fail(w, r, err)
 		return

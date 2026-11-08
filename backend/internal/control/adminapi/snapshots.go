@@ -60,7 +60,7 @@ func (s *Server) archive() (*control.Archive, error) {
 }
 
 func (s *Server) listSnapshots(w http.ResponseWriter, r *http.Request) {
-	limit, cursor, err := page(r)
+	limit, cursor, err := page(r, 1)
 	if err != nil {
 		s.fail(w, r, err)
 		return

@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(adminapi)` · Refuse an empty owner, malformed cursors and repeated key scopes (HUB-451) · HUB-451 · F-16
+  - Creating an integration without an owner_tenant is a 400 at /owner_tenant instead of a 201 integration that could never be published
+  - A pagination cursor that does not belong to the list is a 400 on every list (change log, integrations, versions, accounts, tenants, vendors, snapshots, breakers); clients no longer loop on page 1
+  - An API key created with repeated scopes stores each scope once, in the order given
 - 2026-11-08 · `fix(control)` · Explain an unloadable snapshot, and re-check the archive under its lock before overwriting it (HUB-451) · HUB-451 · F-16
   - When the newest archived snapshot cannot be loaded, the admin API answers 500 INTERNAL_ERROR naming the snapshot version and the cause (meta.snapshot_version, meta.cause) instead of a bare "Internal error"
   - Nodes log one ERROR naming the version and the way out, repeated at most every 10 minutes, instead of a warning every 5 s

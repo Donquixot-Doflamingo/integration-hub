@@ -118,7 +118,7 @@ func accessSetKeys(t control.Tree, path string, kv map[string]any) error {
 
 // accessPage pages items sorted by id: the cursor is the last id of the previous page.
 func accessPage[T any](r *http.Request, ids []string, item func(id string) T) ([]T, *string, error) {
-	limit, cursor, err := page(r)
+	limit, cursor, err := page(r, 1)
 	if err != nil {
 		return nil, nil, err
 	}

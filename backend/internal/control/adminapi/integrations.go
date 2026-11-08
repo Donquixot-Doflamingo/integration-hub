@@ -196,7 +196,7 @@ func (s *Server) visibleIntegration(r *http.Request) (*catalog, *registry.Integr
 }
 
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
-	limit, cursor, err := page(r)
+	limit, cursor, err := page(r, 1)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -488,7 +488,7 @@ func (s *Server) versionViews(ctx context.Context, c *catalog, in *registry.Inte
 }
 
 func (s *Server) listIntegrationVersions(w http.ResponseWriter, r *http.Request) {
-	limit, cursor, err := page(r)
+	limit, cursor, err := page(r, 1)
 	if err != nil {
 		s.fail(w, r, err)
 		return

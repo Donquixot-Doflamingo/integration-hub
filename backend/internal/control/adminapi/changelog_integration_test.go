@@ -83,6 +83,10 @@ func TestChangeLogListAndGet(t *testing.T) {
 	if len(items2) != 1 || items2[0].(map[string]any)["change_id"] != ids[0] || second["next_cursor"] != nil {
 		t.Fatalf("page 2: %v", second)
 	}
+	// A cursor with the wrong number of parts ("x") is a 400, not a silent first page (HUB-451).
+	if code, _ := get("/change-log?cursor=eA"); code != 400 {
+		t.Fatalf("malformed cursor: %d, want 400", code)
+	}
 	code, entry := get("/change-log/" + ids[1])
 	if code != 200 || entry["before"].(map[string]any)["n"] != 1.0 || entry["actor_roles"].([]any)[0] != "editor" {
 		t.Fatalf("entry %d %v", code, entry)

@@ -163,7 +163,7 @@ func (s *Server) parkedBy(ctx context.Context) (map[upstream.BreakerKey]queue.Pa
 
 func (s *Server) listBreakers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	limit, cursor, err := page(r)
+	limit, cursor, err := page(r, 2)
 	if err != nil {
 		s.fail(w, r, err)
 		return
