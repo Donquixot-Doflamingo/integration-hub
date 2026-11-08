@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(frontend)` · Count again before a DLQ replay, as purge already does (HUB-455) · HUB-455 · F-19
+  - A replay is refused ("The selection changed: N now match, not M") when the matching dead letters changed since the operator counted them, instead of moving more than they confirmed
+
 - 2026-11-08 · `fix(frontend)` · Let an operator clear an account's daily quota (HUB-455) · HUB-455 · F-19
   - Emptying the daily quota field now sends `daily: null` instead of answering "Nothing changed"
   - Emptying the rate field explains that the rate cannot be removed (the contract has no null for it)

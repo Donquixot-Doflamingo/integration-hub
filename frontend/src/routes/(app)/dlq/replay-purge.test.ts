@@ -91,7 +91,9 @@ describe('replay by filter', () => {
 		const notice = (await screen.findByText(/^Replayed 42 dead letters/)).closest(
 			'[role="status"]'
 		) as HTMLElement;
-		expect(seen[1]).toEqual({ filter: FILTER, dry_run: false, reason: REASON });
+		// Count (page), count again (server), replay.
+		expect(seen.map((b) => b.dry_run)).toEqual([true, true, false]);
+		expect(seen[2]).toEqual({ filter: FILTER, dry_run: false, reason: REASON });
 		expect(notice).toHaveTextContent(replayExample.change_id!);
 		expect(within(notice).getByRole('link', { name: 'Show the replayed entries' })).toHaveAttribute(
 			'href',
@@ -179,6 +181,27 @@ describe('purge by filter (admin)', () => {
 		});
 	});
 
+	it('refuses to replay when the selection changed since it was counted (HUB-455)', async () => {
+		let dry = 0;
+		const seen: Record<string, unknown>[] = [];
+		server.use(
+			http.post(mswPath('/dlq/replay'), async ({ request }) => {
+				const body = (await request.json()) as Record<string, unknown>;
+				seen.push(body);
+				return HttpResponse.json(dryOf(replayExample, dry++ === 0 ? 42 : 90) as never);
+			})
+		);
+		const user = await renderAt();
+		await user.click(screen.getByRole('button', { name: /Replay matching/ }));
+		const dialog = await screen.findByRole('dialog');
+		await user.type(within(dialog).getByLabelText(/Reason/), REASON);
+		await user.click(within(dialog).getByRole('button', { name: 'Replay' }));
+		expect(
+			await within(dialog).findByText(/The selection changed: 90 now match, not 42/)
+		).toBeInTheDocument();
+		expect(seen.every((b) => b.dry_run === true)).toBe(true);
+	});
+
 	it('refuses to purge when the selection changed since it was counted', async () => {
 		let dry = 0;
 		const seen: Record<string, unknown>[] = [];
@@ -243,7 +266,7 @@ describe('bulk actions on the server', () => {
 			type: 'success',
 			data: { op: 'replay', changeId: replayExample.change_id }
 		});
-		expect(seen[0]).toEqual({
+		expect(seen[1]).toEqual({
 			filter: { account_id: 'ct-brandA-in' },
 			dry_run: false,
 			reason: REASON
