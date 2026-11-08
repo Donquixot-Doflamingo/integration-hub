@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(edge)` · Never release an Idempotency-Key after a successful call (HUB-450) · HUB-450 · F-10
+  - A 200 whose response is too large to store for replay (or whose store write fails) no longer frees the key: a retry answers 409 IDEMPOTENCY_CONFLICT (reason completed_not_stored) instead of calling the vendor a second time
+  - Failed requests still release the key so a retry runs fresh
 - 2026-11-08 · `feat(idempotency)` · Keep a key whose response could not be stored (HUB-450) · HUB-450 · F-10
   - The store can mark a key "completed, response not stored"; a later Begin with the same body answers CompletedNotStored until the record's TTL instead of letting the request run again
   - New counters: idempotency_hits_total{result="completed_not_stored"} and idempotency_writes_total{op="mark_completed"}
