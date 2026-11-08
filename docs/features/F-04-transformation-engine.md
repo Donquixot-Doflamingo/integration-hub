@@ -52,6 +52,7 @@ Vendor mappings scattered in caller code are untested and diverge. Mappings in t
 8. Each production transformer file cites the vendor API doc URL it was verified against (DESIGN §0).
 9. Benchmark `BenchmarkTransform4KB` ≤ 0.5 ms p99 (DESIGN §7.6.5).
 10. Response transformers may declare a `session:` section (HUB-175, F-14): a mapping of session fields evaluated on success only, against `res`, `req` and `account` (`creds`, `hdr` and `session` are rejected at compile; `req.*` paths are checked against the operation's request schema). `Program.MapResponseSession` returns it (nil when every field is nil); it is bounded by `MaxSessionBytes` (16 KB) and the same time budget. Goldens pin it as `"session"` in `expected_response.json`; vendor-response fixtures may carry `_context.req`.
+11. `currencyMinor` uses the full ISO 4217 minor-unit table (0 digits: BIF CLP DJF GNF ISK JPY KMF KRW PYG RWF UGX UYI VND VUV XAF XOF XPF; 3: BHD IQD JOD KWD LYD OMR TND; 4: CLF UYW; 2 for the rest). An amount with more decimals than the currency allows is refused, never rounded, and an unknown currency code is refused, never assumed to have 2 digits (HUB-447).
 
 ## Data model impact
 `transformers(transformer_id, version, kind, endpoint_id, yaml, fixtures)` immutable (DESIGN §18.2); the `capability` column was dropped by migration 00011 (ADR-0023). A response transformer has no endpoint and is optional in a target (pass-through without one).

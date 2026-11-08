@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(transform)` · Use the full ISO 4217 minor-unit table in currencyMinor (HUB-447) · HUB-447 · F-04
+  - `currencyMinor("1000", "XOF")` is 1000, not 100000: every zero-decimal currency (XOF, XAF, XPF, UGX, ISK and others), the 3-digit ones and CLF/UYW (4) are known
+  - An unknown currency code is refused instead of being assumed to have 2 decimals
 - 2026-11-08 · `fix(transform)` · Reject $env so creds cannot bypass the placement rule (HUB-447) · HUB-447 · F-04
   - `$env.creds.token` and `$env["creds"].token` no longer compile: credentials cannot reach the vendor body or a session, and a header can no longer carry one without being treated as a credential
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
