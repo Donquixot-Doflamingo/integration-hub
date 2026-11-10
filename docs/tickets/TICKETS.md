@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **293** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **20**
+Total tickets: **294** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **21**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **293** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 18 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 19 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3870,3 +3870,23 @@ HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 
 - HUB-237 — Runbooks and M8 summary
 
 Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-450 — Edge: idempotency key released after a successful call, trailing JSON junk accepted, scope and integration enumeration
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-088 · **Feature:** F-05 · **Stories:** —
+- **Branch:** `fix/HUB-450-edge-fixes`
+
+Reviewer findings on the request edge:
+1. `settle` released the Idempotency-Key whenever `Complete` failed, also after a successful vendor call (for example a pass-through 200 body over the 1 MiB replay limit). A retry with the same key then called the vendor again, which double-charges money-moving integrations.
+2. `readJSONBody` used `dec.More()`, which is false before a closing `]` or `}`, so `{"a":1}]` was accepted and failed later as a retryable 500 `persist_failed`.
+3. `ScopeRequestsRead` is defined but `getRequestStatus` never checks it.
+4. An existing but ungranted integration answers 403 `not_granted` on invoke and dry-run while an unknown one answers 404, so a tenant can enumerate integration IDs.
+
+Findings 3 and 4 are reported, not changed: the frozen caller contract says request status needs scope `invoke` (no 403 declared on `getRequestStatus`) and documents 403 `not_granted` on invoke. Both need a contract change request (see the final report of this ticket).
+
+**Acceptance criteria**
+- [x] A 200/202 whose replay copy cannot be stored never releases the key; the key is kept as "completed, response not stored" and a retry answers 409 `IDEMPOTENCY_CONFLICT` (reason `completed_not_stored`) until the key's TTL
+- [x] Failures (not 200/202) still release the key
+- [x] A trailing `]`, `}` or second JSON value after the body is 400 `VALIDATION_FAILED`; trailing whitespace is accepted
+- [x] Table-driven tests written first and failing for each fixed finding
+- [x] Findings 3 and 4 written up as contract change requests

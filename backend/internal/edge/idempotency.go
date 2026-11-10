@@ -18,6 +18,7 @@ import (
 type Idempotency interface {
 	Begin(ctx context.Context, k idempotency.Key, bodyHash, requestID string) (idempotency.Outcome, error)
 	Complete(ctx context.Context, k idempotency.Key, requestID string, r idempotency.Response) error
+	MarkCompleted(ctx context.Context, k idempotency.Key, requestID string) error
 	Release(ctx context.Context, k idempotency.Key, requestID string) error
 }
 
@@ -69,6 +70,14 @@ func (s *Server) idempotencyBegin(w http.ResponseWriter, r *http.Request, p *pre
 		p.trail.Add(audit.RequestCompleted, 0, nil, map[string]any{"replay_of": out.RequestID, "status": out.Response.Status})
 		s.record(r, p, "succeeded", out.Response.Status, string(core.CodeIdempotentReplay))
 		return nil, true
+	case idempotency.CompletedNotStored:
+		// The first request succeeded and the vendor acted, but its response was too large to
+		// keep (or the store failed). Running it again could act twice, so the retry is refused
+		// with the contract's IDEMPOTENCY_CONFLICT until the key's 24 h TTL ends.
+		s.fail(w, r, p, &core.CanonicalError{Code: core.CodeIdempotencyConflict,
+			Message: "A request with this Idempotency-Key already completed (" + out.RequestID + "); its response was not stored for replay",
+			Reason:  core.Ptr("completed_not_stored")})
+		return nil, true
 	case idempotency.InProgress:
 		if s.queued() && p.integration.Active().Delivery.Mode != registry.ModeSync && !s.interactive(p) {
 			w.Header().Set("X-Hub-Idempotent-Replay", "true")
@@ -87,7 +96,10 @@ func (s *Server) idempotencyBegin(w http.ResponseWriter, r *http.Request, p *pre
 	}
 }
 
-// settle stores a replayable answer (200, 202) or releases the key so a retry runs fresh.
+// settle stores a replayable answer (200, 202). If that cannot be stored (the response is over
+// the replay limit, or the store failed) the request still succeeded and the vendor acted, so
+// the key is kept as "completed, response not stored" and never released: a retry must not run
+// the vendor call again. Any other status releases the key so a retry runs fresh.
 func (c *idemClaim) settle(ctx context.Context, s *Server, bw *bufferedWriter) {
 	if c == nil {
 		return
@@ -99,6 +111,11 @@ func (c *idemClaim) settle(ctx context.Context, s *Server, bw *bufferedWriter) {
 			return
 		}
 		s.log.WarnContext(ctx, "idempotency result not stored", slog.String("error", err.Error()))
+		if err := s.deps.Idempotency.MarkCompleted(ctx, c.key, c.requestID); err != nil && !errors.Is(err, idempotency.ErrNotOwner) {
+			// The lease still holds the key (in progress) until it expires; never Release here.
+			s.log.WarnContext(ctx, "idempotency key not marked completed", slog.String("error", err.Error()))
+		}
+		return
 	}
 	if err := s.deps.Idempotency.Release(ctx, c.key, c.requestID); err != nil && !errors.Is(err, idempotency.ErrNotOwner) {
 		s.log.WarnContext(ctx, "idempotency key not released", slog.String("error", err.Error()))

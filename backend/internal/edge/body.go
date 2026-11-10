@@ -37,7 +37,9 @@ func readJSONBody(r *http.Request, limit int64) (map[string]any, []byte, *core.C
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	var body map[string]any
-	if err := dec.Decode(&body); err != nil || dec.More() {
+	// After the one value only EOF is allowed: dec.More() is false before a closing ']' or '}',
+	// which let `{"a":1}]` through to a later marshal failure (500) instead of a 400.
+	if err := dec.Decode(&body); err != nil || !onlyEOF(dec) {
 		return nil, nil, &core.CanonicalError{Code: core.CodeValidationFailed, Message: "Body must be one JSON object",
 			Reason: core.Ptr("schema"), Details: []core.ErrorDetail{{Pointer: "", Message: "invalid JSON"}}}
 	}
@@ -45,6 +47,12 @@ func readJSONBody(r *http.Request, limit int64) (map[string]any, []byte, *core.C
 		return nil, nil, &core.CanonicalError{Code: core.CodeValidationFailed, Message: "Body must be a JSON object", Reason: core.Ptr("schema")}
 	}
 	return body, raw, nil
+}
+
+// onlyEOF reports whether the decoder has nothing but whitespace left.
+func onlyEOF(dec *json.Decoder) bool {
+	_, err := dec.Token()
+	return errors.Is(err, io.EOF)
 }
 
 // validate checks the caller's input against the operation's pre-compiled request schema

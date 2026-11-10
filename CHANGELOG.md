@@ -6,6 +6,18 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `docs(tickets)` · Close HUB-450 acceptance criteria (HUB-450) · HUB-450 · F-05
+  - HUB-450 is in review; the requests_read scope and the integration enumeration findings are left for a contract change request
+- 2026-11-08 · `fix(edge)` · Never release an Idempotency-Key after a successful call (HUB-450) · HUB-450 · F-10
+  - A 200 whose response is too large to store for replay (or whose store write fails) no longer frees the key: a retry answers 409 IDEMPOTENCY_CONFLICT (reason completed_not_stored) instead of calling the vendor a second time
+  - Failed requests still release the key so a retry runs fresh
+- 2026-11-08 · `feat(idempotency)` · Keep a key whose response could not be stored (HUB-450) · HUB-450 · F-10
+  - The store can mark a key "completed, response not stored"; a later Begin with the same body answers CompletedNotStored until the record's TTL instead of letting the request run again
+  - New counters: idempotency_hits_total{result="completed_not_stored"} and idempotency_writes_total{op="mark_completed"}
+- 2026-11-08 · `fix(edge)` · Refuse a request body with anything after the JSON object (HUB-450) · HUB-450 · F-05
+  - A body like `{"a":1}]` or `{"a":1} }` now answers 400 VALIDATION_FAILED instead of passing and failing later as a retryable 500 persist_failed; trailing whitespace is still accepted
+- 2026-11-08 · `docs(tickets)` · File HUB-450 for the request edge findings (HUB-450) · HUB-450 · F-05
+  - HUB-450 records four edge findings: the released idempotency key, trailing JSON junk, the unchecked requests_read scope and integration enumeration; the last two are reported for a contract change
 - 2026-11-08 · `docs(features)` · Document the delivery correctness rules and close out HUB-449 (HUB-449) · HUB-449 · F-09
   - F-09 lists the replay expiry and terminal callback rules next to the redirect and truncation ones; the ticket is in review
 - 2026-11-08 · `fix(delivery)` · Fail an attempt whose vendor response was cut at the size cap (HUB-449) · HUB-449 · F-09
