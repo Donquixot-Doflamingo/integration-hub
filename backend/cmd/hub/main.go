@@ -39,6 +39,9 @@ Run "hub <role> -h" for flags. Configuration: flags > HUB_* env > defaults (TECH
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	// After the first signal, restore default handling: a second SIGINT/SIGTERM terminates the
+	// process even while a graceful shutdown is still draining (HUB-454).
+	go func() { <-ctx.Done(); stop() }()
 	code := run(ctx, os.Args[1:], os.Getenv, os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)

@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **297** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **24**
+Total tickets: **298** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **25**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **297** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 22 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 23 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -4006,6 +4006,53 @@ Four resilience bugs found in review of the queue and the delivery worker:
 - [x] The drain holds while the breaker state is unreadable (one log, a metric) and resumes when it is readable again
 - [x] A failing test per bug first (the expiry one is a unit test that did not compile before); queue and delivery unit and integration suites green with `-race`; golangci-lint clean
 - Follow-ups: `TestReleaseInArrivalOrder` is flaky (ids made in one millisecond are not ULID-ordered); a poison envelope dead-lettered by the queue leaves its audit request row non-terminal
+
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-454 — Credential cache noise and stale loader; a failed listener leaves the process hanging
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-084 · **Feature:** F-07 · **Stories:** US-0701
+- **Branch:** `fix/HUB-454-creds-and-run-lifecycle`
+
+Reviewer findings:
+1. Every cache miss kicks a reload (1 per second at most). With the secrets file missing each reload reads the file, counts `creds_decrypts_total` and logs two lines, a pair per second under traffic. A missing secrets file was an error, so a gateway on the dev config with no `hubctl creds set` run warned every 150 s forever.
+2. A key file missing at start made the loader an empty one for the life of the process: `hubctl creds init-key` later never took effect, and the rotation ping logged `credentials reloaded after rotation` at Info with an empty cache.
+3. When a listener failed at runtime the context was not cancelled, so `wg.Wait()` blocked on the watchers and the process never exited with code 1; a second SIGTERM was swallowed until `run` returned.
+
+**Acceptance criteria**
+- [x] Miss-triggered reloads back off exponentially after consecutive failures, up to the periodic refresh interval; a failure is logged once per state change and recovery once
+- [x] `credentials decrypted` is not logged, and `creds_decrypts_total` not incremented, when nothing was decrypted
+- [x] A missing secrets file is an empty store (one warning at startup naming the path); an unreadable, corrupt or undecryptable file stays an error
+- [x] The key file and secrets file are re-opened on every refresh; the rotation log line is a warning when nothing loaded
+- [x] A listener that fails at runtime cancels the role and `Run` returns that error; the first signal restores default handling so a second one terminates
+- [x] Readiness behaviour in the ops docs unchanged
+
 
 ### Critical path (Release 1)
 

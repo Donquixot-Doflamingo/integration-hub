@@ -276,11 +276,129 @@ func TestNewCacheRejectsDoubleRegistration(t *testing.T) {
 	}
 }
 
-func TestMissingFileIsNotExist(t *testing.T) {
+// TestReadAllMissingFileIsNotExist: the raw read still reports a missing file (hubctl needs to
+// tell "no file yet" from "bad file"); Load turns it into an empty store.
+func TestReadAllMissingFileIsNotExist(t *testing.T) {
 	key, _ := GenerateKey()
 	f, _ := NewLocalFile(t.TempDir()+"/absent.enc", key)
-	_, err := f.Load(t.Context(), devAccounts)
+	_, err := f.ReadAll()
 	if !IsNotExist(err) || !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// TestLoadMissingFileIsEmptyStore: HUB-454, a deployment with no credentials yet has an empty
+// store; unreadable, corrupt or undecryptable files stay errors.
+func TestLoadMissingFileIsEmptyStore(t *testing.T) {
+	key, _ := GenerateKey()
+	dir := t.TempDir()
+	f, _ := NewLocalFile(dir+"/absent.enc", key)
+	got, err := f.Load(t.Context(), devAccounts)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("missing file: got %v, %v; want empty store, nil", got, err)
+	}
+	if err := os.WriteFile(dir+"/bad.enc", []byte("not an envelope"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bad, _ := NewLocalFile(dir+"/bad.enc", key)
+	if _, err := bad.Load(t.Context(), devAccounts); !errors.Is(err, ErrDecrypt) {
+		t.Fatalf("corrupt file: err = %v, want ErrDecrypt", err)
+	}
+	if err := os.Mkdir(dir+"/isdir.enc", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	unreadable, _ := NewLocalFile(dir+"/isdir.enc", key)
+	if _, err := unreadable.Load(t.Context(), devAccounts); err == nil {
+		t.Fatal("unreadable file must stay an error")
+	}
+}
+
+// failingLoader fails with a fixed error until healed.
+type failingLoader struct {
+	calls atomic.Int64
+	heal  atomic.Bool
+	ok    Loader
+}
+
+func (l *failingLoader) Load(ctx context.Context, ids []string) (map[string]AccountSecrets, error) {
+	l.calls.Add(1)
+	if l.heal.Load() {
+		return l.ok.Load(ctx, ids)
+	}
+	return nil, errors.New("secrets store unreachable")
+}
+
+func countMsg(logs, msg string) int { return strings.Count(logs, `"msg":"`+msg+`"`) }
+
+// TestMissReloadsBackOffWhileTheSourceFails: HUB-454, traffic on a broken source must not
+// reload (or log) once per second; one failure line, one recovery line.
+func TestMissReloadsBackOffWhileTheSourceFails(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f, _ := newTestFile(t)
+		l := &failingLoader{ok: f}
+		var buf bytes.Buffer
+		c, err := NewCache(l, telemetry.NewSecretSet(), telemetry.NewMetrics("test", "dev"),
+			CacheOptions{Logger: slog.New(slog.NewJSONHandler(&buf, nil))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = c.Warm(t.Context(), devAccounts) // fails
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan struct{})
+		go func() { defer close(done); c.Run(ctx) }()
+
+		for range 600 { // a miss every 100 ms for a minute
+			time.Sleep(100 * time.Millisecond)
+			_, _ = c.Get(ctx, devAccounts[0])
+		}
+		synctest.Wait()
+		if got := l.calls.Load(); got > 9 { // warm + 1, 2, 4, 8, 16, 32 s
+			t.Fatalf("loader calls in a minute of misses = %d, want <= 9 (backoff)", got)
+		}
+		if got := countMsg(buf.String(), "credential cache refresh failed"); got != 1 {
+			t.Fatalf("failure lines = %d, want 1 per state change:\n%s", got, buf.String())
+		}
+		if got := countMsg(buf.String(), "credentials decrypted"); got != 0 {
+			t.Fatalf("decrypted lines = %d with nothing decrypted", got)
+		}
+
+		l.heal.Store(true)
+		time.Sleep(c.opts.RefreshEvery + time.Second) // the periodic refresh always runs
+		synctest.Wait()
+		if _, err := c.Get(ctx, devAccounts[0]); err != nil {
+			t.Fatalf("not recovered: %v", err)
+		}
+		if got := countMsg(buf.String(), "credential cache refresh recovered"); got != 1 {
+			t.Fatalf("recovery lines = %d, want 1", got)
+		}
+		if got := countMsg(buf.String(), "credential cache refresh failed"); got != 1 {
+			t.Fatalf("failure lines after recovery = %d, want still 1", got)
+		}
+		cancel()
+		<-done
+	})
+}
+
+// TestNothingDecryptedIsNotAudited: an empty store loads without a decrypt count or audit line.
+func TestNothingDecryptedIsNotAudited(t *testing.T) {
+	key, _ := GenerateKey()
+	f, _ := NewLocalFile(t.TempDir()+"/absent.enc", key)
+	var buf bytes.Buffer
+	m := telemetry.NewMetrics("test", "dev")
+	c, err := NewCache(f, telemetry.NewSecretSet(), m, CacheOptions{Logger: slog.New(slog.NewJSONHandler(&buf, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Warm(t.Context(), devAccounts); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "credentials decrypted") {
+		t.Fatalf("logged a decrypt with nothing decrypted:\n%s", buf.String())
+	}
+	if got := testutil.ToFloat64(c.decrypts); got != 0 {
+		t.Fatalf("creds_decrypts_total = %v, want 0", got)
+	}
+	if _, err := c.Get(t.Context(), devAccounts[0]); !errors.Is(err, ErrCacheMiss) {
+		t.Fatalf("err = %v, want a cache miss (no credentials)", err)
 	}
 }

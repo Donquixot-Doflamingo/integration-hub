@@ -6,6 +6,18 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(roles)` · Exit when a listener fails and let a second signal terminate (HUB-454) · HUB-454 · F-07
+  - A gateway, worker, scheduler or admin whose listener dies at runtime now exits with code 1 instead of hanging on its background loops
+  - After the first SIGINT/SIGTERM the default signal handling is restored, so a second one ends the process while it drains
+- 2026-11-08 · `fix(roles)` · Re-open the credential key and file on every refresh (HUB-454) · HUB-454 · F-07
+  - Running `hubctl creds init-key` or `creds set` after the gateway or worker started now takes effect on the next refresh, without a restart
+  - A missing key or secrets file warns once (naming the path) and is logged again only when it appears
+  - The rotation ping logs `credentials reloaded after rotation` at Info only when the cache serves the accounts; otherwise a warning
+- 2026-11-08 · `fix(creds)` · Back off credential reloads and treat a missing secrets file as empty (HUB-454) · HUB-454 · F-07
+  - Cache misses on a broken credential source no longer reload and log once per second: reloads back off up to the refresh period, one warning per state change and one line on recovery
+  - A missing secrets file is an empty store (accounts report no credentials on first use) instead of a warning every 150 s; `credentials decrypted` and `creds_decrypts_total` only count loads that decrypted something
+- 2026-11-08 · `docs(tickets)` · File HUB-454 credential cache and run lifecycle fixes (HUB-454) · HUB-454 · F-07
+  - HUB-454 records the credential cache noise, the stale loader and the listener-failure hang, with acceptance criteria
 - 2026-11-08 · `docs(tickets)` · Mark HUB-453 in review with its follow-ups (HUB-453) · HUB-453 · F-09
   - HUB-453 is in review; two follow-ups are noted on it (a flaky queue test, and the audit row of a queue-level poison dead letter)
 - 2026-11-08 · `fix(delivery)` · Hold the drain while the shared breaker state is unreadable (HUB-453) · HUB-453 · F-12

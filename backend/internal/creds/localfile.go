@@ -224,12 +224,17 @@ func (f *LocalFile) WriteAll(all map[string]AccountSecrets) error {
 
 // Load decrypts the file and returns the requested accounts. Accounts absent from the file are
 // reported in a wrapped ErrNotFound alongside the ones that were found; a file that fails
-// authentication returns ErrDecrypt and nothing else.
+// authentication returns ErrDecrypt and nothing else. A file that does not exist is an empty
+// store (nothing decrypted, no error): a deployment without credentials yet reports "no
+// credentials" per account on first use. An unreadable or corrupt file stays an error.
 func (f *LocalFile) Load(ctx context.Context, accountIDs []string) (map[string]AccountSecrets, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	all, err := f.ReadAll()
+	if IsNotExist(err) {
+		return map[string]AccountSecrets{}, nil
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -2,9 +2,11 @@ package roles
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"maps"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -229,5 +231,41 @@ func TestRunRegistersConfigSecrets(t *testing.T) {
 		if got := secrets.Redact("x " + v + " y"); got != "x "+telemetry.Redacted+" y" {
 			t.Errorf("not registered for redaction: %q", got)
 		}
+	}
+}
+
+// failingListener accepts nothing: Accept fails with a non-temporary error, as a listener
+// whose socket died at runtime would.
+type failingListener struct{ net.Listener }
+
+func (failingListener) Accept() (net.Conn, error) { return nil, errors.New("accept: socket died") }
+
+// TestRunReturnsWhenAListenerFailsAtRuntime is HUB-454: the failed server used to leave the
+// watchers running, so Run never returned and the process never exited with code 1.
+func TestRunReturnsWhenAListenerFailsAtRuntime(t *testing.T) {
+	for _, role := range []Role{Gateway, Scheduler} {
+		t.Run(string(role), func(t *testing.T) {
+			cfg := testConfig(t, role)
+			cfg.ConfigWatch = true
+			done := make(chan error, 1)
+			go func() {
+				done <- Run(t.Context(), cfg, slog.New(slog.DiscardHandler), Options{
+					WrapListener: func(name string, ln net.Listener) net.Listener {
+						if name == "ops" {
+							return failingListener{ln}
+						}
+						return ln
+					},
+				})
+			}()
+			select {
+			case err := <-done:
+				if err == nil || !strings.Contains(err.Error(), "ops server") || !strings.Contains(err.Error(), "socket died") {
+					t.Fatalf("Run error = %v, want the ops server failure", err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("Run did not return after a listener failed (process would hang)")
+			}
+		})
 	}
 }

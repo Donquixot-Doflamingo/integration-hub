@@ -89,7 +89,8 @@ Vendor `auth:` scheme name and shape (header names); account `credentials_ref`.
 | --- | --- | --- |
 | Metric | `creds_decrypts_total` | calls to the decrypting loader (warm-up + background refresh); flat under steady traffic, never per request |
 | Metric | `creds_cache_miss_total{account}` | request-path lookups with no warmed entry; must stay 0 (alert `CredsCacheMiss`) |
-| Log | `credential cache refresh failed` (warn, `error`, `on_miss`) | background refresh only; the error never contains values |
+| Log | `credential cache refresh failed` (warn, `error`, `on_miss`, `consecutive_failures`), `credential cache refresh recovered` (info) | background refresh only, once per state change (HUB-454); the error never contains values. Miss-triggered reloads back off 1 s, 2 s, 4 s ... up to the refresh period while the source fails; a missing secrets file is an empty store, not a failure |
+| Log | `no credential key file` (warn, once), `credential key file found` (info), `no credentials file` (warn, once, `path`), `credentials file found` (info) | the gateway and worker re-open the key and the secrets file on every refresh, so `hubctl creds init-key` / `creds set` take effect without a restart (HUB-454) |
 | Metric | `credential_expiry_days{account}` | where expiry known |
 | Alert | credential expiring < 7 days | warn (DESIGN §16.3) |
 
