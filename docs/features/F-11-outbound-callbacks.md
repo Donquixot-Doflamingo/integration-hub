@@ -107,7 +107,7 @@ Integration version `webhooks: [{event, endpoint}]`; tenant YAML registrar entri
 | Metric | `callback_latency_seconds{tenant}` | duration of attempts that sent a request |
 | Metric | `callback_ssrf_blocked_total{class}` | attempts refused by the guard by address class |
 | Metric | `callback_enqueued_total{event}` | rows written by Enqueue (counted at write; a rolled-back transaction still counts) |
-| Metric | `callback_enqueue_skipped_total{reason}` | `unknown_version`, `unknown_endpoint`, `tenant_mismatch` |
+| Metric | `callback_enqueue_skipped_total{reason}` | `unknown_version`, `unknown_endpoint`, `tenant_mismatch`, `endpoint_disabled`, `invalid_payload` (a terminal event whose own payload is unusable: logged by request id and event type, never the payload; the request's terminal transition is not affected, HUB-449) |
 | Log | `callback.enqueue_skipped` (WARN) | reason, request_id, integration_id, integration_version, endpoint_id, event |
 | Metric | `callback_queue_oldest_age_s`, `callback_dlq_count` | gauges sampled by every dispatcher every 15 s |
 | Log | `callback.ssrf_blocked` (WARN) | endpoint_id, tenant, class, delivery_id (never the resolved IP or URL path) |

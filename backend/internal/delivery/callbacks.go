@@ -14,7 +14,8 @@ import (
 // request.expired) for every subscription of the request's integration version, inside the
 // terminal transaction (DESIGN §12.1): the callback exists exactly when the state change
 // committed. The event id is derived from the request id (one terminal event per request), so
-// a retried transaction cannot enqueue it twice.
+// a retried transaction cannot enqueue it twice. A callback whose own payload is unusable is
+// skipped and counted instead of failing the transition (callbacks.EnqueueTerminal).
 func CallbackHook(enq *callbacks.Enqueuer) OnTerminal {
 	return func(ctx context.Context, tx pgx.Tx, ev TerminalEvent) error {
 		e := &callbacks.Event{
@@ -39,7 +40,7 @@ func CallbackHook(enq *callbacks.Enqueuer) OnTerminal {
 		case core.StateAccepted, core.StateInFlight, core.StateRetryScheduled, core.StateParked:
 			return nil
 		}
-		_, err := enq.Enqueue(ctx, tx, e)
+		_, err := enq.EnqueueTerminal(ctx, tx, e)
 		return err
 	}
 }

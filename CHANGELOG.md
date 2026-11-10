@@ -6,6 +6,21 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `docs(features)` · Document the delivery correctness rules and close out HUB-449 (HUB-449) · HUB-449 · F-09
+  - F-09 lists the replay expiry and terminal callback rules next to the redirect and truncation ones; the ticket is in review
+- 2026-11-08 · `fix(delivery)` · Fail an attempt whose vendor response was cut at the size cap (HUB-449) · HUB-449 · F-09
+  - A vendor body over 4 MiB is no longer returned as a result (a garbage string in pass-through, res.text for a transformer): the attempt fails as UPSTREAM_REJECTED, reason response_truncated, and is not retried
+  - The circuit breaker does not count it as an outage
+- 2026-11-08 · `fix(transform)` · Fail an attempt whose vendor answer is an unfollowed redirect (HUB-449) · HUB-449 · F-09
+  - A vendor 3xx (except 304) with no matching errors: rule is UPSTREAM_REJECTED, not retried, for pass-through and response transformers; before, it mapped to a success with an empty or garbage result
+  - The caller's message never carries the redirect's Location
+- 2026-11-08 · `fix(callbacks)` · Never let a callback payload problem undo a request's terminal transition (HUB-449) · HUB-449 · F-11
+  - request.completed carries any JSON result (array, string, number, null for an empty 204 body), as the contract already allows; before, only objects were accepted
+  - A callback whose payload is unusable is skipped, logged and counted (callback_enqueue_skipped_total{reason="invalid_payload"}); the request stays succeeded and the vendor is no longer called again
+- 2026-11-08 · `fix(queue)` · Carry the new expiry into a replayed dead letter's envelope (HUB-449) · HUB-449 · F-09
+  - A dead letter replayed after its original TTL is now delivered; before, the worker read the old expiry from the envelope and expired it without an attempt
+- 2026-11-08 · `docs(tickets)` · File HUB-449 for the delivery correctness fixes (HUB-449) · HUB-449 · F-09
+  - The backlog lists the four delivery bugs found in review: replay expiry, callback payload shape, truncated and redirect responses
 - 2026-11-08 · `fix(audit)` · Redact encoded forms of secrets in audit and logs (HUB-448) · HUB-448 · F-18
   - A credential with characters such as & < > " \ + % or non-ASCII letters is masked in stored request.transformed and vendor.responded payloads, in dead-letter last_vendor_request / last_vendor_response and in log lines, also when it appears JSON-escaped, percent-encoded in a URL or base64-encoded
   - The log denylist also masks x-api-key, access_token, client_secret and refresh_token attributes
