@@ -120,6 +120,9 @@ func unpackLegacy(b blob, now time.Time) (*Snapshot, Sources, error) {
 	if lg == nil { // a format-1 blob without capabilities: its checksum is over the files alone
 		lg = &Legacy{}
 		lg.Checksum, _ = checksum(cfg)
+		if err := UpgradeTransformerFiles(cfg); err != nil { // after the checksum: it covers the files as archived
+			return nil, Sources{}, fmt.Errorf("%w: legacy blob: %w", ErrCorruptBlob, err)
+		}
 	}
 	if lg.Checksum != b.Checksum {
 		return nil, Sources{}, fmt.Errorf("%w: legacy content hashes to %s, blob says %s", ErrCorruptBlob, lg.Checksum, b.Checksum)
