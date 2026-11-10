@@ -73,6 +73,7 @@ Vendor `defaults.breaker`, `health_probe`; integration `breaker.override`, `deli
 | Metric | `breaker_state`, `breaker_transitions_total` | per account/endpoint |
 | Metric | `parked_count`, `parked_oldest_age_s`, `drain_rate` | |
 | Metric | `worker_target_inflight`, `worker_target_cap_deferred_total` | per breaker key: how much of the worker a misbehaving vendor holds (HUB-412) |
+| Metric | `drain_held{reason}` | 1 while the drain holds parked envelopes back; reason `breaker_state_unknown` (HUB-453) |
 | Alert | breaker open > 5 min | page |
 | Alert | `parked_oldest_age_s` > 10 min | page |
 
@@ -83,6 +84,7 @@ Force-open/close and pause are admin mutations in `change_log` with reason.
 | Failure | Behaviour | Caller sees |
 | --- | --- | --- |
 | Redis down | Nodes use local breaker state only | Possibly slower agreement |
+| Redis down (the scheduler cannot read the shared breaker states) | The drain holds every parked envelope (fail closed: a circuit may be open) and logs `drain.held` once; it resumes, with a fresh ramp quota and a `drain.resumed` log, when the states are readable. A missing record with Redis readable still means closed (HUB-453) | Parked requests wait longer |
 | Scheduler leader lost | Standby takes over; drain resumes | Slight delay |
 | Re-open mid-drain | Remaining stay parked | 202s continue |
 | Vendor slow but answering (never trips) | Contained by the worker's per-target cap; its backlog waits in the outbox | Its async requests slow down; other accounts unaffected (`TestNoisyNeighbour/a_slow_but_successful`) |

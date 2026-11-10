@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **296** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **23**
+Total tickets: **297** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **24**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **296** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 21 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 22 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3959,6 +3959,53 @@ Reviewer findings on `backend/internal/callbacks`:
 - [x] One claim returns at most n rows (single LIMIT over the union) and Run's token accounting does not depend on how many rows came back; integration test with a due backlog plus expired in-flight rows
 - [x] A disabled endpoint reschedules without counting the attempt (fixed capped hold); documented in F-11
 
+
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-453 — Outbox: one bad envelope blocks a whole batch, expiry loop can spin, credential misses burn attempts
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-444 · **Feature:** F-09 · **Stories:** —
+- **Branch:** `fix/HUB-453-outbox-resilience`
+
+Four resilience bugs found in review of the queue and the delivery worker:
+1. **Head-of-line block in the queue.** `ClaimWithin` commits the batch as `in_flight` before decoding, then discards every claimed row when one envelope does not decode (for example an older stored format that sorts first). Whole batches wait for the 30 s visibility, `crashes` rises and good envelopes are dead-lettered as poison. `DueExpiries` fails the same way, so the scheduler's expiry pass never runs.
+2. **Expiry loop can spin.** `Scheduler.expire` ignores a failed `Transitions.Expire`, so the row stays due; with 100 or more such rows the `for` loop never ends (no sleep, no ctx check), with fewer they block newer expiries.
+3. **Credential misses burn attempts.** A credential cache miss returns a retryable error without touching the vendor, but the worker counts it on the 8-step schedule: a credential outage of about 2 h dead-letters healthy requests.
+4. **Drain fails open.** With the shared breaker state unreadable (Redis down) the drain assumes "long closed" and releases parked envelopes at 100 % of the account rate.
+
+**Acceptance criteria**
+- [x] An undecodable envelope is dead-lettered (reason `poison`, never the payload in a log) and the rest of the claimed batch is returned; same for `DueExpiries`
+- [x] The expiry sweep stops when a pass makes no progress, checks ctx, and skips a row that keeps failing (bounded retries with backoff, one log per stuck row)
+- [x] A credential cache miss defers the envelope without counting an attempt, with a bounded delay, and is visible in a metric and a log
+- [x] The drain holds while the breaker state is unreadable (one log, a metric) and resumes when it is readable again
+- [x] A failing test per bug first (the expiry one is a unit test that did not compile before); queue and delivery unit and integration suites green with `-race`; golangci-lint clean
+- Follow-ups: `TestReleaseInArrivalOrder` is flaky (ids made in one millisecond are not ULID-ordered); a poison envelope dead-lettered by the queue leaves its audit request row non-terminal
 
 ### Critical path (Release 1)
 

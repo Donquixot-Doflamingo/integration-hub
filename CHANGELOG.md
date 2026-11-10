@@ -6,6 +6,21 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `docs(tickets)` · Mark HUB-453 in review with its follow-ups (HUB-453) · HUB-453 · F-09
+  - HUB-453 is in review; two follow-ups are noted on it (a flaky queue test, and the audit row of a queue-level poison dead letter)
+- 2026-11-08 · `fix(delivery)` · Hold the drain while the shared breaker state is unreadable (HUB-453) · HUB-453 · F-12
+  - When Redis is down the scheduler no longer releases parked requests at the full account rate against a vendor whose circuit may be open; it holds them and resumes when the state is readable
+  - New gauge `drain_held{reason}` and logs `drain.held` / `drain.resumed`
+- 2026-11-08 · `fix(delivery)` · Do not count a credential cache miss as a delivery attempt (HUB-453) · HUB-453 · F-09
+  - A credential outage no longer dead-letters healthy requests: a request whose account credentials are not in the cache waits 5 s without using up its retry schedule
+  - New metric `worker_credentials_deferred_total{account}` and WARN log `worker.credentials_unavailable` show it to operators
+- 2026-11-08 · `fix(delivery)` · Stop the expiry sweep from spinning on envelopes it cannot expire (HUB-453) · HUB-453 · F-09
+  - An expired envelope whose expiry keeps failing no longer makes the scheduler loop forever (probes and drain starve) or block newer expiries behind it
+  - Such an envelope is logged once and skipped with a backoff of 1 s doubling to 10 min; the sweep also stops when the scheduler is shutting down
+- 2026-11-08 · `fix(queue)` · Dead-letter an undecodable envelope instead of losing its whole batch (HUB-453) · HUB-453 · F-09
+  - One stored envelope that no longer decodes (an older format) no longer makes a claim discard every envelope claimed with it; it is dead-lettered as `poison` and the rest of the batch is delivered
+  - The scheduler's expiry pass no longer stops at such an envelope: it is dead-lettered and the other expired envelopes are listed
+  - The move is logged once with the request id (`queue.poison_envelope`), never the payload
 - 2026-11-08 · `fix(callbacks)` · Hold deliveries for a disabled endpoint without using attempts (HUB-452) · HUB-452 · F-11
   - Callbacks for a disabled endpoint wait 5 minutes between looks and keep their full retry schedule, so they are no longer dead-lettered after about 20 hours and are delivered once the endpoint is enabled again
   - A hold writes no `callback.delivered` audit event because nothing is sent
