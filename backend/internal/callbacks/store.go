@@ -32,6 +32,9 @@ type outcome struct {
 	HTTPStatus int    // 0 = no response
 	Error      string // error class, "" when delivered
 	RetryIn    time.Duration
+	// Hold: nothing was sent (the endpoint is disabled), so the attempt that was counted at claim
+	// is given back and the row waits RetryIn without using up the retry schedule (HUB-452).
+	Hold bool
 }
 
 // store is the dispatcher's view of hub.callback_deliveries (pgStore in production).
@@ -51,15 +54,18 @@ type pgStore struct{ pool *pgxpool.Pool }
 // claimDue takes due rows and rows whose claim expired (dispatcher died mid-attempt), each with
 // its own partial index, skipping rows other dispatchers hold. The CTEs are MATERIALIZED so the
 // LIMIT holds: an inlined LIMIT ... SKIP LOCKED subquery may be re-run and update more rows.
+// Each CTE can return up to $2 rows, so the union is cut to $2 again (abandoned rows first, then
+// due rows by age): a claim never returns more rows than the dispatcher has free senders (HUB-452).
+// Rows locked by a CTE but not picked are released when the statement ends.
 const claimDue = `
 WITH due AS MATERIALIZED (
-    SELECT delivery_id FROM hub.callback_deliveries
+    SELECT delivery_id, next_attempt_at AS ord FROM hub.callback_deliveries
     WHERE status IN ('pending', 'retry_scheduled') AND next_attempt_at <= now()
     ORDER BY next_attempt_at
     LIMIT $2
     FOR UPDATE SKIP LOCKED
 ), abandoned AS MATERIALIZED (
-    SELECT delivery_id FROM hub.callback_deliveries
+    SELECT delivery_id, claimed_until AS ord FROM hub.callback_deliveries
     WHERE status = 'in_flight' AND claimed_until < now()
     ORDER BY claimed_until
     LIMIT $2
@@ -68,7 +74,15 @@ WITH due AS MATERIALIZED (
 UPDATE hub.callback_deliveries d
 SET status = 'in_flight', claimed_by = $1, claimed_until = now() + $3 * interval '1 millisecond',
     attempts = d.attempts + 1, updated_at = now()
-WHERE d.delivery_id IN (SELECT delivery_id FROM due UNION SELECT delivery_id FROM abandoned)
+WHERE d.delivery_id IN (
+    SELECT delivery_id FROM (
+        SELECT delivery_id, 0 AS pri, ord FROM abandoned
+        UNION ALL
+        SELECT delivery_id, 1 AS pri, ord FROM due
+    ) picked
+    ORDER BY pri, ord
+    LIMIT $2
+)
 RETURNING d.delivery_id, d.event_id, d.event_type, d.request_id, d.tenant_id, d.integration_id,
     d.integration_version, d.endpoint_id, d.subscription, d.payload, d.attempts, coalesce(d.traceparent, '')`
 
@@ -95,11 +109,12 @@ SET status = $3,
     next_attempt_at = CASE WHEN $3 = 'retry_scheduled' THEN now() + $4 * interval '1 millisecond' ELSE next_attempt_at END,
     delivered_at = CASE WHEN $3 = 'delivered' THEN now() END,
     last_http_status = $5, last_error = $6,
+    attempts = CASE WHEN $7 THEN greatest(attempts - 1, 0) ELSE attempts END,
     claimed_by = NULL, claimed_until = NULL, updated_at = now()
 WHERE delivery_id = $1 AND status = 'in_flight' AND claimed_by = $2`
 
 func (s pgStore) record(ctx context.Context, id, worker string, o outcome) (bool, error) {
-	tag, err := s.pool.Exec(ctx, recordOutcome, id, worker, o.Status, o.RetryIn.Milliseconds(), nullable(o.HTTPStatus), nullable(o.Error))
+	tag, err := s.pool.Exec(ctx, recordOutcome, id, worker, o.Status, o.RetryIn.Milliseconds(), nullable(o.HTTPStatus), nullable(o.Error), o.Hold)
 	if err != nil {
 		return false, fmt.Errorf("callbacks: record %s: %w", id, err)
 	}

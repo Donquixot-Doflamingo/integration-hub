@@ -6,6 +6,17 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(callbacks)` · Hold deliveries for a disabled endpoint without using attempts (HUB-452) · HUB-452 · F-11
+  - Callbacks for a disabled endpoint wait 5 minutes between looks and keep their full retry schedule, so they are no longer dead-lettered after about 20 hours and are delivered once the endpoint is enabled again
+  - A hold writes no `callback.delivered` audit event because nothing is sent
+- 2026-11-08 · `fix(callbacks)` · Never claim more callback rows than free senders (HUB-452) · HUB-452 · F-11
+  - After a dispatcher crash the callback sender no longer runs more than `Senders` attempts at once, leaks goroutines, or hangs at shutdown
+- 2026-11-08 · `fix(callbacks)` · Resolve A and AAAA separately in the SSRF guard (HUB-452) · HUB-452 · F-11
+  - A callback no longer times out on a network whose resolver never answers AAAA, or when an unreachable AAAA address sorts first; the other family is used at once
+  - Each address gets an equal share of the remaining 5 s; every resolved address is still vetted and refused when private, loopback, link-local, metadata, mapped or NAT64
+  - Registering a callback URL no longer waits for the silent address family
+- 2026-11-08 · `docs(tickets)` · File HUB-452 for three callbacks defects (HUB-452) · HUB-452 · F-11
+  - Backlog entry for the SSRF guard AAAA stall, the over-claiming dispatcher and disabled endpoints burning retries
 - 2026-11-08 · `fix(adminapi)` · Make Edit callbacks with credential side effects safe to re-run (HUB-451) · HUB-451 · F-16
   - Creating an account or registrar endpoint that loses a race with another admin replica no longer fails with a spurious 409 on its own credentials; the secret is stored once and removed only if the whole request fails
   - Rotating a registrar secret after a lost race keeps the previous secret as the overlap secret instead of the request's own first write

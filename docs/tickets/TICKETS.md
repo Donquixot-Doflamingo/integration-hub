@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **295** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **22**
+Total tickets: **296** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **23**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **295** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 20 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 21 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3914,6 +3914,51 @@ Reviewer findings on the admin API, the publisher and the snapshot archive:
 - [x] Empty or unknown `owner_tenant` is 400 VALIDATION_FAILED at `/owner_tenant`
 - [x] Malformed cursors are 400; API-key scopes are sorted and unique
 - [x] Access reads reuse a snapshot cached by archive checksum
+
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-452 — Callbacks: AAAA stall in the SSRF guard, over-claiming dispatcher, disabled endpoints burn retries
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-119 · **Feature:** F-11 · **Stories:** —
+- **Branch:** `fix/HUB-452-callbacks`
+
+Reviewer findings on `backend/internal/callbacks`:
+1. **AAAA stall (high).** The guard resolves with one `LookupNetIP("ip")`, which waits for A and AAAA together, then dials the vetted addresses one after another on ONE 5 s budget. On a resolver that never answers AAAA, or an AAAA record that black-holes and sorts first, one attempt uses the whole 5 s: every callback ends as `timeout`, is retried on the 11-step schedule, while curl works. `CheckURL` at registration has the same lookup.
+2. **Over-claim (medium).** `claimDue` takes `LIMIT n` due rows plus `LIMIT n` abandoned rows with no outer limit, so a claim can return 2n rows while only n sender tokens were freed. The token accounting then goes negative, concurrency exceeds `Senders`, surplus goroutines block forever on `slots <-` and `Run` never returns at shutdown.
+3. **Disabled endpoints burn attempts (low).** A disabled endpoint is held with `endpoint_disabled`, but every try counts as one of the 11 attempts, so after about 20 h disabled the callbacks are dead-lettered although the comment says they resume once re-enabled.
+
+**Acceptance criteria**
+- [x] Guard looks up A and AAAA in parallel, takes the first family that answers and falls back to the other, vets every resolved address (refuse the host if any is refused), and gives each address an equal share of the remaining time
+- [x] Tests: resolver that never answers one family, dead first address, all private still refused, mixed public+private refused
+- [x] One claim returns at most n rows (single LIMIT over the union) and Run's token accounting does not depend on how many rows came back; integration test with a due backlog plus expired in-flight rows
+- [x] A disabled endpoint reschedules without counting the attempt (fixed capped hold); documented in F-11
+
 
 ### Critical path (Release 1)
 

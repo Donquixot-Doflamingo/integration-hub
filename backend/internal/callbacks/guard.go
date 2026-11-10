@@ -273,32 +273,152 @@ func (g *Guard) refused(ip netip.Addr, plainHTTP bool) string {
 	return class
 }
 
-// vet resolves host and returns its addresses only if every one of them is allowed: one bad
-// address in the answer refuses the whole host, so round-robin answers cannot smuggle one in.
-func (g *Guard) vet(ctx context.Context, host string, plainHTTP bool) ([]netip.Addr, error) {
-	var ips []netip.Addr
-	if ip, err := netip.ParseAddr(host); err == nil {
-		ips = []netip.Addr{ip}
-	} else {
-		ips, err = g.opts.Resolver.LookupNetIP(ctx, "ip", host)
-		if err != nil {
-			return nil, fmt.Errorf("callbacks: resolve %s: %w", host, err)
+// otherFamilyGrace is how long, after one address family answered, the other one is still
+// waited for so that its addresses are vetted too. A family that stays silent (a resolver that
+// never answers AAAA) costs at most this much, not the whole budget.
+const otherFamilyGrace = 150 * time.Millisecond
+
+// familyAnswer is the outcome of one ip4 or ip6 lookup.
+type familyAnswer struct {
+	ips []netip.Addr
+	err error
+}
+
+// resolution is a host being resolved: the ip4 and ip6 lookups run in parallel and the first
+// family that answers is used; the other is a fallback.
+type resolution struct {
+	g         *Guard
+	host      string
+	plainHTTP bool
+	cancel    context.CancelFunc
+	answers   chan familyAnswer
+	pending   int // lookups not yet received
+}
+
+func (r *resolution) close() { r.cancel() }
+
+// vetFamily returns the addresses of one answer after vetting every one of them.
+func (r *resolution) vetFamily(ips []netip.Addr) ([]netip.Addr, error) {
+	if err := r.g.vetAll(r.host, ips, r.plainHTTP); err != nil {
+		return nil, err
+	}
+	return ips, nil
+}
+
+// start launches the two lookups. The returned resolution must be closed.
+func (g *Guard) start(ctx context.Context, host string, plainHTTP bool) *resolution {
+	lctx, cancel := context.WithCancel(ctx)
+	r := &resolution{g: g, host: host, plainHTTP: plainHTTP, cancel: cancel, answers: make(chan familyAnswer, 2), pending: 2}
+	for _, network := range []string{"ip4", "ip6"} {
+		go func() {
+			ips, err := g.opts.Resolver.LookupNetIP(lctx, network, host)
+			// Keep each lookup to its own family: a resolver that answers both for either network
+			// would otherwise duplicate addresses.
+			var kept []netip.Addr
+			for _, ip := range ips {
+				if ip.Is4() == (network == "ip4") {
+					kept = append(kept, ip)
+				}
+			}
+			r.answers <- familyAnswer{ips: kept, err: err}
+		}()
+	}
+	return r
+}
+
+// next waits for the next lookup that produced addresses. ok=false: the remaining lookups ended
+// without addresses (err is the first failure), wait fired, or ctx ended.
+func (r *resolution) next(ctx context.Context, wait <-chan time.Time) (ips []netip.Addr, ok bool, err error) {
+	for r.pending > 0 {
+		select {
+		case a := <-r.answers:
+			r.pending--
+			if a.err == nil && len(a.ips) > 0 {
+				return a.ips, true, nil
+			}
+			if err == nil {
+				err = a.err
+			}
+		case <-wait:
+			return nil, false, nil
+		case <-ctx.Done():
+			return nil, false, ctx.Err()
 		}
 	}
-	if len(ips) == 0 {
-		return nil, fmt.Errorf("callbacks: resolve %s: no addresses", host)
-	}
+	return nil, false, err
+}
+
+// vetAll refuses the host when any of ips is refused: one bad address in an answer refuses the
+// whole host, so round-robin answers cannot smuggle one in.
+func (g *Guard) vetAll(host string, ips []netip.Addr, plainHTTP bool) error {
 	for _, ip := range ips {
 		if class := g.refused(ip, plainHTTP); class != "" {
 			detail := "resolves to a " + class + " address"
 			if class == ClassPolicy {
 				detail = "plain http is only allowed to loopback test receivers"
 			}
-			return nil, &BlockedError{Host: host, Class: class, Detail: detail}
+			return &BlockedError{Host: host, Class: class, Detail: detail}
 		}
 	}
-	return ips, nil
+	return nil
 }
+
+// resolve returns the vetted addresses of host from the first family that answers, plus the
+// other family's addresses when they arrive within the grace period; a family still pending is
+// left to the caller as a fallback (r != nil, close it). A refused address in any answer that
+// arrived refuses the host.
+func (g *Guard) resolve(ctx context.Context, host string, plainHTTP bool) (ips []netip.Addr, r *resolution, err error) {
+	if ip, perr := netip.ParseAddr(host); perr == nil {
+		if err := g.vetAll(host, []netip.Addr{ip}, plainHTTP); err != nil {
+			return nil, nil, err
+		}
+		return []netip.Addr{ip}, nil, nil
+	}
+	r = g.start(ctx, host, plainHTTP)
+	first, ok, err := r.next(ctx, nil)
+	if !ok {
+		r.close()
+		if err == nil {
+			err = errors.New("no addresses")
+		}
+		return nil, nil, fmt.Errorf("callbacks: resolve %s: %w", host, err)
+	}
+	if ips, err = r.vetFamily(first); err != nil {
+		r.close()
+		return nil, nil, err
+	}
+	if r.pending > 0 {
+		grace := time.NewTimer(otherFamilyGrace)
+		defer grace.Stop()
+		if more, ok, _ := r.next(ctx, grace.C); ok {
+			extra, err := r.vetFamily(more)
+			if err != nil {
+				r.close()
+				return nil, nil, err
+			}
+			ips = append(ips, extra...)
+		}
+	}
+	return ips, r, nil
+}
+
+// vet resolves host and returns its addresses, all vetted (CheckURL).
+func (g *Guard) vet(ctx context.Context, host string, plainHTTP bool) ([]netip.Addr, error) {
+	ips, r, err := g.resolve(ctx, host, plainHTTP)
+	if r != nil {
+		r.close()
+	}
+	return ips, err
+}
+
+// dialTimeoutError reports a dial that ran out of time as a timeout, so the attempt is classed
+// "timeout" and not "connect", even when an earlier address was refused outright.
+type dialTimeoutError struct{ err error }
+
+func (e *dialTimeoutError) Error() string   { return e.err.Error() }
+func (e *dialTimeoutError) Unwrap() error   { return e.err }
+func (e *dialTimeoutError) Timeout() bool   { return true }
+func (e *dialTimeoutError) Temporary() bool { return true }
 
 func (g *Guard) dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(addr)
@@ -306,24 +426,71 @@ func (g *Guard) dialContext(ctx context.Context, network, addr string) (net.Conn
 		return nil, fmt.Errorf("callbacks: dial %s: %w", addr, err)
 	}
 	plainHTTP, _ := ctx.Value(plainHTTPKey{}).(bool)
-	ips, err := g.vet(ctx, host, plainHTTP)
+	queue, r, err := g.resolve(ctx, host, plainHTTP)
 	if err != nil {
 		return nil, err
+	}
+	if r != nil {
+		defer r.close()
 	}
 	dial := g.opts.dial
 	if dial == nil {
 		d := &net.Dialer{Timeout: g.opts.Timeout, ControlContext: g.control}
 		dial = d.DialContext
 	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(g.opts.Timeout)
+	}
 	var errs []error
-	for _, ip := range ips {
-		conn, err := dial(ctx, network, net.JoinHostPort(ip.String(), port))
+	timedOut := false
+	for i := 0; ; i++ {
+		if i >= len(queue) {
+			// Out of vetted addresses: wait for the family that had not answered yet.
+			if r == nil || r.pending == 0 {
+				break
+			}
+			more, ok, _ := r.next(ctx, nil)
+			if !ok {
+				break
+			}
+			extra, err := r.vetFamily(more)
+			if err != nil {
+				return nil, err
+			}
+			queue = append(queue, extra...)
+			i--
+			continue
+		}
+		// An equal share of what is left for each address still to try, and one more for the
+		// family that has not answered: one black-holed address cannot use all of the budget.
+		left := len(queue) - i
+		if r != nil && r.pending > 0 {
+			left++
+		}
+		dctx, cancel := context.WithTimeout(ctx, max(time.Until(deadline), time.Millisecond)/time.Duration(left))
+		conn, err := dial(dctx, network, net.JoinHostPort(queue[i].String(), port))
+		cancel()
 		if err == nil {
 			return conn, nil
 		}
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			timedOut = true
+		}
 		errs = append(errs, err)
+		if ctx.Err() != nil {
+			break
+		}
 	}
-	return nil, errors.Join(errs...)
+	joined := errors.Join(errs...)
+	if joined == nil {
+		joined = errors.New("callbacks: dial: no address to try")
+	}
+	if timedOut {
+		return nil, &dialTimeoutError{err: joined}
+	}
+	return nil, joined
 }
 
 // control re-checks the socket address right before connect(2): whatever produced the address,

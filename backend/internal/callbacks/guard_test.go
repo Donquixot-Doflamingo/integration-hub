@@ -221,12 +221,26 @@ func TestGuardDNSRebinding(t *testing.T) {
 	_, fn, tlsCfg := tlsReceiver(t, func(http.ResponseWriter, *http.Request) { hits.Add(1) })
 	for _, private := range []string{"10.0.0.7", "127.0.0.1", "169.254.169.254", "::1", "::ffff:192.168.1.1"} {
 		t.Run(private, func(t *testing.T) {
-			var calls atomic.Int64
-			res := resolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
-				if calls.Add(1) == 1 {
+			// Lookups are per family: the first ip4 lookup (registration) answers 8.8.8.8, later
+			// rounds answer the private address in its own family. calls counts that family.
+			pa := netip.MustParseAddr(private)
+			var calls, n4, n6 atomic.Int64
+			res := resolverFunc(func(_ context.Context, network, _ string) ([]netip.Addr, error) {
+				n := &n6
+				if network == "ip4" {
+					n = &n4
+				}
+				first := n.Add(1) == 1
+				if (network == "ip4") == pa.Is4() {
+					calls.Add(1)
+					if !first {
+						return []netip.Addr{pa}, nil
+					}
+				}
+				if network == "ip4" && first {
 					return addrs("8.8.8.8"), nil
 				}
-				return addrs(private), nil
+				return nil, nil
 			})
 			g := newTestGuard(t, GuardOptions{Resolver: res, dial: fn.dial, tlsConfig: tlsCfg})
 			if err := g.CheckURL(t.Context(), "https://example.com/cb"); err != nil {
@@ -254,8 +268,8 @@ func TestGuardDialsTheVettedAddress(t *testing.T) {
 	if err != nil || status != http.StatusNoContent {
 		t.Fatalf("Do = %v, %v", status, err)
 	}
-	if got := fn.addrs(); len(got) != 1 || got[0] != "8.8.8.8:443" {
-		t.Fatalf("dialed %v, want the vetted IP literal 8.8.8.8:443", got)
+	if got := fn.addrs(); len(got) != 1 || (got[0] != "8.8.8.8:443" && got[0] != "[2606:4700:4700::1111]:443") {
+		t.Fatalf("dialed %v, want one vetted IP literal", got)
 	}
 }
 

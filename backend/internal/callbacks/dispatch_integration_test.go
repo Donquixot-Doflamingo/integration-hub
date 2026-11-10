@@ -26,19 +26,30 @@ import (
 
 // tenantReceiver is a tenant endpoint that verifies every callback and counts deliveries.
 type tenantReceiver struct {
-	srv      *httptest.Server
-	fail     atomic.Int64 // answer 500 to this many requests first
-	mu       sync.Mutex
-	byID     map[string]int
-	bodies   [][]byte
-	verified atomic.Int64
-	rejected atomic.Int64
+	srv  *httptest.Server
+	fail atomic.Int64 // answer 500 to this many requests first
+	// delay (ns) slows every answer; inflight/maxInflight count concurrent requests.
+	delay, inflight, maxInflight atomic.Int64
+	mu                           sync.Mutex
+	byID                         map[string]int
+	bodies                       [][]byte
+	verified                     atomic.Int64
+	rejected                     atomic.Int64
 }
 
 func newTenantReceiver(t *testing.T, secret string) *tenantReceiver {
 	t.Helper()
 	r := &tenantReceiver{byID: map[string]int{}}
 	r.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		cur := r.inflight.Add(1)
+		defer r.inflight.Add(-1)
+		for {
+			m := r.maxInflight.Load()
+			if cur <= m || r.maxInflight.CompareAndSwap(m, cur) {
+				break
+			}
+		}
+		time.Sleep(time.Duration(r.delay.Load()))
 		body, _ := io.ReadAll(req.Body)
 		if err := Verify(req.Header.Get(SignatureHeader), body, [][]byte{[]byte(secret)}, time.Now(), 0); err != nil {
 			r.rejected.Add(1)
@@ -364,6 +375,126 @@ func TestAbandonedClaimIsReclaimed(t *testing.T) {
 	}
 	if r := readRow(t, it.pool, id); r.status != statusDelivered {
 		t.Fatalf("row changed to %+v", r)
+	}
+}
+
+// TestClaimNeverReturnsMoreThanAsked (HUB-452): with a due backlog AND expired in-flight rows, a
+// claim of n returns exactly n rows (the SQL took n of each and returned up to 2n), taking the
+// abandoned rows first; the rest stay claimable.
+func TestClaimNeverReturnsMoreThanAsked(t *testing.T) {
+	it := newITest(t)
+	const due, abandoned = 8, 6
+	evs := make([]*Event, due+abandoned)
+	for i := range evs {
+		evs[i] = sampleEvents()["failed"]
+	}
+	it.enqueue(t, evs...)
+	if _, err := it.pool.Exec(t.Context(), `UPDATE hub.callback_deliveries SET status = 'in_flight', claimed_by = 'cb-crashed',
+		claimed_until = now() - interval '1 second', attempts = 1
+		WHERE delivery_id IN (SELECT delivery_id FROM hub.callback_deliveries ORDER BY delivery_id LIMIT $1)`, abandoned); err != nil {
+		t.Fatal(err)
+	}
+	st := pgStore{pool: it.pool}
+	got, err := st.claim(t.Context(), "cb-a", 4, 30*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 {
+		t.Fatalf("claim(4) returned %d rows", len(got))
+	}
+	for _, d := range got {
+		if d.Attempts != 2 {
+			t.Fatalf("claimed %s with attempt %d, want an abandoned row (attempt 2)", d.ID, d.Attempts)
+		}
+	}
+	// 10 left (2 abandoned, 8 due): asking for 7 gives 7, then the remaining 3; none twice.
+	seen := map[string]bool{}
+	for _, d := range got {
+		seen[d.ID] = true
+	}
+	for _, ask := range []int{7, 20} {
+		more, err := st.claim(t.Context(), "cb-a", ask, 30*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := min(ask, due+abandoned-len(seen)); len(more) != want {
+			t.Fatalf("claim(%d) returned %d rows, want %d", ask, len(more), want)
+		}
+		for _, d := range more {
+			if seen[d.ID] {
+				t.Fatalf("row %s claimed twice", d.ID)
+			}
+			seen[d.ID] = true
+		}
+	}
+	if len(seen) != due+abandoned {
+		t.Fatalf("claimed %d distinct rows of %d", len(seen), due+abandoned)
+	}
+}
+
+// TestRunWithBacklogAndAbandonedRowsStaysWithinSenders: Run over a due backlog plus expired
+// in-flight rows delivers all of them, never has more than Senders requests in flight, and stops.
+func TestRunWithBacklogAndAbandonedRowsStaysWithinSenders(t *testing.T) {
+	it := newITest(t)
+	const total = 60
+	evs := make([]*Event, total)
+	for i := range evs {
+		evs[i] = sampleEvents()["failed"]
+	}
+	it.enqueue(t, evs...)
+	if _, err := it.pool.Exec(t.Context(), `UPDATE hub.callback_deliveries SET status = 'in_flight', claimed_by = 'cb-crashed',
+		claimed_until = now() - interval '1 second', attempts = 1
+		WHERE delivery_id IN (SELECT delivery_id FROM hub.callback_deliveries ORDER BY delivery_id LIMIT 30)`); err != nil {
+		t.Fatal(err)
+	}
+	it.rcv.delay.Store(int64(15 * time.Millisecond))
+	stop := run(t, it.dispatcher(t, audit.Discard{}, DispatcherOptions{Senders: 4, ClaimBatch: 4}))
+	waitFor(t, "all delivered", func() bool { return countRows(t, it.pool, `status = 'delivered'`) == total })
+	stop()
+	if m := it.rcv.maxInflight.Load(); m > 4 {
+		t.Fatalf("%d concurrent requests with 4 senders", m)
+	}
+}
+
+// TestDisabledEndpointDoesNotBurnAttempts (HUB-452): a delivery for a disabled endpoint is looked
+// at again and again without using up the 11-attempt schedule, never dead-letters, and is
+// delivered as attempt 1 once the endpoint is enabled.
+func TestDisabledEndpointDoesNotBurnAttempts(t *testing.T) {
+	it := newITest(t)
+	ev := sampleEvents()["failed"]
+	it.enqueue(t, ev)
+	id := deliveryIDs(t, it.pool, ev.RequestID)[0]
+	d := it.dispatcher(t, audit.Discard{}, DispatcherOptions{})
+	ep := it.snaps.s.Registrar["reg_orders_cb"]
+	cycle := func() {
+		t.Helper()
+		if _, err := it.pool.Exec(t.Context(), `UPDATE hub.callback_deliveries SET next_attempt_at = now() WHERE delivery_id = $1`, id); err != nil {
+			t.Fatal(err)
+		}
+		rows, err := d.deps.store.claim(t.Context(), d.ID(), 1, 30*time.Second)
+		if err != nil || len(rows) != 1 {
+			t.Fatalf("claim = %d rows, %v", len(rows), err)
+		}
+		d.attempt(t.Context(), rows[0])
+	}
+	ep.Disabled = true
+	for i := range 15 { // more than the 11 attempts of the schedule
+		cycle()
+		if r := readRow(t, it.pool, id); r.status != statusRetryScheduled || r.attempts != 0 || r.lastError != errEndpointDisabled {
+			t.Fatalf("cycle %d: row = %+v, want retry_scheduled, 0 attempts, endpoint_disabled", i, r)
+		}
+	}
+	var wait time.Duration
+	if err := it.pool.QueryRow(t.Context(), `SELECT next_attempt_at - now() FROM hub.callback_deliveries WHERE delivery_id = $1`, id).Scan(&wait); err != nil {
+		t.Fatal(err)
+	}
+	if wait < disabledHold-time.Minute || wait > disabledHold {
+		t.Fatalf("held for %v, want about %v", wait, disabledHold)
+	}
+	ep.Disabled = false
+	cycle()
+	if r := readRow(t, it.pool, id); r.status != statusDelivered || r.attempts != 1 {
+		t.Fatalf("after re-enable row = %+v, want delivered on attempt 1", r)
 	}
 }
 
