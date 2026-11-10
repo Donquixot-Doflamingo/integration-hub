@@ -6,6 +6,22 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `test(scripts)` · Add make test-scripts and close out HUB-456 (HUB-456) · HUB-456 · F-23
+  - `make test-scripts` runs the hermetic shell tests for the dev tooling; HUB-456 is in review with what was and was not run
+- 2026-11-08 · `fix(examples)` · Keep the examples off the dev stack's ports and processes (HUB-456) · HUB-456 · F-23
+  - The examples' mockvendor now defaults to 127.0.0.1:18099/18098, so running an example while `make dev-up` is up can no longer reset or reprogram the dev stack's mockvendor
+  - An example refuses to start, naming the port and the likely culprit, when a port it needs is already listening; it programs only the mockvendor it started, and fails when its own process died instead of trusting another listener's healthz
+  - Pid files under .demo/<example>/pids let the next run stop a gateway or mockvendor left by a SIGKILLed run (after checking the command line)
+  - The example output prints a non-JSON response body (an HTML 502) as received instead of nothing
+- 2026-11-08 · `fix(scripts)` · Harden the dev stack scripts against stale state and failed starts (HUB-456) · HUB-456 · F-23
+  - dev-up and dev-down only trust a pid file when the process behind it runs the Hub binary; a pid reused after a reboot is no longer reported as "already running" and is never signalled
+  - A dev-up that fails after starting processes stops them again; the "port already in use" message names scripts/dev-down.sh and the stale pid files it removed
+  - DEV_STATE may be relative; the dev key and encrypted credentials are recreated together when either is missing or unreadable
+  - dev-up warns, with the log to read and DEV_RESET=1, when a hub role logs "archived snapshot not loaded"
+- 2026-11-08 · `fix(deploy)` · Publish the compose Postgres and Redis on loopback only (HUB-456) · HUB-456 · F-23
+  - The dev Postgres (hub/hub) and Redis (no password) are no longer reachable from the LAN on Linux hosts; local tools still connect on localhost
+- 2026-11-08 · `docs(tickets)` · Open HUB-456 for the dev tooling fixes (HUB-456) · HUB-456 · F-23
+  - HUB-456 lists nine reviewer findings on the dev stack scripts, the examples' shared helper and the compose ports, each with an acceptance criterion
 - 2026-11-08 · `fix(frontend)` · Keep the seconds of a time bound when Search is pressed (HUB-455) · HUB-455 · F-19
   - Opening /requests?from=...T09:00:30Z and pressing Search no longer moves the bound to 09:00:00; the time fields accept seconds (requests, DLQ, change log)
 

@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: hub
       POSTGRES_PASSWORD: hub # dev-only credential
       POSTGRES_DB: hub
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"] # loopback only: hub/hub is a dev credential
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hub -d hub"]
@@ -20,7 +20,7 @@ services:
   redis:
     image: redis:7.4.12-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
     command: ["redis-server", "--save", "", "--appendonly", "no"]
-    ports: ["6379:6379"]
+    ports: ["127.0.0.1:6379:6379"] # loopback only: no auth
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
