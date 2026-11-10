@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(audit)` · Redact encoded forms of secrets in audit and logs (HUB-448) · HUB-448 · F-18
+  - A credential with characters such as & < > " \ + % or non-ASCII letters is masked in stored request.transformed and vendor.responded payloads, in dead-letter last_vendor_request / last_vendor_response and in log lines, also when it appears JSON-escaped, percent-encoded in a URL or base64-encoded
+  - The log denylist also masks x-api-key, access_token, client_secret and refresh_token attributes
+- 2026-11-08 · `docs(tickets)` · File HUB-448, escaped secrets leak into audit (HUB-448) · HUB-448 · F-18
+  - The backlog records the confirmed leak of credentials with JSON or URL special characters, with its acceptance criteria
 - 2026-11-08 · `fix(transform)` · Make format() work on JSON numbers and fail on a bad layout (HUB-447) · HUB-447 · F-04
   - `format("%d", req.n)` and `format("%s", req.n)` print `3` for a JSON number 3, and `format("%v", 1000000.0)` prints `1000000`; `%.2f` still prints a float
   - A layout with a bad verb, a wrong argument type or the wrong number of arguments fails the call as TRANSFORM_FAILED instead of sending `%!d(float64=3)` to the vendor
