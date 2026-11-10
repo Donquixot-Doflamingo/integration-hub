@@ -6,6 +6,16 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(transform)` · Make format() work on JSON numbers and fail on a bad layout (HUB-447) · HUB-447 · F-04
+  - `format("%d", req.n)` and `format("%s", req.n)` print `3` for a JSON number 3, and `format("%v", 1000000.0)` prints `1000000`; `%.2f` still prints a float
+  - A layout with a bad verb, a wrong argument type or the wrong number of arguments fails the call as TRANSFORM_FAILED instead of sending `%!d(float64=3)` to the vendor
+- 2026-11-08 · `fix(transform)` · Fail a transformer run that produces NaN or Inf (HUB-447) · HUB-447 · F-04
+  - A division by zero in a mapping (`req.a / req.b`) now fails the call as TRANSFORM_FAILED before it leaves the Hub; it no longer breaks body encoding or sends "+Inf" as a header or query value
+- 2026-11-08 · `fix(transform)` · Use the full ISO 4217 minor-unit table in currencyMinor (HUB-447) · HUB-447 · F-04
+  - `currencyMinor("1000", "XOF")` is 1000, not 100000: every zero-decimal currency (XOF, XAF, XPF, UGX, ISK and others), the 3-digit ones and CLF/UYW (4) are known
+  - An unknown currency code is refused instead of being assumed to have 2 decimals
+- 2026-11-08 · `fix(transform)` · Reject $env so creds cannot bypass the placement rule (HUB-447) · HUB-447 · F-04
+  - `$env.creds.token` and `$env["creds"].token` no longer compile: credentials cannot reach the vendor body or a session, and a header can no longer carry one without being treated as a credential
 - 2026-11-08 · `fix(upstream)` · Satisfy the linters on the dialer tests and drop an unused helper (HUB-446) · HUB-446 · F-23
   - No user-visible change: CI lint is green again (errcheck, noctx, unused)
 - 2026-11-08 · `fix(upstream)` · Connect to vendors without waiting for a silent AAAA lookup (HUB-446) · HUB-446 · F-23

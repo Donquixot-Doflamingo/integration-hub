@@ -287,13 +287,36 @@ func fnEmailNormalize(params ...any) (any, error) {
 	return s, nil
 }
 
-// minorDigits are ISO 4217 exponents that differ from 2.
-var minorDigits = map[string]int{"JPY": 0, "KRW": 0, "VND": 0, "CLP": 0, "BHD": 3, "KWD": 3, "OMR": 3, "JOD": 3, "TND": 3, "IQD": 3, "LYD": 3}
+// minorDigits is the ISO 4217 minor-unit exponent of every active currency, grouped by exponent.
+// An unknown code is refused rather than guessed as 2: a missing zero-decimal currency would
+// overcharge 100x. Add a code here when ISO publishes one.
+var minorDigits = buildMinorDigits(map[int]string{
+	0: "BIF CLP DJF GNF ISK JPY KMF KRW PYG RWF UGX UYI VND VUV XAF XOF XPF",
+	2: "AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BGN BMD BND BOB BOV BRL BSD BTN BWP BYN BZD " +
+		"CAD CDF CHE CHF CHW CNY COP COU CRC CUP CVE CZK DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP GMD " +
+		"GTQ GYD HKD HNL HTG HUF IDR ILS INR IRR JMD KES KGS KHR KPW KYD KZT LAK LBP LKR LRD LSL MAD MDL MGA MKD " +
+		"MMK MNT MOP MRU MUR MVR MWK MXN MXV MYR MZN NAD NGN NIO NOK NPR NZD PAB PEN PGK PHP PKR PLN QAR RON RSD " +
+		"RUB SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD SSP STN SVC SYP SZL THB TJS TMT TOP TRY TTD TWD TZS UAH USD " +
+		"USN UYU UZS VED VES WST XCD YER ZAR ZMW ZWG",
+	3: "BHD IQD JOD KWD LYD OMR TND",
+	4: "CLF UYW",
+})
+
+func buildMinorDigits(groups map[int]string) map[string]int {
+	m := make(map[string]int, 180)
+	for exp, codes := range groups {
+		for _, c := range strings.Fields(codes) {
+			m[c] = exp
+		}
+	}
+	return m
+}
 
 var decimalPattern = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
 
 // currencyMinor(amount, currency) converts an amount ("1234.5" or 1234.5) to integer minor units
-// (123450 for INR). Amounts with more decimals than the currency allows are rejected, never rounded.
+// (123450 for INR). Amounts with more decimals than the currency allows are rejected, never rounded;
+// a currency missing from the ISO 4217 table is rejected, never assumed to have 2 digits.
 func fnCurrencyMinor(params ...any) (any, error) {
 	if len(params) != 2 {
 		return nil, argErr("currencyMinor", "(amount, currency)", params)
@@ -324,7 +347,7 @@ func fnCurrencyMinor(params ...any) (any, error) {
 	}
 	exp, ok := minorDigits[cur]
 	if !ok {
-		exp = 2
+		return nil, fmt.Errorf("currencyMinor: %q is not a known ISO 4217 currency (its minor unit is not defined)", cur)
 	}
 	whole, frac, _ := strings.Cut(s, ".")
 	frac = strings.TrimRight(frac, "0")

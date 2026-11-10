@@ -264,6 +264,13 @@ func (c *compiler) expression(n *cnode, src string, noCreds bool) {
 		}
 	}
 	for _, id := range v.idents {
+		// $env is the whole variable map: $env.creds or $env["cr"+"eds"] would reach creds past the
+		// identifier checks below, so no $-prefixed identifier is allowed at all.
+		if strings.HasPrefix(id, "$") {
+			c.ce.add(n.path, "%s is not available: reach variables by name (req, hdr, account, creds, session, res)", id)
+			failed = true
+			continue
+		}
 		if !slices.Contains(c.vars, id) && slices.Contains(c.otherVars, id) {
 			c.ce.add(n.path, "%s is not available in %s mapping (DESIGN §7.2)", id, c.mapping)
 			failed = true

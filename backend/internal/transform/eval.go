@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/expr-lang/expr/vm"
@@ -40,6 +41,39 @@ type EvalError struct {
 
 // errEvaluation replaces engine messages in Error(), which reaches logs and the audit trail.
 var errEvaluation = errors.New("expression failed at run time")
+
+// errNonFinite marks a NaN or ±Inf result (for example a division by zero). JSON cannot carry
+// one, and "+Inf" must never be sent as a header or query value, so the call fails before it leaves the Hub.
+var errNonFinite = errors.New("result contains a non-finite number (NaN or Inf), for example a division by zero")
+
+// hasNonFinite reports whether v is, or contains, a NaN or ±Inf float.
+func hasNonFinite(v any) bool {
+	switch x := v.(type) {
+	case float64:
+		return math.IsNaN(x) || math.IsInf(x, 0)
+	case float32:
+		return math.IsNaN(float64(x)) || math.IsInf(float64(x), 0)
+	case map[string]any:
+		for _, e := range x {
+			if hasNonFinite(e) {
+				return true
+			}
+		}
+	case []any:
+		for _, e := range x {
+			if hasNonFinite(e) {
+				return true
+			}
+		}
+	case []float64:
+		for _, e := range x {
+			if math.IsNaN(e) || math.IsInf(e, 0) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // Detail is the engine message, which may contain input values: show it only for fixture data
 // (goldens, hubctl), never in logs or audit.
@@ -95,6 +129,9 @@ func (p *Program) eval(n *cnode, env map[string]any) (any, error) {
 		v, err := m.Run(n.prog, env)
 		if err != nil {
 			return nil, &EvalError{Transformer: p.ref, Path: n.path, Expr: n.src, Err: errEvaluation, detail: firstLine(err.Error())}
+		}
+		if hasNonFinite(v) {
+			return nil, &EvalError{Transformer: p.ref, Path: n.path, Expr: n.src, Err: errNonFinite}
 		}
 		return v, nil
 	case nodeObject:
