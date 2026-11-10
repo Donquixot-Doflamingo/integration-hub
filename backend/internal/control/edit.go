@@ -69,6 +69,16 @@ func (t Tree) SetString(path, key, value string) error {
 // current snapshot (snap) and returns the change-log row; the result is built and validated in
 // full, archived, logged and announced, exactly like a publish. An error from fn aborts the
 // edit with nothing written.
+//
+// fn MUST be repeatable: when another replica archives a version between the load and the
+// commit, the edit is re-run (up to 5 times) on the newer tree, calling fn again. fn may only
+// change the Tree and local variables it assigns on every run. A side effect outside the tree
+// (credential store writes, sends, counters) must be done once and remembered by the caller:
+// keep a flag that this request already performed it, skip it on a re-run, use what the first
+// run produced, and undo it only when Edit returns an error. Never overwrite what someone
+// else wrote. createAccount, createRegistrarEndpoint and rotateRegistrarSecret
+// (adminapi) are the reference implementations. Read state that the callback itself changes
+// from before the first run, not from the store (rotateRegistrarSecret keeps the secrets it read).
 func (p *Publisher) Edit(ctx context.Context, fn func(t Tree, snap *registry.Snapshot) (Change, error)) (Result, error) {
 	return p.locked(ctx, func() (Result, error) {
 		t, snap, err := p.load(ctx)

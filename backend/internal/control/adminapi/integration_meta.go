@@ -84,6 +84,10 @@ func (s *Server) createIntegration(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, &Error{Status: http.StatusConflict, Code: CodeConflict, Message: fmt.Sprintf("Integration %s already exists", body.IntegrationID)})
 		return
 	}
+	if body.OwnerTenant == "" { // required by the contract; an ownerless integration can never be published
+		s.fail(w, r, badRequest("/owner_tenant", "owner_tenant is required"))
+		return
+	}
 	if err := checkTenants(c.snap, body.OwnerTenant, body.Grants); err != nil {
 		s.fail(w, r, err)
 		return

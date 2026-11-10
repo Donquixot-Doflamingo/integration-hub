@@ -118,7 +118,7 @@ func accessSetKeys(t control.Tree, path string, kv map[string]any) error {
 
 // accessPage pages items sorted by id: the cursor is the last id of the previous page.
 func accessPage[T any](r *http.Request, ids []string, item func(id string) T) ([]T, *string, error) {
-	limit, cursor, err := page(r)
+	limit, cursor, err := page(r, 1)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -137,17 +137,13 @@ func accessPage[T any](r *http.Request, ids []string, item func(id string) T) ([
 }
 
 // accessSnapshot returns the current registry snapshot (the publisher's view, else Deps.Snapshot).
+//
+// It shares the cached snapshot of the integrations and vendors handlers (rebuilt only when the
+// archive's checksum changes): a read used to gunzip and fully rebuild the snapshot every time,
+// and stamped BuiltAt with "now", which objectTimes then used as a moving created/updated time
+// for objects older than the change log (HUB-451).
 func (s *Server) accessSnapshot(ctx context.Context) (*registry.Snapshot, error) {
-	if s.d.Publisher != nil {
-		_, snap, err := s.d.Publisher.Current(ctx)
-		return snap, err
-	}
-	if s.d.Snapshot != nil {
-		if snap := s.d.Snapshot(); snap != nil {
-			return snap, nil
-		}
-	}
-	return nil, errors.New("no registry snapshot")
+	return s.snapshot(ctx)
 }
 
 func (s *Server) accessRotator() (*control.Rotator, error) {
@@ -411,7 +407,8 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 	// The credential store is only needed when the vendor's scheme takes credentials: an auth
 	// none account (ADR-0023) can be created on an admin without one.
 	var rot *control.Rotator
-	created := false
+	created := false // this request wrote the credential entry (kept across re-runs of the callback)
+	var sec creds.AccountSecrets
 	ctx := r.Context()
 	res, err := pub.Edit(ctx, func(t control.Tree, snap *registry.Snapshot) (control.Change, error) {
 		path := "accounts/" + id + ".yaml"
@@ -456,11 +453,15 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		if rot, err = s.accessRotator(); err != nil {
 			return control.Change{}, err
 		}
-		sec := creds.AccountSecrets{Active: creds.NewSlot(creds.AccountSecrets{}, body.Credentials, body.CredentialExpiresAt, s.d.Now())}
-		if err := rot.PutCredentials(ctx, id, &sec, true); err != nil {
-			return control.Change{}, err
+		// The callback may run again (Publisher.Edit re-runs it after losing a cross-replica
+		// race): the entry this request already wrote is kept, never created a second time.
+		if !created {
+			sec = creds.AccountSecrets{Active: creds.NewSlot(creds.AccountSecrets{}, body.Credentials, body.CredentialExpiresAt, s.d.Now())}
+			if err := rot.PutCredentials(ctx, id, &sec, true); err != nil {
+				return control.Change{}, err
+			}
+			created = true
 		}
-		created = true
 		return control.Change{Actor: principal(r).Actor(), Action: "createAccount", ObjectType: "account", ObjectID: id, Reason: reason,
 			After: map[string]any{"vendor": a.Vendor, "region": a.Region, "config": a.Config, "quota": a.Quota, "credentials": sec.Views()}}, nil
 	})

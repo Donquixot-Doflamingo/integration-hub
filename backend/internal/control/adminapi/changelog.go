@@ -29,8 +29,9 @@ type changeSummary struct {
 	SnapshotVersion *int64    `json:"snapshot_version"`
 }
 
-// page reads the limit (1..200, default 50) and the opaque cursor of a list operation.
-func page(r *http.Request) (limit int, cursor []string, err error) {
+// page reads the limit (1..200, default 50) and the opaque cursor of a list operation. A cursor
+// that does not decode to the list's number of parts is a 400, never a silent first page.
+func page(r *http.Request, parts int) (limit int, cursor []string, err error) {
 	limit = 50
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if limit, err = strconv.Atoi(v); err != nil || limit < 1 || limit > 200 {
@@ -43,6 +44,9 @@ func page(r *http.Request) (limit int, cursor []string, err error) {
 			return 0, nil, badRequest("", "cursor is not a cursor of this list")
 		}
 		cursor = strings.Split(string(b), "\x00")
+		if len(cursor) != parts {
+			return 0, nil, badRequest("", "cursor is not a cursor of this list")
+		}
 	}
 	return limit, cursor, nil
 }
@@ -71,7 +75,7 @@ func timeRange(r *http.Request) (from, to *time.Time, err error) {
 }
 
 func (s *Server) listChangeLog(w http.ResponseWriter, r *http.Request) {
-	limit, cursor, err := page(r)
+	limit, cursor, err := page(r, 2)
 	if err != nil {
 		s.fail(w, r, err)
 		return

@@ -89,7 +89,7 @@ func (s *Server) current(ctx context.Context) (registry.Sources, *registry.Snaps
 
 // pageOf returns the page of keys (already in list order) after the request's cursor.
 func pageOf(r *http.Request, keys []string) (items []string, next *string, err error) {
-	limit, cursor, err := page(r)
+	limit, cursor, err := page(r, 1)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -698,6 +698,7 @@ func (s *Server) updateVendor(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return control.Change{}, fmt.Errorf("%w: vendor %q", control.ErrNotFound, id)
 		}
+		m = vendorMeta{} // the callback may run again: do not merge into what the last run left
 		if err := readMeta(t.Get, vendorMetaFile(id), &m); err != nil {
 			return control.Change{}, err
 		}

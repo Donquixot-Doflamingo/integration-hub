@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **294** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **21**
+Total tickets: **295** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **22**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **294** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 19 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 20 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3890,3 +3890,55 @@ Findings 3 and 4 are reported, not changed: the frozen caller contract says requ
 - [x] A trailing `]`, `}` or second JSON value after the body is 400 `VALIDATION_FAILED`; trailing whitespace is accepted
 - [x] Table-driven tests written first and failing for each fixed finding
 - [x] Findings 3 and 4 written up as contract change requests
+
+### HUB-451 — Control plane: publish deadlock, non-atomic publish and change log, unexplained 500 on an unloadable snapshot
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** — · **Feature:** F-16 · **Stories:** —
+- **Branch:** `fix/HUB-451-control-plane`
+
+Reviewer findings on the admin API, the publisher and the snapshot archive:
+1. **Deadlock.** `Publisher.locked` held a pool connection per edit while blocked on `pg_advisory_lock`; the holder needs a second connection (archive transaction, change log). With as many concurrent edits as pool connections, all admin DB access hangs.
+2. **Not atomic.** The snapshot committed first and the change-log row came after; a failed insert left a live snapshot without a change, and createAccount / registrar flows then rolled their credentials back. A no-op publish attributed the existing snapshot to the no-op author.
+3. **Unexplained 500.** When the newest archived snapshot cannot be loaded, every admin read and write answered a bare 500; the node logged the same generic warning every 5 s.
+4. **TOCTOU.** The config-directory archive (`mayArchiveConfig` then `Publish`) and `UpgradeLegacyArchive` could overwrite a UI publish that landed in between.
+5. `createIntegration` accepted an empty `owner_tenant`.
+6. Malformed pagination cursors (change log, integrations, access lists) silently returned page 1.
+7. `createAPIKey` left duplicate scopes (`slices.Compact` on unsorted input).
+8. Tenants / accounts / api-keys / registrar reads rebuilt the snapshot from the blob on every call.
+
+**Acceptance criteria**
+- [x] Concurrent edits (more than the pool size) all finish; the edit lock holds no pool connection
+- [x] Snapshot and change-log row commit in one transaction; `snapshot_version` is set only when a snapshot was written
+- [x] An unloadable newest snapshot answers an actionable error naming the version and cause; nodes log one ERROR naming the version and the fix, rate-limited
+- [x] The config-directory archive and the legacy upgrade check the latest version under the archive lock
+- [x] Empty or unknown `owner_tenant` is 400 VALIDATION_FAILED at `/owner_tenant`
+- [x] Malformed cursors are 400; API-key scopes are sorted and unique
+- [x] Access reads reuse a snapshot cached by archive checksum
+
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.

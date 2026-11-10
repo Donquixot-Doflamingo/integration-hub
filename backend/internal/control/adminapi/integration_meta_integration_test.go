@@ -45,6 +45,12 @@ func TestCreateAndFirstPublish(t *testing.T) {
 			t.Errorf("want %s: %d %s", tc.want, resp.Code, resp.Body)
 		}
 	}
+	// HUB-451: owner_tenant is required; an empty one used to create an integration that could
+	// never be published. The request breaks the contract on purpose, so it skips request validation.
+	empty := strings.Replace(strings.Replace(brandC, "int_evt_brandC", "int_evt_brandF", 1), `"owner_tenant":"orders-service"`, `"owner_tenant":""`, 1)
+	if resp, _ := a.doInvalid(RoleEditor, http.MethodPost, "/integrations", empty); resp.Code != 400 || !strings.Contains(resp.Body.String(), "/owner_tenant") {
+		t.Errorf("empty owner_tenant: %d %s", resp.Code, resp.Body)
+	}
 	// interactive is set at creation (ADR-0023) and shown on the integration and its summary.
 	inter := mustDo(a, RoleEditor, http.MethodPost, "/integrations", strings.Replace(strings.Replace(brandC, "int_evt_brandC", "int_evt_brandI", 1), `"grants"`, `"interactive":true,"grants"`, 1), 201)
 	if inter["integration"].(map[string]any)["interactive"] != true {
