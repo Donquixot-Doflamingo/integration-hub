@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { enhance } from '$app/forms';
+	import { applyAction, enhance } from '$app/forms';
 	import {
 		fromPlainError,
 		type ActionFailureData,
@@ -100,6 +100,8 @@
 					fields = d?.fields ?? {};
 					error = d?.error ? fromPlainError(d.error) : null;
 					result = null;
+				} else if (r.type === 'redirect') {
+					await applyAction(r);
 				} else {
 					error = new HubApiError({
 						status: r.type === 'error' ? (r.status ?? 500) : 500,

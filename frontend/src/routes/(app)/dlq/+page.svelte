@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { enhance } from '$app/forms';
+	import { applyAction, enhance } from '$app/forms';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fromPlainError, type ActionFailureData, type ActionSuccessData } from '$lib/api/actions';
@@ -8,6 +9,8 @@
 	import type { DlqBulkResult } from '$lib/api/types';
 	import ChangeNotice from '$lib/components/ChangeNotice.svelte';
 	import ErrorPanel from '$lib/components/ErrorPanel.svelte';
+	import FieldError from '$lib/components/FieldError.svelte';
+	import FormProblems from '$lib/components/FormProblems.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import RoleGate from '$lib/components/RoleGate.svelte';
 	import ListView from '$lib/components/ListView.svelte';
@@ -16,6 +19,7 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { sectionFor } from '$lib/nav';
 	import { formatNumber, formatUtc } from '$lib/utils/format';
+	import type { FilterProblems } from '$lib/utils/filter-problems';
 	import { DEFAULT_PAGE_SIZE, PAGE_SIZES, type Paging } from '$lib/utils/paging';
 	import { lastRange, toLocalInput } from '$lib/utils/time';
 	import type { PageData } from './$types';
@@ -32,7 +36,8 @@
 		replayedChoices,
 		searchFor,
 		without,
-		type Filters
+		type Filters,
+		type FilterKey
 	} from './filters';
 
 	let { data }: { data: PageData } = $props();
@@ -98,6 +103,9 @@
 										message: 'The filters could not be counted.'
 									})
 								};
+					} else if (result.type === 'redirect') {
+						// The session expired: the action answered with the sign-in redirect (HUB-455).
+						await applyAction(result);
 					} else {
 						countError = {
 							kind,
@@ -132,12 +140,35 @@
 		};
 	}
 
+	// Filters whose text does not fit its rule: marked, and the search does not run (HUB-455).
+	let problems = $state.raw<FilterProblems<FilterKey>>({});
+	const problemItems = $derived(
+		(Object.entries(problems) as [FilterKey, string][]).map(([k, message]) => ({
+			label: filterLabels[k],
+			message
+		}))
+	);
+	// New URL state (a search, a chip removed): the marks belonged to the old form text.
+	$effect(() => {
+		void data.state;
+		problems = {};
+	});
+
 	function onsubmit(e: SubmitEvent) {
 		// Without JS the browser submits the GET form as is; with JS, build a clean URL.
 		e.preventDefault();
-		const { filters: next, limit } = filtersFromForm(
-			new FormData(e.currentTarget as HTMLFormElement)
-		);
+		const form = e.currentTarget as HTMLFormElement;
+		const { filters: next, limit, problems: found } = filtersFromForm(new FormData(form));
+		problems = found;
+		// A value that does not fit is not searched without: mark it and stay (HUB-455).
+		if (Object.keys(found).length) {
+			tick().then(() =>
+				form
+					.querySelector<HTMLElement>('[aria-invalid="true"][aria-describedby$="-error"]')
+					?.focus()
+			);
+			return;
+		}
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- hrefFor builds on resolve()
 		goto(hrefFor(next, firstPage(limit ?? DEFAULT_PAGE_SIZE)), { keepFocus: true, noScroll: true });
 	}
@@ -147,6 +178,8 @@
 	title={section.label}
 	summary="Dead-lettered requests, newest first. Kept 14 days. Filter them, open one to see why it failed."
 />
+
+<FormProblems title="Fix these filters before searching" items={problemItems} />
 
 <form class="filters" method="GET" action={base} {onsubmit} aria-label="Filter dead letters">
 	<div class="row">
@@ -161,11 +194,14 @@
 				<input
 					id="d-tenant"
 					name="tenant_id"
+					aria-invalid={problems.tenant_id ? 'true' : undefined}
+					aria-describedby={problems.tenant_id ? 'd-tenant-error' : undefined}
 					value={filters.tenant_id ?? ''}
 					maxlength="64"
 					placeholder="orders-service"
 					autocomplete="off"
 				/>
+				<FieldError id="d-tenant-error" message={problems.tenant_id} />
 			{/if}
 		</div>
 		<div class="field">
@@ -173,11 +209,14 @@
 			<input
 				id="d-integration"
 				name="integration_id"
+				aria-invalid={problems.integration_id ? 'true' : undefined}
+				aria-describedby={problems.integration_id ? 'd-integration-error' : undefined}
 				value={filters.integration_id ?? ''}
 				maxlength="64"
 				placeholder="int_evt_brandA"
 				autocomplete="off"
 			/>
+			<FieldError id="d-integration-error" message={problems.integration_id} />
 		</div>
 		{#if !scoped}
 			<div class="field">
@@ -185,22 +224,28 @@
 				<input
 					id="d-vendor"
 					name="vendor_id"
+					aria-invalid={problems.vendor_id ? 'true' : undefined}
+					aria-describedby={problems.vendor_id ? 'd-vendor-error' : undefined}
 					value={filters.vendor_id ?? ''}
 					maxlength="64"
 					placeholder="clevertap"
 					autocomplete="off"
 				/>
+				<FieldError id="d-vendor-error" message={problems.vendor_id} />
 			</div>
 			<div class="field">
 				<label for="d-account">Account</label>
 				<input
 					id="d-account"
 					name="account_id"
+					aria-invalid={problems.account_id ? 'true' : undefined}
+					aria-describedby={problems.account_id ? 'd-account-error' : undefined}
 					value={filters.account_id ?? ''}
 					maxlength="64"
 					placeholder="ct-brandA-in"
 					autocomplete="off"
 				/>
+				<FieldError id="d-account-error" message={problems.account_id} />
 			</div>
 		{/if}
 		<div class="field">
@@ -208,12 +253,15 @@
 			<input
 				id="d-reason"
 				name="reason"
+				aria-invalid={problems.reason ? 'true' : undefined}
+				aria-describedby={problems.reason ? 'd-reason-error' : undefined}
 				value={filters.reason ?? ''}
 				maxlength="64"
 				placeholder="UPSTREAM_REJECTED"
 				autocomplete="off"
 				list="d-reasons"
 			/>
+			<FieldError id="d-reason-error" message={problems.reason} />
 			<datalist id="d-reasons">
 				{#each COMMON_REASONS as r (r)}<option value={r}></option>{/each}
 			</datalist>
@@ -234,6 +282,7 @@
 				id="d-from"
 				name="from"
 				type="datetime-local"
+				step="1"
 				value={toLocalInput(filters.from)}
 				aria-invalid={data.state.problem ? 'true' : undefined}
 				aria-describedby={data.state.problem ? 'd-range-problem' : 'd-range-hint'}
@@ -245,6 +294,7 @@
 				id="d-to"
 				name="to"
 				type="datetime-local"
+				step="1"
 				value={toLocalInput(filters.to)}
 				aria-invalid={data.state.problem ? 'true' : undefined}
 				aria-describedby={data.state.problem ? 'd-range-problem' : 'd-range-hint'}

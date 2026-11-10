@@ -63,6 +63,13 @@ describe('times', () => {
 
 	it('toLocalInput', () => expect(toLocalInput('2026-10-31T09:00:00Z')).toBe('2026-10-31T09:00'));
 
+	it('keeps the seconds of a bound through the form (HUB-455)', () => {
+		expect(toLocalInput('2026-10-31T09:00:30Z')).toBe('2026-10-31T09:00:30');
+		const f = new FormData();
+		f.set('from', toLocalInput('2026-10-31T09:00:30Z'));
+		expect(filtersFromForm(f).filters.from).toBe('2026-10-31T09:00:30Z');
+	});
+
 	it('lastRange ends at the next full minute', () => {
 		const now = Date.parse('2026-10-31T09:15:20Z');
 		expect(lastRange(3_600_000, now)).toEqual({
@@ -101,7 +108,21 @@ describe('searchFor / filtersFromForm', () => {
 				code: ['UPSTREAM_TIMEOUT', 'UPSTREAM_REJECTED'],
 				from: '2026-10-31T09:00:00Z'
 			},
+			problems: {},
 			limit: 25
 		});
+	});
+
+	it('names the fields whose text was dropped instead of silently searching without them (HUB-455)', () => {
+		const f = new FormData();
+		f.set('tenant_id', 'ab');
+		f.set('integration_id', 'my tenant');
+		f.set('vendor_id', 'clevertap');
+		f.set('code', 'UPSTREAM_TIMEOUT 9bad');
+		f.set('from', '2026-13-45T09:00');
+		const r = filtersFromForm(f);
+		expect(Object.keys(r.problems).sort()).toEqual(['code', 'from', 'integration_id', 'tenant_id']);
+		expect(r.problems.tenant_id).toMatch(/3 to 64/);
+		expect(r.filters.vendor_id).toBe('clevertap');
 	});
 });

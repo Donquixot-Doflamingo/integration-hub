@@ -72,6 +72,16 @@ it('reads the form (datetime-local as UTC, empty fields dropped)', () => {
 	form.set('limit', '100');
 	expect(filtersFromForm(form)).toEqual({
 		filters: { actor: 'priya@example.com', object_type: 'tenant', from: '2026-10-31T09:00:00Z' },
+		problems: {},
 		limit: 100
 	});
+});
+
+it('names the fields whose text was dropped (HUB-455)', () => {
+	const form = new FormData();
+	form.set('action', 'Not An Operation');
+	form.set('actor', 'priya@example.com');
+	const r = filtersFromForm(form);
+	expect(Object.keys(r.problems)).toEqual(['action']);
+	expect(r.filters).toEqual({ actor: 'priya@example.com' });
 });

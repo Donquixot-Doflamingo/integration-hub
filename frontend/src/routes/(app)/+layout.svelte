@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { adminApiBase } from '$lib/api/console';
+	import AccessUnavailable from '$lib/components/AccessUnavailable.svelte';
 	import Breadcrumbs from '$lib/components/Breadcrumbs.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import SideNav from '$lib/components/SideNav.svelte';
@@ -92,7 +93,11 @@
 	</header>
 
 	<main id="main" tabindex="-1">
-		{@render children()}
+		{#if !data.access.known && !data.me.ok}
+			<AccessUnavailable error={data.me.error} />
+		{:else}
+			{@render children()}
+		{/if}
 	</main>
 </div>
 

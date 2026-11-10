@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **298** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **25**
+Total tickets: **299** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **26**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **298** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 23 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 24 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -4054,6 +4054,59 @@ Reviewer findings:
 - [x] Readiness behaviour in the ops docs unchanged
 
 
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-455 — Console: admin shown as tenant viewer when /me fails, expired sessions cannot recover, filters silently dropped, empty lookups
+- **Epic:** EP-14 · **Type:** fix · **Area:** frontend
+- **Status:** in-review · **Depends on:** HUB-436 · **Feature:** F-19 · **Stories:** —
+- **Branch:** `fix/HUB-455-console-error-states`
+
+A code review of the console found states where it lies to the operator or leaves them stuck:
+1. When `/me` fails with anything but 401 the access is `NO_ACCESS` (tenant-scoped, no tenants): an admin sees Accounts/Vendors as forbidden, an empty Tenants list, a false 404 on `/tenants/<id>`, and no vendor/account columns, until a hard reload.
+2. An expired session (8 h token) mid-use: the error panel has no sign-in link and Retry repeats the 401; custom `enhance` callbacks (goldens, dry run, DLQ count, draft save/check) ignore the action's `redirect(303, /login)`.
+3. A filter value that fails the client pattern (short slug, bad code) is silently dropped: unfiltered list, no chip, no error. In the DLQ this also drives the replay/purge count.
+4. Failed lookups (vendors, accounts, transformers, endpoints) render empty pickers with no message; only the first 25 vendors are read.
+5. A quota cannot be cleared (`daily` emptied gives "Nothing changed"); the contract allows `null`.
+6. DLQ replay trusts the earlier dry-run count; only purge re-counts.
+7. "Run publish checks" ignores an error or redirect result.
+8. Pager shows a wrong page number after 20 pages (trail is capped).
+9. Request timeline sorts by `seq` first; replays may reuse it.
+10. `toLocalInput` drops seconds, so Search shifts a `from`/`to` bound.
+
+**Acceptance criteria**
+- [x] 1: unknown access shows an ErrorPanel with Retry on every role-dependent page; unknown is never tenant-scoped
+- [x] 2: UNAUTHORIZED errors link to sign-in; `redirect` results are applied in every custom `enhance` callback
+- [x] 3: an invalid filter value shows a field error (aria-invalid, described-by) and the search does not run
+- [x] 4: lookup failures are shown; all vendors are read by following cursors
+- [x] 5: an emptied quota field sends `null`
+- [x] 6-10: fixed with a failing test first, or reported as not done
+- [x] `npm run check && npm run lint && npm test` green
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.

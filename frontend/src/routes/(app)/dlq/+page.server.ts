@@ -54,14 +54,14 @@ async function run(event: RequestEvent, kind: BulkKind) {
 		if (text(form, 'confirm').trim() !== String(expected)) {
 			return invalid(kind, { confirm: `Type ${expected} to confirm.` });
 		}
-		// Purge is permanent: refuse when the selection changed since it was counted.
-		const now = await call(event, kind, filter, DRY_RUN_REASON, true);
-		if (!now.ok) return finish(kind, now);
-		if (willAffect(now.data) !== expected) {
-			return invalid(kind, {
-				confirm: `The selection changed: ${now.data.matched} now match, not ${expected}. Cancel and count again.`
-			});
-		}
+	}
+	// Both are refused when the selection changed since it was counted: purge is permanent, and a
+	// replay that moves more than the operator confirmed is just as hard to undo (HUB-455).
+	const now = await call(event, kind, filter, DRY_RUN_REASON, true);
+	if (!now.ok) return finish(kind, now);
+	if (willAffect(now.data) !== expected) {
+		const message = `The selection changed: ${now.data.matched} now match, not ${expected}. Cancel and count again.`;
+		return invalid(kind, kind === 'purge' ? { confirm: message } : { reason: message });
 	}
 	const res = await call(event, kind, filter, reason.reason, false);
 	return finish(kind, res);

@@ -31,12 +31,13 @@ export interface TimedEvent {
 }
 
 /**
- * Events in `seq` order with their gaps (the contract promises seq order; sorted anyway). A real
- * Hub repeats `seq` values after a DLQ replay (the replay's events reuse 101, 102, ...), so equal
- * seqs are ordered by time and the page keys rows by position, not by seq (HUB-289).
+ * Events in time order with their gaps. A real Hub repeats `seq` values after a DLQ replay (the
+ * replay's events restart the numbering), so `seq` is not a global order: sorting by it first put
+ * a later replay event between two original ones and made gaps negative (HUB-455). Time decides;
+ * `seq` orders events with the same timestamp, and the page keys rows by position (HUB-289).
  */
 export function timed(events: TimelineEvent[]): TimedEvent[] {
-	const sorted = [...events].sort((a, b) => a.seq - b.seq || Date.parse(a.at) - Date.parse(b.at));
+	const sorted = [...events].sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.seq - b.seq);
 	const start = sorted.length ? Date.parse(sorted[0]!.at) : 0;
 	let prev: number | null = null;
 	return sorted.map((event) => {

@@ -79,6 +79,26 @@ describe('request explorer', () => {
 		);
 	});
 
+	it('marks a filter that does not fit and does not search without it (HUB-455)', async () => {
+		const user = userEvent.setup();
+		renderAt();
+		const tenant = screen.getByLabelText('Tenant');
+		await user.type(tenant, 'ab');
+		await user.click(screen.getByRole('button', { name: 'Search' }));
+		expect(goto).not.toHaveBeenCalled();
+		expect(tenant).toHaveAttribute('aria-invalid', 'true');
+		const message = await screen.findByText(/Use 3 to 64 letters/, { selector: 'p.fk-error' });
+		expect(tenant).toHaveAttribute('aria-describedby', message.id);
+		expect(screen.getByRole('alert')).toHaveTextContent('Tenant');
+		await user.clear(tenant);
+		await user.type(tenant, 'orders-service');
+		await user.click(screen.getByRole('button', { name: 'Search' }));
+		expect(goto).toHaveBeenCalledWith(
+			expect.stringContaining('tenant_id=orders-service'),
+			expect.anything()
+		);
+	});
+
 	it('pages with the cursor and keeps the filters', async () => {
 		renderAt('?status=succeeded');
 		await screen.findByRole('table', { busy: false });

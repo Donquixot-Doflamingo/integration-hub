@@ -1,12 +1,16 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import FieldError from '$lib/components/FieldError.svelte';
+	import FormProblems from '$lib/components/FormProblems.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import ListView from '$lib/components/ListView.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Pager from '$lib/components/Pager.svelte';
 	import { sectionFor } from '$lib/nav';
 	import { formatUtc } from '$lib/utils/format';
+	import type { FilterProblems } from '$lib/utils/filter-problems';
 	import { DEFAULT_PAGE_SIZE, PAGE_SIZES, type Paging } from '$lib/utils/paging';
 	import { lastRange, toLocalInput } from '$lib/utils/time';
 	import type { PageData } from './$types';
@@ -21,7 +25,8 @@
 		objectTypeLabels,
 		searchFor,
 		without,
-		type Filters
+		type Filters,
+		type FilterKey
 	} from './filters';
 	import { objectHref } from '$lib/objects';
 
@@ -41,17 +46,42 @@
 		{ label: 'Last 7 days', ms: 7 * 86_400_000 }
 	];
 
+	// Filters whose text does not fit its rule: marked, and the search does not run (HUB-455).
+	let problems = $state.raw<FilterProblems<FilterKey>>({});
+	const problemItems = $derived(
+		(Object.entries(problems) as [FilterKey, string][]).map(([k, message]) => ({
+			label: filterLabels[k],
+			message
+		}))
+	);
+	// New URL state (a search, a chip removed): the marks belonged to the old form text.
+	$effect(() => {
+		void data.state;
+		problems = {};
+	});
+
 	function onsubmit(e: SubmitEvent) {
 		e.preventDefault();
-		const { filters: next, limit } = filtersFromForm(
-			new FormData(e.currentTarget as HTMLFormElement)
-		);
+		const form = e.currentTarget as HTMLFormElement;
+		const { filters: next, limit, problems: found } = filtersFromForm(new FormData(form));
+		problems = found;
+		// A value that does not fit is not searched without: mark it and stay (HUB-455).
+		if (Object.keys(found).length) {
+			tick().then(() =>
+				form
+					.querySelector<HTMLElement>('[aria-invalid="true"][aria-describedby$="-error"]')
+					?.focus()
+			);
+			return;
+		}
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- hrefFor builds on resolve()
 		goto(hrefFor(next, firstPage(limit ?? DEFAULT_PAGE_SIZE)), { keepFocus: true, noScroll: true });
 	}
 </script>
 
 <PageHeader title={section.label} summary={section.summary} />
+
+<FormProblems title="Fix these filters before searching" items={problemItems} />
 
 <form class="filters" method="GET" action={base} {onsubmit} aria-label="Filter the change log">
 	<div class="row">
@@ -60,23 +90,29 @@
 			<input
 				id="cl-actor"
 				name="actor"
+				aria-invalid={problems.actor ? 'true' : undefined}
+				aria-describedby={problems.actor ? 'cl-actor-error' : undefined}
 				value={filters.actor ?? ''}
 				maxlength="256"
 				placeholder="priya@example.com"
 				autocomplete="off"
 			/>
+			<FieldError id="cl-actor-error" message={problems.actor} />
 		</div>
 		<div class="field">
 			<label for="cl-action">Action <span class="hint">(operation)</span></label>
 			<input
 				id="cl-action"
 				name="action"
+				aria-invalid={problems.action ? 'true' : undefined}
+				aria-describedby={problems.action ? 'cl-action-error' : undefined}
 				value={filters.action ?? ''}
 				maxlength="64"
 				placeholder="publishIntegrationVersion"
 				autocomplete="off"
 				list="cl-actions"
 			/>
+			<FieldError id="cl-action-error" message={problems.action} />
 			<datalist id="cl-actions">
 				{#each COMMON_ACTIONS as a (a)}<option value={a}></option>{/each}
 			</datalist>
@@ -93,11 +129,14 @@
 			<input
 				id="cl-object"
 				name="object_id"
+				aria-invalid={problems.object_id ? 'true' : undefined}
+				aria-describedby={problems.object_id ? 'cl-object-error' : undefined}
 				value={filters.object_id ?? ''}
 				maxlength="128"
 				placeholder="int_evt_brandA"
 				autocomplete="off"
 			/>
+			<FieldError id="cl-object-error" message={problems.object_id} />
 		</div>
 	</div>
 	<div class="row">
@@ -107,6 +146,7 @@
 				id="cl-from"
 				name="from"
 				type="datetime-local"
+				step="1"
 				value={toLocalInput(filters.from)}
 				aria-invalid={data.state.problem ? 'true' : undefined}
 				aria-describedby={data.state.problem ? 'cl-range-problem' : undefined}
@@ -118,6 +158,7 @@
 				id="cl-to"
 				name="to"
 				type="datetime-local"
+				step="1"
 				value={toLocalInput(filters.to)}
 				aria-invalid={data.state.problem ? 'true' : undefined}
 				aria-describedby={data.state.problem ? 'cl-range-problem' : undefined}

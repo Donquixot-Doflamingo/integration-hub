@@ -71,10 +71,16 @@ export const load: PageLoad = async (event) => {
 						api.call((c) => c.GET('/transformers', { params: { query: { ...all, cursor } } }))
 					)
 				]);
+				const problems: string[] = [];
+				if (!vendors.ok) problems.push(`Could not load the vendors: ${vendors.error.message}`);
+				if (!accounts.ok) problems.push(`Could not load the accounts: ${accounts.error.message}`);
+				if (!transformers.ok)
+					problems.push(`Could not load the transformers: ${transformers.error.message}`);
 				return {
 					vendors: vendors.ok ? vendors.data.items : [],
 					accounts: accounts.ok ? accounts.data.items : [],
-					transformers: transformers.ok ? transformers.data.items : []
+					transformers: transformers.ok ? transformers.data.items : [],
+					problems
 				};
 			});
 

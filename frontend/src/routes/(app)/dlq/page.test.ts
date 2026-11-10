@@ -88,6 +88,16 @@ describe('DLQ list', () => {
 		expect(row).toHaveTextContent('2026-10-31 11:02 UTC');
 	});
 
+	it('does not apply (or count) filters whose text does not fit (HUB-455)', async () => {
+		await renderAt('');
+		await screen.findByRole('table', { busy: false });
+		(screen.getByLabelText('Account') as HTMLInputElement).value = 'my account';
+		screen.getByRole('button', { name: 'Apply' }).click();
+		expect(goto).not.toHaveBeenCalled();
+		expect(await screen.findByRole('alert')).toHaveTextContent('Account');
+		expect(screen.getByLabelText('Account')).toHaveAttribute('aria-invalid', 'true');
+	});
+
 	it('applies the form as a clean URL, back on the first page', async () => {
 		await renderAt('?cursor=c9&prev=');
 		await screen.findByRole('table', { busy: false });

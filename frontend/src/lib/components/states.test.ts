@@ -131,6 +131,16 @@ describe('ErrorPanel', () => {
 		expect(details).toHaveTextContent('/limit must be <= 200');
 	});
 
+	it('links to sign-in, not Retry, when the session expired (HUB-455)', () => {
+		window.history.pushState({}, '', '/dlq?reason=X');
+		const error = new HubApiError({ status: 401, code: 'UNAUTHORIZED', message: 'expired' });
+		render(ErrorPanel, { props: { error, context: 'Could not load DLQ', onretry: () => {} } });
+		const link = screen.getByRole('link', { name: 'Sign in' });
+		expect(link).toHaveAttribute('href', '/login?next=%2Fdlq%3Freason%3DX&expired=1');
+		expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
+		window.history.pushState({}, '', '/');
+	});
+
 	it('gives each panel its own heading id', () => {
 		const error = new HubApiError({ status: 500, code: 'INTERNAL_ERROR', message: 'boom' });
 		render(ErrorPanel, { props: { error, context: 'A' } });

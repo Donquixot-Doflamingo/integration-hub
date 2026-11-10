@@ -6,6 +6,39 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `fix(frontend)` · Keep the seconds of a time bound when Search is pressed (HUB-455) · HUB-455 · F-19
+  - Opening /requests?from=...T09:00:30Z and pressing Search no longer moves the bound to 09:00:00; the time fields accept seconds (requests, DLQ, change log)
+
+- 2026-11-08 · `fix(frontend)` · Order request timeline events by time, not by seq (HUB-455) · HUB-455 · F-19
+  - A replayed request's events (which restart seq) no longer land between the original events or show negative gaps; seq only breaks ties
+
+- 2026-11-08 · `fix(frontend)` · Stop showing a wrong page number after 20 pages (HUB-455) · HUB-455 · F-19
+  - Past page 21 the pager says "This page" instead of a wrong "Page 21", and Previous no longer jumps back to the first page when the back trail ends (it steps back one page at a time and is hidden where the trail ends)
+
+- 2026-11-08 · `fix(frontend)` · Count again before a DLQ replay, as purge already does (HUB-455) · HUB-455 · F-19
+  - A replay is refused ("The selection changed: N now match, not M") when the matching dead letters changed since the operator counted them, instead of moving more than they confirmed
+
+- 2026-11-08 · `fix(frontend)` · Let an operator clear an account's daily quota (HUB-455) · HUB-455 · F-19
+  - Emptying the daily quota field now sends `daily: null` instead of answering "Nothing changed"
+  - Emptying the rate field explains that the rate cannot be removed (the contract has no null for it)
+
+- 2026-11-08 · `fix(frontend)` · Show failed lookups and read every vendor in the authoring pickers (HUB-455) · HUB-455 · F-19
+  - The publish editor and the transformer forms list which lookups failed (vendors, accounts, transformers, a vendor's endpoints) instead of showing empty pickers with no message
+  - Endpoint suggestions now cover all vendors, not only the first 25
+
+- 2026-11-08 · `fix(frontend)` · Mark filter values that do not fit instead of silently dropping them (HUB-455) · HUB-455 · F-19
+  - Requests, DLQ and change-log filters: a value such as tenant "ab" or "my tenant" now shows a message under its field (and a summary alert) and the search does not run, instead of listing everything with no chip
+  - In the DLQ this keeps replay and purge counts tied to exactly the filters the operator sees
+
+- 2026-11-08 · `fix(frontend)` · Let an expired session sign in again from error panels and action callbacks (HUB-455) · HUB-455 · F-19
+  - An "Unauthorized" error panel offers a Sign in link (back to the same page) instead of a Retry that repeats the 401
+  - Goldens, dry run, connection test, DLQ count, draft save and the authoring forms follow the action's sign-in redirect instead of showing "Try again" forever
+  - "Run publish checks" shows a message when the checks cannot run, instead of silently returning to normal
+
+- 2026-11-08 · `fix(frontend)` · Show a retry panel instead of tenant-viewer pages when /me fails (HUB-455) · HUB-455 · F-19
+  - An admin whose /me call failed (not 401) no longer sees Accounts and Vendors as forbidden, an empty Tenants list or false 404s: every page shows "Could not load your access" with Retry, and one successful retry reloads all data
+  - Unknown access is never treated as a tenant viewer
+
 - 2026-11-08 · `fix(roles)` · Exit when a listener fails and let a second signal terminate (HUB-454) · HUB-454 · F-07
   - A gateway, worker, scheduler or admin whose listener dies at runtime now exits with code 1 instead of hanging on its background loops
   - After the first SIGINT/SIGTERM the default signal handling is restored, so a second one ends the process while it drains
