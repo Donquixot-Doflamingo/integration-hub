@@ -108,6 +108,7 @@ var (
 	transformerID   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
 	keyHashPattern  = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	endpointPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*@[1-9][0-9]*$`)
+	uuidPattern     = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 )
 
 // Load reads every object from src. It reports all decode and per-file problems at once; cross-
@@ -152,9 +153,11 @@ func Load(src Sources) (*Config, error) {
 	})
 	c.loadTransformers(src, &ps)
 	c.loadIntegrations(src, &ps)
+	isfcIDs := map[string]string{} // lower-cased ISFC tenant UUID -> Hub tenant id
 	eachYAML(src.Config, "tenants", &ps, func(file string, data []byte) {
 		var t Tenant
 		if decode(file, data, &t, &ps) && c.put(file, "tenant", t.Tenant, &ps) {
+			checkTenantISFC(file, &t, isfcIDs, &ps)
 			for i, k := range t.APIKeys {
 				at := fmt.Sprintf("api_keys[%d]", i)
 				if !keyHashPattern.MatchString(k.Hash) {
@@ -394,5 +397,42 @@ func applyDefaults(v *IntegrationVersion) {
 	}
 	if v.Audit.Retention == 0 {
 		v.Audit.Retention = Duration(DefaultRetention)
+	}
+}
+
+// checkTenantISFC validates the setup state, the ISFC block and the interim caller client list of
+// one tenant file (HUB-480). Old files without these fields pass unchanged. isfcIDs tracks the
+// ISFC tenant ids seen so far: two Hub tenants may not claim the same ISFC tenant.
+func checkTenantISFC(file string, t *Tenant, isfcIDs map[string]string, ps *ConfigErrors) {
+	switch t.Setup {
+	case "", SetupPending, SetupComplete:
+	default:
+		ps.add(file, "setup", "must be pending or complete")
+	}
+	for i, cl := range t.ISFCCallerClients {
+		if strings.TrimSpace(cl) == "" {
+			ps.add(file, fmt.Sprintf("isfc_caller_clients[%d]", i), "must not be empty")
+		}
+	}
+	l := t.ISFC
+	if l == nil {
+		return
+	}
+	if !uuidPattern.MatchString(l.TenantID) {
+		ps.add(file, "isfc.tenant_id", "must be an ISFC tenant UUID")
+	} else {
+		id := strings.ToLower(l.TenantID)
+		if prev, dup := isfcIDs[id]; dup {
+			ps.add(file, "isfc.tenant_id", "ISFC tenant %s is already linked to Hub tenant %q", id, prev)
+		}
+		isfcIDs[id] = t.Tenant
+	}
+	if l.Key == "" {
+		ps.add(file, "isfc.key", "required")
+	}
+	switch l.Status {
+	case ISFCStatusActive, ISFCStatusInactive:
+	default:
+		ps.add(file, "isfc.status", "must be ACTIVE or INACTIVE")
 	}
 }

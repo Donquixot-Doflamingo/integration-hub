@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(registry)` · Add ISFC and setup fields to tenants, sync tables and the pending-setup edge check (HUB-480) · HUB-480 · F-25
+  - A tenant file may carry `setup: pending|complete`, an `isfc` block (tenant_id, key, name, status, linked, synced_at) and the interim `isfc_caller_clients` list; the loader validates them and rejects two Hub tenants linked to one ISFC tenant; files without them load unchanged
+  - Migration 00012 adds `hub.isfc_sync_runs` and `hub.isfc_caller_keys` (hash-only key column)
+  - With `HUB_TENANT_SOURCE=isfc` the edge answers 401 for a tenant whose setup is pending; the default mode is unchanged
 - 2026-11-11 · `feat(adminapi)` · Verify RS256 tokens and RSA JWKS keys in the admin JWT verifier (HUB-472) · HUB-472 · F-24
   - The admin API accepts RS256 (Hydra) as well as ES256 tokens; RSA keys under 2048 bits are skipped and an RSA key can never verify an ES256 token or the reverse
   - `none`, HS* and every other alg stay refused; the dev issuer and `jwt` mode are unchanged

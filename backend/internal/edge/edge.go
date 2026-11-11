@@ -50,9 +50,12 @@ type Deps struct {
 	// Sessions is the vendor session store (HUB-175). nil: Queueing.DB when queueing is wired;
 	// without either, X-Hub-Session is always SESSION_NOT_FOUND and no session can be opened.
 	Sessions sessions.DB
-	Metrics  *telemetry.Metrics
-	Log      *slog.Logger
-	Now      func() time.Time
+	// TenantSourceISFC is HUB_TENANT_SOURCE=isfc: tenants come from ISFC, and a tenant whose
+	// setup is still pending is refused with 401 (AUTH_PLAN §2.1, HUB-480).
+	TenantSourceISFC bool
+	Metrics          *telemetry.Metrics
+	Log              *slog.Logger
+	Now              func() time.Time
 }
 
 // Upstream sends one attempt to a vendor (upstream.Client).

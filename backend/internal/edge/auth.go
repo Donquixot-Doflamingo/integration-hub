@@ -72,6 +72,10 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 				WriteError(w, r, unauthorized)
 				return
 			}
+			if s.deps.TenantSourceISFC && entry.Tenant.SetupState() == registry.SetupPending {
+				WriteError(w, r, unauthorized) // setup not finished: calls are refused (HUB-480)
+				return
+			}
 			if entry.Tenant.Status == "suspended" {
 				WriteError(w, r, &core.CanonicalError{Code: core.CodeForbidden, Message: "Tenant is suspended", Reason: core.Ptr("tenant_suspended")})
 				return

@@ -405,6 +405,50 @@ type Tenant struct {
 	Status      string      `yaml:"status,omitempty"` // active | suspended
 	// Disabled turns every key of the tenant off (401 at the edge, admin updateTenant).
 	Disabled bool `yaml:"disabled,omitempty"`
+	// Setup is "pending" until a tenant admin finishes the Hub-side setup (set by the ISFC sync
+	// when it creates the tenant); "" and "complete" both mean complete, so YAML written before
+	// ISFC tenants existed loads unchanged (AUTH_PLAN §6.1).
+	Setup string `yaml:"setup,omitempty"`
+	// ISFC is the read-only copy of the tenant's ISFC record, written only by the sync. nil: the
+	// tenant is not linked to ISFC (legacy tenants).
+	ISFC *TenantISFC `yaml:"isfc,omitempty"`
+	// ISFCCallerClients lists the ISFC caller (backend) client ids that may call the Hub for
+	// this tenant. Interim until ISFC-CR-1 puts tenants on API keys (AUTH_PLAN G1, D5); the
+	// caller-key sync resolves a key's tenants from it.
+	ISFCCallerClients []string `yaml:"isfc_caller_clients,omitempty"`
+}
+
+// Tenant setup states (hub-admin TenantSetup).
+const (
+	SetupPending  = "pending"
+	SetupComplete = "complete"
+)
+
+// ISFC tenant statuses (hub-admin IsfcTenantStatus).
+const (
+	ISFCStatusActive   = "ACTIVE"
+	ISFCStatusInactive = "INACTIVE"
+)
+
+// TenantISFC is the ISFC side of a tenant (AUTH_PLAN §2.1, §6.1). TenantID is the link.
+type TenantISFC struct {
+	TenantID string     `yaml:"tenant_id"` // ISFC tenant UUID
+	Key      string     `yaml:"key"`
+	Name     string     `yaml:"name"`
+	Status   string     `yaml:"status"` // ACTIVE | INACTIVE
+	Linked   bool       `yaml:"linked"` // present in the Hub console client's tenants list
+	SyncedAt *time.Time `yaml:"synced_at,omitempty"`
+	// DisabledBySync records that the sync (not an admin) set Tenant.Disabled, so a later
+	// re-activation in ISFC re-enables only what the sync disabled.
+	DisabledBySync bool `yaml:"disabled_by_sync,omitempty"`
+}
+
+// SetupState returns "pending" or "complete" (an empty Setup is complete).
+func (t *Tenant) SetupState() string {
+	if t.Setup == SetupPending {
+		return SetupPending
+	}
+	return SetupComplete
 }
 
 // APIKey is a tenant key, stored only as a hash (DESIGN §16.5).

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,7 +39,8 @@ type Snapshot struct {
 	// version that references them. The hot path only runs them (DESIGN §7.1).
 	Programs map[TransformerRef]*transform.Program
 
-	keys map[string]KeyEntry // API key hash → tenant + key (edge auth, M3)
+	keys        map[string]KeyEntry // API key hash → tenant + key (edge auth, M3)
+	isfcTenants map[string]*Tenant  // lower-cased ISFC tenant UUID → tenant (ISFC caller auth, HUB-486)
 
 	// Legacy is set when the snapshot was rebuilt from a pre-ADR-0023 blob (UpgradeLegacy).
 	Legacy *Legacy
@@ -56,6 +58,23 @@ func (s *Snapshot) KeyByHash(hash string) (KeyEntry, bool) {
 	return k, ok
 }
 
+// TenantByISFC finds the tenant linked to the ISFC tenant UUID id (lower case). A map lookup:
+// safe on the hot path.
+func (s *Snapshot) TenantByISFC(id string) (*Tenant, bool) {
+	t, ok := s.isfcTenants[id]
+	return t, ok
+}
+
+func indexISFC(tenants map[string]*Tenant) map[string]*Tenant {
+	m := map[string]*Tenant{}
+	for _, t := range tenants {
+		if t.ISFC != nil {
+			m[strings.ToLower(t.ISFC.TenantID)] = t
+		}
+	}
+	return m
+}
+
 // ReindexKeys rebuilds the API-key index of s from s.Tenants (tests and admin-side copies). It
 // returns s for chaining.
 func ReindexKeys(s *Snapshot) *Snapshot {
@@ -65,6 +84,7 @@ func ReindexKeys(s *Snapshot) *Snapshot {
 			s.keys[k.Hash] = KeyEntry{Tenant: t, Key: k}
 		}
 	}
+	s.isfcTenants = indexISFC(s.Tenants)
 	return s
 }
 
@@ -116,7 +136,7 @@ func Build(src Sources, now time.Time) (*Snapshot, error) {
 		Checksum: sum, BuiltAt: now.UTC(),
 		Vendors: c.Vendors, Accounts: c.Accounts, Transformers: c.Transformers,
 		Integrations: c.Integrations, Tenants: c.Tenants, Registrar: c.Registrar, Programs: cc.programs,
-		keys: map[string]KeyEntry{},
+		keys: map[string]KeyEntry{}, isfcTenants: indexISFC(c.Tenants),
 	}
 	for _, t := range c.Tenants {
 		for _, k := range t.APIKeys {

@@ -97,8 +97,8 @@ func TestRemoveCapabilitiesMigration(t *testing.T) {
 	if _, err := db.ExecContext(ctx, preADR0023Data); err != nil {
 		t.Fatalf("seed pre-ADR-0023 data: %v", err)
 	}
-	if n, err := migrations.Up(ctx, db); err != nil || n != 1 {
-		t.Fatalf("up 00011: applied %d, %v", n, err)
+	if err := migrations.UpTo(ctx, db, 11); err != nil { // not Up: later migrations are not under test here
+		t.Fatalf("up 00011: %v", err)
 	}
 
 	jsonOf := func(q string, args ...any) any {
@@ -217,8 +217,8 @@ func TestRemoveCapabilitiesMigration(t *testing.T) {
 		if _, err := db.ExecContext(ctx, `INSERT INTO hub.integrations (integration_id, owner_tenant, capability, active_version) VALUES ('int_mig_d', 't_mig', 'events.track@v1', 1)`); err != nil {
 			t.Fatalf("pre-ADR-0023 insert after down: %v", err)
 		}
-		if n, err := migrations.Up(ctx, db); err != nil || n != 1 {
-			t.Fatalf("up again: applied %d, %v", n, err)
+		if err := migrations.UpTo(ctx, db, 11); err != nil {
+			t.Fatalf("up again: %v", err)
 		}
 		assertColumns(ctx, t, db, map[string]bool{"capabilities.capability": false, "integrations.interactive": true})
 	})
