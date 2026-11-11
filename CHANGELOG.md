@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `contract(admin)` · Document the 403 responses of getMe and getRequestStatus (HUB-469) · HUB-469 · F-24
+  - `hub-admin` and `hub-public` 2.1.1 list 403 where the Hub already returns it (no Hub role; credential without `requests_read`)
 - 2026-11-11 · `feat(frontend)` · Restrict the dev login to mock builds and tests, and refuse it at start-up (HUB-495) · HUB-495 · F-24
   - `PUBLIC_AUTH_MODE=dev` works only in mock builds (`HUB_API_MOCKING=true`) and when `NODE_ENV=test`; in a deployment it stops the console from starting, and an unset or unknown mode starts but nobody can sign in (the login page says why)
   - A session made by the other provider is not accepted (a dev cookie after a switch to ISFC, or the reverse), even though it decrypts

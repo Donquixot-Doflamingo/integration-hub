@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: Integration Hub - Admin (Control Plane) API
-  version: 2.1.0
+  version: 2.1.1
   summary: Control plane for vendors, accounts, transformers, integrations, tenants and operations.
   description: |
     The control plane (DESIGN §16.1). Unlike the caller API, this API **does** show vendors,
@@ -128,6 +128,8 @@ paths:
                 token_expires_at: '2026-10-31T10:15:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '503':
           $ref: '#/components/responses/AuthzUnavailable'
         '500':

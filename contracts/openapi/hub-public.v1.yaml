@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: Integration Hub - Caller API
-  version: 2.1.0
+  version: 2.1.1
   summary: The vendor-agnostic API internal services call to reach any third party.
   description: |
     Callers send a **stable integration ID**, an **operation** and a **request body** that matches
@@ -357,6 +357,8 @@ paths:
                     error: null
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/RequestNotFound'
         '429':

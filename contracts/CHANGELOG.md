@@ -5,6 +5,9 @@ Entry format: `- YYYY-MM-DD · <document> <version> · <CCR / HUB-###> · <summa
 
 ## 2026-11-11
 
+- 2026-11-11 · `hub-admin` 2.1.1, `hub-public` 2.1.1 · HUB-475 / HUB-487 (change requests from the backend) · Document 403 responses the Hub already returns (patch)
+  - `getMe` (admin): 403 `Forbidden` for a user with no Hub role or a refused machine key.
+  - `getRequestStatus` (public): 403 `Forbidden` when the credential lacks scope `requests_read`.
 - 2026-11-11 · `hub-public` 2.1.0 · HUB-470 (AUTH_PLAN §14) · ISFC S2S credentials and optional `X-Tenant-Id` (additive, minor)
   - New security schemes `isfcS2S` (apiKey, header `x-isfc-api-key`) and `isfcS2SClientId` (apiKey, header `x-isfc-client-id`), required together in one security requirement, as an alternative to `bearerAuth` on the global `security` and on `dryRunIntegration` (scope `dry_run`).
   - New optional header parameter `TenantId` (`X-Tenant-Id`, ISFC tenant UUID) on `invokeIntegration`, `invokeIntegrationOperation`, `dryRunIntegration`, `getRequestStatus`, `listIntegrations` and `getIntegration`: only needed when the credential covers several tenants.
