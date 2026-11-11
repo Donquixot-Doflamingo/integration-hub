@@ -3744,7 +3744,7 @@ Progress: ADR-0028 written (Accepted 2026-11-11) with the DESIGN §18.5 argument
 
 ### HUB-468 — Feature docs, stories, PRD, SECURITY / TECH_SPEC / OBSERVABILITY updates
 - **Epic:** EP-15 · **Type:** docs · **Area:** docs
-- **Status:** todo · **Depends on:** HUB-465, HUB-466, HUB-467 · **Feature:** F-24, F-25 · **Stories:** US-24xx, US-25xx
+- **Status:** in-progress · **Depends on:** HUB-465, HUB-466, HUB-467 · **Feature:** F-24, F-25 · **Stories:** US-24xx, US-25xx
 - **Branch:** `docs/HUB-468-isfc-feature-docs`
 
 **Acceptance criteria**

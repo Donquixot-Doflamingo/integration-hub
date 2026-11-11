@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(product)` · Add the ISFC identity and tenant stories and requirements (HUB-468) · HUB-468 · F-24
+  - USER_STORIES gains US-2401 to US-2405 (F-24) and US-2501 to US-2503 (F-25) with Given/When/Then, all marked planned (EP-15)
+  - PRD gains deviation DV-8 (ISFC owns identity and tenants, platform tenant), FR-54 to FR-58 and NFR-19, NFR-20
 - 2026-11-11 · `contract(admin)` · Add ISFC security schemes, permissions, tenant ISFC fields and sync operations (HUB-469) · HUB-469 · F-24, F-25
   - hub-admin 2.1.0: `x-required-permission` on all operations, role `tenant_admin`, security schemes `isfcGateway` and `isfcApiKey`, read-only `isfc` and `setup` on tenants, operations `syncTenants` and `syncTenant`, error codes `tenant_managed_by_isfc` and `authz_unavailable`
   - hubmcp-tools 2.0.1 classifies the new operations; `make contracts-check` checks the permission catalogue
