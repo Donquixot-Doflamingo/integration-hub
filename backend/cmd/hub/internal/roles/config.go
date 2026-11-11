@@ -114,6 +114,9 @@ type Config struct {
 	OPAURL      string
 	OPATimeout  time.Duration
 	OPADisabled bool
+	// ISFC is the ISFC tenant and caller plane (HUB_TENANT_SOURCE, HUB_EDGE_ISFC_AUTH, HUB_ISFC_*):
+	// the reconciler, the caller keys and the events webhook (isfc_config.go).
+	ISFC ISFCConfig
 	// Env is HUB_ENV ("test" in tests only; anything else is a real deployment).
 	Env string
 	// CallbackHosts allowlists registrar endpoint hosts at the admin ("h" or ".suffix"); empty
@@ -249,6 +252,7 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	default:
 		errs = append(errs, fmt.Errorf("admin-auth-mode: want jwt or isfc, got %q", c.AdminAuthMode))
 	}
+	errs = append(errs, c.loadISFC(role, getenv)...)
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, err
 	}

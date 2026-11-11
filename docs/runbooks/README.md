@@ -14,6 +14,7 @@ One runbook per alert in [`deploy/alerts/hub.rules.yaml`](../../deploy/alerts/hu
 | `CredentialExpiringSoon` | warn | An account's credential slot expires in less than 7 days | [CredentialExpiringSoon.md](CredentialExpiringSoon.md) |
 | `HubOverheadP99High` | warn | Hub overhead p99 on sync and wait requests is above 5 ms (SLO S1) | [HubOverheadP99High.md](HubOverheadP99High.md) |
 | `AuditEventsDropped` | warn | Audit events were dropped; some requests have an incomplete audit trail | [AuditEventsDropped.md](AuditEventsDropped.md) |
+| `HubIsfcSyncStale` | warn | The ISFC tenant and caller-key sync has not succeeded for 15 minutes, or failed 3 runs in a row | [HubIsfcSyncStale.md](HubIsfcSyncStale.md) |
 
 Procedures used by several runbooks:
 - [Credential rotation](credential-rotation.md): add `next`, test, promote, watch 15 minutes, delete old (DESIGN §6.6).

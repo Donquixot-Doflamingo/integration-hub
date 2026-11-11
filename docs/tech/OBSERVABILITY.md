@@ -477,13 +477,14 @@ Also new for the load runs: `net/http/pprof` is mounted on the ops port of every
 | Metric | `hub_stage_duration_ms{stage="auth"}` | unchanged; the ISFC credential path is included |
 | Metric | `hub_edge_auth_total` | `method=isfc\|hub_key`, `result` (tracks the retirement of legacy keys) |
 | Metric | `hub_isfc_sync_runs_total`, `hub_isfc_sync_failures_total`, `hub_isfc_sync_lag_seconds` | `trigger=event\|tick\|manual` |
+| Metric | `hub_isfc_sync_consecutive_failures` (gauge, HUB-482) | none. Failed runs in a row on the leader; 0 on followers. `hub_isfc_sync_runs_total` also has `result=ok\|partial\|failed`; `hub_isfc_sync_lag_seconds` has no label and is 0 on followers (implemented, HUB-482) |
 | Metric | `hub_isfc_caller_keys` (gauge) | none |
 | Log | `admin.authz` | subject, client, tenant, operation, decision, reason; **no token and no `x-isfc-sub-attrs` dump** |
 | Log | `isfc.sync` | run id, created/updated/disabled counts |
 | Log | `request.received` (audit event, F-08) | adds `caller_client_id`, `isfc_key_id`, key hash; never the key |
 | Trace | span `admin.authz.opa` | `authz.decision=allow\|deny\|error` |
 | Alert | `HubAdminAuthzUnavailable` | OPA errors > 1 % for 5 min |
-| Alert | `HubIsfcSyncStale` | `hub_isfc_sync_lag_seconds` > 900 (also fires after 3 failed runs in a row) |
+| Alert | `HubIsfcSyncStale` | `hub_isfc_sync_lag_seconds` > 900 (also fires after 3 failed runs in a row, via `hub_isfc_sync_consecutive_failures`); rule in `deploy/alerts/hub.rules.yaml`, runbook `docs/runbooks/HubIsfcSyncStale.md` (HUB-482) |
 
 - The logger redacts `x-isfc-api-key` and Hydra tokens by value (test required in HUB-476 and HUB-488).
 - `hub_isfc_sync_failures_total` counts failed runs; a failed fetch never disables tenants (ADR-0027).

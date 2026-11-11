@@ -1,0 +1,53 @@
+# promtool unit tests for the hub-isfc group (HUB-482). Run: promtool test rules deploy/alerts/*_test.yml
+rule_files:
+  - hub.rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # Lag: the leader has not synced for more than 15 minutes (900 s) from minute 5 on.
+  - name: a leader without a successful sync for 15 minutes warns
+    interval: 1m
+    input_series:
+      - series: 'hub_isfc_sync_lag_seconds{instance="wk-1"}'
+        values: '0 60 120 180 240 300 360 420 480 540 600 660 720 780 840 900 960 1020 1080 1140 1200'
+      - series: 'hub_isfc_sync_lag_seconds{instance="wk-2"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HubIsfcSyncStale
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: HubIsfcSyncStale
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+            exp_annotations:
+              summary: "ISFC tenant sync is stale or failing"
+              description: "The ISFC reconcile loop has not completed a successful run for more than 15 minutes, or failed 3 runs in a row. The Hub keeps its last good tenants and caller keys; revoked ISFC keys and new tenants take effect late."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/HubIsfcSyncStale.md"
+
+  # Three failed runs in a row fire it even while the lag is still small.
+  - name: three failed runs in a row warn, one failed run does not
+    interval: 1m
+    input_series:
+      - series: 'hub_isfc_sync_lag_seconds{instance="wk-1"}'
+        values: '60x10'
+      - series: 'hub_isfc_sync_consecutive_failures{instance="wk-1"}'
+        values: '0 1 1 1 3 3 3 3 3 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: HubIsfcSyncStale
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: HubIsfcSyncStale
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+            exp_annotations:
+              summary: "ISFC tenant sync is stale or failing"
+              description: "The ISFC reconcile loop has not completed a successful run for more than 15 minutes, or failed 3 runs in a row. The Hub keeps its last good tenants and caller keys; revoked ISFC keys and new tenants take effect late."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/HubIsfcSyncStale.md"
+      - eval_time: 9m
+        alertname: HubIsfcSyncStale
+        exp_alerts: []

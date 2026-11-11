@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(isfcsync)` · Add the ISFC tenant reconciler with a leader-only loop in the worker (HUB-482) · HUB-482 · F-25
+  - With `HUB_TENANT_SOURCE=isfc` the worker leader pulls ISFC every `HUB_ISFC_RECONCILE_INTERVAL` (5 min): tenants linked to the console client are created `setup: pending`, renames and key changes update the isfc copy only, INACTIVE, unlinked or deleted tenants are disabled (never deleted), re-activated ones are re-enabled and keep a Hub suspension
+  - Hub tenant ids are derived once from the ISFC key (padded with `-t`, `-2`, `-3` on collision) and never change; the platform tenant is skipped; `HUB_ISFC_SYNC_DRY_RUN=true` only logs
+  - Every change is written as actor `isfc-sync`; ISFC down keeps the last state and disables nothing; metrics `hub_isfc_sync_runs_total`, `_failures_total`, `_lag_seconds`, `_consecutive_failures` and alert `HubIsfcSyncStale`
 - 2026-11-11 · `feat(adminapi)` · Accept ISFC API keys as machine principals on the admin API (HUB-476) · HUB-476 · F-24
   - Automation (CI, hubctl) can call the admin directly with `x-isfc-client-id` + `x-isfc-api-key`: OPA checks the key and its permission, the principal is `client:<id>` (also the change log actor) with the roles its key covers, and it has platform scope
   - `unsealRequest` and `purgeDeadLetters` are refused for machines whatever the key holds (403, OPA is not asked); a revoked key, another client's key or an unknown key is 403, a missing client id or bearer plus key is 401
