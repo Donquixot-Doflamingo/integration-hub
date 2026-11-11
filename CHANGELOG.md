@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `contract(admin)` · Add ISFC security schemes, permissions, tenant ISFC fields and sync operations (HUB-469) · HUB-469 · F-24, F-25
+  - hub-admin 2.1.0: `x-required-permission` on all operations, role `tenant_admin`, security schemes `isfcGateway` and `isfcApiKey`, read-only `isfc` and `setup` on tenants, operations `syncTenants` and `syncTenant`, error codes `tenant_managed_by_isfc` and `authz_unavailable`
+  - hubmcp-tools 2.0.1 classifies the new operations; `make contracts-check` checks the permission catalogue
 - 2026-11-11 · `docs(adr)` · Add ADR-0028 caller auth with ISFC backend clients checked in memory (HUB-467) · HUB-467 · F-24
   - ADR-0028 records ISFC S2S credentials for callers checked in memory with no OPA hop on the sync path (DESIGN §18.5), the revocation delay and the legacy hk_live_ cut-off rule (planned, EP-15); OPA latency numbers are pending HUB-463
 - 2026-11-11 · `docs(adr)` · Add ADR-0027 tenants owned by ISFC with a synced Hub copy (HUB-466) · HUB-466 · F-25

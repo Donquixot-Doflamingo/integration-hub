@@ -53,7 +53,7 @@ Admin write tools (registered when `HUB_ADMIN_TOKEN` is set **and** the transpor
 | Tool | Maps to (`hub-admin#`) | Method | Min. role | `requires_confirm` |
 | --- | --- | --- | --- | --- |
 | `hub_admin_create_tenant` | `createTenant` | POST | admin | |
-| `hub_admin_update_tenant` | `updateTenant` | PATCH | admin | `live_traffic` |
+| `hub_admin_update_tenant` | `updateTenant` | PATCH | tenant_admin | `live_traffic` |
 | `hub_admin_create_api_key` | `createApiKey` | POST | admin | `mints_secret` (output `/secret` sensitive) |
 | `hub_admin_create_vendor` | `createVendor` | POST | admin | |
 | `hub_admin_update_vendor` | `updateVendor` | PUT | admin | `live_traffic` |
@@ -66,8 +66,8 @@ Admin write tools (registered when `HUB_ADMIN_TOKEN` is set **and** the transpor
 | `hub_admin_publish_integration_version` | `publishIntegrationVersion` | POST | editor | `live_traffic` |
 | `hub_admin_set_integration_weights` | `updateIntegrationWeights` | POST | editor | `live_traffic` |
 | `hub_admin_rollback_integration` | `rollbackIntegration` | POST | editor | `live_traffic` |
-| `hub_admin_create_registrar_endpoint` | `createRegistrarEndpoint` | POST | admin | `mints_secret` (output `/signing_secret` sensitive) |
-| `hub_admin_update_registrar_endpoint` | `updateRegistrarEndpoint` | PATCH | admin | `live_traffic` |
+| `hub_admin_create_registrar_endpoint` | `createRegistrarEndpoint` | POST | tenant_admin | `mints_secret` (output `/signing_secret` sensitive) |
+| `hub_admin_update_registrar_endpoint` | `updateRegistrarEndpoint` | PATCH | tenant_admin | `live_traffic` |
 
 Vendor endpoint versions are immutable. To change an endpoint, call `hub_admin_create_vendor_endpoint` with the same name: it creates `<name>@<n+1>`. Accounts cannot be created through MCP yet, because `createAccount` takes credential values (required for every auth scheme except `none`, hub-admin 2.0.0; see `forbidden_operations`).
 

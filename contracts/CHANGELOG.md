@@ -3,6 +3,19 @@
 Contract versions, newest first. Each document has its own semver (see `README.md` § Versioning).
 Entry format: `- YYYY-MM-DD · <document> <version> · <CCR / HUB-###> · <summary>`.
 
+## 2026-11-11
+
+- 2026-11-11 · `hub-admin` 2.1.0 · HUB-469 (AUTH_PLAN §14) · ISFC security schemes, per-operation permissions, tenant ISFC fields and sync operations (additive, minor)
+  - Security: `security` now accepts `oidc`, `isfcGateway` (bearer JWT through the ISFC gateway, `X-Tenant-Id` picks the ISFC tenant) or `isfcApiKey` + `isfcApiKeyClientId` (headers `x-isfc-api-key` and `x-isfc-client-id`, required together). `info.description` documents the modes, that machine principals are refused for `unsealRequest` and `purgeDeadLetters`, and fail-closed 503.
+  - `x-required-permission` on all 74 existing operations next to `x-required-role` (catalogue of AUTH_PLAN §7.4: `HUB_VENDOR`, `HUB_ACCOUNT`, `HUB_TRANSFORMER`, `HUB_INTEGRATION`, `HUB_TENANT`, `HUB_REQUEST`, `HUB_DLQ`, `HUB_BREAKER`, `HUB_PLATFORM`, each `:READ`, a write tier or an admin tier; `none` for `getMe`). Today's role matrix is unchanged except the tenant_admin operations below.
+  - Role: new value `tenant_admin` (D4) in the `Role` enum and as an `x-required-role` value. `admin` ⊃ `tenant_admin` ⊃ `tenant_viewer`; `editor` and `viewer` do not satisfy it. It is the minimum role of `updateTenant` and of `createRegistrarEndpoint`, `updateRegistrarEndpoint`, `deleteRegistrarEndpoint` and `rotateRegistrarSecret` (permission `HUB_TENANT:SETUP`, new). A `tenant_admin` gets 403 for `disabled` in `updateTenant`. **Frontend: `gen:api` changes the `Role` union.**
+  - Tenants: new read-only schemas `IsfcTenantLink` (`tenant_id` UUID, `key`, `name`, `status`, `linked`, `synced_at`), `IsfcTenantStatus` and `TenantSetup` (`pending|complete`). `Tenant` and `TenantSummary` gain required `setup` and `isfc` (null when not linked to ISFC). `TenantUpdate` gains `setup` (only `complete`).
+  - New operations `syncTenants` (`POST /tenants/sync`) and `syncTenant` (`POST /tenants/{tenant_id}/sync`), role `admin`, permission `HUB_TENANT:ADMIN`; new schemas `TenantSyncRequest`, `TenantSyncOutcome`, `TenantSyncResult`, `TenantSyncChange`. Hub-admin has 76 operations.
+  - New error codes `tenant_managed_by_isfc` (409, `createTenant` in ISFC mode; new response `TenantConflict`) and `authz_unavailable` (503, new response `AuthzUnavailable`, declared on every operation). `Me` is unchanged.
+  - Tooling: `tools/check.mjs` knows `tenant_admin` and fails an operation whose `x-required-permission` is not in the catalogue.
+- 2026-11-11 · `hubmcp-tools` 2.0.1 · HUB-469 · Tool classification follows hub-admin 2.1.0 (patch)
+  - `hub_admin_update_tenant`, `hub_admin_create_registrar_endpoint` and `hub_admin_update_registrar_endpoint` declare `requires.x-required-role: tenant_admin` (the spec's new minimum role). `syncTenants` and `syncTenant` are listed in `not_exposed_operations`. No tool, input or output changes.
+
 ## 2026-11-07
 
 - 2026-11-07 · `hub-admin` 2.0.0 · HUB-432 (ADR-0023) · Capabilities removed; operations and request schemas on integration versions, request schema on vendor endpoints (breaking, major; approved by the product owner 2026-11-07, pre-1.0)

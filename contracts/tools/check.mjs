@@ -68,7 +68,20 @@ const LEAK_NAME = /vendor|account|version|transformer/i;
 const LEAK_NAME_ALLOW = new Set(['vendor_ref', 'vendor_ms', 'spec_version', 'x-hub-integration-version']);
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options', 'trace'];
-const ADMIN_ROLES = new Set(['admin', 'editor', 'viewer', 'tenant_viewer']);
+const ADMIN_ROLES = new Set(['admin', 'editor', 'viewer', 'tenant_viewer', 'tenant_admin']);
+// Permission catalogue of docs/tech/AUTH_PLAN.md §7.4 (hub-admin >= 2.1.0), plus `none` (getMe).
+const ADMIN_PERMISSIONS = new Set([
+  'none',
+  'HUB_VENDOR:READ', 'HUB_VENDOR:ADMIN',
+  'HUB_ACCOUNT:READ', 'HUB_ACCOUNT:TEST', 'HUB_ACCOUNT:ADMIN',
+  'HUB_TRANSFORMER:READ', 'HUB_TRANSFORMER:WRITE',
+  'HUB_INTEGRATION:READ', 'HUB_INTEGRATION:WRITE',
+  'HUB_TENANT:READ', 'HUB_TENANT:SETUP', 'HUB_TENANT:ADMIN',
+  'HUB_REQUEST:READ', 'HUB_REQUEST:UNSEAL',
+  'HUB_DLQ:READ', 'HUB_DLQ:REPLAY', 'HUB_DLQ:PURGE',
+  'HUB_BREAKER:READ', 'HUB_BREAKER:ADMIN',
+  'HUB_PLATFORM:READ',
+]);
 // Admin POSTs that change nothing: no `reason`, no `change_id` (hub-admin info.description).
 const ADMIN_NON_MUTATING = new Set([
   'testAccountConnection',
@@ -500,6 +513,7 @@ function checkSpec(kind) {
         if (!op.tags?.length) err(`${where}: no tags`);
         for (const t of op.tags ?? []) if (!tags.has(t)) err(`${where}: tag '${t}' is not declared`);
         if (kind === 'admin' && !ADMIN_ROLES.has(op['x-required-role'])) err(`${where}: x-required-role '${op['x-required-role']}' is not one of ${[...ADMIN_ROLES]}`);
+        if (kind === 'admin' && !ADMIN_PERMISSIONS.has(op['x-required-permission'])) err(`${where}: x-required-permission '${op['x-required-permission']}' is not in the permission catalogue (AUTH_PLAN §7.4)`);
 
         // parameters
         const params = [];
@@ -731,7 +745,8 @@ if (mcp) {
       };
   }
   const ADMIN_SPEC = path.posix.basename(SPECS.admin);
-  const ROLE_RANK = { tenant_viewer: 0, viewer: 1, editor: 2, admin: 3 };
+  // tenant_admin sits between editor and admin only for picking a tool's strictest role: admin satisfies it, editor does not.
+  const ROLE_RANK = { tenant_viewer: 0, viewer: 1, editor: 2, tenant_admin: 2.5, admin: 3 };
   // Operations that must carry the confirm guard / a sensitive_output declaration whatever else
   // the contract says (the user's requirement; README "Admin write tools").
   const MUST_CONFIRM_LIVE = new Set(['publishIntegrationVersion', 'updateIntegrationWeights', 'rollbackIntegration']);
