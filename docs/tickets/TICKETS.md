@@ -3734,11 +3734,13 @@ Progress: ADR-0026 written (Accepted 2026-11-11); ADR-0005 and ADR-0022 marked p
 
 ### HUB-467 — ADR-0028: caller auth with ISFC backend clients, checked in memory
 - **Epic:** EP-15 · **Type:** docs · **Area:** docs
-- **Status:** todo · **Depends on:** HUB-463 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-463 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `docs/HUB-467-adr-isfc-callers`
 
 **Acceptance criteria**
 - [ ] ADR-0028 Accepted, with the HUB-463 OPA latency numbers and the DESIGN §18.5 argument; legacy-key cut-off rule recorded.
+
+Progress: ADR-0028 written (Accepted 2026-11-11) with the DESIGN §18.5 argument and the legacy-key cut-off rule. The OPA latency numbers are pending (HUB-463 is blocked on a live ISFC stack), so the box stays open and the ADR will be amended.
 
 ### HUB-468 — Feature docs, stories, PRD, SECURITY / TECH_SPEC / OBSERVABILITY updates
 - **Epic:** EP-15 · **Type:** docs · **Area:** docs

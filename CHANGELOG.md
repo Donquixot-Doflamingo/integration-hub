@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(adr)` · Add ADR-0028 caller auth with ISFC backend clients checked in memory (HUB-467) · HUB-467 · F-24
+  - ADR-0028 records ISFC S2S credentials for callers checked in memory with no OPA hop on the sync path (DESIGN §18.5), the revocation delay and the legacy hk_live_ cut-off rule (planned, EP-15); OPA latency numbers are pending HUB-463
 - 2026-11-11 · `docs(adr)` · Add ADR-0027 tenants owned by ISFC with a synced Hub copy (HUB-466) · HUB-466 · F-25
   - ADR-0027 records the ownership table, tenant lifecycle, derived immutable Hub tenant ids, the pull-based reconciler that events only trigger, and the failure behaviour (planned, EP-15)
 - 2026-11-11 · `docs(adr)` · Add ADR-0026 ISFC identity and per-operation admin policies (HUB-465) · HUB-465 · F-24
