@@ -105,6 +105,9 @@ func (p Principal) Allows(min Role) bool {
 // Scoped reports whether results must be filtered to Tenants (a pure tenant_viewer or
 // tenant_admin: no platform role).
 func (p Principal) Scoped() bool {
+	if p.Machine { // keys carry no tenant (AUTH_PLAN G1): a machine acts on the platform
+		return false
+	}
 	top := p.Top()
 	return top == RoleTenantViewer || top == RoleTenantAdmin
 }

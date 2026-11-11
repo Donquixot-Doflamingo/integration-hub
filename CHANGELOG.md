@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(adminapi)` · Accept ISFC API keys as machine principals on the admin API (HUB-476) · HUB-476 · F-24
+  - Automation (CI, hubctl) can call the admin directly with `x-isfc-client-id` + `x-isfc-api-key`: OPA checks the key and its permission, the principal is `client:<id>` (also the change log actor) with the roles its key covers, and it has platform scope
+  - `unsealRequest` and `purgeDeadLetters` are refused for machines whatever the key holds (403, OPA is not asked); a revoked key, another client's key or an unknown key is 403, a missing client id or bearer plus key is 401
+  - The logger redacts `x-isfc-api-key` by value (the key joins the redaction set, bounded at 256 keys)
 - 2026-11-11 · `feat(adminapi)` · Wire ISFC mode into the admin server, /me and the RBAC matrix (HUB-475) · HUB-475 · F-24
   - In `HUB_ADMIN_AUTH_MODE=isfc` every admin request goes authenticate, OPA (deny 403, error or timeout 503 `authz_unavailable`, no engine also 503), then the in-process role check; the change log actor is the email
   - `/me` keeps its shape (mapped Hub roles, the Hub id of the tenant for tenant scope); new UI gates `tenants:setup` and `tenants:sync`, and `registrar:write` now needs `tenant_admin`

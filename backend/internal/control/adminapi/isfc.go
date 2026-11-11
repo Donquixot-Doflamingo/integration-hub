@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,6 +22,7 @@ const (
 	hdrISFCEmail    = "X-Isfc-Sub-Email-Id"
 	hdrISFCTenantID = "X-Isfc-Tenant-Id"
 	hdrISFCSubAttrs = "X-Isfc-Sub-Attrs"
+	hdrISFCAPIKey   = "X-Isfc-Api-Key" //nolint:gosec // a header name, not a credential
 )
 
 // Auth modes (HUB_ADMIN_AUTH_MODE).
@@ -70,8 +72,51 @@ func unauthorized(reason, msg string) *authnError {
 	return &authnError{reason: reason, err: &Error{Status: http.StatusUnauthorized, Code: CodeUnauthorized, Message: msg}}
 }
 
-// authenticate builds the principal of a human request (a gateway-forwarded bearer token).
+// machineRefused are the operations no machine principal may call, whatever its key holds (human
+// only, decision D7).
+var machineRefused = map[string]bool{"unsealRequest": true, "purgeDeadLetters": true}
+
+// Permission bundles of the Hub roles (AUTH_PLAN §7.4). A machine principal's Roles are the roles
+// whose bundle its key fully covers; they describe the key in /me and the change log. What a key
+// may do is decided by its permissions in OPA, not by these roles.
+var (
+	hubReadPermissions   = []string{"HUB_VENDOR:READ", "HUB_ACCOUNT:READ", "HUB_TRANSFORMER:READ", "HUB_INTEGRATION:READ", "HUB_TENANT:READ", "HUB_REQUEST:READ", "HUB_DLQ:READ", "HUB_BREAKER:READ", "HUB_PLATFORM:READ"}
+	hubWritePermissions  = []string{"HUB_ACCOUNT:TEST", "HUB_TRANSFORMER:WRITE", "HUB_INTEGRATION:WRITE", "HUB_DLQ:REPLAY"}
+	hubAdminPermissions  = []string{"HUB_VENDOR:ADMIN", "HUB_ACCOUNT:ADMIN", "HUB_TENANT:ADMIN", "HUB_TENANT:SETUP", "HUB_REQUEST:UNSEAL", "HUB_DLQ:PURGE", "HUB_BREAKER:ADMIN"}
+	hubTenantReadBundle  = []string{"HUB_TENANT:READ", "HUB_INTEGRATION:READ", "HUB_REQUEST:READ", "HUB_DLQ:READ"}
+	hubTenantSetupBundle = append(slices.Clone(hubTenantReadBundle), "HUB_TENANT:SETUP")
+)
+
+// rolesCovered returns the Hub roles whose permission bundle is a subset of perms.
+func rolesCovered(perms []string) []Role {
+	covers := func(bundle ...[]string) bool {
+		return !slices.ContainsFunc(slices.Concat(bundle...), func(p string) bool { return !slices.Contains(perms, p) })
+	}
+	var roles []Role
+	if covers(hubReadPermissions, hubWritePermissions, hubAdminPermissions) {
+		roles = append(roles, RoleAdmin)
+	}
+	if covers(hubReadPermissions, hubWritePermissions) {
+		roles = append(roles, RoleEditor)
+	}
+	if covers(hubReadPermissions) {
+		roles = append(roles, RoleViewer)
+	}
+	if covers(hubTenantSetupBundle) {
+		roles = append(roles, RoleTenantAdmin)
+	}
+	if covers(hubTenantReadBundle) {
+		roles = append(roles, RoleTenantViewer)
+	}
+	return roles
+}
+
+// authenticate builds the principal of a request: a machine (x-isfc-api-key) or a human (a
+// gateway-forwarded bearer token).
 func (a *ISFCAuth) authenticate(r *http.Request) (Principal, *authnError) {
+	if key := r.Header.Get(hdrISFCAPIKey); key != "" {
+		return a.authenticateMachine(r, key)
+	}
 	tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !ok || tok == "" {
 		return Principal{}, unauthorized(authnNoToken, "Missing bearer token")
@@ -103,6 +148,29 @@ func (a *ISFCAuth) authenticate(r *http.Request) (Principal, *authnError) {
 	}
 	p.Roles, p.Tenants = a.mapRoles(r.Context(), tenantID, stringList(attrs["roles"]))
 	return p, nil
+}
+
+// authenticateMachine builds the principal of an automation client that calls the admin directly
+// with x-isfc-client-id and x-isfc-api-key (AUTH_PLAN §7.5). The key itself is checked by OPA
+// against the bundle's allowed_api_keys; the principal gets its roles from the key's permissions
+// once OPA has answered (applyKeyPermissions). Machine principals have platform scope: ISFC keys
+// carry no tenant (gap G1).
+func (a *ISFCAuth) authenticateMachine(r *http.Request, key string) (Principal, *authnError) {
+	if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+		return Principal{}, unauthorized(authnHeaderMismatch, "Send either a bearer token or an API key, not both")
+	}
+	clientID := strings.TrimSpace(r.Header.Get(hdrISFCClientID))
+	if clientID == "" {
+		return Principal{}, unauthorized(authnNoToken, "x-isfc-client-id is required with an API key")
+	}
+	_ = key // checked by OPA; never stored in the principal
+	return Principal{Subject: "client:" + clientID, ClientID: clientID, SubType: "INTERNAL", Machine: true, Tenants: []string{}}, nil
+}
+
+// applyKeyPermissions sets a machine principal's roles from the key permissions OPA reports in
+// the decision meta (`key_permissions`).
+func applyKeyPermissions(p *Principal, meta map[string]any) {
+	p.Roles = rolesCovered(stringList(meta["key_permissions"]))
 }
 
 // mapRoles applies the AUTH_PLAN §2.2 table. A request without a tenant, in an unknown tenant, or

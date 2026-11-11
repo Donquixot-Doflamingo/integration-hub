@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/authz"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/contract"
 )
 
@@ -60,8 +62,18 @@ func isfcRoleOf(role Role) isfcRole {
 // tenant-capable ones (x-required-role tenant_viewer or tenant_admin) accept tenant scope too.
 type catalogOPA struct {
 	rules []catalogRule
+	keys  map[string]catalogKey // API keys of the bundle (allowed_api_keys)
 	down  atomic.Bool
 	calls atomic.Int64
+	// failWith, when set, is returned as the OPA error (a test that checks the log is clean of it).
+	failWith error
+}
+
+// catalogKey is one entry of the bundle's allowed_api_keys.
+type catalogKey struct {
+	client string // allowed_client_id
+	status string
+	perms  []string
 }
 
 type catalogRule struct {
@@ -111,6 +123,12 @@ func (f *catalogOPA) Decide(_ context.Context, in authz.Input) (authz.Decision, 
 	if f.down.Load() {
 		return authz.Decision{}, fmt.Errorf("%w: down", authz.ErrUnavailable)
 	}
+	if f.failWith != nil {
+		return authz.Decision{}, f.failWith
+	}
+	if in.Client.APIKey != "" {
+		return f.decideMachine(in), nil
+	}
 	hasTenant := in.Tenant != nil && in.Tenant.ID != ""
 	roles, perms := subList(in, "roles"), subList(in, "permissions")
 	anyOf := func(names []string) bool {
@@ -130,6 +148,32 @@ func (f *catalogOPA) Decide(_ context.Context, in authz.Input) (authz.Decision, 
 		return authz.Decision{Allow: platform || (tenant && r.tenantCapable)}, nil
 	}
 	return authz.Decision{}, nil
+}
+
+// decideMachine mirrors has_required_permissions_on_api_key: the key must be ACTIVE, issued to
+// the calling client and hold the operation's permission; a key has platform scope, no tenant.
+func (f *catalogOPA) decideMachine(in authz.Input) authz.Decision {
+	key, ok := f.keys[string(in.Client.APIKey)]
+	if !ok || key.status != "ACTIVE" || key.client != in.Client.ClientID {
+		return authz.Decision{}
+	}
+	for _, r := range f.rules {
+		if r.method != in.HTTP.Method || !r.re.MatchString(in.HTTP.Path) {
+			continue
+		}
+		if r.perm == "none" || slices.Contains(key.perms, r.perm) {
+			return authz.Decision{Allow: true, Meta: map[string]any{"key_permissions": toAny(key.perms)}}
+		}
+	}
+	return authz.Decision{}
+}
+
+func toAny(ss []string) []any {
+	out := make([]any, len(ss))
+	for i, s := range ss {
+		out[i] = s
+	}
+	return out
 }
 
 // isfcMatrixMode is the ISFC-mode harness: RS256 tokens signed like Hydra's, gateway headers
@@ -308,5 +352,174 @@ func TestISFCMe(t *testing.T) {
 		if p.Actor() != me.Email {
 			t.Fatalf("actor %q", p.Actor())
 		}
+	}
+}
+
+// machine keys of the machine tests: key -> bundle entry.
+func machineKeys() map[string]catalogKey {
+	return map[string]catalogKey{
+		"isfck_admin_key_0001":  {"ci-admin", "ACTIVE", slices.Concat(hubReadPerms, hubWritePerms, hubAdminPerms)},
+		"isfck_ci_key_00000002": {"integration-hub-ci", "ACTIVE", []string{"HUB_INTEGRATION:WRITE"}},
+		"isfck_viewer_key_0003": {"viewer-bot", "ACTIVE", hubReadPerms},
+		"isfck_revoked_key_004": {"ci-admin", "INACTIVE", slices.Concat(hubReadPerms, hubWritePerms, hubAdminPerms)},
+	}
+}
+
+func machineReq(t *testing.T, method, path, client, key string) *http.Request {
+	t.Helper()
+	req := newReq(t, method, path, strings.NewReader(`{}`))
+	if client != "" {
+		req.Header.Set(hdrISFCClientID, client)
+	}
+	if key != "" {
+		req.Header.Set(hdrISFCAPIKey, key)
+	}
+	return req
+}
+
+// TestISFCMachineMatrix: automation clients call the admin API directly with x-isfc-client-id and
+// x-isfc-api-key (HUB-476). OPA decides by the key's permissions; unsealRequest and
+// purgeDeadLetters are refused whatever the key holds; a revoked key, a key of another client and an
+// unknown key are refused.
+func TestISFCMachineMatrix(t *testing.T) {
+	spec := contract.Load(t, "hub-admin.v1.yaml")
+	opa := newCatalogOPA(spec)
+	opa.keys = machineKeys()
+	perms := map[string]string{}
+	for _, op := range spec.Operations() {
+		perms[op.ID] = op.Extensions["x-required-permission"]
+	}
+	m, s := isfcMatrixModeWith(t, opa)
+	h := m.server.Handler()
+	type want struct {
+		name, client, key string
+		allowed           func(op, perm string) bool
+		code              int // when not allowed
+	}
+	always := func(string, string) bool { return true }
+	cases := []want{
+		{"all permissions", "ci-admin", "isfck_admin_key_0001", always, http.StatusForbidden},
+		{"integration writer only", "integration-hub-ci", "isfck_ci_key_00000002", func(_, p string) bool { return p == "HUB_INTEGRATION:WRITE" || p == "none" }, http.StatusForbidden},
+		{"read only", "viewer-bot", "isfck_viewer_key_0003", func(_, p string) bool { return strings.HasSuffix(p, ":READ") || p == "none" }, http.StatusForbidden},
+		{"revoked key", "ci-admin", "isfck_revoked_key_004", func(string, string) bool { return false }, http.StatusForbidden},
+		{"key of another client", "intruder", "isfck_admin_key_0001", func(string, string) bool { return false }, http.StatusForbidden},
+		{"unknown key", "ci-admin", "isfck_made_up_key_0005", func(string, string) bool { return false }, http.StatusForbidden},
+		{"no client id", "", "isfck_admin_key_0001", func(string, string) bool { return false }, http.StatusUnauthorized},
+	}
+	for _, c := range cases {
+		for _, rt := range s.Routes() {
+			req := machineReq(t, rt.Method, Base+samplePath(rt.Path), c.client, c.key)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			allowed := c.allowed(rt.Op, perms[rt.Op]) && !machineRefused[rt.Op]
+			switch {
+			case allowed && (rec.Code == http.StatusForbidden || rec.Code == http.StatusUnauthorized || rec.Code == http.StatusServiceUnavailable):
+				t.Errorf("%s: %s: %d, want past authorization", c.name, rt.Op, rec.Code)
+			case !allowed && rec.Code != c.code:
+				t.Errorf("%s: %s: %d, want %d", c.name, rt.Op, rec.Code, c.code)
+			case !allowed && rt.Op == "getMe":
+				// The contract lists no 403 for getMe (every role may call it); a refused key or a user
+				// without a Hub role still gets the standard envelope. Contract gap, reported to the steward.
+			case !allowed:
+				checkResponse(t, spec, req, rec)
+			}
+		}
+	}
+	// A bearer token together with an API key is ambiguous.
+	req := machineReq(t, http.MethodGet, Base+"/me", "ci-admin", "isfck_admin_key_0001")
+	req.Header.Set("Authorization", "Bearer a.b.c")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("bearer + key: %d", rec.Code)
+	}
+	// The refusal is not an OPA deny: it never even asks.
+	before := opa.calls.Load()
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, machineReq(t, http.MethodPost, Base+"/dlq/purge", "ci-admin", "isfck_admin_key_0001"))
+	if rec.Code != http.StatusForbidden || opa.calls.Load() != before || !strings.Contains(rec.Body.String(), "API keys cannot call") {
+		t.Errorf("purgeDeadLetters by a machine: %d %s (OPA calls %d -> %d)", rec.Code, rec.Body, before, opa.calls.Load())
+	}
+}
+
+// TestISFCMachinePrincipal: the principal is client:<id>, Machine, with the roles its key covers;
+// the change log actor is client:<id>.
+func TestISFCMachinePrincipal(t *testing.T) {
+	spec := contract.Load(t, "hub-admin.v1.yaml")
+	opa := newCatalogOPA(spec)
+	opa.keys = machineKeys()
+	_, s := isfcMatrixModeWith(t, opa)
+	for key, wantRoles := range map[string][]Role{
+		"isfck_admin_key_0001":  {RoleAdmin, RoleEditor, RoleViewer, RoleTenantAdmin, RoleTenantViewer},
+		"isfck_viewer_key_0003": {RoleViewer, RoleTenantViewer},
+		"isfck_ci_key_00000002": nil,
+	} {
+		req := machineReq(t, http.MethodGet, Base+"/me", opa.keys[key].client, key)
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: /me %d %s", key, rec.Code, rec.Body)
+		}
+		var me struct {
+			Subject string   `json:"subject"`
+			Roles   []string `json:"roles"`
+			Tenants []string `json:"tenants"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &me); err != nil {
+			t.Fatal(err)
+		}
+		wantNames := make([]string, len(wantRoles))
+		for i, r := range wantRoles {
+			wantNames[i] = string(r)
+		}
+		if me.Subject != "client:"+opa.keys[key].client || !slices.Equal(me.Roles, wantNames) || len(me.Tenants) != 0 {
+			t.Fatalf("%s: /me %+v, want roles %v", key, me, wantNames)
+		}
+	}
+	p := Principal{Subject: "client:ci-admin", Machine: true}
+	if p.Actor() != "client:ci-admin" || p.Scoped() {
+		t.Fatalf("actor %q scoped %v", p.Actor(), p.Scoped())
+	}
+}
+
+// TestMachineKeyIsRedactedFromLogs: the logger redacts x-isfc-api-key by value (HUB-476, AGENTS
+// §3.5). Even a policy engine error that echoes the key cannot put it in a log line.
+func TestMachineKeyIsRedactedFromLogs(t *testing.T) {
+	spec := contract.Load(t, "hub-admin.v1.yaml")
+	const key = "isfck_admin_key_0001"
+	opa := newCatalogOPA(spec)
+	opa.keys = machineKeys()
+	opa.failWith = fmt.Errorf("%w: upstream said key %s is bad", authz.ErrUnavailable, key)
+	var buf strings.Builder
+	secrets := telemetry.NewSecretSet()
+	log := telemetry.NewLogger(&buf, slog.LevelDebug, secrets, "admin")
+	iss := newRSIssuer(t, testHydra, "rs-1", 2048)
+	s := New(Deps{ISFC: testISFCAuth(t, iss), Authz: opa, Log: log, Secrets: secrets})
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, machineReq(t, http.MethodGet, Base+"/vendors", "ci-admin", key))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "admin.authz") || strings.Contains(out, key) || !strings.Contains(out, "***") {
+		t.Fatalf("the key must be redacted by value:\n%s", out)
+	}
+	if strings.Contains(rec.Body.String(), key) {
+		t.Fatalf("the key is in the response: %s", rec.Body)
+	}
+	// Without a Secrets set nothing breaks (and nothing is registered).
+	s2 := New(Deps{ISFC: testISFCAuth(t, iss), Authz: opa})
+	s2.Handler().ServeHTTP(httptest.NewRecorder(), machineReq(t, http.MethodGet, Base+"/vendors", "ci-admin", key))
+}
+
+// TestRedactedKeysAreBounded: endless distinct keys cannot grow the redaction set.
+func TestRedactedKeysAreBounded(t *testing.T) {
+	secrets := telemetry.NewSecretSet()
+	s := New(Deps{Secrets: secrets})
+	for i := range 2 * maxRedactedKeys {
+		s.redactKey(fmt.Sprintf("isfck_flood_key_%06d", i))
+	}
+	if secrets.Len() != maxRedactedKeys {
+		t.Fatalf("%d keys registered, want %d", secrets.Len(), maxRedactedKeys)
 	}
 }

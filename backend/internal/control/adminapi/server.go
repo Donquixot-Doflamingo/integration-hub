@@ -13,6 +13,8 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -80,6 +82,9 @@ type Server struct {
 	mux    *http.ServeMux
 	routes []Route
 	authn  *authnMetrics
+	// redacted holds the machine keys already given to Deps.Secrets (see redactKey).
+	redacted  sync.Map
+	redactedN atomic.Int64
 }
 
 // New builds the server with every implemented operation registered.
@@ -189,7 +194,12 @@ func (s *Server) authorizeISFC(op string, min Role, next http.Handler) http.Hand
 			writeError(w, r, aerr.err)
 			return
 		}
-		if len(p.Roles) == 0 {
+		if p.Machine && machineRefused[op] { // human-only operations, whatever the key holds (D7)
+			s.logAuthz(r, p, op, authz.DecisionDeny, "machine principal refused")
+			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: "This operation is for signed-in people; API keys cannot call it"})
+			return
+		}
+		if !p.Machine && len(p.Roles) == 0 {
 			s.authn.fail(authnNoRoles)
 			s.logAuthz(r, p, op, authz.DecisionDeny, "no Hub role in this tenant")
 			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: "No Hub role in this tenant"})
@@ -199,6 +209,9 @@ func (s *Server) authorizeISFC(op string, min Role, next http.Handler) http.Hand
 			s.logAuthz(r, p, op, authz.DecisionError, "no policy engine configured")
 			writeError(w, r, authzUnavailable())
 			return
+		}
+		if p.Machine {
+			s.redactKey(r.Header.Get(hdrISFCAPIKey))
 		}
 		d, err := s.d.Authz.Decide(r.Context(), s.opaInput(r, p))
 		if err != nil {
@@ -212,7 +225,11 @@ func (s *Server) authorizeISFC(op string, min Role, next http.Handler) http.Hand
 			return
 		}
 		s.logAuthz(r, p, op, authz.DecisionAllow, d.Reason)
-		if !p.Allows(min) {
+		if p.Machine {
+			// A key holds permissions, not a role: OPA has checked the one this operation needs, and
+			// the roles only describe the key (/me, change log).
+			applyKeyPermissions(&p, d.Meta)
+		} else if !p.Allows(min) {
 			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: fmt.Sprintf("Requires role '%s'", min)})
 			return
 		}
@@ -220,6 +237,24 @@ func (s *Server) authorizeISFC(op string, min Role, next http.Handler) http.Hand
 		ctx = control.WithChangeMeta(ctx, p.RoleNames(), RequestID(ctx))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// maxRedactedKeys bounds the redaction set that machine keys grow: a client that sends endless
+// distinct keys must not grow it (or its rebuilt replacer) without limit.
+const maxRedactedKeys = 256
+
+// redactKey registers a machine's API key with the logger's redaction set, once, so no log line
+// can carry it by value (AGENTS §3.5, HUB-476).
+func (s *Server) redactKey(key string) {
+	if s.d.Secrets == nil || key == "" {
+		return
+	}
+	if _, seen := s.redacted.Load(key); seen || s.redactedN.Load() >= maxRedactedKeys {
+		return
+	}
+	s.redacted.Store(key, struct{}{})
+	s.redactedN.Add(1)
+	s.d.Secrets.Add(key)
 }
 
 // opaInput is the sidecar-compatible policy input of one request: the subject with its gateway
@@ -231,6 +266,10 @@ func (s *Server) opaInput(r *http.Request, p Principal) authz.Input {
 	}
 	sub["id"], sub["type"] = p.Subject, p.SubType
 	in := authz.Input{Sub: sub, HTTP: authz.HTTP{Method: r.Method, Path: r.URL.Path}, Client: authz.Caller{ClientID: p.ClientID}}
+	if p.Machine { // the sidecar sets sub.id to the caller's client id for an API key request
+		sub["id"] = p.ClientID
+		in.Client.APIKey = authz.APIKey(r.Header.Get(hdrISFCAPIKey))
+	}
 	if p.ISFCTenantID != "" {
 		in.Tenant = &authz.Tenant{ID: p.ISFCTenantID}
 	}
