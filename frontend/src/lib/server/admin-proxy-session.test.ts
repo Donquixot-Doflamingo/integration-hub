@@ -1,7 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AUTH, createFakeIsfc, tokenResponse } from '$lib/testing/fake-isfc';
-import { readSessionCookie } from './auth/cookie';
 import { decodeSession, newSession } from './auth/session';
+
+/** The session value the browser would hold after this response: the Set-Cookie headers, joined. */
+function sessionFromHeaders(res: Response): ReturnType<typeof decodeSession> {
+	const chunks = new Map<string, string>();
+	for (const h of res.headers.getSetCookie()) {
+		const [pair] = h.split(';');
+		const [k, ...v] = pair!.split('=');
+		if (k!.startsWith('hub_console_session') && v.join('=')) chunks.set(k!, v.join('='));
+	}
+	const value = [...chunks.keys()]
+		.sort()
+		.map((k) => chunks.get(k))
+		.join('');
+	return decodeSession(value, SECRET);
+}
 
 // HUB-492 / HUB-494: the proxy's Handle keeps the session cookie in step with what the gateway says.
 const SECRET = 's'.repeat(40);
@@ -32,7 +46,9 @@ function setup(tenantId: string | null, fetchImpl: typeof fetch) {
 	const cookies = {
 		get: (k: string) => store.get(k),
 		set: (k: string, v: string) => void store.set(k, v),
-		delete: (k: string) => void store.delete(k)
+		delete: (k: string) => void store.delete(k),
+		serialize: (k: string, v: string, o: { maxAge?: number }) =>
+			`${k}=${v}; Max-Age=${o.maxAge ?? ''}; Path=/`
 	};
 	const url = new URL('https://console.test/admin/v1/me');
 	const event = {
@@ -70,11 +86,11 @@ describe('proxyAdminApi with an ISFC session', () => {
 			resolve: async () => new Response()
 		})) as Response;
 		expect(res.status).toBe(200);
-		expect(decodeSession(readSessionCookie(cookies), SECRET)).toMatchObject({
-			tenantId: ECHO,
-			accessToken: 'access-old'
-		});
+		// The proxy answers with its own Response, which SvelteKit does not add cookies to: the
+		// new session must be on the response itself (found by a smoke run against a real server).
+		expect(sessionFromHeaders(res)).toMatchObject({ tenantId: ECHO, accessToken: 'access-old' });
 		expect(event.locals.session.tenantId).toBe(ECHO);
+		void cookies;
 	});
 
 	it('refreshes after a GW_004, repeats the call with the new token and keeps the rotated tokens in the cookie', async () => {
@@ -101,10 +117,12 @@ describe('proxyAdminApi with an ISFC session', () => {
 		})) as Response;
 		expect(res.status).toBe(200);
 		expect(seen).toEqual(['Bearer access-old', 'Bearer new.access.token']);
-		expect(decodeSession(readSessionCookie(cookies), SECRET)).toMatchObject({
+		// The rotated tokens reach the browser on the proxied response itself.
+		expect(sessionFromHeaders(res)).toMatchObject({
 			accessToken: 'new.access.token',
 			refreshToken: 'refresh-new'
 		});
+		void cookies;
 	});
 
 	it('GW_007 (session ended at ISFC) reaches the console as UNAUTHORIZED, and nothing is refreshed', async () => {
@@ -125,5 +143,7 @@ describe('proxyAdminApi with an ISFC session', () => {
 		expect(res.status).toBe(401);
 		expect(await res.json()).toMatchObject({ error: { code: 'UNAUTHORIZED' } });
 		expect(isfc.calls).toHaveLength(0);
+		// Nothing changed in the session, so no cookie is sent.
+		expect(res.headers.getSetCookie()).toEqual([]);
 	});
 });

@@ -32,6 +32,6 @@ export const POST: RequestHandler = async (event) => {
 			/* ISFC did not answer or refused: the local session still ends below. */
 		}
 	}
-	clearSessionCookie(cookies);
+	clearSessionCookie(cookies, event.url.protocol === 'https:');
 	redirect(303, '/login');
 };

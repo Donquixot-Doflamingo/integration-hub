@@ -25,9 +25,37 @@ export function readSessionCookie(cookies: Pick<CookieJar, 'get'>): string | und
 	return value;
 }
 
-/** Forgets the session cookie, every chunk. */
-export function clearSessionCookie(cookies: Pick<CookieJar, 'delete'>): void {
-	for (let i = 0; i < MAX_CHUNKS; i++) cookies.delete(name(i), { path: '/' });
+/**
+ * Forgets the session cookie, every chunk. `secure` should say whether the page is https: a
+ * delete that is `Secure` while the cookie was not (SvelteKit's default for any host but
+ * localhost) is ignored by browsers on plain http.
+ */
+export function clearSessionCookie(cookies: Pick<CookieJar, 'delete'>, secure?: boolean): void {
+	for (let i = 0; i < MAX_CHUNKS; i++) {
+		cookies.delete(name(i), secure === undefined ? { path: '/' } : { path: '/', secure });
+	}
+}
+
+interface CookiePart {
+	name: string;
+	value: string;
+	opts: { path: string; httpOnly: boolean; sameSite: 'lax'; secure: boolean; maxAge: number };
+}
+
+/** The cookies (value chunks) that hold `session`. */
+function sessionCookieParts(session: Session, secret: string, secure: boolean): CookiePart[] {
+	const value = encodeSession(session, secret);
+	const parts = value.match(new RegExp(`.{1,${CHUNK}}`, 'g')) ?? [value];
+	if (parts.length > MAX_CHUNKS) throw new Error('The session is too large for a cookie.');
+	const maxAge = Math.min(
+		Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+		SESSION_TTL_SECONDS
+	);
+	return parts.map((part, i) => ({
+		name: name(i),
+		value: part,
+		opts: { path: '/', httpOnly: true, sameSite: 'lax', secure, maxAge }
+	}));
 }
 
 /** Seals `session` and sets the cookie: httpOnly, SameSite=Lax, Secure on https. */
@@ -37,21 +65,31 @@ export function writeSessionCookie(
 	secret: string,
 	secure: boolean
 ): void {
-	const value = encodeSession(session, secret);
-	const parts = value.match(new RegExp(`.{1,${CHUNK}}`, 'g')) ?? [value];
-	if (parts.length > MAX_CHUNKS) throw new Error('The session is too large for a cookie.');
-	const maxAge = Math.max(0, session.exp - Math.floor(Date.now() / 1000));
-	parts.forEach((part, i) =>
-		cookies.set(name(i), part, {
-			path: '/',
-			httpOnly: true,
-			sameSite: 'lax',
-			secure,
-			maxAge: Math.min(maxAge, SESSION_TTL_SECONDS)
-		})
-	);
+	const parts = sessionCookieParts(session, secret, secure);
+	for (const p of parts) cookies.set(p.name, p.value, p.opts);
 	// A shorter value than before must not leave a stale tail behind.
 	for (let i = parts.length; i < MAX_CHUNKS; i++) {
 		if (cookies.get(name(i))) cookies.delete(name(i), { path: '/' });
 	}
+}
+
+/**
+ * `Set-Cookie` header values for the session as it is now (`null`: the session ended, every
+ * chunk is deleted). SvelteKit adds cookies set with `cookies.set` only to responses that come
+ * out of `resolve()`; the admin proxy answers with its own `Response`, so it must carry them
+ * itself or a refreshed (rotated) token would never reach the browser.
+ */
+export function sessionSetCookieHeaders(
+	cookies: Pick<Cookies, 'serialize'>,
+	session: Session | null,
+	secret: string | null,
+	secure: boolean
+): string[] {
+	const out: string[] = [];
+	const parts = session && secret ? sessionCookieParts(session, secret, secure) : [];
+	for (const p of parts) out.push(cookies.serialize(p.name, p.value, p.opts));
+	for (let i = parts.length; i < MAX_CHUNKS; i++) {
+		out.push(cookies.serialize(name(i), '', { path: '/', maxAge: 0, secure }));
+	}
+	return out;
 }

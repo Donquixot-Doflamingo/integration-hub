@@ -3,7 +3,7 @@ import { env } from '$env/dynamic/private';
 import { DEFAULT_ADMIN_API_BASE, ETAG_HEADER, REQUEST_ID_HEADER } from '$lib/api/client';
 import { isTokenRefusal, normalizeGatewayError } from './gateway-errors';
 import { isTenantUuid } from '$lib/auth/tenant-choice';
-import { writeSessionCookie } from './auth/cookie';
+import { sessionSetCookieHeaders, writeSessionCookie } from './auth/cookie';
 import { refreshForEvent } from './auth/refresh';
 import { sessionSecret } from './auth';
 
@@ -157,12 +157,13 @@ export const proxyAdminApi: Handle = async ({ event, resolve }) => {
 	if (!upstream) return resolve(event);
 	// ISFC sessions refresh once on a gateway "token no longer valid" (HUB-492); the new cookie is
 	// set on this response, so the browser keeps the rotated tokens.
-	return forwardToAdmin(event, upstream, fetch, {
+	const response = await forwardToAdmin(event, upstream, fetch, {
 		onTenantEcho: (tenantId) => {
 			const session = event.locals.session;
 			const secret = sessionSecret();
 			if (!session || session.provider !== 'isfc' || !secret) return;
 			event.locals.session = { ...session, tenantId };
+			event.locals.sessionDirty = true;
 			writeSessionCookie(
 				event.cookies,
 				event.locals.session,
@@ -175,6 +176,20 @@ export const proxyAdminApi: Handle = async ({ event, resolve }) => {
 			return outcome === 'refreshed' ? (event.locals.session?.accessToken ?? null) : null;
 		}
 	});
+	// SvelteKit only adds `cookies.set` cookies to responses made by `resolve()`; this one is our
+	// own, so a refreshed or switched session must be put on it by hand (HUB-492).
+	if (event.locals.sessionDirty) {
+		const secure = event.url.protocol === 'https:';
+		for (const h of sessionSetCookieHeaders(
+			event.cookies,
+			event.locals.session,
+			sessionSecret(),
+			secure
+		)) {
+			response.headers.append('set-cookie', h);
+		}
+	}
+	return response;
 };
 
 /**

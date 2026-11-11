@@ -6,6 +6,13 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `fix(frontend)` · Put refreshed session cookies on proxied admin responses (HUB-492) · HUB-492 · F-24
+  - A refreshed ISFC session (rotated tokens) or a tenant adopted from the gateway now reaches the browser on `/admin/v1` responses too; before, SvelteKit dropped the cookie on the proxy's own response and the next refresh would have used a spent token
+  - Deleting a cookie on plain http no longer sends `Secure`, which browsers ignore
+- 2026-11-11 · `feat(hubctl)` · Add hubctl login -isfc, ISFC machine mode, HUB_TENANT_ID and a fixed hubmcp admin URL (HUB-496) · HUB-496 · F-24
+  - `hubctl login -isfc` signs in with ISFC (PKCE, loopback redirect on the public hubctl client) and saves the token at 0600; `login -dev` is unchanged
+  - With HUBCTL_ISFC_CLIENT_ID and HUBCTL_ISFC_CLIENT_SECRET (and HUBCTL_ISFC_AUTH_URL) hubctl fetches the client's key and calls the admin directly with x-isfc-client-id and x-isfc-api-key, refreshing it once on 401 or 403; HUB_TENANT_ID sends X-Tenant-Id
+  - hubmcp no longer guesses the admin URL as HUB_BASE_URL + /admin/v1: HUB_ADMIN_BASE_URL is required with HUB_ADMIN_TOKEN (a loopback gateway defaults to the same host on :8081), and HUB_TENANT_ID is sent on hub_admin_* calls
 - 2026-11-11 · `feat(mcp)` · Add the ISFC credential to the Go SDK and hubmcp and onboard teams in the consumer skill (HUB-489) · HUB-489 · F-24
   - `hubclient.WithISFC(clientID, secret, authURL)` fetches, caches and refreshes the caller's ISFC key (once on 401 or 403); `WithISFCKey` and `WithTenantID` cover a held key and a multi-tenant key
   - hubmcp reads HUB_ISFC_CLIENT_ID, HUB_ISFC_API_KEY and HUB_TENANT_ID; the HTTP transport accepts x-isfc-client-id and x-isfc-api-key per request, and a loopback server may hold one in its environment

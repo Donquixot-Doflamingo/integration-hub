@@ -18,7 +18,7 @@ export const GET: RequestHandler = async ({ url, cookies, request, fetch }) => {
 	const config = readIsfcConfig();
 	const loginCookie = cookies.get(LOGIN_COOKIE);
 	// The login state is single use, whatever happens next.
-	cookies.delete(LOGIN_COOKIE, { path: LOGIN_COOKIE_PATH });
+	cookies.delete(LOGIN_COOKIE, { path: LOGIN_COOKIE_PATH, secure: url.protocol === 'https:' });
 	if (!secret || !config.ok) redirect(303, '/login?error=sign_in_failed');
 
 	const secure = url.protocol === 'https:';

@@ -89,7 +89,7 @@ describe('GET /auth/callback', () => {
 		expect(call.body).toMatchObject({ code: 'the-code', code_verifier: 'verifier-1' });
 		expect(call.headers.get('x-device-id')).toBe(DEVICE);
 		expect(call.headers.get('user-agent')).toBe('Browser/1.0');
-		expect(r.deleted).toContainEqual({ name: LOGIN_COOKIE, opts: { path: '/auth' } });
+		expect(r.deleted).toContainEqual({ name: LOGIN_COOKIE, opts: { path: '/auth', secure: true } });
 		const cookie = r.sets.find((s) => s.name === 'hub_console_session')!;
 		expect(cookie.opts).toMatchObject({ path: '/', httpOnly: true, sameSite: 'lax', secure: true });
 		expect(cookie.value).not.toContain('refresh-1');

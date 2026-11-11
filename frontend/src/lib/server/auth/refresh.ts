@@ -138,13 +138,15 @@ export async function refreshForEvent(
 	});
 	if (r.ok) {
 		event.locals.session = r.session;
+		event.locals.sessionDirty = true;
 		writeSessionCookie(event.cookies, r.session, secret, secure);
 		return 'refreshed';
 	}
 	if (r.ended) {
-		clearSessionCookie(event.cookies);
+		clearSessionCookie(event.cookies, secure);
 		event.locals.session = null;
 		event.locals.sessionEnded = true;
+		event.locals.sessionDirty = true;
 		return 'ended';
 	}
 	return 'failed';
