@@ -385,12 +385,25 @@ func TestISFCMachineMatrix(t *testing.T) {
 	spec := contract.Load(t, "hub-admin.v1.yaml")
 	opa := newCatalogOPA(spec)
 	opa.keys = machineKeys()
+	m, s := isfcMatrixModeWith(t, opa)
+	runMachineMatrix(t, spec, m, s)
+	// The refusal is not an OPA deny: it never even asks.
+	before := opa.calls.Load()
+	rec := httptest.NewRecorder()
+	m.server.Handler().ServeHTTP(rec, machineReq(t, http.MethodPost, Base+"/dlq/purge", "ci-admin", "isfck_admin_key_0001"))
+	if rec.Code != http.StatusForbidden || opa.calls.Load() != before || !strings.Contains(rec.Body.String(), "API keys cannot call") {
+		t.Errorf("purgeDeadLetters by a machine: %d %s (OPA calls %d -> %d)", rec.Code, rec.Body, before, opa.calls.Load())
+	}
+}
+
+// runMachineMatrix sends every route with every kind of key (machineKeys) and checks the answer.
+func runMachineMatrix(t *testing.T, spec *contract.Spec, m matrixMode, s *Server) {
+	t.Helper()
+	h := m.server.Handler()
 	perms := map[string]string{}
 	for _, op := range spec.Operations() {
 		perms[op.ID] = op.Extensions["x-required-permission"]
 	}
-	m, s := isfcMatrixModeWith(t, opa)
-	h := m.server.Handler()
 	type want struct {
 		name, client, key string
 		allowed           func(op, perm string) bool
@@ -432,13 +445,6 @@ func TestISFCMachineMatrix(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("bearer + key: %d", rec.Code)
-	}
-	// The refusal is not an OPA deny: it never even asks.
-	before := opa.calls.Load()
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, machineReq(t, http.MethodPost, Base+"/dlq/purge", "ci-admin", "isfck_admin_key_0001"))
-	if rec.Code != http.StatusForbidden || opa.calls.Load() != before || !strings.Contains(rec.Body.String(), "API keys cannot call") {
-		t.Errorf("purgeDeadLetters by a machine: %d %s (OPA calls %d -> %d)", rec.Code, rec.Body, before, opa.calls.Load())
 	}
 }
 

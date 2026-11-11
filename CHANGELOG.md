@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `test(authz)` · Add the 76 admin policies and the Rego RBAC matrix tests (HUB-479) · HUB-479 · F-24
+  - `authz-policies/integration-hub/policies/admin/v1/` has one generated policy per operationId (76 of hub-admin 2.1.0); the generated `tests/rbac_matrix_test.rego` checks every operation against every role and API key, `tests/entry_test.rego` covers scopes, clients, `ISFC_ADMIN` (not an admin), shadowing and keys
+  - `opa test` runs 94 tests, all passing (executed in docker with opa 1.4.2); an integration test runs the Go ISFC-mode matrix and the machine matrix through the real policies in a real OPA container
+  - A Go test keeps `catalogue.json` and the Go role bundles in step
 - 2026-11-11 · `feat(edge)` · Record the ISFC caller client and key id on request.received (HUB-488) · HUB-488 · F-24
   - For an ISFC credential the `request.received` audit event adds `caller_client_id`, `isfc_key_id` and `auth_method`, next to the key hash; Hub-key requests record what they did before
   - The `x-isfc-api-key` value is never in an audit event, a record, a response or a log line; a test proves it on success, on a validation failure and on a refused credential
