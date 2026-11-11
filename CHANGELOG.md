@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(features)` · Add feature docs F-24 and F-25 for ISFC identity and tenants (HUB-468) · HUB-468 · F-24
+  - F-24 (ISFC identity and authorization) and F-25 (Tenants from ISFC) exist from the template, status in-progress, every behaviour marked planned (EP-15)
+  - The feature index and dependency graph list both features
+- 2026-11-11 · `contract(mcp)` · Add ISFC settings for hubmcp (HUB-471) · HUB-471 · F-24
+  - hubmcp-tools 2.1.0: env `HUB_TENANT_ID`, `HUB_ISFC_CLIENT_ID`, `HUB_ISFC_API_KEY`; `HUB_ADMIN_BASE_URL` is the ISFC gateway route in ISFC mode; no tool changes
 - 2026-11-11 · `contract(public)` · Add ISFC S2S security scheme and optional X-Tenant-Id (HUB-470) · HUB-470 · F-24
   - hub-public 2.1.0: callers may authenticate with `x-isfc-api-key` + `x-isfc-client-id` instead of a tenant API key, and send `X-Tenant-Id` when the credential covers several tenants; no vendor, account or version leak
 - 2026-11-11 · `docs(product)` · Add the ISFC identity and tenant stories and requirements (HUB-468) · HUB-468 · F-24

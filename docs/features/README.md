@@ -31,6 +31,8 @@ For a cross-feature, example-driven view (what a caller sends and gets back, and
 | F-21 | Consumer Claude skill & Go SDK (`hubclient`) | After M3 · EP-11 | in-progress | [F-21](F-21-claude-skill-sdk.md) | US-2101–2104 | HUB-300–329 |
 | F-22 | Release-2 features | Release 2 · EP-12 | proposed | [F-22](F-22-release-2.md) | US-2201–2208 | HUB-330–399 |
 | F-23 | Schema registry: operations on the integration, request schemas on the endpoint (capabilities removed, ADR-0023) | post-M8 · EP-14 | shipped | [F-23](F-23-schema-registry.md) | US-2301–2313 | HUB-431–459 |
+| F-24 | ISFC identity and authorization (SSO login, per-operation OPA policies, ISFC caller credentials) | post-M8 · EP-15 | in-progress (planned) | [F-24](F-24-isfc-identity-and-authz.md) | US-2401–2405 | HUB-460–HUB-479, HUB-486–HUB-498 |
+| F-25 | Tenants from ISFC (synced copy, setup flow, caller keys) | post-M8 · EP-15 | in-progress (planned) | [F-25](F-25-tenants-from-isfc.md) | US-2501–2503 | HUB-460, HUB-464, HUB-466, HUB-480–HUB-485, HUB-498 |
 
 ## Dependency graph
 
@@ -51,6 +53,8 @@ flowchart TD
   F05 & F06 --> F20[F-20 hubmcp] & F21[F-21 Skill/SDK]
   F18 --> F22[F-22 Release 2]
   F03 & F04 & F05 & F19 --> F23[F-23 Schema registry]
+  F05 & F16 & F19 --> F24[F-24 ISFC identity/authz]
+  F03 & F24 --> F25[F-25 Tenants from ISFC]
 ```
 
 ## Contract references
