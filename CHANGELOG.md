@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(tech)` · Fix the RBAC matrix and docs drift, add ISFC trust boundaries and env vars (HUB-468) · HUB-468 · F-24
+  - SECURITY §7 now matches the contract's x-required-role and TestRBACMatrix (74 operations); it no longer lets editors create vendors, accounts, tenants or keys, and no longer shows tenant_viewer reading the change log
+  - SECURITY lists the planned ISFC trust boundaries and gaps G4, G5, G6, G15, and says plainly that the console has no CSP yet and its session cookie is signed, not encrypted
+  - TECH_SPEC drops the oidc-stub compose service and the /auth/login routes that do not exist, fixes hub_tenant to hub_tenants, and lists the planned HUB_ADMIN_AUTH_MODE, HUB_EDGE_ISFC_AUTH, HUB_TENANT_SOURCE, HUB_OPA_* and HUB_ISFC_* settings
 - 2026-11-11 · `docs(features)` · Add feature docs F-24 and F-25 for ISFC identity and tenants (HUB-468) · HUB-468 · F-24
   - F-24 (ISFC identity and authorization) and F-25 (Tenants from ISFC) exist from the template, status in-progress, every behaviour marked planned (EP-15)
   - The feature index and dependency graph list both features

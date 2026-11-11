@@ -510,7 +510,29 @@ Flags override env. Env names: `HUB_*`. Loaded once at start into an immutable s
 | `HUB_TRACE_FORWARD_VENDORS` | empty (no vendor receives `traceparent`; comma-separated vendor names, ADR-0013) | gateway, worker |
 | `HUB_LOG_LEVEL`, `HUB_LOG_FORMAT` | `info`, `json` (`text` allowed in dev) | all |
 | `GOMEMLIMIT`, `GOGC` | see `OBSERVABILITY.md` §8.3 | all |
-| `HUB_OIDC_ISSUER`, `HUB_OIDC_AUDIENCE` | dev stub issuer | admin |
+
+#### 8.1.1 ISFC identity, tenancy and authorization (planned, EP-15; none of these exist yet)
+Source: [AUTH_PLAN](AUTH_PLAN.md) §5, §6, §7, §8, [ADR-0026](adr/0026-isfc-identity-and-per-operation-admin-policies.md) to [ADR-0028](adr/0028-caller-auth-with-isfc-backend-clients-checked-in-memory.md). Every default keeps today's behaviour.
+
+| Variable | Default | Roles |
+| --- | --- | --- |
+| `HUB_ADMIN_AUTH_MODE` | `jwt`; `jwt` = today's verifier and dev issuer unchanged, `isfc` = gateway identity + JWT check + OPA (§7 of the plan) | admin |
+| `HUB_EDGE_ISFC_AUTH` | `off`; `on` accepts `x-isfc-client-id` + `x-isfc-api-key` in addition to `hk_live_` keys | gateway |
+| `HUB_TENANT_SOURCE` | `local`; `isfc` starts the reconciler and makes `createTenant` answer 409 `tenant_managed_by_isfc` | admin, worker |
+| `HUB_OPA_URL` | unset; base URL of the OPA sidecar (`POST /v1/data/integrationhub/decision`), required in `isfc` admin mode | admin |
+| `HUB_OPA_TIMEOUT` | `200ms`; an error or timeout is 503 `authz_unavailable` (fail closed) | admin |
+| `HUB_OPA_DISABLED` | `false`; refused unless `HUB_ENV=test` | admin, tests only |
+| `HUB_ISFC_AUTH_URL` | unset; auth-service base URL for the reconciler, key fetch and (console) login | admin, worker |
+| `HUB_ISFC_CLIENT_ID`, `HUB_ISFC_CLIENT_SECRET` | unset; the Hub's own backend client (`integration-hub`) for S2S key fetch; the secret is environment or secret store only, never logged | worker |
+| `HUB_ISFC_CONSOLE_CLIENT_ID` | unset; the console client id every admin JWT must carry | admin |
+| `HUB_ISFC_JWKS_URL`, `HUB_ISFC_ISSUER`, `HUB_ISFC_AUDIENCE` | unset; Hydra JWKS (RS256 and ES256), issuer, optional audience | admin |
+| `HUB_ISFC_PLATFORM_TENANT_ID` | unset; ISFC UUID of the platform tenant (D1) | admin, worker |
+| `HUB_ISFC_RECONCILE_INTERVAL` | `5m` | worker |
+| `HUB_ISFC_SYNC_DRY_RUN` | `false`; `true` logs what the reconciler would change | worker |
+| `HUB_ISFC_EVENTS_*` | unset; SQS queue settings for the event consumer (D8), behind an interface | worker |
+| `HUB_EDGE_LEGACY_KEYS` | `on`; `off` after the cut-off (ADR-0028) | gateway |
+
+Console (`frontend`, build or run time): `PUBLIC_AUTH_MODE` (`dev` in mock builds, otherwise **must be set**; `dev` is refused outside mock or test builds), `HUB_SESSION_SECRET` (AES-GCM key for the encrypted session), `HUB_ADMIN_UPSTREAM` (the ISFC gateway route for the Hub admin in `isfc` mode). Exact names of the `HUB_ISFC_*` variables are fixed by the implementing tickets (HUB-472 to HUB-484); this table is updated with them.
 
 ### 8.2 Registry config files (`backend/config/`)
 Dev registry, round-trippable with `hubctl plan|apply` (DESIGN §16.1). No secrets in these files.
@@ -705,8 +727,9 @@ Prerequisites (installed via HUB-012; versions in §3): Go ≥ 1.26, Node 22 LTS
 | `redis` | `redis:7.4.12-alpine` (pinned digest) | default | 6379 (published on 127.0.0.1 only) |
 | `mockvendor` | built from `backend/` | `apps` | 8099 / 8098 |
 | `hub-gateway`, `hub-worker`, `hub-scheduler`, `hub-admin` | built from `backend/` | `apps` | 8080 / 8081 |
-| `oidc-stub` | dev OIDC issuer (see §17.3) | `auth` | 8085 |
 | `otel-collector`, `prometheus`, `grafana`, `tempo` | pinned | `obs` | 4317 / 9091 / 3000 / 3200 |
+
+There is no separate OIDC stub service: the dev issuer is part of `hub admin` (`HUB_ADMIN_DEV_OIDC=true`, §8.1; §17.3). Planned (EP-15): an OPA sidecar and a `mockisfc` process for the local ISFC integration; the Hub ports are configurable beside an ISFC stack (`docs/runbooks/isfc-local.md`).
 
 ### 14.2 Make targets
 Root `Makefile` (delegates):
@@ -790,12 +813,16 @@ Rules: tests never call real vendors (AGENTS §3.3) — only `staging`/`prod` re
 | `/breakers` | state, force-open/close | breakers |
 | `/snapshots` | versions, checksums, node lag | snapshots |
 | `/change-log` | audit of admin mutations | change log |
-| `/auth/login`, `/auth/callback`, `/auth/logout` | OIDC | — |
+| `/login`, `/logout` | sign-in (dev role-picker today; ISFC Email OTP and Microsoft planned, EP-15, with `/auth/callback`) and sign-out | — |
 
-### 17.3 Auth (OIDC stub in dev)
-- Authorization Code + PKCE performed **server-side** in SvelteKit (`hooks.server.ts`). Tokens stay in an encrypted, `HttpOnly`, `SameSite=Lax`, `Secure` session cookie; the browser never sees an access token.
-- Roles (`admin | editor | viewer | tenant_viewer`, DESIGN §16.1) come from a token claim (`hub_roles`, plus `hub_tenant` for `tenant_viewer`). The UI hides actions the role cannot do; **the admin API enforces RBAC** regardless (SECURITY §7).
-- Dev: compose profile `auth` runs an OIDC stub with fixed users per role. **Open**: build the stub in Go (part of `mockvendor` or `cmd/hub admin --dev-oidc`) vs a pinned third-party image; supply-chain policy prefers in-repo (§22).
+### 17.3 Auth (today: dev issuer; planned, EP-15: ISFC)
+**Today.**
+- The console is a backend-for-frontend: the SvelteKit server holds the token and a same-origin proxy adds it to `/admin/v1` calls (ADR-0022); the browser never sees an access token.
+- The session lives in an `HttpOnly`, `SameSite=Lax` cookie that is **HMAC-signed, not encrypted** (gap G14; AES-GCM planned in HUB-492). `src/lib/server/auth/oidc.ts` is a stub that answers 503 (HUB-282); the real sign-in is the dev provider (role-picker, or the dev issuer when `HUB_DEV_OIDC_ISSUER` is set in a non-mock build), selected with `PUBLIC_AUTH_MODE=dev`.
+- Roles (`admin | editor | viewer | tenant_viewer`, DESIGN §16.1) come from the token claim `hub_roles`, and the tenants of a `tenant_viewer` from `hub_tenants` (plural). The UI hides actions the role cannot do; **the admin API enforces RBAC** regardless (SECURITY §7).
+- Dev issuer: built into `hub admin` (`HUB_ADMIN_DEV_OIDC=true`, exclusive with `HUB_OIDC_ISSUER`, §8.1). No compose service exists for it.
+
+**Planned (EP-15, [ADR-0026](adr/0026-isfc-identity-and-per-operation-admin-policies.md)).** `PUBLIC_AUTH_MODE=isfc`: login page from ISFC's `GET /oauth2/method/<console client>` (Email OTP and Microsoft only); server-side PKCE S256 with `state` and `nonce` in a short-lived encrypted cookie; code exchange with the browser's device id and user agent; AES-GCM encrypted session; single-flight refresh; tenant switcher from ISFC `/oauth2/panels` (platform tenant first) with `X-Tenant-Id` added by the proxy; `HUB_ADMIN_UPSTREAM` points at the ISFC gateway route. `dev` is refused unless `__API_MOCKING__` is set or `NODE_ENV=test`.
 
 ### 17.4 Data loading and state
 - Reads: `+page.server.ts` `load` functions call the generated client with the user's token (SSR, no token in browser). Mutations: SvelteKit **form actions** that call the client, then `redirect` or return the result (progressive enhancement).
