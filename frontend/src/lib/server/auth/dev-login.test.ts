@@ -14,15 +14,18 @@ function post(fields: Record<string, string>) {
 	const set = vi.fn();
 	const event = {
 		request: new Request('http://c.test/login', { method: 'POST', body }),
-		cookies: { set },
+		cookies: { set, get: vi.fn(), delete: vi.fn() },
 		url: new URL('http://c.test/login')
 	};
-	return { set, run: () => actions.default!(event as never) };
+	return { set, run: () => actions.dev!(event as never) };
 }
 
 describe('dev login', () => {
-	it('shows the role picker', () => {
-		const out = load({ url: new URL('http://c.test/login'), locals: { session: null } } as never);
+	it('shows the role picker', async () => {
+		const out = await load({
+			url: new URL('http://c.test/login'),
+			locals: { session: null }
+		} as never);
 		expect(out).toMatchObject({ login: { provider: 'dev', ready: true, missing: [] } });
 	});
 

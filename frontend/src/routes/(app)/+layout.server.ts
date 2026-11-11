@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import { env as publicEnv } from '$env/dynamic/public';
 import { loginUrl } from '$lib/auth/redirect';
+import { authMode } from '$lib/server/auth';
 import { toPublicSession } from '$lib/server/auth/session';
 import type { LayoutServerLoad } from './$types';
 
@@ -20,10 +21,11 @@ function isfcAdminUrl(): string | null {
 // back to the page they asked for. Only the token-free view of the session reaches the browser.
 // `isfcMode` tells pages that tenants come from ISFC (HUB-485): they hide "Create tenant".
 export const load: LayoutServerLoad = ({ locals, url }) => {
-	if (!locals.session) redirect(303, loginUrl(url));
+	// A cookie that no longer verified (expired, or the key changed) says so on the login page.
+	if (!locals.session) redirect(303, loginUrl(url, { expired: locals.sessionEnded }));
 	return {
 		session: toPublicSession(locals.session),
-		isfcMode: publicEnv.PUBLIC_AUTH_MODE === 'isfc',
+		isfcMode: authMode() === 'isfc',
 		isfcAdminUrl: isfcAdminUrl()
 	};
 };

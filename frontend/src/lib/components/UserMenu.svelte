@@ -14,7 +14,7 @@
 		me: ApiResult<Me>;
 		/** Session identity, shown when `/me` failed. */
 		user: SessionUser;
-		provider: 'dev' | 'oidc';
+		provider: 'dev' | 'isfc';
 		expiresAt: string;
 	} = $props();
 

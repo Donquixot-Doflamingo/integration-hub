@@ -1,16 +1,22 @@
 import type { Handle, HandleFetch } from '@sveltejs/kit';
 import { adminApiBase } from '$lib/api/console';
 import { resolveBaseUrl } from '$lib/api/client';
-import { SESSION_COOKIE, decodeSession } from './session';
+import { clearSessionCookie, readSessionCookie } from './cookie';
+import { decodeSession } from './session';
 import { sessionSecret } from './index';
 
-/** Reads the session cookie into `event.locals.session`; drops a cookie that no longer verifies. */
+/**
+ * Reads the session cookie into `event.locals.session`. A cookie that no longer verifies (wrong
+ * key, tampered, expired) is dropped and `locals.sessionEnded` says so, so the login page can
+ * tell the operator the session ended instead of showing a bare sign-in.
+ */
 export const authenticate: Handle = async ({ event, resolve }) => {
-	const raw = event.cookies.get(SESSION_COOKIE);
+	const raw = readSessionCookie(event.cookies);
 	const secret = sessionSecret();
 	const session = raw && secret ? decodeSession(raw, secret) : null;
-	if (raw && !session) event.cookies.delete(SESSION_COOKIE, { path: '/' });
+	if (raw && !session) clearSessionCookie(event.cookies);
 	event.locals.session = session;
+	event.locals.sessionEnded = !!raw && !session;
 	return resolve(event);
 };
 

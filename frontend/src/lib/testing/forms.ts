@@ -24,10 +24,15 @@ const state: { wiring: Wiring | null; submissions: { action: string; form: FormD
 };
 
 export const testSession: Session = {
-	v: 1,
+	v: 2,
 	provider: 'dev',
 	user: { subject: 'dev|priya', name: 'Priya Sharma', email: null, roles: ['admin'], tenants: [] },
 	accessToken: null,
+	refreshToken: null,
+	isfcSessionId: null,
+	accessExp: null,
+	tenantId: null,
+	deviceId: null,
 	exp: Math.floor(Date.now() / 1000) + 3600
 };
 
@@ -84,7 +89,7 @@ export async function runAction(
 		locals: { session: opts.session === undefined ? testSession : opts.session },
 		url,
 		fetch,
-		cookies: { get: (k: string) => opts.cookies?.[k] }
+		cookies: { get: (k: string) => opts.cookies?.[k], set: () => {}, delete: () => {} }
 	};
 	try {
 		const out = await action(event as never);

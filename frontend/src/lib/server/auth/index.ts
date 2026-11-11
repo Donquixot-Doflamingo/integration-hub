@@ -2,42 +2,98 @@ import { randomBytes } from 'node:crypto';
 import { env as privateEnv } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { createDevProvider } from './dev';
-import { oidcProvider } from './oidc';
+import { isfcProvider } from './isfc-provider';
 import type { AuthProvider } from './provider';
 import type { AuthProviderId } from './session';
 
 export * from './session';
-export type { AuthProvider, LoginView, SignInResult } from './provider';
+export type { AuthProvider, LoginMethodView, LoginView, SignInResult } from './provider';
+
+/** Name of the setting that picks the provider (public: the page may show it, it holds no secret). */
+export const AUTH_MODE_ENV = 'PUBLIC_AUTH_MODE';
+
+export type ModeResolution =
+	| { mode: 'dev'; reason?: undefined }
+	| { mode: 'isfc'; reason?: undefined }
+	| { mode: null; reason: string };
 
 /**
- * Which provider this deployment uses: `dev` in mock builds (`HUB_API_MOCKING=true`) or when
- * `PUBLIC_AUTH_MODE=dev`; otherwise `oidc`.
+ * `PUBLIC_AUTH_MODE=dev|isfc` (HUB-495, AUTH_PLAN §5):
+ * - mock builds (`__API_MOCKING__`) always use `dev`: there is no identity provider and no backend;
+ * - `isfc` is the real login;
+ * - `dev` is refused unless `NODE_ENV=test`, so the role picker can never run in a real
+ *   deployment (it would let anyone choose their own role);
+ * - anything else, including unset, is refused: the setting must be chosen on purpose.
  */
-export function authMode(): AuthProviderId {
-	if (__API_MOCKING__ || publicEnv.PUBLIC_AUTH_MODE === 'dev') return 'dev';
-	return 'oidc';
+export function resolveAuthMode(opts: {
+	mocking: boolean;
+	mode: string | undefined;
+	nodeEnv: string | undefined;
+}): ModeResolution {
+	if (opts.mocking) return { mode: 'dev' };
+	const mode = opts.mode?.trim();
+	if (mode === 'isfc') return { mode: 'isfc' };
+	if (mode === 'dev') {
+		return opts.nodeEnv === 'test'
+			? { mode: 'dev' }
+			: {
+					mode: null,
+					reason:
+						'PUBLIC_AUTH_MODE=dev is only allowed in mock builds and tests: the role picker would let anyone pick a role. Use PUBLIC_AUTH_MODE=isfc.'
+				};
+	}
+	return {
+		mode: null,
+		reason: mode
+			? `PUBLIC_AUTH_MODE=${mode} is not a mode. Use isfc.`
+			: 'PUBLIC_AUTH_MODE is not set. Set it to isfc.'
+	};
+}
+
+function resolution(): ModeResolution {
+	return resolveAuthMode({
+		mocking: __API_MOCKING__,
+		mode: publicEnv.PUBLIC_AUTH_MODE,
+		nodeEnv: process.env.NODE_ENV
+	});
+}
+
+/** The provider this deployment uses, or null when the mode is refused or unset. */
+export function authMode(): AuthProviderId | null {
+	return resolution().mode;
 }
 
 export function authProvider(): AuthProvider {
-	if (authMode() === 'dev') {
-		// Against a running Hub (scripts/dev-up.sh) the admin's dev issuer mints the token (HUB-286).
+	const r = resolution();
+	if (r.mode === 'dev') {
+		// Against a running Hub the admin's dev issuer mints the token (HUB-286); tests only.
 		return createDevProvider({
 			issuer: __API_MOCKING__ ? undefined : privateEnv.HUB_DEV_OIDC_ISSUER
 		});
 	}
-	return oidcProvider({
-		issuer: privateEnv.HUB_OIDC_ISSUER,
-		clientId: privateEnv.HUB_OIDC_CLIENT_ID,
-		redirectUri: privateEnv.HUB_OIDC_REDIRECT_URI
-	});
+	if (r.mode === 'isfc') return isfcProvider();
+	const reason = r.reason;
+	return {
+		id: 'none',
+		describe: () => ({
+			provider: 'none',
+			ready: false,
+			notice: reason,
+			missing: [AUTH_MODE_ENV],
+			methods: []
+		}),
+		async signIn() {
+			return { ok: false, status: 503, message: reason };
+		}
+	};
 }
 
 let devSecret: string | undefined;
 
 /**
- * HMAC key for the session cookie: `HUB_SESSION_SECRET` (at least 32 characters). Dev mode without
- * one uses a random per-process key (sessions end when the server restarts). OIDC mode without one
- * returns null, and nobody can sign in (fail closed).
+ * Key for the sealed cookies: `HUB_SESSION_SECRET` (at least 32 characters). The dev provider
+ * (mock builds and tests only) without one uses a random per-process key (sessions end when the
+ * server restarts). Any other mode without one returns null, and nobody can sign in (fail closed).
  */
 export function sessionSecret(): string | null {
 	const configured = privateEnv.HUB_SESSION_SECRET;

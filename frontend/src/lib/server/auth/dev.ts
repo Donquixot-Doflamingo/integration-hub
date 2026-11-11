@@ -129,7 +129,8 @@ export function createDevProvider(opts: DevProviderOptions = {}): AuthProvider {
 			notice: issuer
 				? 'Development sign-in: choose a role. The Hub admin dev issuer signs your token; no password.'
 				: 'Development sign-in: choose a role. No identity provider is involved.',
-			missing: []
+			missing: [],
+			methods: []
 		}),
 		async signIn(form) {
 			const id = readIdentity(form);

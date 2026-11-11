@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(frontend)` · Add the ISFC login: Email OTP, Microsoft and the callback code exchange (HUB-491) · HUB-491 · F-24
+  - The login page lists Email OTP and Microsoft from ISFC's `/oauth2/method/integration-hub-console` (every other method is ignored); with `PUBLIC_AUTH_MODE=isfc` the dev role picker is gone
+  - A sign-in generates PKCE (S256), `state` and `nonce` on the server and keeps them in a 10-minute encrypted httpOnly cookie; `/auth/callback` checks `state`, exchanges the code at ISFC with the browser's `x-device-id` and User-Agent, sets the session and removes the code from the URL
+  - Sign-in errors have their own messages (`AS_FB_21` no tenant access, `AS_VE_34` email domain not allowed, `GW_007` session ended, `GW_015` no access to the tenant); nothing from the URL is echoed
+  - The HUB-282 OIDC stub is replaced; new settings `HUB_ISFC_AUTH_URL`, `HUB_ISFC_CLIENT_ID`, `HUB_ISFC_REDIRECT_URI`; the Microsoft button opens Hydra's flow in the browser with the server's PKCE challenge (HUB-493 adds its fake-provider tests)
 - 2026-11-11 · `feat(isfcsync)` · Sync ISFC caller keys into hashed rows and rebuild the gateway key map (HUB-483) · HUB-483 · F-24
   - Each reconcile reads the keys the Hub backend client issued, hashes them while decoding and stores them in `hub.isfc_caller_keys` (the plaintext is never stored or logged); a key that leaves ISFC's configuration becomes REVOKED
   - A key's tenants come from the tenants' interim `isfc_caller_clients` lists until ISFC-CR-1; permissions `HUB:INVOKE`, `HUB:DRY_RUN`, `HUB:REQUESTS_READ` map to the existing scopes

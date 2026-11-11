@@ -29,7 +29,7 @@ describe('createDevProvider with an issuer', () => {
 	it('mints a token for the chosen identity and keeps it in the session', async () => {
 		const f = issuer();
 		const p = createDevProvider({ issuer: `${ISSUER}/`, fetch: f });
-		expect(p.describe().notice).toMatch(/dev issuer signs your token/);
+		expect((await p.describe()).notice).toMatch(/dev issuer signs your token/);
 		const out = await p.signIn(
 			form({
 				role: 'tenant_viewer',
