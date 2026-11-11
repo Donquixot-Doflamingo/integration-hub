@@ -21,16 +21,34 @@ func (s *Server) registerTenants() {
 	s.handle("listTenants", RoleViewer, false, "GET /tenants", s.listTenants)
 	s.handle("createTenant", RoleAdmin, true, "POST /tenants", s.createTenant)
 	s.handle("getTenant", RoleTenantViewer, false, "GET /tenants/{tenant_id}", s.getTenant)
-	s.handle("updateTenant", RoleAdmin, true, "PATCH /tenants/{tenant_id}", s.updateTenant)
+	s.handle("updateTenant", RoleTenantAdmin, true, "PATCH /tenants/{tenant_id}", s.updateTenant)
 }
 
 func tenantPath(id string) string { return "tenants/" + id + ".yaml" }
 
+// tenantName is the display name: the Hub override if one is set, otherwise the ISFC name
+// (AUTH_PLAN §2.1), otherwise the id.
 func tenantName(t *registry.Tenant) string {
-	if t.DisplayName != "" {
+	switch {
+	case t.DisplayName != "":
 		return t.DisplayName
+	case t.ISFC != nil && t.ISFC.Name != "":
+		return t.ISFC.Name
 	}
 	return t.Tenant
+}
+
+// isfcView is Tenant.isfc: the read-only ISFC copy, null for a tenant that is not linked.
+func isfcView(t *registry.Tenant) any {
+	l := t.ISFC
+	if l == nil {
+		return nil
+	}
+	synced := any(nil)
+	if l.SyncedAt != nil {
+		synced = l.SyncedAt.UTC()
+	}
+	return map[string]any{"tenant_id": l.TenantID, "key": l.Key, "name": l.Name, "status": l.Status, "linked": l.Linked, "synced_at": synced}
 }
 
 // tenantCounts are integrations_owned and active_api_keys.
@@ -55,7 +73,8 @@ func (s *Server) tenantView(ctx context.Context, snap *registry.Snapshot, t *reg
 	return map[string]any{
 		"tenant_id": t.Tenant, "display_name": tenantName(t), "description": nullable(t.Description), "contact": nullable(t.Contact),
 		"rate_limit": map[string]any{"rps": t.RateLimit.RPS, "burst": t.RateLimit.Burst}, "disabled": t.Disabled,
-		"integrations_owned": owned, "active_api_keys": keys, "created_at": created, "updated_at": updated,
+		"integrations_owned": owned, "active_api_keys": keys, "setup": t.SetupState(), "isfc": isfcView(t),
+		"created_at": created, "updated_at": updated,
 	}
 }
 
@@ -78,7 +97,7 @@ func (s *Server) listTenants(w http.ResponseWriter, r *http.Request) {
 		_, updated := s.objectTimes(ctx, "tenant", id, snap.BuiltAt)
 		owned, keys := s.tenantCounts(snap, t)
 		return map[string]any{"tenant_id": id, "display_name": tenantName(t), "disabled": t.Disabled,
-			"integrations_owned": owned, "active_api_keys": keys, "updated_at": updated}
+			"integrations_owned": owned, "active_api_keys": keys, "setup": t.SetupState(), "isfc": isfcView(t), "updated_at": updated}
 	})
 	if err != nil {
 		s.fail(w, r, err)
@@ -143,6 +162,11 @@ func (s *Server) writeTenant(w http.ResponseWriter, r *http.Request, status int,
 }
 
 func (s *Server) createTenant(w http.ResponseWriter, r *http.Request) {
+	if s.d.TenantSource == "isfc" { // tenants are created and linked in ISFC (AUTH_PLAN §2.1)
+		s.fail(w, r, &Error{Status: http.StatusConflict, Code: CodeTenantManagedByISFC, Details: []Detail{},
+			Message: "Tenants are created in ISFC. Link the tenant to the Integration Hub client there, then run a sync."})
+		return
+	}
 	var body struct {
 		TenantID    string         `json:"tenant_id"`
 		DisplayName string         `json:"display_name"`
@@ -222,11 +246,20 @@ func (s *Server) updateTenant(w http.ResponseWriter, r *http.Request) {
 	}
 	for k := range body {
 		switch k {
-		case "display_name", "description", "contact", "rate_limit", "disabled", "reason":
+		case "display_name", "description", "contact", "rate_limit", "disabled", "setup", "reason":
 		default:
 			s.fail(w, r, badRequest("/"+k, "unknown field "+k))
 			return
 		}
+	}
+	p := principal(r)
+	if _, ok := body["disabled"]; ok && !p.Allows(RoleAdmin) { // a tenant_admin may not disable its tenant
+		s.fail(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: "Only a platform admin may change disabled"})
+		return
+	}
+	if v, ok := body["setup"]; ok && v != registry.SetupComplete { // finishing setup is one way: never back to pending
+		s.fail(w, r, badRequest("/setup", "setup can only be set to complete"))
+		return
 	}
 	pub, err := s.accessPublisher()
 	if err != nil {
@@ -236,7 +269,7 @@ func (s *Server) updateTenant(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("tenant_id")
 	res, err := pub.Edit(r.Context(), func(tr control.Tree, snap *registry.Snapshot) (control.Change, error) {
 		t, ok := snap.Tenants[id]
-		if !ok {
+		if !ok || !p.SeesTenant(id) {
 			return control.Change{}, notFound("Tenant")
 		}
 		if err := accessIfMatch(r, accessETag(t)); err != nil {
@@ -286,11 +319,16 @@ func (s *Server) updateTenant(w http.ResponseWriter, r *http.Request) {
 		if next.Disabled {
 			kv["disabled"] = true
 		}
+		if _, ok := body["setup"]; ok {
+			next.Setup = registry.SetupComplete
+			kv["setup"] = registry.SetupComplete
+		}
 		if err := accessSetKeys(tr, tenantPath(id), kv); err != nil {
 			return control.Change{}, err
 		}
 		view := func(t registry.Tenant) map[string]any {
-			return map[string]any{"display_name": t.DisplayName, "description": t.Description, "contact": t.Contact, "rate_limit": t.RateLimit, "disabled": t.Disabled}
+			return map[string]any{"display_name": t.DisplayName, "description": t.Description, "contact": t.Contact, "rate_limit": t.RateLimit,
+				"disabled": t.Disabled, "setup": t.SetupState()}
 		}
 		return control.Change{Actor: principal(r).Actor(), Action: "updateTenant", ObjectType: "tenant", ObjectID: id, Reason: reason,
 			Before: view(*t), After: view(next)}, nil

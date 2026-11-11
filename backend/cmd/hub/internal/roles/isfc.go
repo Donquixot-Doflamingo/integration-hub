@@ -2,13 +2,16 @@ package roles
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control/adminapi"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/isfc"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/isfcsync"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
@@ -139,4 +142,57 @@ func sleepCtx(ctx context.Context, d time.Duration) {
 	case <-ctx.Done():
 	case <-t.C:
 	}
+}
+
+// ISFCEventsPath is the signed events webhook on the admin listener (AUTH_PLAN §6.2, decision D8).
+const ISFCEventsPath = "/internal/isfc/events"
+
+// adminSyncer adapts the reconciler to the admin API's TenantSyncer ("Sync now").
+type adminSyncer struct{ rec *isfcsync.Reconciler }
+
+func (a adminSyncer) SyncAll(ctx context.Context, actor, reason string) (adminapi.SyncResult, error) {
+	return a.run(ctx, isfcsync.RunOptions{Actor: actor, Reason: reason})
+}
+
+func (a adminSyncer) SyncOne(ctx context.Context, actor, tenant, reason string) (adminapi.SyncResult, error) {
+	return a.run(ctx, isfcsync.RunOptions{Actor: actor, Reason: reason, Tenant: tenant})
+}
+
+func (a adminSyncer) run(ctx context.Context, opt isfcsync.RunOptions) (adminapi.SyncResult, error) {
+	res, err := a.rec.Run(ctx, isfcsync.TriggerManual, opt)
+	switch {
+	case errors.Is(err, isfcsync.ErrBusy):
+		return adminapi.SyncResult{}, adminapi.ErrSyncBusy
+	case errors.Is(err, isfcsync.ErrNotLinked):
+		return adminapi.SyncResult{}, adminapi.ErrSyncNotLinked
+	case err != nil:
+		return adminapi.SyncResult{}, err
+	}
+	return adminapi.SyncResult{ChangeID: res.ChangeID, Outcome: res.Outcome, Error: res.Error, Started: res.Started, Finished: res.Finished,
+		Created: res.Created, Updated: res.Updated + res.Enabled, Disabled: res.Disabled, Unchanged: res.Unchanged}, nil
+}
+
+// newISFCAdmin builds what the admin role adds in ISFC tenant mode: the "Sync now" syncer and, when
+// HUB_ISFC_EVENTS_SECRET is set, the signed events webhook, which only pings the leader worker
+// over Redis (it does not reconcile itself). Both are nil when tenants are not from ISFC.
+func newISFCAdmin(cfg Config, m *telemetry.Metrics, log *slog.Logger, secrets *telemetry.SecretSet, st *stores, reg *roleRegistry) (adminapi.TenantSyncer, http.Handler, error) {
+	if !cfg.ISFC.FromISFC() {
+		return nil, nil, nil
+	}
+	s, err := newISFCSync(cfg, m, log, secrets, st, reg, isfcsync.NewMetrics(m.Registry, nil))
+	if err != nil {
+		return nil, nil, err
+	}
+	var events http.Handler
+	if cfg.ISFC.EventsSecret != "" {
+		secrets.Add(string(cfg.ISFC.EventsSecret))
+		events = &isfcsync.WebhookHandler{Secret: []byte(cfg.ISFC.EventsSecret), Trigger: func(isfcsync.Event) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if err := st.rdb.Publish(ctx, ISFCSyncChannel, "event").Err(); err != nil {
+				log.WarnContext(ctx, "isfc event ping failed: the next scheduled reconcile picks the change up", slog.String("error", err.Error()))
+			}
+		}}
+	}
+	return adminSyncer{rec: s.rec}, events, nil
 }

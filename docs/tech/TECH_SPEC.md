@@ -532,7 +532,9 @@ Source: [AUTH_PLAN](AUTH_PLAN.md) §5, §6, §7, §8, [ADR-0026](adr/0026-isfc-i
 | `HUB_ISFC_PLATFORM_TENANT_ID` | unset; ISFC UUID of the platform tenant (D1) | admin, worker |
 | `HUB_ISFC_RECONCILE_INTERVAL` | `5m` | worker |
 | `HUB_ISFC_SYNC_DRY_RUN` | `false`; `true` logs what the reconciler would change | worker |
-| `HUB_ISFC_EVENTS_*` | unset; SQS queue settings for the event consumer (D8), behind an interface | worker |
+| `HUB_ISFC_EVENTS_SECRET` | unset; HMAC secret of the signed webhook `POST /internal/isfc/events` on the admin listener (headers `X-Isfc-Timestamp`, `X-Isfc-Signature: sha256=hex(HMAC(secret, ts + "." + body))`, 5 min tolerance). An event only pings the leader worker over Redis `hub:isfc:sync`; empty disables the route (HUB-484) | admin |
+| `HUB_ISFC_EVENTS_*` | unset; SQS queue settings for the event consumer (D8). Only the `isfcsync.Consumer` interface and a fake exist; the SQS implementation waits for ISFC-CR-2 | worker |
+| `HUB_ISFC_AUTH_CLIENT_ID`, `HUB_ISFC_BACKEND_CLIENT_ID` | `auth-service`; the Hub's own client id (default `HUB_ISFC_CLIENT_ID`) whose issued keys are the caller keys. Environment only, like every `HUB_ISFC_*` (no flags) | worker, admin |
 | `HUB_EDGE_LEGACY_KEYS` | `on`; `off` after the cut-off (ADR-0028) | gateway |
 
 Console (`frontend`, build or run time): `PUBLIC_AUTH_MODE` (`dev` in mock builds, otherwise **must be set**; `dev` is refused outside mock or test builds), `HUB_SESSION_SECRET` (AES-GCM key for the encrypted session), `HUB_ADMIN_UPSTREAM` (the ISFC gateway route for the Hub admin in `isfc` mode). Exact names of the `HUB_ISFC_*` variables are fixed by the implementing tickets (HUB-472 to HUB-484); this table is updated with them.

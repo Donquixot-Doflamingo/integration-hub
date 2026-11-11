@@ -77,14 +77,21 @@ func adminHandler(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 	} else {
 		log.WarnContext(ctx, "no credential store: rotation endpoints answer 500 until `hubctl creds init-key`", slog.String("error", err.Error()))
 	}
+	syncer, events, err := newISFCAdmin(cfg, m, log, secrets, st, reg) // "Sync now" and the events webhook (HUB-484)
+	if err != nil {
+		return nil, err
+	}
 	api := adminapi.New(adminapi.Deps{Pool: st.pg, Redis: st.rdb, Verifier: verifier, ISFC: isfc, Authz: decider, Secrets: secrets, Metrics: m.Registry, Publisher: pub, Rotator: rot, Archive: reg.archive,
 		Snapshot: reg.store.Snapshot, Log: log, Sealer: auditSealer(ctx, cfg, log), Upstream: probe,
-		CallbackHosts: cfg.CallbackHosts})
+		CallbackHosts: cfg.CallbackHosts, TenantSource: cfg.ISFC.TenantSource, Sync: syncer})
 	mux := http.NewServeMux()
 	mux.Handle(adminapi.Base+"/", api.Handler())
 	if dev != nil {
 		mux.Handle("/.well-known/openid-configuration", dev.Handler())
 		mux.Handle("/oidc/", dev.Handler())
+	}
+	if events != nil { // signed, outside /admin/v1: no bearer token, the HMAC is the credential
+		mux.Handle("POST "+ISFCEventsPath, events)
 	}
 	return mux, nil
 }

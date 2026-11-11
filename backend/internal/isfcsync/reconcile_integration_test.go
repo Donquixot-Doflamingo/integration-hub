@@ -6,12 +6,17 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/isfc"
@@ -248,4 +253,50 @@ func TestPGElectorHasOneLeader(t *testing.T) {
 		t.Fatalf("after release: %v %v", ok, err)
 	}
 	b.Release()
+}
+
+// TestEventsOnlyTriggerAndDuplicatesAreHarmless: a burst of duplicate, reordered events (one of them
+// announcing a change that is not visible yet) converges to ISFC's state in a handful of runs.
+func TestEventsOnlyTriggerAndDuplicatesAreHarmless(t *testing.T) {
+	r := newRig(t)
+	reg := prometheus.NewRegistry()
+	r.rec.Metrics = isfcsync.NewMetrics(reg, nil)
+	a := r.mock.AddTenant("AAA", "Tenant A")
+	r.mock.SetClientTenants(console, a)
+	loop := &isfcsync.Loop{Runner: r.rec, Elector: isfcsync.PGElector{Pool: r.pool}, Interval: time.Hour, Retry: 20 * time.Millisecond, Metrics: r.rec.Metrics}
+	fc := &isfcsync.FakeConsumer{}
+	ctx, cancel := context.WithCancel(t.Context())
+	var wg sync.WaitGroup
+	wg.Go(func() { loop.Run(ctx) })
+	wg.Go(func() { _ = isfcsync.Consume(ctx, fc, loop.Trigger) })
+	defer func() { cancel(); wg.Wait() }()
+
+	waitFor := func(what string, ok func(*registry.Snapshot) bool) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			if ok(r.snapshot()) {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Fatalf("timed out waiting for %s", what)
+	}
+	waitFor("the start-up run to create tenant A", func(s *registry.Snapshot) bool { _, ok := s.TenantByISFC(a); return ok })
+
+	b := r.mock.AddTenant("BBB", "Tenant B")
+	r.mock.SetClientTenants(console, a, b)
+	r.mock.SetTenantStatus(a, "INACTIVE")
+	for i := range 100 {
+		fc.Send(isfcsync.Event{EventID: fmt.Sprintf("e%d", i%4), Type: []string{"tenant.updated", "client.tenants_changed", "tenant.created"}[i%3], OccurredAt: time.Unix(int64(5000-i), 0)})
+	}
+	waitFor("B created and A disabled", func(s *registry.Snapshot) bool {
+		tb, okB := s.TenantByISFC(b)
+		ta, okA := s.TenantByISFC(a)
+		return okB && okA && tb.Setup == "pending" && ta.Disabled
+	})
+	time.Sleep(200 * time.Millisecond)
+	if n := testutil.ToFloat64(r.rec.Metrics.Runs.WithLabelValues(isfcsync.TriggerEvent, "ok")); n < 1 || n > 8 {
+		t.Fatalf("100 duplicate events caused %v event runs", n)
+	}
 }

@@ -60,6 +60,7 @@ type countingRunner struct {
 	mu       sync.Mutex
 	triggers []string
 	ran      chan struct{}
+	delay    time.Duration // how long a run takes: events arriving meanwhile collapse
 }
 
 func newRunner() *countingRunner { return &countingRunner{ran: make(chan struct{}, 100)} }
@@ -68,6 +69,7 @@ func (r *countingRunner) Run(_ context.Context, trigger string, _ RunOptions) (R
 	r.mu.Lock()
 	r.triggers = append(r.triggers, trigger)
 	r.mu.Unlock()
+	time.Sleep(r.delay)
 	r.ran <- struct{}{}
 	return Result{}, nil
 }
@@ -118,6 +120,7 @@ func TestOnlyTheLeaderReconciles(t *testing.T) {
 
 func TestTriggersCollapseAndDuplicatesAreHarmless(t *testing.T) {
 	r := newRunner()
+	r.delay = 50 * time.Millisecond
 	var mu sync.Mutex
 	var leader string
 	l := &Loop{Runner: r, Elector: &fakeElector{mu: &mu, leader: &leader, name: "a"}, Interval: time.Hour, Retry: time.Hour}

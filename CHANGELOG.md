@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(adminapi)` · Add Sync now for ISFC tenants, the events webhook and tenant setup in the admin API (HUB-484) · HUB-484 · F-25
+  - `syncTenants` and `syncTenant` run the reconciler on demand and answer with created, updated, disabled and unchanged counts; an unreachable ISFC is 200 `result: failed` and disables nothing; a second sync at the same time is 409; the change log names the operator
+  - With `HUB_TENANT_SOURCE=isfc`, `createTenant` answers 409 `tenant_managed_by_isfc`; tenants show `setup` and the read-only `isfc` copy, and the ISFC name is the display name unless the Hub sets one
+  - A `tenant_admin` finishes setup of its own tenant (`setup: complete`, one way; `disabled` stays platform-only); the signed webhook `POST /internal/isfc/events` (`HUB_ISFC_EVENTS_SECRET`) only triggers a reconcile, and duplicate or reordered events are harmless
 - 2026-11-11 · `docs(tech)` · List HUB_OPA_CLIENT_ID in the TECH_SPEC settings (HUB-477) · HUB-477 · F-24
   - TECH_SPEC section on environment variables gains `HUB_OPA_CLIENT_ID`, the client id whose id without `-` is the Rego package of the admin policies
 - 2026-11-11 · `test(frontend)` · Cover the Microsoft SSO round trip against a fake provider (HUB-493) · HUB-493 · F-24

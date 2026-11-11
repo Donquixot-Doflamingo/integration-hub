@@ -82,3 +82,10 @@ func TestNewISFCSyncIsOffByDefault(t *testing.T) {
 		t.Fatalf("local source built a reconciler: %v %v", s, err)
 	}
 }
+
+func TestNewISFCAdminIsOffByDefault(t *testing.T) {
+	syncer, events, err := newISFCAdmin(Config{}, nil, nil, nil, nil, nil)
+	if syncer != nil || events != nil || err != nil {
+		t.Fatalf("local source built sync routes: %v %v %v", syncer, events, err)
+	}
+}

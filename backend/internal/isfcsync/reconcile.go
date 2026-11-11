@@ -71,6 +71,9 @@ type Config struct {
 
 // RunOptions say what a run is for.
 type RunOptions struct {
+	// Actor is who the change log names: the operator of a manual run. Empty: "isfc-sync", the
+	// actor of event and scheduled runs.
+	Actor string
 	// Reason is the operator's reason of a manual run; it goes into the change log.
 	Reason string
 	// Tenant restricts the run to one Hub tenant id (syncTenant). It must be linked to ISFC.
@@ -247,8 +250,30 @@ func (r *Reconciler) change(res Result, trigger string, opt RunOptions, p Plan) 
 	if len(ids) == 1 {
 		oid = ids[0]
 	}
-	return control.Change{Actor: Actor, Action: "syncTenants", ObjectType: "tenant", ObjectID: oid, Reason: reason(res.RunID, trigger, opt),
+	return control.Change{Actor: actor(opt), Action: action(opt), ObjectType: "tenant", ObjectID: oid, Reason: reason(res.RunID, trigger, opt),
 		After: map[string]any{"run_id": res.RunID, "trigger": trigger, "created": created, "updated": updated, "disabled": disabled, "enabled": enabled, "tenants": ids}}
+}
+
+// action names the change-log row like the admin operation: syncTenant for one tenant.
+func action(opt RunOptions) string {
+	if opt.Tenant != "" {
+		return "syncTenant"
+	}
+	return "syncTenants"
+}
+
+func objectID(opt RunOptions) string {
+	if opt.Tenant != "" {
+		return opt.Tenant
+	}
+	return "isfc-sync"
+}
+
+func actor(opt RunOptions) string {
+	if opt.Actor != "" {
+		return opt.Actor
+	}
+	return Actor
 }
 
 func reason(runID, trigger string, opt RunOptions) string {
@@ -301,7 +326,7 @@ func (r *Reconciler) finish(ctx context.Context, trigger string, opt RunOptions,
 			slog.String("result", outcome), slog.String("error", res.Error))
 	}
 	if trigger == TriggerManual && res.ChangeID == "" && !res.DryRun && outcome != OutcomeFailed {
-		id, err := r.Store.RecordChange(ctx, control.Change{Actor: Actor, Action: "syncTenants", ObjectType: "tenant", ObjectID: "isfc-sync",
+		id, err := r.Store.RecordChange(ctx, control.Change{Actor: actor(opt), Action: action(opt), ObjectType: "tenant", ObjectID: objectID(opt),
 			Reason: reason(res.RunID, trigger, opt),
 			After:  map[string]any{"run_id": res.RunID, "trigger": trigger, "created": res.Created, "updated": res.Updated, "disabled": res.Disabled, "unchanged": res.Unchanged}})
 		if err != nil {
@@ -311,7 +336,7 @@ func (r *Reconciler) finish(ctx context.Context, trigger string, opt RunOptions,
 	}
 	if trigger == TriggerManual && res.ChangeID == "" && outcome == OutcomeFailed {
 		// The contract promises a change id on every answer; a failed manual run is logged too.
-		if id, err := r.Store.RecordChange(ctx, control.Change{Actor: Actor, Action: "syncTenants", ObjectType: "tenant", ObjectID: "isfc-sync",
+		if id, err := r.Store.RecordChange(ctx, control.Change{Actor: actor(opt), Action: action(opt), ObjectType: "tenant", ObjectID: objectID(opt),
 			Reason: reason(res.RunID, trigger, opt) + " (failed)", After: map[string]any{"run_id": res.RunID, "result": outcome}}); err == nil {
 			res.ChangeID = id
 		}

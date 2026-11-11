@@ -63,8 +63,12 @@ type Deps struct {
 	// CallbackHosts allowlists registrar endpoint hosts: "hooks.example.com" matches that host,
 	// ".example.com" any host under it. Empty: any public host (the SSRF guard still applies).
 	CallbackHosts []string
-	Log           *slog.Logger
-	Now           func() time.Time
+	// TenantSource is HUB_TENANT_SOURCE ("isfc": tenants come from ISFC and createTenant answers 409
+	// tenant_managed_by_isfc). Sync runs syncTenants and syncTenant (nil: they answer 409).
+	TenantSource string
+	Sync         TenantSyncer
+	Log          *slog.Logger
+	Now          func() time.Time
 }
 
 // Route is one registered operation.
