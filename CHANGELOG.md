@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(hubctl)` · Add hubctl tenants link and a report of Hub tenants with no ISFC link (HUB-498) · HUB-498 · F-25
+  - `hubctl tenants link <hub-id> <isfc-uuid>` writes `isfc.tenant_id` into an existing tenant file in the config tree (comments kept), so the ISFC sync updates that tenant instead of creating a duplicate; it refuses unknown tenants, bad UUIDs, a UUID linked elsewhere, and a relink without `-force`
+  - `hubctl tenants link --report` lists Hub tenants without an ISFC link (exit 3 when there are some)
+  - `hubctl apply` now refuses an ISFC-link change with a clear message: the admin API cannot carry it (a contract change request is open); HUB-498 is split, the console CSP is HUB-499
 - 2026-11-11 · `test(roles)` · Register the admin authz metric in the metrics catalogue tests (HUB-474) · HUB-474 · F-24
   - `TestAlertRulesUseExportedMetrics` knows `hub_admin_authz_duration_ms`, so the `HubAdminAuthzUnavailable` alert query is checked against an exported metric
 - 2026-11-11 · `chore(deploy)` · Add ISFC deployment manifests, the HubAdminAuthzUnavailable alert, the ISFC runbook and dev-up --isfc (HUB-497) · HUB-497 · F-24

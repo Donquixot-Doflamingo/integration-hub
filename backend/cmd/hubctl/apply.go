@@ -158,6 +158,10 @@ func planActions(changes []fileChange, live, local *registry.Config, reason stri
 			acts = append(acts, action{what: "update account " + parts[1], method: http.MethodPatch, path: "/accounts/" + url.PathEscape(parts[1]), body: body})
 		case len(parts) == 2 && parts[0] == "tenants" && c.Kind == "change":
 			a, b := live.Tenants[parts[1]], local.Tenants[parts[1]]
+			if !reflect.DeepEqual(a.ISFC, b.ISFC) {
+				refuse(c, "the ISFC link is not applied by the admin API (isfc is read-only on updateTenant): the sync writes it; hubctl tenants link edits the config tree only")
+				continue
+			}
 			if !reflect.DeepEqual(a.APIKeys, b.APIKeys) || a.Status != b.Status {
 				refuse(c, "API keys hold secrets: mint, rotate and revoke them through the admin API, not files")
 				continue

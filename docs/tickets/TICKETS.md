@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **339** · done: **204** · todo: **100** · other (in-progress/in-review/blocked): **35**
+Total tickets: **340** · done: **204** · todo: **99** · other (in-progress/in-review/blocked): **37**
 
 ## Epics
 
@@ -23,7 +23,7 @@ Total tickets: **339** · done: **204** · todo: **100** · other (in-progress/i
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
 | EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 25 | 0 |
-| EP-15 | ISFC identity, tenancy and authorization | post-M8 | F-24, F-25 | HUB-460–HUB-499 | 39 | 0 |
+| EP-15 | ISFC identity, tenancy and authorization | post-M8 | F-24, F-25 | HUB-460–HUB-499 | 40 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -4019,17 +4019,32 @@ Replaces the HUB-282 stub (HUB-282 closed as superseded).
 **Acceptance criteria**
 - [ ] Helm values (ISFC `deploy/charts/isfc-service`, `opa.enabled`, `opa.platform: integration-hub`); gateway route from §9; network policy: admin listener reachable only from the gateway and allow-listed automation; runbook `docs/runbooks/isfc-auth.md` (OPA down, sync stale, key revocation).
 
-### HUB-498 — Link existing tenants, console CSP, acceptance
+### HUB-498 — Link existing tenants (hubctl) and ISFC acceptance
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-482, HUB-495, HUB-497 · **Feature:** F-24, F-25 · **Stories:** —
-- **Branch:** `feat/HUB-498-isfc-cutover`
+- **Status:** in-review · **Depends on:** HUB-482, HUB-495, HUB-497 · **Feature:** F-24, F-25 · **Stories:** —
+- **Branch:** `phase-15/isfc-auth`
 
-Split into three tickets before starting (link tool / CSP / acceptance).
+Split on 2026-11-11 as the ticket asked: this ticket keeps the link tool; the console CSP is HUB-499. The end-to-end acceptance run is **blocked**: it needs QA with a real ISFC (Email OTP login, Microsoft step, real OPA, ISFC API keys), which tests and agents never call (AGENTS.md §3 rule 7). It stays an open box below and is not tracked as a separate ticket yet: open one when QA access exists.
+
+The link tool works on the tenant YAML tree (`-config-dir`), offline. The admin contract has no operation that writes `isfc.tenant_id` (`updateTenant` treats `isfc` as read-only), so `hubctl apply` refuses an ISFC-only change. Getting a link into a running Hub needs a contract change request (see the HUB-498 commit and the lead's report): a platform-admin operation such as `linkTenantToIsfc`.
 
 **Acceptance criteria**
-- [ ] `hubctl tenants link <hub-id> <isfc-uuid>` + unmatched report.
-- [ ] Console CSP (G12).
-- [ ] End-to-end acceptance on QA: Email OTP login, platform vs tenant scope, every policy denies without its permission, tenant auto-created on link, disabled on deactivate, caller with ISFC key invokes, revoked key refused. Summary with Deviations (AGENTS.md §10).
+- [x] `hubctl tenants link <hub-id> <isfc-uuid>` writes `isfc.tenant_id` (plus a seed key, name, status) into the existing tenant file, keeping comments; refuses an unknown tenant, a bad UUID, a UUID already linked elsewhere and a relink without `-force`. Table-driven unit tests, no real ISFC.
+- [x] `hubctl tenants link --report` lists Hub tenants with no ISFC link (exit 3 when there are some).
+- [ ] The link reaches a running Hub (needs the admin contract operation from the change request; today it applies to the config tree only).
+- [ ] End-to-end acceptance on QA (blocked, needs real ISFC): Email OTP login, platform vs tenant scope, every policy denies without its permission, tenant auto-created on link, disabled on deactivate, caller with ISFC key invokes, revoked key refused. Summary with Deviations (AGENTS.md §10).
+
+### HUB-499 — Console Content-Security-Policy (G12)
+- **Epic:** EP-15 · **Type:** feat · **Area:** frontend
+- **Status:** in-progress · **Depends on:** HUB-495 · **Feature:** F-24 · **Stories:** —
+- **Branch:** `phase-15/isfc-auth`
+
+Split from HUB-498. SECURITY §2.2 names a strict CSP as the control for console XSS; none was set (gap G12).
+
+**Acceptance criteria**
+- [ ] The console sends a nonce-based CSP (no `unsafe-inline` for scripts; `default-src 'self'`, `frame-ancestors 'none'`, `form-action` and `connect-src` limited to what the ISFC login needs).
+- [ ] `npm run check && npm test` and the mock Playwright e2e pass with no CSP violation in the browser console.
+- [ ] `docs/tech/SECURITY.md` describes the policy as implemented.
 
 ## Parallel tracks
 
