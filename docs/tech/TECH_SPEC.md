@@ -170,9 +170,11 @@ Packages may import only packages in **lower** layers (or the same layer where l
 | L4 | `upstream` | core, registry, creds, telemetry | resolve, transform, queue, audit (returns attempt facts; caller emits audit) |
 | L5 | `callbacks` | core, registry, audit, telemetry | delivery, edge |
 | L6 | `delivery` | core, registry, resolve, transform, creds, upstream, queue, sessions, audit, callbacks, telemetry | edge, webhooks, control |
-| L7 | `edge` | core, registry, resolve, transform, creds, upstream, queue, sessions, idempotency, audit, delivery (shared `Attempter`), telemetry | webhooks, control |
+| L7 | `edge` | core, registry, resolve, transform, creds, upstream, queue, sessions, idempotency, audit, delivery (shared `Attempter`), isfc (in-memory caller-key map), telemetry | webhooks, control |
 | L7 | `webhooks` | core, registry, transform, audit, callbacks, telemetry | edge, delivery, control |
 | L7 | `control` | core, registry, transform, resolve, creds, upstream, queue, audit, sessions, telemetry | edge, delivery, webhooks |
+| L3 | `isfc` | registry (key hashing), telemetry | everything else. ISFC auth-service client, the in-memory ISFC caller-key map the edge reads, and `isfc/mockisfc`, the fake ISFC every ISFC test uses (HUB-481, HUB-483) |
+| L8 | `isfcsync` | core, registry, control, isfc, telemetry | edge, delivery, webhooks. Tenant and caller-key reconciler of the worker role (HUB-482, F-25) |
 | test | `testkit` | nothing internal (core and telemetry allowed) | must never be imported by production code; only `cmd/mockvendor` and `_test.go` files use it |
 | bin | `cmd/*` | anything | — |
 | SDK | `pkg/hubclient` | **nothing** under `internal/` (public SDK; wire types are its own or generated) | internal/* |

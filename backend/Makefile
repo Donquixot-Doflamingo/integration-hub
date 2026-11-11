@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 GO ?= go
 BIN := bin
-CMDS := hub hubctl mockvendor hubmcp hubload
+CMDS := hub hubctl mockvendor hubmcp hubload mockisfc
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GOLANGCI_LINT_VERSION := 2.15.0
 COMPOSE := docker compose -f ../deploy/docker-compose.yml

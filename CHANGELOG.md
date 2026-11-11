@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(isfc)` · Add the ISFC auth-service client and the mockisfc fake (HUB-481) · HUB-481 · F-25
+  - `internal/isfc` fetches the Hub's own key with client credentials, refreshes it once on 401 or 403, and reads tenants, client metadata and client configuration with timeouts; API keys are hashed while decoded and no secret reaches an error or a log
+  - `cmd/mockisfc` (and `internal/isfc/mockisfc`) is a fake auth-service: tenants, client metadata, configuration, key fetch, client-credentials token mint and an RS256 JWKS; every ISFC test uses it, none calls a real ISFC
 - 2026-11-11 · `feat(adminapi)` · Map ISFC gateway identity to a Principal behind HUB_ADMIN_AUTH_MODE (HUB-473) · HUB-473 · F-24
   - `HUB_ADMIN_AUTH_MODE=jwt|isfc` (default `jwt`, unchanged): in `isfc` the admin verifies the Hydra token, cross-checks `x-isfc-sub-id` and `x-isfc-client-id` against it and maps the roles of `x-isfc-sub-attrs` (platform tenant: HUB_ADMIN/EDITOR/VIEWER; linked tenant: HUB_TENANT_ADMIN/VIEWER); `ISFC_ADMIN` is not a Hub admin
   - New role `tenant_admin` (admin ⊃ tenant_admin ⊃ tenant_viewer; editor and viewer do not satisfy it); malformed attributes or an unknown tenant give no roles (403)
