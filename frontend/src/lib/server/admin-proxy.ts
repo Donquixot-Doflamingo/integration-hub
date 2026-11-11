@@ -1,6 +1,8 @@
 import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { DEFAULT_ADMIN_API_BASE, ETAG_HEADER, REQUEST_ID_HEADER } from '$lib/api/client';
+import { isTokenRefusal, normalizeGatewayError } from './gateway-errors';
+import { refreshForEvent } from './auth/refresh';
 
 /**
  * Same-origin proxy for the admin API (HUB-286, ADR-0022).
@@ -58,11 +60,21 @@ function plain(status: number, message: string): Response {
 	});
 }
 
+/** Optional behaviour of one forward (ISFC sessions): see `proxyAdminApi`. */
+export interface ForwardHooks {
+	/**
+	 * Called once when the gateway says the access token is no longer valid (`GW_002`, `GW_003`,
+	 * `GW_004`). Returns the refreshed token, or null when the session could not be refreshed.
+	 */
+	refreshToken?: () => Promise<string | null>;
+}
+
 /** Forwards one admin API request upstream with the session token. Never throws. */
 export async function forwardToAdmin(
 	event: Pick<RequestEvent, 'request' | 'url' | 'isSubRequest' | 'locals'>,
 	upstream: string,
-	fetchImpl: typeof fetch = fetch
+	fetchImpl: typeof fetch = fetch,
+	hooks: ForwardHooks = {}
 ): Promise<Response> {
 	if (!sameOrigin(event)) return plain(403, 'Cross-origin admin API call refused.');
 	const { request, url } = event;
@@ -76,21 +88,40 @@ export async function forwardToAdmin(
 	if (token) headers.set('authorization', `Bearer ${token}`);
 
 	const body = SAFE_METHODS.has(request.method) ? undefined : await request.arrayBuffer();
-	let res: Response;
-	try {
-		res = await fetchImpl(`${upstream}${url.pathname}${url.search}`, {
+	const send = () =>
+		fetchImpl(`${upstream}${url.pathname}${url.search}`, {
 			method: request.method,
 			headers,
 			body,
 			redirect: 'manual',
 			signal: request.signal
 		});
+	let res: Response;
+	try {
+		res = await send();
+		// ISFC: the access token expired or was refused. Refresh it once and repeat the call (the
+		// body was read above, so it can be sent again). A second refusal is the answer.
+		if (res.status === 401 && hooks.refreshToken) {
+			const refused = await res
+				.clone()
+				.json()
+				.then((b: unknown) => isTokenRefusal(res.status, b))
+				.catch(() => false);
+			if (refused) {
+				const fresh = await hooks.refreshToken();
+				if (fresh) {
+					headers.set('authorization', `Bearer ${fresh}`);
+					res = await send();
+				}
+			}
+		}
 	} catch {
 		return plain(
 			502,
 			`The admin API at ${upstream} did not answer. Is the hub admin role running?`
 		);
 	}
+	res = await normalizeGatewayError(res);
 	const out = new Headers();
 	for (const name of RESPONSE_HEADERS) {
 		const v = res.headers.get(name);
@@ -109,7 +140,14 @@ export const proxyAdminApi: Handle = async ({ event, resolve }) => {
 	if (!isAdminPath(event.url.pathname)) return resolve(event);
 	const upstream = adminUpstream();
 	if (!upstream) return resolve(event);
-	return forwardToAdmin(event, upstream);
+	// ISFC sessions refresh once on a gateway "token no longer valid" (HUB-492); the new cookie is
+	// set on this response, so the browser keeps the rotated tokens.
+	return forwardToAdmin(event, upstream, fetch, {
+		refreshToken: async () => {
+			const outcome = await refreshForEvent(event, { fetch: event.fetch, force: true });
+			return outcome === 'refreshed' ? (event.locals.session?.accessToken ?? null) : null;
+		}
+	});
 };
 
 /**

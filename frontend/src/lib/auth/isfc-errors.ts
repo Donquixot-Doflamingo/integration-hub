@@ -9,6 +9,15 @@ export const ISFC_ERROR_MESSAGES: Record<string, string> = {
 		'You have no tenant access in the Integration Hub console. Ask a platform admin to add you to a tenant in ISFC.',
 	AS_VE_34: 'Your email domain is not allowed to sign in to the Integration Hub console.',
 	// api-gateway
+	GW_001: 'You are not signed in. Sign in again.',
+	GW_002: 'Your sign-in has expired. Sign in again.',
+	GW_003: 'Your sign-in is not valid. Sign in again.',
+	GW_004: 'Your sign-in is not valid. Sign in again.',
+	GW_005: 'ISFC could not check your access right now. Try again in a moment.',
+	GW_008: 'There is no session. Sign in again.',
+	GW_010: 'ISFC refused this request for your account.',
+	GW_014: 'Too many requests. Wait a moment and try again.',
+	GW_016: 'The selected tenant is not valid. Pick one from the list.',
 	GW_007: 'Your ISFC session has ended. Sign in again.',
 	GW_015:
 		'You have no access to that tenant in the Integration Hub. Pick another tenant, or ask for access in ISFC.',

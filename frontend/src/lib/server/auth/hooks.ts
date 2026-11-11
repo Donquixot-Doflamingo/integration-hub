@@ -3,10 +3,11 @@ import { adminApiBase } from '$lib/api/console';
 import { resolveBaseUrl } from '$lib/api/client';
 import { clearSessionCookie, readSessionCookie } from './cookie';
 import { decodeSession } from './session';
+import { refreshForEvent } from './refresh';
 import { sessionSecret } from './index';
 
 /**
- * Reads the session cookie into `event.locals.session`. A cookie that no longer verifies (wrong
+ * Reads the session cookie into `event.locals.session`, refreshing the ISFC tokens when due. A cookie that no longer verifies (wrong
  * key, tampered, expired) is dropped and `locals.sessionEnded` says so, so the login page can
  * tell the operator the session ended instead of showing a bare sign-in.
  */
@@ -17,6 +18,9 @@ export const authenticate: Handle = async ({ event, resolve }) => {
 	if (raw && !session) clearSessionCookie(event.cookies);
 	event.locals.session = session;
 	event.locals.sessionEnded = !!raw && !session;
+	// An ISFC access token about to expire is refreshed before anything uses it (single flight).
+	// If ISFC refuses the refresh token the session is over: the page goes to /login?expired=1.
+	await refreshForEvent(event, { fetch: event.fetch });
 	return resolve(event);
 };
 

@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(frontend)` · Refresh ISFC tokens once, end expired sessions at /login?expired=1 and log out at ISFC (HUB-492) · HUB-492 · F-24
+  - The session cookie is AES-GCM encrypted (key `HUB_SESSION_SECRET`): the access and refresh tokens cannot be read from its value, and a login cookie cannot be used as a session
+  - The server refreshes the access token a minute before it expires, or once after the gateway refuses it, single-flight per refresh token; a 409 from ISFC is retried once after 300 ms; the rotated tokens go into the new cookie
+  - When ISFC refuses the refresh token the session ends and the page goes to `/login?expired=1`; an ISFC outage does not sign anyone out
+  - Sign out calls `POST {ISFC_AUTH}/api/v1/logout` and always clears the cookie; ISFC gateway errors (`GW_015`, `GW_007`, ...) reach the pages as readable Hub errors
 - 2026-11-11 · `test(authz)` · Add the 76 admin policies and the Rego RBAC matrix tests (HUB-479) · HUB-479 · F-24
   - `authz-policies/integration-hub/policies/admin/v1/` has one generated policy per operationId (76 of hub-admin 2.1.0); the generated `tests/rbac_matrix_test.rego` checks every operation against every role and API key, `tests/entry_test.rego` covers scopes, clients, `ISFC_ADMIN` (not an admin), shadowing and keys
   - `opa test` runs 94 tests, all passing (executed in docker with opa 1.4.2); an integration test runs the Go ISFC-mode matrix and the machine matrix through the real policies in a real OPA container
