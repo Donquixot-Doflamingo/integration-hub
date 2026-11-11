@@ -453,3 +453,32 @@ func BenchmarkBegin(b *testing.B) {
 		})
 	}
 }
+
+// A response too large to store must not free the key: a retry would call the vendor again.
+func TestMarkCompletedKeepsTheKeyAfterAnOversizeResponse(t *testing.T) {
+	s, rdb, prefix := newStore(t, idempotency.Options{MaxBytes: 1024})
+	ctx := t.Context()
+	k := key("tomb-1")
+	if got, _ := s.Begin(ctx, k, "bh", "req_A"); got.State != idempotency.Fresh {
+		t.Fatalf("Begin = %+v", got)
+	}
+	if err := s.Complete(ctx, k, "req_A", idempotency.Response{Status: 200, Body: bytes.Repeat([]byte("x"), 2048)}); !errors.Is(err, idempotency.ErrTooLarge) {
+		t.Fatalf("Complete = %v", err)
+	}
+	if err := s.MarkCompleted(ctx, k, "req_A"); err != nil {
+		t.Fatalf("MarkCompleted: %v", err)
+	}
+	if err := s.MarkCompleted(ctx, k, "req_B"); !errors.Is(err, idempotency.ErrNotOwner) {
+		t.Fatalf("MarkCompleted by another request = %v, want ErrNotOwner", err)
+	}
+	got, err := s.Begin(ctx, k, "bh", "req_B")
+	if err != nil || got.State != idempotency.CompletedNotStored || got.RequestID != "req_A" {
+		t.Fatalf("retry Begin = %+v, %v; want CompletedNotStored of req_A", got, err)
+	}
+	if got, _ := s.Begin(ctx, k, "other", "req_C"); got.State != idempotency.Conflict {
+		t.Fatalf("different body = %+v, want Conflict", got)
+	}
+	if ttl := rdb.PTTL(ctx, onlyKey(t, rdb, prefix)).Val(); ttl < time.Hour {
+		t.Fatalf("tombstone ttl = %v, want the rest of the 24 h record TTL, not the lease", ttl)
+	}
+}

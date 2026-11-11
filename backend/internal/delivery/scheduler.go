@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/sessions"
 )
@@ -44,6 +45,7 @@ type Scheduler struct {
 	SampleEvery time.Duration
 
 	leader prometheus.Gauge
+	expiry expiryTracker
 }
 
 // RegisterMetrics adds scheduler_leader (1 on the leader) to reg.
@@ -144,21 +146,11 @@ func (s *Scheduler) setLeader(v float64) {
 
 // expire finishes every waiting envelope past its TTL as expired (request.expired callback).
 func (s *Scheduler) expire(ctx context.Context) {
-	for {
-		envs, err := s.Queue.DueExpiries(ctx, s.DB, 100)
-		if err != nil {
-			s.Log.ErrorContext(ctx, "expiry sweep failed", slog.String("error", err.Error()))
-			return
-		}
-		for _, env := range envs {
-			if err := s.Transitions.Expire(ctx, env, "", env.Attempt); err != nil && !IsLost(err) {
-				s.Log.ErrorContext(ctx, "expire failed", slog.String("request_id", env.RequestID), slog.String("error", err.Error()))
-			}
-		}
-		if len(envs) < 100 {
-			return
-		}
-	}
+	s.expiry.run(ctx, s.Log, s.now,
+		func(ctx context.Context, n int) ([]core.Envelope, error) { return s.Queue.DueExpiries(ctx, s.DB, n) },
+		func(ctx context.Context, env core.Envelope) error {
+			return s.Transitions.Expire(ctx, env, "", env.Attempt)
+		})
 }
 
 func (s *Scheduler) sweepSessions(ctx context.Context) {

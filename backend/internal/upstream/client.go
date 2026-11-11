@@ -87,7 +87,7 @@ func (o *Options) withDefaults() {
 		o.TracerProvider = noop.NewTracerProvider()
 	}
 	if o.Dialer == nil {
-		o.Dialer = &net.Dialer{KeepAlive: 30 * time.Second}
+		o.Dialer = &resolvingDialer{base: &net.Dialer{KeepAlive: 30 * time.Second}}
 	}
 	if o.UserAgent == "" {
 		o.UserAgent = "integration-hub"

@@ -1,10 +1,14 @@
 package telemetry
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -78,11 +82,18 @@ func (s *SecretSet) rebuild() {
 		s.replacer.Store(nil)
 		return
 	}
-	vs := make([]string, 0, len(s.values))
+	// Every encoded form of every value, longest first: a form that contains another (a secret
+	// inside a longer secret, a JSON-escaped form over its raw one) is replaced whole.
+	seen := map[string]struct{}{}
+	var vs []string
 	for v := range s.values {
-		vs = append(vs, v)
+		for _, f := range SecretForms(v) {
+			if _, dup := seen[f]; !dup {
+				seen[f] = struct{}{}
+				vs = append(vs, f)
+			}
+		}
 	}
-	// Longest first, so a secret that contains another is replaced whole.
 	slices.SortFunc(vs, func(a, b string) int { return cmp.Or(cmp.Compare(len(b), len(a)), strings.Compare(a, b)) })
 	pairs := make([]string, 0, 2*len(vs))
 	for _, v := range vs {
@@ -102,10 +113,50 @@ func (s *SecretSet) Redact(str string) string {
 	return str
 }
 
-// deniedKeys are attribute keys whose value is always redacted, whatever it is.
+// SecretForms returns v followed by every encoded form of it that can reach stored or logged
+// text: JSON-escaped with and without Go's HTML escaping (& < >), URL query- and path-escaped,
+// and base64 (standard and URL alphabets, padded and not). Each form is also JSON-escaped,
+// because URLs and headers travel inside JSON strings. A derived form identical to v is
+// omitted, and so is one shorter than the minimum secret length, which would match ordinary
+// text. A Basic credential "user:secret" is not derived here: callers register that token as
+// its own value.
+func SecretForms(v string) []string {
+	out := []string{v}
+	add := func(f string) {
+		if len(f) >= minSecretLen && !slices.Contains(out, f) {
+			out = append(out, f)
+		}
+	}
+	q := url.QueryEscape(v)
+	bases := []string{v, q, url.PathEscape(v), strings.ReplaceAll(q, "+", "%20")}
+	for _, e := range []*base64.Encoding{base64.StdEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.RawURLEncoding} {
+		bases = append(bases, e.EncodeToString([]byte(v)))
+	}
+	for _, b := range bases {
+		add(b)
+		add(jsonEscaped(b, true))
+		add(jsonEscaped(b, false))
+	}
+	return out
+}
+
+// jsonEscaped is the inside of the JSON string literal of s.
+func jsonEscaped(s string, html bool) string {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(html)
+	_ = enc.Encode(s) // a string always encodes
+	b := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
+	return string(b[1 : len(b)-1])
+}
+
+// deniedKeys are attribute keys whose value is always redacted, whatever it is. Keys are
+// compared lower-cased, exactly as written (no hyphen/underscore folding), so both spellings of
+// the header-like ones are listed.
 var deniedKeys = map[string]bool{
 	"authorization": true, "proxy_authorization": true, "password": true, "passcode": true,
 	"api_key": true, "secret": true, "token": true, "cookie": true, "set_cookie": true,
+	"x-api-key": true, "x_api_key": true, "access_token": true, "client_secret": true, "refresh_token": true,
 }
 
 // RedactHandler is a slog.Handler that redacts registered secret values from the message

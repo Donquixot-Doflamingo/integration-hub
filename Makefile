@@ -2,7 +2,7 @@
 NODE22 := /opt/homebrew/opt/node@22/bin
 export PATH := $(NODE22):$(PATH)
 
-.PHONY: doctor up down dev-up dev-down check backend-check frontend-check contracts-check contracts-tools contracts-version-check
+.PHONY: doctor up down dev-up dev-down test-scripts check backend-check frontend-check contracts-check contracts-tools contracts-version-check
 
 doctor:
 	$(MAKE) -C backend doctor
@@ -21,6 +21,10 @@ dev-up:
 
 dev-down:
 	scripts/dev-down.sh
+
+# Hermetic shell tests for the dev tooling (HUB-456): own listeners and temp dirs, never the dev stack.
+test-scripts:
+	@for t in scripts/tests/*_test.sh; do echo "== $$t"; bash $$t || exit 1; done
 
 backend-check:
 	$(MAKE) -C backend lint test

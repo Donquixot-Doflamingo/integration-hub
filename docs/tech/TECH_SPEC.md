@@ -701,8 +701,8 @@ Prerequisites (installed via HUB-012; versions in §3): Go ≥ 1.26, Node 22 LTS
 ### 14.1 docker compose (`deploy/docker-compose.yml`)
 | Service | Image | Profile | Port |
 | --- | --- | --- | --- |
-| `postgres` | `postgres:16.15-alpine` (pinned digest) | default | 5432 |
-| `redis` | `redis:7.4.12-alpine` (pinned digest) | default | 6379 |
+| `postgres` | `postgres:16.15-alpine` (pinned digest) | default | 5432 (published on 127.0.0.1 only) |
+| `redis` | `redis:7.4.12-alpine` (pinned digest) | default | 6379 (published on 127.0.0.1 only) |
 | `mockvendor` | built from `backend/` | `apps` | 8099 / 8098 |
 | `hub-gateway`, `hub-worker`, `hub-scheduler`, `hub-admin` | built from `backend/` | `apps` | 8080 / 8081 |
 | `oidc-stub` | dev OIDC issuer (see §17.3) | `auth` | 8085 |

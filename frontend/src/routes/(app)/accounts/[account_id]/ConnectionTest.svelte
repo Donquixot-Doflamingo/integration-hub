@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { enhance } from '$app/forms';
+	import { applyAction, enhance } from '$app/forms';
 	import { fromPlainError, type ActionFailureData, type ActionSuccessData } from '$lib/api/actions';
 	import { HubApiError } from '$lib/api/errors';
 	import type { ConnectionTestResult } from '$lib/api/types';
@@ -59,6 +59,8 @@
 								code: 'VALIDATION_FAILED',
 								message: Object.values(d?.fields ?? {})[0] ?? 'The test could not run.'
 							});
+				} else if (r.type === 'redirect') {
+					await applyAction(r);
 				} else {
 					error = new HubApiError({
 						status: r.type === 'error' ? (r.status ?? 500) : 500,

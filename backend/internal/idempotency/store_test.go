@@ -43,7 +43,7 @@ type fakeRedis struct {
 var _ redis.Scripter = (*fakeRedis)(nil)
 
 func scriptName(sha string) string {
-	for name, src := range map[string]string{"begin": beginSrc, "complete": completeSrc, "release": releaseSrc} {
+	for name, src := range map[string]string{"begin": beginSrc, "complete": completeSrc, "release": releaseSrc, "tombstone": tombstoneSrc} {
 		if sha == redis.NewScript(src).Hash() {
 			return name
 		}
@@ -127,6 +127,8 @@ func TestBeginMapsReplies(t *testing.T) {
 		{name: "free key is fresh", reply: []any{"f"}, want: Outcome{State: Fresh}},
 		{name: "running request is in progress", reply: []any{"p", "req_1"}, want: Outcome{State: InProgress, RequestID: "req_1"}},
 		{name: "different body is a conflict", reply: []any{"x", "req_1"}, want: Outcome{State: Conflict, RequestID: "req_1"}},
+		{name: "completed without a stored response", reply: []any{"t", "req_1"}, want: Outcome{State: CompletedNotStored, RequestID: "req_1"}},
+		{name: "short tombstone reply is unavailable", reply: []any{"t"}, wantErr: ErrUnavailable},
 		{
 			name:  "completed 200 replays status headers and body",
 			reply: []any{"c", "req_1", "200", `{"Content-Type":"application/json","X-Hub-Served-By":"primary"}`, `{"ok":true}`},
@@ -426,8 +428,8 @@ func TestWarmLoadsScripts(t *testing.T) {
 	if err := s.Warm(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if n := f.callCount(); n != 3 {
-		t.Fatalf("%d script loads, want 3", n)
+	if n := f.callCount(); n != 4 {
+		t.Fatalf("%d script loads, want 4", n)
 	}
 	d, _, _ := newTestStore(t, nil, errors.New("connection refused"), Options{})
 	if err := d.Warm(t.Context()); !errors.Is(err, ErrUnavailable) {
@@ -522,9 +524,41 @@ func scrapeMetrics(t *testing.T, m *telemetry.Metrics) string {
 
 func TestStateString(t *testing.T) {
 	t.Parallel()
-	for s, want := range map[State]string{Fresh: "fresh", InProgress: "in_progress", Completed: "completed", Conflict: "conflict", 0: "invalid"} {
+	for s, want := range map[State]string{Fresh: "fresh", InProgress: "in_progress", Completed: "completed", Conflict: "conflict", CompletedNotStored: "completed_not_stored", 0: "invalid"} {
 		if s.String() != want {
 			t.Errorf("%d.String() = %q, want %q", s, s.String(), want)
 		}
+	}
+}
+
+func TestMarkCompletedMapsReplies(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		reply   any
+		err     error
+		wantErr error
+	}{
+		{name: "owner marks the record", reply: int64(1)},
+		{name: "expired lease is not owner", reply: int64(0), wantErr: ErrNotOwner},
+		{name: "other owner is not owner", reply: int64(-1), wantErr: ErrNotOwner},
+		{name: "redis down is unavailable", err: errors.New("connection refused"), wantErr: ErrUnavailable},
+		{name: "unexpected reply is unavailable", reply: int64(3), wantErr: ErrUnavailable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s, f, _ := newTestStore(t, tt.reply, tt.err, Options{})
+			err := s.MarkCompleted(t.Context(), testKey, "req_1")
+			if !errors.Is(err, tt.wantErr) || (tt.wantErr == nil && err != nil) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if c := f.lastCall(t); c.script != "tombstone" || c.args[0] != "req_1" {
+				t.Fatalf("call = %+v", c)
+			}
+		})
+	}
+	if err := (&Store{}).MarkCompleted(t.Context(), Key{}, "req_1"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("empty key: %v", err)
 	}
 }

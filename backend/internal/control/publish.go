@@ -13,6 +13,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.yaml.in/yaml/v3"
 
@@ -33,6 +34,9 @@ type Publisher struct {
 	// retire guard (DESIGN §6.5); may be nil (counts as zero).
 	Guard func(ctx context.Context, snap *registry.Snapshot, account string) (pinned, sessions int, err error)
 	Now   func() time.Time
+	// SimulateRace, when set, is asked inside the archive transaction whether another replica
+	// archived a version in between (true makes the edit re-run, like a lost race). Tests only.
+	SimulateRace func() bool
 }
 
 // Result is a published change.
@@ -76,6 +80,9 @@ type tree struct {
 	files map[string][]byte
 	// base is the snapshot the edit started from (account draining compares against it).
 	base *registry.Snapshot
+	// baseVersion is its archive version (0: the bootstrap tree, nothing archived yet). The
+	// commit refuses to write over a newer archive version (errStaleBase).
+	baseVersion int64
 }
 
 func (t *tree) sources() registry.Sources {
@@ -97,11 +104,19 @@ func (p *Publisher) Current(ctx context.Context) (registry.Sources, *registry.Sn
 }
 
 func (p *Publisher) load(ctx context.Context) (*tree, *registry.Snapshot, error) {
-	src, snap, err := p.Current(ctx)
+	var baseVersion int64
+	snap, src, v, err := p.Archive.Latest(ctx, p.now())
+	switch {
+	case errors.Is(err, ErrNoSnapshot):
+		src = p.Bootstrap
+		snap, err = registry.Build(src, p.now())
+	case err == nil:
+		baseVersion = v
+	}
 	if err != nil {
 		return nil, nil, err
 	}
-	t := &tree{files: map[string][]byte{}, base: snap}
+	t := &tree{files: map[string][]byte{}, base: snap, baseVersion: baseVersion}
 	err = fs.WalkDir(src.Config, ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -113,8 +128,13 @@ func (p *Publisher) load(ctx context.Context) (*tree, *registry.Snapshot, error)
 	return t, snap, err
 }
 
+// errStaleBase: another writer archived a version after this edit loaded its tree.
+var errStaleBase = errors.New("publish: the archive moved on while the edit was prepared")
+
 // commit validates the edited tree (full snapshot build), applies the account lifecycle,
-// archives it with a change-log row and notifies nodes.
+// archives it with its change-log row in ONE transaction and notifies nodes. When the tree is
+// identical to the archived one nothing is archived, and the change row carries no
+// snapshot_version (it did not publish that snapshot).
 func (p *Publisher) commit(ctx context.Context, t *tree, ch Change) (Result, error) {
 	if strings.TrimSpace(ch.Actor) == "" {
 		return Result{}, ErrMissingAuthor
@@ -135,39 +155,64 @@ func (p *Publisher) commit(ctx context.Context, t *tree, ch Change) (Result, err
 			return Result{}, err
 		}
 	}
-	v, _, err := p.Archive.Publish(ctx, t.sources(), snap, ch.Actor, ch.Reason)
+	var id string
+	v, published, err := p.Archive.PublishWith(ctx, t.sources(), snap, ch.Actor, ch.Reason, PublishOptions{
+		Guard: func(latest Meta, exists bool) error {
+			if !exists {
+				latest.Version = 0
+			}
+			if latest.Version != t.baseVersion || (p.SimulateRace != nil && p.SimulateRace()) {
+				return errStaleBase
+			}
+			return nil
+		},
+		InTx: func(ctx context.Context, tx pgx.Tx, version int64, published bool) error {
+			if published {
+				ch.SnapshotVersion = version
+			}
+			var err error
+			id, err = RecordChange(ctx, tx, ch)
+			return err
+		},
+	})
 	if err != nil {
 		return Result{}, err
 	}
-	ch.SnapshotVersion = v
-	id, err := RecordChange(ctx, p.Pool, ch)
-	if err != nil {
-		return Result{}, err
-	}
-	if p.Notify != nil {
+	if published && p.Notify != nil {
 		p.Notify(ctx, v)
 	}
 	return Result{ArchiveVersion: v, ChangeID: id, Snapshot: snap, Drained: drained}, nil
 }
 
-// publishLock serialises every edit of the config tree across admin replicas: load → commit of
-// one change must not interleave with another (both would start from the same version).
-const publishLock = 0x6875622d7075626c // "hub-publ"
+// publishSem serialises edits of the config tree inside this process (load → commit of one
+// change must not interleave with another: both would start from the same version). It holds no
+// database connection while a writer waits: the previous pg_advisory_lock held one pool
+// connection per waiter and starved the holder of the connection its own transaction needs
+// (HUB-451). Across replicas the archive transaction's advisory lock plus the base-version check
+// in commit give the same guarantee: the loser re-runs its edit on the newer tree.
+var publishSem = make(chan struct{}, 1)
 
-// locked runs fn while holding the publish advisory lock on a dedicated connection.
+// maxEditAttempts bounds the re-runs after a cross-replica race.
+const maxEditAttempts = 5
+
+// locked runs fn (an edit: load, change, commit) serialised in this process. fn is re-run when
+// another replica archived a version in between, so it must be repeatable.
 func (p *Publisher) locked(ctx context.Context, fn func() (Result, error)) (Result, error) {
-	conn, err := p.Pool.Acquire(ctx)
-	if err != nil {
-		return Result{}, fmt.Errorf("publish lock: %w", err)
+	select {
+	case publishSem <- struct{}{}:
+	case <-ctx.Done():
+		return Result{}, fmt.Errorf("publish lock: %w", ctx.Err())
 	}
-	defer conn.Release()
-	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, int64(publishLock)); err != nil {
-		return Result{}, fmt.Errorf("publish lock: %w", err)
+	defer func() { <-publishSem }()
+	for attempt := 1; ; attempt++ {
+		res, err := fn()
+		if !errors.Is(err, errStaleBase) {
+			return res, err
+		}
+		if attempt == maxEditAttempts {
+			return Result{}, fmt.Errorf("%w: gave up after %d attempts: %w", ErrConflict, attempt, err)
+		}
 	}
-	defer func() {
-		_, _ = conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, int64(publishLock))
-	}()
-	return fn()
 }
 
 // PublishVersion publishes spec (an integration version document) as the next immutable

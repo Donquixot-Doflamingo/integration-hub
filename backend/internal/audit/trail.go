@@ -2,12 +2,15 @@ package audit
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 )
 
 // MaxInlinePayload is the largest payload stored in request_events; the rest is truncated
@@ -55,11 +58,7 @@ func NewTrail(o TrailOptions) *Trail {
 		o.Masker = NewMasker(nil)
 	}
 	t := &Trail{o: o}
-	for _, s := range o.Secrets {
-		if s != "" {
-			t.secrets = append(t.secrets, []byte(s))
-		}
-	}
+	t.AddSecrets(o.Secrets...)
 	if o.Policy == registry.PayloadMasked {
 		t.mask = newMasking(o.Masker, o.Tenant, o.PII, o.Canonical)
 	}
@@ -70,10 +69,18 @@ func NewTrail(o TrailOptions) *Trail {
 // recorded before the call are unaffected: add secrets before the stage that may carry them.
 func (t *Trail) AddSecrets(values ...string) {
 	for _, s := range values {
-		if s != "" {
-			t.secrets = append(t.secrets, []byte(s))
+		if s == "" {
+			continue
+		}
+		// Every encoded form that can appear in stored text (JSON, URL, base64), not just the raw bytes.
+		for _, f := range telemetry.SecretForms(s) {
+			if !slices.ContainsFunc(t.secrets, func(o []byte) bool { return string(o) == f }) {
+				t.secrets = append(t.secrets, []byte(f))
+			}
 		}
 	}
+	// Longest first: a form that contains another is replaced whole, not in pieces.
+	slices.SortStableFunc(t.secrets, func(a, b []byte) int { return cmp.Compare(len(b), len(a)) })
 }
 
 // Policy is the payload policy the trail applies (recorded on the requests row).

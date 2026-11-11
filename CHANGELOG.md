@@ -6,6 +6,161 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-08 · `test(scripts)` · Add make test-scripts and close out HUB-456 (HUB-456) · HUB-456 · F-23
+  - `make test-scripts` runs the hermetic shell tests for the dev tooling; HUB-456 is in review with what was and was not run
+- 2026-11-08 · `fix(examples)` · Keep the examples off the dev stack's ports and processes (HUB-456) · HUB-456 · F-23
+  - The examples' mockvendor now defaults to 127.0.0.1:18099/18098, so running an example while `make dev-up` is up can no longer reset or reprogram the dev stack's mockvendor
+  - An example refuses to start, naming the port and the likely culprit, when a port it needs is already listening; it programs only the mockvendor it started, and fails when its own process died instead of trusting another listener's healthz
+  - Pid files under .demo/<example>/pids let the next run stop a gateway or mockvendor left by a SIGKILLed run (after checking the command line)
+  - The example output prints a non-JSON response body (an HTML 502) as received instead of nothing
+- 2026-11-08 · `fix(scripts)` · Harden the dev stack scripts against stale state and failed starts (HUB-456) · HUB-456 · F-23
+  - dev-up and dev-down only trust a pid file when the process behind it runs the Hub binary; a pid reused after a reboot is no longer reported as "already running" and is never signalled
+  - A dev-up that fails after starting processes stops them again; the "port already in use" message names scripts/dev-down.sh and the stale pid files it removed
+  - DEV_STATE may be relative; the dev key and encrypted credentials are recreated together when either is missing or unreadable
+  - dev-up warns, with the log to read and DEV_RESET=1, when a hub role logs "archived snapshot not loaded"
+- 2026-11-08 · `fix(deploy)` · Publish the compose Postgres and Redis on loopback only (HUB-456) · HUB-456 · F-23
+  - The dev Postgres (hub/hub) and Redis (no password) are no longer reachable from the LAN on Linux hosts; local tools still connect on localhost
+- 2026-11-08 · `docs(tickets)` · Open HUB-456 for the dev tooling fixes (HUB-456) · HUB-456 · F-23
+  - HUB-456 lists nine reviewer findings on the dev stack scripts, the examples' shared helper and the compose ports, each with an acceptance criterion
+- 2026-11-08 · `fix(frontend)` · Keep the seconds of a time bound when Search is pressed (HUB-455) · HUB-455 · F-19
+  - Opening /requests?from=...T09:00:30Z and pressing Search no longer moves the bound to 09:00:00; the time fields accept seconds (requests, DLQ, change log)
+
+- 2026-11-08 · `fix(frontend)` · Order request timeline events by time, not by seq (HUB-455) · HUB-455 · F-19
+  - A replayed request's events (which restart seq) no longer land between the original events or show negative gaps; seq only breaks ties
+
+- 2026-11-08 · `fix(frontend)` · Stop showing a wrong page number after 20 pages (HUB-455) · HUB-455 · F-19
+  - Past page 21 the pager says "This page" instead of a wrong "Page 21", and Previous no longer jumps back to the first page when the back trail ends (it steps back one page at a time and is hidden where the trail ends)
+
+- 2026-11-08 · `fix(frontend)` · Count again before a DLQ replay, as purge already does (HUB-455) · HUB-455 · F-19
+  - A replay is refused ("The selection changed: N now match, not M") when the matching dead letters changed since the operator counted them, instead of moving more than they confirmed
+
+- 2026-11-08 · `fix(frontend)` · Let an operator clear an account's daily quota (HUB-455) · HUB-455 · F-19
+  - Emptying the daily quota field now sends `daily: null` instead of answering "Nothing changed"
+  - Emptying the rate field explains that the rate cannot be removed (the contract has no null for it)
+
+- 2026-11-08 · `fix(frontend)` · Show failed lookups and read every vendor in the authoring pickers (HUB-455) · HUB-455 · F-19
+  - The publish editor and the transformer forms list which lookups failed (vendors, accounts, transformers, a vendor's endpoints) instead of showing empty pickers with no message
+  - Endpoint suggestions now cover all vendors, not only the first 25
+
+- 2026-11-08 · `fix(frontend)` · Mark filter values that do not fit instead of silently dropping them (HUB-455) · HUB-455 · F-19
+  - Requests, DLQ and change-log filters: a value such as tenant "ab" or "my tenant" now shows a message under its field (and a summary alert) and the search does not run, instead of listing everything with no chip
+  - In the DLQ this keeps replay and purge counts tied to exactly the filters the operator sees
+
+- 2026-11-08 · `fix(frontend)` · Let an expired session sign in again from error panels and action callbacks (HUB-455) · HUB-455 · F-19
+  - An "Unauthorized" error panel offers a Sign in link (back to the same page) instead of a Retry that repeats the 401
+  - Goldens, dry run, connection test, DLQ count, draft save and the authoring forms follow the action's sign-in redirect instead of showing "Try again" forever
+  - "Run publish checks" shows a message when the checks cannot run, instead of silently returning to normal
+
+- 2026-11-08 · `fix(frontend)` · Show a retry panel instead of tenant-viewer pages when /me fails (HUB-455) · HUB-455 · F-19
+  - An admin whose /me call failed (not 401) no longer sees Accounts and Vendors as forbidden, an empty Tenants list or false 404s: every page shows "Could not load your access" with Retry, and one successful retry reloads all data
+  - Unknown access is never treated as a tenant viewer
+
+- 2026-11-08 · `fix(roles)` · Exit when a listener fails and let a second signal terminate (HUB-454) · HUB-454 · F-07
+  - A gateway, worker, scheduler or admin whose listener dies at runtime now exits with code 1 instead of hanging on its background loops
+  - After the first SIGINT/SIGTERM the default signal handling is restored, so a second one ends the process while it drains
+- 2026-11-08 · `fix(roles)` · Re-open the credential key and file on every refresh (HUB-454) · HUB-454 · F-07
+  - Running `hubctl creds init-key` or `creds set` after the gateway or worker started now takes effect on the next refresh, without a restart
+  - A missing key or secrets file warns once (naming the path) and is logged again only when it appears
+  - The rotation ping logs `credentials reloaded after rotation` at Info only when the cache serves the accounts; otherwise a warning
+- 2026-11-08 · `fix(creds)` · Back off credential reloads and treat a missing secrets file as empty (HUB-454) · HUB-454 · F-07
+  - Cache misses on a broken credential source no longer reload and log once per second: reloads back off up to the refresh period, one warning per state change and one line on recovery
+  - A missing secrets file is an empty store (accounts report no credentials on first use) instead of a warning every 150 s; `credentials decrypted` and `creds_decrypts_total` only count loads that decrypted something
+- 2026-11-08 · `docs(tickets)` · File HUB-454 credential cache and run lifecycle fixes (HUB-454) · HUB-454 · F-07
+  - HUB-454 records the credential cache noise, the stale loader and the listener-failure hang, with acceptance criteria
+- 2026-11-08 · `docs(tickets)` · Mark HUB-453 in review with its follow-ups (HUB-453) · HUB-453 · F-09
+  - HUB-453 is in review; two follow-ups are noted on it (a flaky queue test, and the audit row of a queue-level poison dead letter)
+- 2026-11-08 · `fix(delivery)` · Hold the drain while the shared breaker state is unreadable (HUB-453) · HUB-453 · F-12
+  - When Redis is down the scheduler no longer releases parked requests at the full account rate against a vendor whose circuit may be open; it holds them and resumes when the state is readable
+  - New gauge `drain_held{reason}` and logs `drain.held` / `drain.resumed`
+- 2026-11-08 · `fix(delivery)` · Do not count a credential cache miss as a delivery attempt (HUB-453) · HUB-453 · F-09
+  - A credential outage no longer dead-letters healthy requests: a request whose account credentials are not in the cache waits 5 s without using up its retry schedule
+  - New metric `worker_credentials_deferred_total{account}` and WARN log `worker.credentials_unavailable` show it to operators
+- 2026-11-08 · `fix(delivery)` · Stop the expiry sweep from spinning on envelopes it cannot expire (HUB-453) · HUB-453 · F-09
+  - An expired envelope whose expiry keeps failing no longer makes the scheduler loop forever (probes and drain starve) or block newer expiries behind it
+  - Such an envelope is logged once and skipped with a backoff of 1 s doubling to 10 min; the sweep also stops when the scheduler is shutting down
+- 2026-11-08 · `fix(queue)` · Dead-letter an undecodable envelope instead of losing its whole batch (HUB-453) · HUB-453 · F-09
+  - One stored envelope that no longer decodes (an older format) no longer makes a claim discard every envelope claimed with it; it is dead-lettered as `poison` and the rest of the batch is delivered
+  - The scheduler's expiry pass no longer stops at such an envelope: it is dead-lettered and the other expired envelopes are listed
+  - The move is logged once with the request id (`queue.poison_envelope`), never the payload
+- 2026-11-08 · `fix(callbacks)` · Hold deliveries for a disabled endpoint without using attempts (HUB-452) · HUB-452 · F-11
+  - Callbacks for a disabled endpoint wait 5 minutes between looks and keep their full retry schedule, so they are no longer dead-lettered after about 20 hours and are delivered once the endpoint is enabled again
+  - A hold writes no `callback.delivered` audit event because nothing is sent
+- 2026-11-08 · `fix(callbacks)` · Never claim more callback rows than free senders (HUB-452) · HUB-452 · F-11
+  - After a dispatcher crash the callback sender no longer runs more than `Senders` attempts at once, leaks goroutines, or hangs at shutdown
+- 2026-11-08 · `fix(callbacks)` · Resolve A and AAAA separately in the SSRF guard (HUB-452) · HUB-452 · F-11
+  - A callback no longer times out on a network whose resolver never answers AAAA, or when an unreachable AAAA address sorts first; the other family is used at once
+  - Each address gets an equal share of the remaining 5 s; every resolved address is still vetted and refused when private, loopback, link-local, metadata, mapped or NAT64
+  - Registering a callback URL no longer waits for the silent address family
+- 2026-11-08 · `docs(tickets)` · File HUB-452 for three callbacks defects (HUB-452) · HUB-452 · F-11
+  - Backlog entry for the SSRF guard AAAA stall, the over-claiming dispatcher and disabled endpoints burning retries
+- 2026-11-08 · `fix(adminapi)` · Make Edit callbacks with credential side effects safe to re-run (HUB-451) · HUB-451 · F-16
+  - Creating an account or registrar endpoint that loses a race with another admin replica no longer fails with a spurious 409 on its own credentials; the secret is stored once and removed only if the whole request fails
+  - Rotating a registrar secret after a lost race keeps the previous secret as the overlap secret instead of the request's own first write
+  - Updating a vendor after a lost race no longer merges stale metadata from the first attempt
+- 2026-11-08 · `perf(adminapi)` · Reuse the cached snapshot for tenants, accounts, API keys and registrar reads (HUB-451) · HUB-451 · F-16
+  - These reads no longer unzip and rebuild the whole snapshot on every call, and the created/updated time of an object older than the change log stays fixed instead of moving to "now"
+  - Docs: the F-16 failure modes and OBSERVABILITY describe the HUB-451 behaviour
+- 2026-11-08 · `fix(adminapi)` · Refuse an empty owner, malformed cursors and repeated key scopes (HUB-451) · HUB-451 · F-16
+  - Creating an integration without an owner_tenant is a 400 at /owner_tenant instead of a 201 integration that could never be published
+  - A pagination cursor that does not belong to the list is a 400 on every list (change log, integrations, versions, accounts, tenants, vendors, snapshots, breakers); clients no longer loop on page 1
+  - An API key created with repeated scopes stores each scope once, in the order given
+- 2026-11-08 · `fix(control)` · Explain an unloadable snapshot, and re-check the archive under its lock before overwriting it (HUB-451) · HUB-451 · F-16
+  - When the newest archived snapshot cannot be loaded, the admin API answers 500 INTERNAL_ERROR naming the snapshot version and the cause (meta.snapshot_version, meta.cause) instead of a bare "Internal error"
+  - Nodes log one ERROR naming the version and the way out, repeated at most every 10 minutes, instead of a warning every 5 s
+  - The config-directory archive and the legacy upgrade check the latest version under the archive lock, so a console publish that lands in between is no longer overwritten by an older tree
+- 2026-11-08 · `fix(control)` · Publish without the connection deadlock, and archive the snapshot with its change in one transaction (HUB-451) · HUB-451 · F-16
+  - Many concurrent admin edits no longer hang every admin database call: waiting for the edit lock holds no pool connection
+  - A snapshot and its change-log row commit together; a failed change-log write no longer leaves a live snapshot without a change
+  - A publish that changes nothing records its change without a snapshot version, so the snapshot list no longer credits it to the wrong author
+  - Edits that raced with another replica re-run on the newer tree instead of overwriting it
+- 2026-11-08 · `docs(tickets)` · Close HUB-450 acceptance criteria (HUB-450) · HUB-450 · F-05
+  - HUB-450 is in review; the requests_read scope and the integration enumeration findings are left for a contract change request
+- 2026-11-08 · `fix(edge)` · Never release an Idempotency-Key after a successful call (HUB-450) · HUB-450 · F-10
+  - A 200 whose response is too large to store for replay (or whose store write fails) no longer frees the key: a retry answers 409 IDEMPOTENCY_CONFLICT (reason completed_not_stored) instead of calling the vendor a second time
+  - Failed requests still release the key so a retry runs fresh
+- 2026-11-08 · `feat(idempotency)` · Keep a key whose response could not be stored (HUB-450) · HUB-450 · F-10
+  - The store can mark a key "completed, response not stored"; a later Begin with the same body answers CompletedNotStored until the record's TTL instead of letting the request run again
+  - New counters: idempotency_hits_total{result="completed_not_stored"} and idempotency_writes_total{op="mark_completed"}
+- 2026-11-08 · `fix(edge)` · Refuse a request body with anything after the JSON object (HUB-450) · HUB-450 · F-05
+  - A body like `{"a":1}]` or `{"a":1} }` now answers 400 VALIDATION_FAILED instead of passing and failing later as a retryable 500 persist_failed; trailing whitespace is still accepted
+- 2026-11-08 · `docs(tickets)` · File HUB-450 for the request edge findings (HUB-450) · HUB-450 · F-05
+  - HUB-450 records four edge findings: the released idempotency key, trailing JSON junk, the unchecked requests_read scope and integration enumeration; the last two are reported for a contract change
+- 2026-11-08 · `docs(features)` · Document the delivery correctness rules and close out HUB-449 (HUB-449) · HUB-449 · F-09
+  - F-09 lists the replay expiry and terminal callback rules next to the redirect and truncation ones; the ticket is in review
+- 2026-11-08 · `fix(delivery)` · Fail an attempt whose vendor response was cut at the size cap (HUB-449) · HUB-449 · F-09
+  - A vendor body over 4 MiB is no longer returned as a result (a garbage string in pass-through, res.text for a transformer): the attempt fails as UPSTREAM_REJECTED, reason response_truncated, and is not retried
+  - The circuit breaker does not count it as an outage
+- 2026-11-08 · `fix(transform)` · Fail an attempt whose vendor answer is an unfollowed redirect (HUB-449) · HUB-449 · F-09
+  - A vendor 3xx (except 304) with no matching errors: rule is UPSTREAM_REJECTED, not retried, for pass-through and response transformers; before, it mapped to a success with an empty or garbage result
+  - The caller's message never carries the redirect's Location
+- 2026-11-08 · `fix(callbacks)` · Never let a callback payload problem undo a request's terminal transition (HUB-449) · HUB-449 · F-11
+  - request.completed carries any JSON result (array, string, number, null for an empty 204 body), as the contract already allows; before, only objects were accepted
+  - A callback whose payload is unusable is skipped, logged and counted (callback_enqueue_skipped_total{reason="invalid_payload"}); the request stays succeeded and the vendor is no longer called again
+- 2026-11-08 · `fix(queue)` · Carry the new expiry into a replayed dead letter's envelope (HUB-449) · HUB-449 · F-09
+  - A dead letter replayed after its original TTL is now delivered; before, the worker read the old expiry from the envelope and expired it without an attempt
+- 2026-11-08 · `docs(tickets)` · File HUB-449 for the delivery correctness fixes (HUB-449) · HUB-449 · F-09
+  - The backlog lists the four delivery bugs found in review: replay expiry, callback payload shape, truncated and redirect responses
+- 2026-11-08 · `fix(audit)` · Redact encoded forms of secrets in audit and logs (HUB-448) · HUB-448 · F-18
+  - A credential with characters such as & < > " \ + % or non-ASCII letters is masked in stored request.transformed and vendor.responded payloads, in dead-letter last_vendor_request / last_vendor_response and in log lines, also when it appears JSON-escaped, percent-encoded in a URL or base64-encoded
+  - The log denylist also masks x-api-key, access_token, client_secret and refresh_token attributes
+- 2026-11-08 · `docs(tickets)` · File HUB-448, escaped secrets leak into audit (HUB-448) · HUB-448 · F-18
+  - The backlog records the confirmed leak of credentials with JSON or URL special characters, with its acceptance criteria
+- 2026-11-08 · `fix(transform)` · Make format() work on JSON numbers and fail on a bad layout (HUB-447) · HUB-447 · F-04
+  - `format("%d", req.n)` and `format("%s", req.n)` print `3` for a JSON number 3, and `format("%v", 1000000.0)` prints `1000000`; `%.2f` still prints a float
+  - A layout with a bad verb, a wrong argument type or the wrong number of arguments fails the call as TRANSFORM_FAILED instead of sending `%!d(float64=3)` to the vendor
+- 2026-11-08 · `fix(transform)` · Fail a transformer run that produces NaN or Inf (HUB-447) · HUB-447 · F-04
+  - A division by zero in a mapping (`req.a / req.b`) now fails the call as TRANSFORM_FAILED before it leaves the Hub; it no longer breaks body encoding or sends "+Inf" as a header or query value
+- 2026-11-08 · `fix(transform)` · Use the full ISO 4217 minor-unit table in currencyMinor (HUB-447) · HUB-447 · F-04
+  - `currencyMinor("1000", "XOF")` is 1000, not 100000: every zero-decimal currency (XOF, XAF, XPF, UGX, ISK and others), the 3-digit ones and CLF/UYW (4) are known
+  - An unknown currency code is refused instead of being assumed to have 2 decimals
+- 2026-11-08 · `fix(transform)` · Reject $env so creds cannot bypass the placement rule (HUB-447) · HUB-447 · F-04
+  - `$env.creds.token` and `$env["creds"].token` no longer compile: credentials cannot reach the vendor body or a session, and a header can no longer carry one without being treated as a credential
+- 2026-11-08 · `fix(upstream)` · Satisfy the linters on the dialer tests and drop an unused helper (HUB-446) · HUB-446 · F-23
+  - No user-visible change: CI lint is green again (errcheck, noctx, unused)
+- 2026-11-08 · `fix(upstream)` · Connect to vendors without waiting for a silent AAAA lookup (HUB-446) · HUB-446 · F-23
+  - Calls to a vendor no longer time out on networks whose DNS never answers IPv6 queries; each resolved address gets an equal share of the connect timeout
+- 2026-11-08 · `fix(registry)` · Upgrade old snapshots whose response transformer still names an endpoint (HUB-446) · HUB-446 · F-23
+  - A dev or staging database that holds a snapshot archived before ADR-0023 loads again instead of answering 500 on every admin call
 - 2026-11-08 · `fix(examples)` · Make the agify example work live from India (HUB-445) · HUB-445 · F-23
   - The names are joined with a space ("harsh Khandelwal"), which agify answers with an age; joined without one it answered age null
   - The endpoint allows 10 s to connect, enough for slow DNS plus TLS to agify

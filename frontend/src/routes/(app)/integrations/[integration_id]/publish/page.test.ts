@@ -6,7 +6,7 @@ import { contractMocks } from '$lib/api/mocks/contract.gen';
 import { mockError, mockOperation, mswPath } from '$lib/api/mocks/handlers';
 import { server } from '$lib/api/mocks/server';
 import { accessFromRoles, type Access } from '$lib/auth/roles';
-import { runAction, useActions } from '$lib/testing/forms';
+import { applied, runAction, useActions } from '$lib/testing/forms';
 import Page from './+page.svelte';
 import { load } from './+page';
 import { actions } from './+page.server';
@@ -244,6 +244,43 @@ describe('publish page', () => {
 		expect(checks).toHaveTextContent('Weights total 100');
 		expect(checks).toHaveTextContent('Fail');
 		expect(screen.getByRole('button', { name: 'Publish v8' })).toBeDisabled();
+	});
+
+	it('applies the sign-in redirect when the session expired during the checks (HUB-455)', async () => {
+		useActions(actions, { params: { integration_id: ID }, session: null });
+		const { user } = await renderPublish();
+		await user.click(screen.getByRole('button', { name: 'Run publish checks on v8' }));
+		await waitFor(() => expect(applied).toHaveLength(1));
+		expect(applied[0]).toMatchObject({ type: 'redirect', status: 303 });
+	});
+
+	it('shows a message when the publish checks cannot run at all (HUB-455)', async () => {
+		useActions(
+			{
+				...actions,
+				validate: () => {
+					throw new Error('boom');
+				}
+			},
+			{ params: { integration_id: ID } }
+		);
+		const { user } = await renderPublish();
+		await user.click(screen.getByRole('button', { name: 'Run publish checks on v8' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent(/could not run the publish checks/);
+	});
+
+	it('says which lookups failed instead of leaving pickers silently empty (HUB-455)', async () => {
+		server.use(mockError('listVendors', 500), mockError('listAccounts', 403));
+		const data = (await load({
+			fetch,
+			url: new URL(`http://console.test/integrations/${ID}/publish`),
+			params: { integration_id: ID },
+			parent: async () => ({ access: accessFromRoles(['editor']) })
+		} as never)) as { lookups: Promise<{ problems: string[] }> };
+		const { problems } = await data.lookups;
+		expect(problems).toHaveLength(2);
+		expect(problems[0]).toMatch(/vendors/);
+		expect(problems[1]).toMatch(/accounts/);
 	});
 
 	it('is read only for viewers', async () => {

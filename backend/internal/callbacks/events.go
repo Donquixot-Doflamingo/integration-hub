@@ -131,9 +131,14 @@ func (*DeliveryStatus) Type() EventType { return EventDeliveryStatus }
 func ts(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
 
 func (d *Completed) wire(*Event) (any, error) {
+	// The result is any JSON value (contracts/schemas/events/request.completed.json, ADR-0023): a
+	// pass-through body can be an array, a string or, for an empty one (204), null.
 	r := bytes.TrimSpace(d.Result)
-	if len(r) == 0 || r[0] != '{' || !json.Valid(r) {
-		return nil, errors.New("completed: result must be a JSON object")
+	if len(r) == 0 {
+		r = []byte("null")
+	}
+	if !json.Valid(r) {
+		return nil, errors.New("completed: result must be valid JSON")
 	}
 	if d.Attempts < 1 || d.CompletedAt.IsZero() {
 		return nil, errors.New("completed: attempts ≥ 1 and completed_at are required")

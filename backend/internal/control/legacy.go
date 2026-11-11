@@ -28,7 +28,7 @@ const LegacyUpgradeReason = "ADR-0023: capabilities folded into integration oper
 // drafts it could not upgrade (no operations and no known capability: they stay as they are and
 // fail validation until edited).
 func UpgradeLegacyArchive(ctx context.Context, pool *pgxpool.Pool, a *Archive, now time.Time) (version int64, skipped []string, err error) {
-	snap, src, _, err := a.Latest(ctx, now)
+	snap, src, loaded, err := a.Latest(ctx, now)
 	if errors.Is(err, ErrNoSnapshot) {
 		return 0, nil, nil
 	}
@@ -47,7 +47,19 @@ func UpgradeLegacyArchive(ctx context.Context, pool *pgxpool.Pool, a *Archive, n
 			return 0, nil, err
 		}
 	}
-	v, _, err := a.Publish(ctx, src, snap, meta.Author, LegacyUpgradeReason)
+	// Re-checked under the archive lock: a publish that landed since the load must not be
+	// replaced by the older tree (the next boot sees the newer, current-layout snapshot).
+	v, _, err := a.PublishWith(ctx, src, snap, meta.Author, LegacyUpgradeReason, PublishOptions{
+		Guard: func(latest Meta, exists bool) error {
+			if !exists || latest.Version != loaded {
+				return fmt.Errorf("%w: the archive moved from v%d to v%d", ErrArchiveRefused, loaded, latest.Version)
+			}
+			return nil
+		},
+	})
+	if errors.Is(err, ErrArchiveRefused) {
+		return 0, skipped, nil
+	}
 	if err != nil {
 		return 0, skipped, fmt.Errorf("re-archive the upgraded snapshot: %w", err)
 	}

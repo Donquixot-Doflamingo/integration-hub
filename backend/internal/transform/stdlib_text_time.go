@@ -41,7 +41,11 @@ func asInt(fn string, v any) (int64, error) {
 	return 0, fmt.Errorf("%s: want a number, got %T", fn, v)
 }
 
-// format(layout, args...) formats like fmt.Sprintf.
+// format(layout, args...) formats like fmt.Sprintf with two differences that make it fit JSON data
+// (HUB-447). JSON numbers are float64, so a whole-number float (3, 1000000) is formatted as an
+// integer: %d, %x and %v print 3 and 1000000, %s prints "3"; %f, %e and %g keep the float. And a
+// layout that does not fit its arguments (bad verb, wrong type, too few or too many arguments)
+// is an error, never the "%!d(float64=3)" text Sprintf would put in the vendor request.
 func fnFormat(params ...any) (any, error) {
 	if len(params) < 1 {
 		return nil, argErr("format", "(layout, args...)", params)
@@ -50,7 +54,84 @@ func fnFormat(params ...any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return fmt.Sprintf(layout, params[1:]...), nil
+	args := params[1:]
+	verbs, scanned := formatVerbs(layout)
+	candidates := [][]any{wholeFloatsToInts(args, verbs, scanned)}
+	if !scanned {
+		candidates = append(candidates, args) // *, [n]: the verb of an argument is unknown, try both
+	}
+	for _, c := range candidates {
+		out := fmt.Sprintf(layout, c...)
+		if !strings.Contains(out, "%!") || !formatFailed(layout, c) {
+			return out, nil
+		}
+	}
+	return nil, fmt.Errorf("format: layout %q does not fit its arguments (bad verb, wrong type, or wrong argument count)", layout)
+}
+
+// formatFailed re-runs the layout with every string argument replaced by a plain word: a "%!" that
+// is still there comes from the layout, not from data that happens to contain "%!".
+func formatFailed(layout string, args []any) bool {
+	plain := make([]any, len(args))
+	for i, a := range args {
+		if _, ok := a.(string); ok {
+			a = "x"
+		}
+		plain[i] = a
+	}
+	return strings.Contains(fmt.Sprintf(layout, plain...), "%!")
+}
+
+// formatVerbs returns the verb of each argument in order. ok is false when the layout uses *
+// widths or [n] indexes, where arguments no longer map one to one onto verbs.
+func formatVerbs(layout string) (verbs []byte, ok bool) {
+	for i := 0; i < len(layout); i++ {
+		if layout[i] != '%' {
+			continue
+		}
+		i++
+		for i < len(layout) && strings.IndexByte("+-# 0123456789.", layout[i]) >= 0 {
+			i++
+		}
+		if i >= len(layout) {
+			break
+		}
+		switch layout[i] {
+		case '*', '[':
+			return nil, false
+		case '%':
+		default:
+			verbs = append(verbs, layout[i])
+		}
+	}
+	return verbs, true
+}
+
+// wholeFloatsToInts converts finite whole-number float64 arguments inside the int64 range to
+// integers: to int64 for integer verbs (and for %v and unknown verbs), to a decimal string for %s.
+func wholeFloatsToInts(args []any, verbs []byte, scanned bool) []any {
+	out := make([]any, len(args))
+	for i, a := range args {
+		out[i] = a
+		f, isFloat := a.(float64)
+		if !isFloat || f != math.Trunc(f) || f < -9.223372036854775808e18 || f >= 9.223372036854775808e18 {
+			continue
+		}
+		verb := byte('v')
+		if scanned {
+			if i >= len(verbs) {
+				continue
+			}
+			verb = verbs[i]
+		}
+		switch verb {
+		case 's':
+			out[i] = strconv.FormatInt(int64(f), 10)
+		case 'd', 'v', 'x', 'X', 'o', 'O', 'b', 'c', 'U', 'q':
+			out[i] = int64(f)
+		}
+	}
+	return out
 }
 
 // truncate(s, n[, suffix]) keeps at most n characters (runes), the suffix included.

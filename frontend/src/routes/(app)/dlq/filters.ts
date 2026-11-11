@@ -1,4 +1,5 @@
 import type { DlqFilter, ListDeadLettersQuery } from '$lib/api/types';
+import { droppedFields, SLUG_PROBLEM, type FilterProblems } from '$lib/utils/filter-problems';
 import { pagingParams, parsePaging, type Paging } from '$lib/utils/paging';
 import { normalizeTime, timeChip } from '$lib/utils/time';
 
@@ -136,25 +137,54 @@ export function chipValue(key: FilterKey, filters: Filters): string {
 	return filters[key] ?? '';
 }
 
-/** The filter form -> filters (empty fields dropped; reason upper-cased unless `poison`). */
-export function filtersFromForm(form: FormData): { filters: Filters; limit: number | null } {
+const problemMessages: Record<FilterKey, string> = {
+	tenant_id: SLUG_PROBLEM,
+	integration_id: SLUG_PROBLEM,
+	vendor_id: SLUG_PROBLEM,
+	account_id: SLUG_PROBLEM,
+	reason: 'Use a reason code such as UPSTREAM_REJECTED, or "poison".',
+	replayed: 'Pick a listed choice.',
+	from: 'Enter a valid date and time.',
+	to: 'Enter a valid date and time.'
+};
+
+/**
+ * The filter form -> filters (empty fields dropped; reason upper-cased unless `poison`).
+ * `problems` names each non-empty field that did not fit its rule. The page marks it and does not
+ * search or count: the replay/purge count must cover exactly the filters the operator sees
+ * (HUB-455).
+ */
+export function filtersFromForm(form: FormData): {
+	filters: Filters;
+	limit: number | null;
+	problems: FilterProblems<FilterKey>;
+} {
 	const params = new URLSearchParams();
+	const rawText: Partial<Record<FilterKey, string>> = {};
 	for (const key of TEXT_KEYS) {
 		const raw = form.get(key);
 		if (typeof raw !== 'string' || !raw.trim()) continue;
 		const v = raw.trim();
 		const reason = v.toLowerCase() === 'poison' ? 'poison' : v.toUpperCase();
 		params.set(key, key === 'reason' ? reason : v);
+		rawText[key] = key === 'reason' ? reason : v;
 	}
 	const replayed = form.get('replayed');
-	if (typeof replayed === 'string' && replayed) params.set('replayed', replayed);
+	if (typeof replayed === 'string' && replayed) {
+		params.set('replayed', replayed);
+		rawText.replayed = replayed;
+	}
 	for (const key of ['from', 'to'] as const) {
-		const v = normalizeTime(String(form.get(key) ?? ''));
+		const text = String(form.get(key) ?? '').trim();
+		if (text) rawText[key] = text;
+		const v = normalizeTime(text);
 		if (v) params.set(key, v);
 	}
 	const limit = Number(form.get('limit'));
+	const filters = parseListState(params).filters;
 	return {
-		filters: parseListState(params).filters,
+		filters,
+		problems: droppedFields(rawText, filters, problemMessages),
 		limit: Number.isFinite(limit) && limit > 0 ? limit : null
 	};
 }

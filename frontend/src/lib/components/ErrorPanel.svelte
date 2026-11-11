@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { HubApiError } from '$lib/api/errors';
+	import { resolve } from '$app/paths';
+	import { loginUrl } from '$lib/auth/redirect';
 	import { formatDurationMs } from '$lib/utils/format';
 	import CopyButton from './CopyButton.svelte';
 	import Icon from './Icon.svelte';
@@ -43,6 +45,15 @@
 				return null;
 		}
 	});
+
+	// An expired session cannot be retried away: offer sign-in, returning to this page (HUB-455).
+	const expired = $derived(error.code === 'UNAUTHORIZED');
+	const signInHref = $derived(
+		resolve('/login') +
+			(typeof window === 'undefined'
+				? ''
+				: new URL(loginUrl(new URL(window.location.href), { expired: true }), 'http://x').search)
+	);
 
 	const retryText = $derived(
 		error.retryable
@@ -95,7 +106,10 @@
 				<dd>{retryText}</dd>
 			</div>
 		</dl>
-		{#if onretry}
+		{#if expired}
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve('/login') plus the query -->
+			<a class="retry" href={signInHref}>Sign in</a>
+		{:else if onretry}
 			<button type="button" class="retry" onclick={onretry}>
 				<Icon name="retry" size={16} /> Retry
 			</button>
@@ -179,6 +193,10 @@
 		background: var(--surface);
 		cursor: pointer;
 		font-weight: 600;
+	}
+	a.retry {
+		color: inherit;
+		text-decoration: none;
 	}
 	.retry:hover {
 		border-color: var(--ink-muted);

@@ -18,6 +18,10 @@ var defaultMessages = map[core.Code]string{
 	core.CodeUpstreamTimeout:     "The upstream did not answer in time",
 }
 
+// redirectMessage differs from the default rejection message, so EnrichVendorError does not
+// replace it with text from the redirect's body.
+const redirectMessage = "The upstream answered with a redirect"
+
 var errNotResponse = errors.New("not a response transformer")
 
 // MapResponse maps a vendor response to the canonical response or a canonical error (DESIGN §7.4).
@@ -103,7 +107,7 @@ func (p *Program) mapResponse(resp core.VendorResponse, in Input) (any, *core.Ca
 		}
 		return nil, ce, nil
 	}
-	if status >= 400 {
+	if IsFailureStatus(status) {
 		return nil, Classify(status), nil
 	}
 	if p.response == nil {
@@ -122,12 +126,26 @@ func (p *Program) mapResponse(resp core.VendorResponse, in Input) (any, *core.Ca
 	return out, nil, nil
 }
 
+// IsFailureStatus reports whether a vendor status that no error rule matched fails the attempt:
+// 4xx and 5xx, and 3xx except 304. The upstream client never follows redirects, so a 3xx is a
+// response the Hub cannot use. 304 answers a conditional request, which only the request
+// transformer can have made (it sets If-None-Match or If-Modified-Since); the response
+// expression handles it (res.status == 304).
+func IsFailureStatus(status int) bool {
+	return status >= 400 || (status >= 300 && status != 304)
+}
+
 // Classify is the default classification of a vendor error status (DESIGN §10.2): the fallback
 // for statuses no error rule matched, and the classification of pass-through responses, which
-// have no response transformer (ADR-0023). Only 429 and 5xx are retryable.
+// have no response transformer (ADR-0023). Only 429 and 5xx are retryable. An unfollowed
+// redirect is UPSTREAM_REJECTED, not retryable (the same call gets the same redirect), with a
+// fixed message: the Location is vendor identity and never reaches the caller.
 func Classify(status int) *core.CanonicalError {
 	code, retryable := core.CodeUpstreamRejected, false
 	switch {
+	case status >= 300 && status < 400:
+		s := status
+		return &core.CanonicalError{Code: code, Message: redirectMessage, Reason: core.Ptr("upstream_redirect"), Upstream: &core.Upstream{Status: &s}}
 	case status == 401 || status == 403:
 		code = core.CodeUpstreamAuthFailed
 	case status == 429:

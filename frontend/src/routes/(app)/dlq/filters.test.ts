@@ -98,11 +98,22 @@ describe('URL round trip', () => {
 				reason: 'UPSTREAM_REJECTED',
 				from: '2026-10-31T09:00:00Z'
 			},
+			problems: {},
 			limit: 100
 		});
 		const g = new FormData();
 		g.set('reason', 'Poison');
 		expect(filtersFromForm(g).filters).toEqual({ reason: 'poison' });
+	});
+
+	it('names the fields whose text was dropped (HUB-455)', () => {
+		const f = new FormData();
+		f.set('tenant_id', 'ab');
+		f.set('reason', 'not a reason');
+		f.set('account_id', 'ct-brandA-in');
+		const r = filtersFromForm(f);
+		expect(Object.keys(r.problems).sort()).toEqual(['reason', 'tenant_id']);
+		expect(r.filters).toEqual({ account_id: 'ct-brandA-in' });
 	});
 
 	it.each([

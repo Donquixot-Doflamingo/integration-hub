@@ -273,7 +273,15 @@ export function updateBody(
 	if (Object.keys(patch).length) body.config = patch;
 	const q: AccountQuota = {};
 	if (v.rps.trim() && Number(v.rps) !== Number(before.rps || NaN)) q.rps = Number(v.rps);
+	// `rps` is a number in the contract (never null): an account with a rate keeps one (HUB-455).
+	else if (!v.rps.trim() && before.rps.trim())
+		return {
+			ok: false,
+			fields: { '/quota/rps': 'The rate cannot be removed. Enter the new requests per second.' }
+		};
 	if (v.daily.trim() && Number(v.daily) !== Number(before.daily || NaN)) q.daily = Number(v.daily);
+	// `daily` is `integer | null` (JSON merge-patch): an emptied field clears the daily quota.
+	else if (!v.daily.trim() && before.daily.trim()) q.daily = null;
 	if (Object.keys(q).length) body.quota = q;
 	if (Object.keys(body).length === 1)
 		return { ok: false, fields: { '/config': 'Nothing changed. Edit the config or the quota.' } };

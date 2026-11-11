@@ -57,6 +57,13 @@ describe('accessFromMe', () => {
 		expect(NO_ACCESS.canMutate).toBe(false);
 	});
 
+	it('never treats unknown access as a tenant viewer (HUB-455)', () => {
+		// An unknown identity must not look like a restricted one: the layout shows "could not load
+		// your access" instead of pages that say "tenant viewers cannot see this".
+		expect(NO_ACCESS.known).toBe(false);
+		expect(NO_ACCESS.tenantScoped).toBe(false);
+	});
+
 	it('reads roles and tenants from /me', () => {
 		const a = accessFromMe({
 			ok: true,

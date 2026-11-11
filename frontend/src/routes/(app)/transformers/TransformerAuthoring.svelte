@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { enhance } from '$app/forms';
+	import { applyAction, enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import {
@@ -174,6 +174,7 @@
 						key: sentKey,
 						result: (r.data as ActionSuccessData<GoldensRunResult>).result
 					};
+				else if (r.type === 'redirect') await applyAction(r);
 				else goldensError = failureOf(r, 'run the samples');
 			} finally {
 				runningGoldens = false;
@@ -209,6 +210,7 @@
 			try {
 				if (r.type === 'success')
 					dryResult = (r.data as ActionSuccessData<TransformerDryRunResult>).result;
+				else if (r.type === 'redirect') await applyAction(r);
 				else {
 					dryError = failureOf(r, 'run the dry run');
 					if (r.type === 'failure')

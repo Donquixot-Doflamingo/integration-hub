@@ -2,6 +2,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import AsyncView from '$lib/components/AsyncView.svelte';
+	import FormProblems from '$lib/components/FormProblems.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import RoleGate from '$lib/components/RoleGate.svelte';
 	import type { PageData } from './$types';
@@ -20,6 +21,10 @@
 <RoleGate access={data.access} ops={['createTransformerVersion', 'runTransformerGoldens']}>
 	<AsyncView result={data.lookups} noun="the vendor endpoints" onretry={invalidateAll}>
 		{#snippet children(l)}
+			<FormProblems
+				title="Some endpoint suggestions are missing"
+				items={l.problems.map((message) => ({ message }))}
+			/>
 			<TransformerAuthoring mode="new" initial={emptyValues()} endpoints={l.endpoints} />
 		{/snippet}
 	</AsyncView>

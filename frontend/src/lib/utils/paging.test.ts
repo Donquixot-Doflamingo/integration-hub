@@ -28,6 +28,35 @@ describe('walking pages', () => {
 		expect(pageNumber(p1)).toBe(1);
 	});
 
+	it('keeps the page number exact up to page 21, then stops claiming one (HUB-455)', () => {
+		let p = parsePaging(q(''));
+		for (let n = 2; n <= 21; n++) p = nextPaging(p, `c${n}`);
+		expect(pageNumber(p)).toBe(21);
+		p = nextPaging(p, 'c22');
+		expect(pageNumber(p)).toBeNull();
+		for (let n = 23; n <= 30; n++) p = nextPaging(p, `c${n}`);
+		expect(pageNumber(p)).toBeNull();
+		expect(p.prev.length).toBeLessThanOrEqual(20);
+	});
+
+	it('Previous steps back one page at a time, and is not offered where the trail ends (HUB-455)', () => {
+		let p = parsePaging(q(''));
+		for (let n = 2; n <= 30; n++) p = nextPaging(p, `c${n}`);
+		const seen: (string | undefined)[] = [];
+		for (let back = previousPaging(p); back; back = previousPaging(back)) seen.push(back.cursor);
+		// c29, c28, ... down to the oldest cursor the trail still knows; never a jump to page 1.
+		expect(seen[0]).toBe('c29');
+		expect(seen.every((c) => c !== undefined)).toBe(true);
+		expect(seen.length).toBeGreaterThan(15);
+	});
+
+	it('survives the URL round trip once truncated', () => {
+		let p = parsePaging(q(''));
+		for (let n = 2; n <= 30; n++) p = nextPaging(p, `c${n}`);
+		const url = new URLSearchParams(pagingParams(p));
+		expect(parsePaging(url)).toEqual(p);
+	});
+
 	it('serialises only what differs from the defaults', () => {
 		expect(pagingParams(parsePaging(q('')))).toEqual([]);
 		expect(pagingParams({ cursor: 'c2', prev: ['', 'c1'], limit: 100 })).toEqual([

@@ -87,6 +87,7 @@ type workerMetrics struct {
 	inflight       *prometheus.GaugeVec   // worker_inflight{pool}
 	targetInflight *prometheus.GaugeVec   // worker_target_inflight{account, endpoint}
 	capDeferred    *prometheus.CounterVec // worker_target_cap_deferred_total{account, endpoint}
+	credsDeferred  *prometheus.CounterVec // worker_credentials_deferred_total{account}
 }
 
 // RegisterMetrics adds worker_inflight, worker_target_inflight and
@@ -100,8 +101,10 @@ func (w *Worker) RegisterMetrics(reg prometheus.Registerer) {
 			Help: "Attempts in flight in this worker process per (account, endpoint); capped at the worker's target cap."}, []string{"account", "endpoint"}),
 		capDeferred: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "worker_target_cap_deferred_total",
 			Help: "Claimed envelopes put back unattempted because their (account, endpoint) had the worker's target cap in flight."}, []string{"account", "endpoint"}),
+		credsDeferred: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "worker_credentials_deferred_total",
+			Help: "Claimed envelopes put back unattempted because the account's credentials were not in the cache (no attempt counted)."}, []string{"account"}),
 	}
-	reg.MustRegister(w.metrics.inflight, w.metrics.targetInflight, w.metrics.capDeferred)
+	reg.MustRegister(w.metrics.inflight, w.metrics.targetInflight, w.metrics.capDeferred, w.metrics.credsDeferred)
 }
 
 func (w *Worker) now() time.Time {
@@ -495,6 +498,16 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 		report(w.Transitions.HoldForTarget(ctx, env, w.Name, w.now(), queue.Target{Account: out.Account, Endpoint: out.Endpoint}), "target at cap")
 		return
 	}
+	if out.CredentialsUnavailable {
+		// Nothing reached the vendor: not an attempt on the retry schedule, no breaker outcome and
+		// no budget use. The envelope waits for the credentials; its TTL bounds the wait (HUB-453).
+		if w.metrics.credsDeferred != nil {
+			w.metrics.credsDeferred.WithLabelValues(account).Inc()
+		}
+		log.WarnContext(ctx, "worker.credentials_unavailable", slog.String("account", account), slog.Duration("hold", credentialsHold))
+		report(w.Transitions.Hold(ctx, env, w.Name, w.now().Add(credentialsHold), "credentials unavailable"), "credentials unavailable")
+		return
+	}
 	if c.Attempt == 1 {
 		w.Budget.Live(account)
 	}
@@ -511,6 +524,10 @@ func (w *Worker) handle(ctx context.Context, c queue.Claimed) {
 	TerminalAudit(trail, c.Attempt, state, err, out.Err)
 	w.Audit.Emit(audit.Batch{Events: trail.Events(), Attempts: out.Attempts})
 }
+
+// credentialsHold is how long an envelope waits after a credential cache miss (matches the
+// retry_after_ms of the error the sync path returns for it).
+const credentialsHold = 5 * time.Second
 
 // resolve picks the version and target of an attempt: the active version at send time (D10),
 // resolved_version when pinned, and for a vendor session its exact version and account.

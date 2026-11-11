@@ -164,7 +164,6 @@ func TestMarshalRejectsInvalidEvents(t *testing.T) {
 			e.IdempotencyKey = strings.Repeat("k", 256)
 			return e
 		}(),
-		"result not object":   baseEvent(&Completed{Result: json.RawMessage(`[1]`), Attempts: 1, CompletedAt: t0}),
 		"result invalid":      baseEvent(&Completed{Result: json.RawMessage(`{`), Attempts: 1, CompletedAt: t0}),
 		"completed 0 attempt": baseEvent(&Completed{Result: json.RawMessage(`{}`), CompletedAt: t0}),
 		"failed no code":      baseEvent(&Failed{Attempts: 1, FailedAt: t0, Error: core.CanonicalError{Message: "x"}}),

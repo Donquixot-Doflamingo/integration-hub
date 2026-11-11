@@ -39,16 +39,27 @@ type Resilience struct {
 	oldest    *prometheus.GaugeVec
 	released  *prometheus.CounterVec
 	probes    *prometheus.CounterVec
+	held      *prometheus.GaugeVec
+
+	// stateUnknown is set by probeOpen when the shared breaker states could not be read this tick
+	// (Redis down); the drain then holds. heldLogged makes the hold and the resume log once.
+	stateUnknown bool
+	heldLogged   bool
 }
 
-// RegisterMetrics adds parked_count, parked_oldest_age_s, drain_released_total and
-// health_probes_total to reg.
+// heldBreakerStateUnknown is the drain_held reason while the shared breaker state is unreadable.
+const heldBreakerStateUnknown = "breaker_state_unknown"
+
+// RegisterMetrics adds parked_count, parked_oldest_age_s, drain_released_total,
+// health_probes_total and drain_held to reg.
 func (r *Resilience) RegisterMetrics(reg prometheus.Registerer) {
 	r.parked = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "parked_count", Help: "Envelopes parked per account and endpoint."}, []string{"account", "endpoint"})
 	r.oldest = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "parked_oldest_age_s", Help: "Age of the oldest parked envelope per account and endpoint."}, []string{"account", "endpoint"})
 	r.released = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "drain_released_total", Help: "Parked envelopes released by the drain."}, []string{"account", "endpoint"})
 	r.probes = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "health_probes_total", Help: "Synthetic health probes by result."}, []string{"vendor", "account", "result"})
-	reg.MustRegister(r.parked, r.oldest, r.released, r.probes)
+	r.held = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "drain_held", Help: "1 while the drain holds parked envelopes back, by reason (breaker_state_unknown: the shared breaker state is unreadable)."}, []string{"reason"})
+	r.held.WithLabelValues(heldBreakerStateUnknown).Set(0)
+	reg.MustRegister(r.parked, r.oldest, r.released, r.probes, r.held)
 }
 
 func (r *Resilience) now() time.Time {
@@ -75,6 +86,9 @@ func (r *Resilience) Tick(ctx context.Context, db queue.DB, tick time.Duration) 
 
 func (r *Resilience) probeOpen(ctx context.Context) {
 	open, err := r.Breakers.SharedOpen(ctx)
+	r.mu.Lock()
+	r.stateUnknown = err != nil
+	r.mu.Unlock()
 	if err != nil {
 		r.Log.WarnContext(ctx, "listing open breakers failed", slog.String("error", err.Error()))
 	}
@@ -177,6 +191,25 @@ func (r *Resilience) drain(ctx context.Context, db queue.DB, tick time.Duration)
 	snap := r.Snapshots.Snapshot()
 	r.parked.Reset()
 	r.oldest.Reset()
+	// The shared breaker states could not be read this tick: a circuit may be open, so nothing is
+	// released (fail closed). "No record" is different: with Redis readable a missing record means
+	// the breaker never tripped, or closed long ago (HUB-453).
+	r.mu.Lock()
+	unknown := r.stateUnknown
+	logHold := unknown != r.heldLogged
+	r.heldLogged = unknown
+	r.mu.Unlock()
+	if unknown {
+		r.held.WithLabelValues(heldBreakerStateUnknown).Set(1)
+		if logHold {
+			r.Log.WarnContext(ctx, "drain.held", slog.String("reason", heldBreakerStateUnknown), slog.Int("parked_groups", len(groups)))
+		}
+	} else {
+		r.held.WithLabelValues(heldBreakerStateUnknown).Set(0)
+		if logHold {
+			r.Log.InfoContext(ctx, "drain.resumed", slog.String("reason", heldBreakerStateUnknown))
+		}
+	}
 	step := r.RampStep
 	if step <= 0 {
 		step = 30 * time.Second
@@ -188,6 +221,13 @@ func (r *Resilience) drain(ctx context.Context, db queue.DB, tick time.Duration)
 			continue
 		}
 		key := upstream.BreakerKey{Account: g.Account, Endpoint: g.Endpoint}
+		if unknown {
+			r.mu.Lock() // no catch-up burst when the state is readable again
+			delete(r.carry, key)
+			delete(r.lastDrain, key)
+			r.mu.Unlock()
+			continue
+		}
 		state, ok := r.Breakers.SharedState(ctx, key)
 		if ok && state.State != upstream.Closed {
 			r.mu.Lock()
@@ -197,7 +237,7 @@ func (r *Resilience) drain(ctx context.Context, db queue.DB, tick time.Duration)
 			continue
 		}
 		closedAt := time.UnixMilli(state.Version)
-		if !ok { // never tripped here (or Redis is down): treat as long closed
+		if !ok { // no record with Redis readable: never tripped, or closed long ago
 			closedAt = time.Time{}
 		}
 		factor := RampFactor(r.now().Sub(closedAt), step)

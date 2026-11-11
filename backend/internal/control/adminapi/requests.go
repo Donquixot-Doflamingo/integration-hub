@@ -255,7 +255,7 @@ func (s *Server) searchRequests(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) requestFilterOf(r *http.Request) (requestFilter, error) {
-	limit, cursor, err := page(r)
+	limit, cursor, err := page(r, 2)
 	if err != nil {
 		return requestFilter{}, err
 	}

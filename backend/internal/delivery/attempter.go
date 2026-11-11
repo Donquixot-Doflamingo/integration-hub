@@ -101,6 +101,10 @@ type Result struct {
 	OverCap  bool
 	Account  string
 	Endpoint string
+	// CredentialsUnavailable reports that the credential cache had no entry for the account
+	// (HUB-453): nothing was sent and no breaker outcome was recorded, so the worker puts the
+	// envelope back without counting an attempt.
+	CredentialsUnavailable bool
 }
 
 // PassThrough is a vendor answer returned unchanged (ADR-0023): only Content-Type and
@@ -185,6 +189,7 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 	in, c, ce := a.Input(ctx, j.Snap, j.Res, j.Body, j.Hdr, j.Trail)
 	if ce != nil {
 		r.Err = ce
+		r.CredentialsUnavailable = ce.Reason != nil && *ce.Reason == "credentials_unavailable"
 		return r
 	}
 	in.Session = j.Session
@@ -263,6 +268,20 @@ func (a *Attempter) Run(ctx context.Context, j Job) Result {
 		return r
 	}
 
+	if att.Truncated {
+		// The body exceeded the response cap and was cut: neither a pass-through body nor a
+		// transformer's input can be trusted. UPSTREAM_REJECTED because the same call returns
+		// the same oversized body, so it is never retried (UPSTREAM_UNAVAILABLE would be, by
+		// code), and the breaker does not count it: it says nothing about the vendor's health.
+		// The audit trail already holds vendor.responded with truncated=true.
+		adm.record(a.now(), upstream.OutcomeIgnore)
+		a.Log.WarnContext(ctx, "upstream response truncated", slog.String("integration", integration), slog.Int("status", att.Response.Status))
+		s := att.Response.Status
+		r.Err = &core.CanonicalError{Code: core.CodeUpstreamRejected, Message: "The upstream response was too large to process",
+			Reason: core.Ptr("response_truncated"), Upstream: &core.Upstream{Status: &s}}
+		return r
+	}
+
 	if respProg == nil {
 		a.passThrough(j, &r, n, att, adm)
 		return r
@@ -309,7 +328,7 @@ func (a *Attempter) passThrough(j Job, r *Result, n int, att upstream.Attempt, a
 	r.PassThrough = &PassThrough{Status: status, ContentType: att.Response.Headers.Get("Content-Type"),
 		RetryAfter: att.Response.Headers.Get("Retry-After"), Body: att.Raw}
 	var vce *core.CanonicalError
-	if status >= 400 {
+	if transform.IsFailureStatus(status) {
 		vce = transform.Classify(status)
 		EnrichVendorError(vce, att.Response, a.now())
 	}

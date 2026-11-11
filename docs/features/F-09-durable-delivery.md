@@ -71,6 +71,10 @@ stateDiagram-v2
 10. Separate worker pools for messaging vs LLM (DESIGN §17).
 11. **Claiming (HUB-412, ADR-0019).** The worker claims continuously: as soon as one of its `HUB_WORKER_CONCURRENCY` slots frees, it claims `min(HUB_WORKER_CLAIM_BATCH, free slots)`, so no envelope waits for another envelope's attempt to finish. It claims only what it can start at once, so shutdown just stops claiming and lets the attempts in flight finish. Each `(account, endpoint)` may hold at most `HUB_WORKER_TARGET_CAP` slots; envelopes over it are put back unattempted (F-13 rule 9).
 12. **Startup (HUB-406).** A worker claims nothing until the first registry snapshot is loaded (`worker.waiting_for_snapshot`), so a restart with a backlog neither panics nor counts crashes toward the poison detector; an envelope somehow claimed without a snapshot is put back unattempted.
+13. **Redirects (HUB-449).** The upstream client never follows redirects. A 3xx that no `errors:` rule of the response transformer matches (and any 3xx of a pass-through operation) fails the attempt as `UPSTREAM_REJECTED`, `retryable: false`, reason `upstream_redirect`, with a fixed message that never carries the `Location`. The breaker records it as a response, not an outage (like any rejection). 304 is not failed: only a request transformer that sets `If-None-Match` or `If-Modified-Since` can cause one, and the response expression maps it (`res.status == 304`).
+14. **Truncated responses (HUB-449).** A vendor body over the response cap (`upstream` `MaxResponseBytes`, 4 MiB) is cut. The attempt fails as `UPSTREAM_REJECTED`, `retryable: false`, reason `response_truncated`, with pass-through and with a transformer alike: the same call returns the same oversized body, so a retry cannot help (`UPSTREAM_UNAVAILABLE` would be retried by code). The breaker does not count it (`OutcomeIgnore`): it says nothing about the vendor's health. The audit trail keeps `vendor.responded` with `truncated: true`; the log line `upstream response truncated` carries the integration and status only.
+15. **Replay expiry (HUB-449).** `Outbox.Replay` writes the new expiry into the envelope JSON as well as the `expires_at` column: the worker checks the JSON's, so a dead letter replayed after its original TTL is delivered, not expired unattempted.
+16. **Terminal callbacks never undo the transition (HUB-449).** `request.completed` carries any JSON result (array, string, number, `null` for an empty body; F-11). A callback whose payload cannot be built is skipped, logged and counted (`callback_enqueue_skipped_total{reason="invalid_payload"}`); it never fails the terminal transaction, which would leave the request in flight, call the vendor again and dead-letter it as poison.
 
 ## Data model impact
 `outbox` (indexes `(status, next_attempt_at)`, `(status, account_id, endpoint_id)`), `dead_letters` (DESIGN §18.2).
@@ -85,6 +89,10 @@ Integration version `delivery: { mode, wait_ms, ttl, retry? }`; without `ttl` th
 | Metric | async accept latency (edge timing of 202) | NFR-02 |
 | Log | `state_transition` | request_id, from, to, attempt |
 | Metric | `worker_inflight{pool}` | slots in use (HUB-412) |
+| Log | `queue.poison_envelope` | ERROR, once per envelope: `request_id`, `reason=poison`; never the payload (HUB-453) |
+| Log | `expire failed; the envelope is skipped with a growing backoff` | ERROR, once per stuck request id: `request_id`, `error` (HUB-453) |
+| Metric | `worker_credentials_deferred_total{account}` | envelopes put back unattempted on a credential cache miss (HUB-453) |
+| Log | `worker.credentials_unavailable` | WARN: `account`, `hold` (HUB-453) |
 | Log | `worker.waiting_for_snapshot` | INFO, once per start before the first snapshot (HUB-406) |
 | Trace | spans `worker.claim`, `upstream` linked to the original trace via envelope `traceparent` | |
 | Alert | `queue_oldest_age_s` > 2 min | page |
@@ -99,7 +107,10 @@ Envelope stores the canonical body; it falls under the same payload policy as au
 | Worker killed mid-flight | Reclaimed after visibility timeout; at-least-once to vendor, guarded completion | One completion, one callback |
 | Postgres down | Async invoke 503; workers idle | 503 retryable |
 | Poison envelope | DLQ after 2 crashes | `request.failed` |
+| A stored envelope that no longer decodes (older format) | Dead-lettered as `poison` when a claim or the expiry pass reads it; the rest of the batch is delivered (HUB-453) | Nothing new (the operator sees it in the DLQ) |
 | Worker starts before its first snapshot | Claims nothing until it loads; no crash counted | Nothing (delivery starts once the snapshot is in) |
+| An expired envelope whose expiry keeps failing (no longer pending, failing terminal hook) | The sweep skips it with a backoff of 1 s doubling to 10 min and logs it once; the sweep ends when a pass makes no progress, so newer expiries and the scheduler's other work continue (HUB-453) | Nothing new |
+| Credential cache has no entry for the account (credential store outage) | The worker puts the envelope back for 5 s without counting an attempt, so the retry schedule is not spent and nothing is dead-lettered by the outage; the TTL still bounds the wait (HUB-453) | Nothing new (a sync caller still gets a retryable `UPSTREAM_UNAVAILABLE`) |
 | One vendor slow or hanging | Holds at most its target cap of slots; others keep claiming | Other vendors unaffected (`docs/tech/ISOLATION.md`) |
 
 ## Testing

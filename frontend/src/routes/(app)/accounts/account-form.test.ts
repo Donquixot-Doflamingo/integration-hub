@@ -125,6 +125,24 @@ describe('config and quota edit (merge-patch)', () => {
 			body: { quota: { rps: 80 }, reason: 'Vendor raised our quota' }
 		});
 	});
+
+	it('clears the daily quota with null when the field is emptied (HUB-455)', () => {
+		const before = { ...editValuesFromAccount(contractMocks.getAccount.example), daily: '1000' };
+		expect(updateBody({ ...before, daily: '' }, before, 'No daily cap any more')).toEqual({
+			ok: true,
+			body: { quota: { daily: null }, reason: 'No daily cap any more' }
+		});
+		// Already empty and still empty is not a change.
+		const none = { ...before, daily: '' };
+		expect(updateBody(none, none, 'nothing changed here').ok).toBe(false);
+	});
+
+	it('refuses to empty the rate, which the contract cannot clear (HUB-455)', () => {
+		const before = editValuesFromAccount(contractMocks.getAccount.example);
+		const r = updateBody({ ...before, rps: '' }, before, 'Remove the rate please');
+		expect(r.ok).toBe(false);
+		expect(!r.ok && r.fields['/quota/rps']).toMatch(/cannot be removed/);
+	});
 });
 
 describe('rotation step', () => {

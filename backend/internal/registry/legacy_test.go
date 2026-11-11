@@ -174,3 +174,54 @@ func TestUpgradeLegacyDocs(t *testing.T) {
 		t.Fatal("unknown capability accepted")
 	}
 }
+
+// A format-1 blob of a tree that already has no capabilities, whose response transformer still
+// names a vendor_endpoint (the console wrote one before ADR-0023), upgrades instead of being
+// refused: the dev database of a developer who onboarded an API in the console stayed unreadable
+// otherwise (HUB-446).
+func TestUnpackUpgradesResponseTransformerVendorEndpoint(t *testing.T) {
+	files, err := readTree(os.DirFS("../../config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum, err := checksum(toMapFS(files))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := blob{Format: legacyBlobFormat, Checksum: sum, Config: map[string]string{}}
+	for p, d := range files {
+		b.Config[p] = string(d)
+	}
+	b.Config["transformers/R2/1.yaml"] = strings.Replace(b.Config["transformers/R2/1.yaml"], "kind: response", "kind: response\nvendor_endpoint: clevertap.upload@1\ncapability: events.track@v1", 1)
+	if !strings.Contains(b.Config["transformers/R2/1.yaml"], "vendor_endpoint:") {
+		t.Fatal("test setup: R2 is not a response transformer")
+	}
+	// The blob's checksum covers the files as archived.
+	sum, _ = checksum(toMapFS(mapOf(b.Config)))
+	b.Checksum = sum
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if err := json.NewEncoder(zw).Encode(b); err != nil {
+		t.Fatal(err)
+	}
+	_ = zw.Close()
+	snap, src, err := Unpack(buf.Bytes(), sum, time.Now())
+	if err != nil {
+		t.Fatalf("blob with a vendor_endpoint on a response transformer: %v", err)
+	}
+	if snap.Legacy == nil || snap.Legacy.Checksum != sum {
+		t.Fatalf("legacy %+v", snap.Legacy)
+	}
+	data, err := fs.ReadFile(src.Config, "transformers/R2/1.yaml")
+	if err != nil || strings.Contains(string(data), "vendor_endpoint") || strings.Contains(string(data), "capability:") {
+		t.Fatalf("upgraded transformer %v:\n%s", err, data)
+	}
+}
+
+func mapOf(m map[string]string) map[string][]byte {
+	out := map[string][]byte{}
+	for k, v := range m {
+		out[k] = []byte(v)
+	}
+	return out
+}

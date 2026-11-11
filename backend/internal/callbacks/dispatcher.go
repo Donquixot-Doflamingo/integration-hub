@@ -52,6 +52,10 @@ const (
 	statusDeadLettered   = "dead_lettered"
 )
 
+// disabledHold is how long a delivery for a disabled endpoint waits before it is looked at again.
+// Looking costs no send and no attempt (the attempt is given back), so a fixed wait is enough.
+const disabledHold = 5 * time.Minute
+
 // Error classes recorded in last_error, the audit meta and logs. Never a body or header value.
 const (
 	errEndpointUnknown   = "endpoint_unknown"
@@ -251,8 +255,15 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		cctx, cancel := context.WithTimeout(work, 5*time.Second)
 		claimed, err := d.deps.store.claim(cctx, d.opts.ID, n, d.opts.Visibility)
 		cancel()
-		for range n - len(claimed) {
+		// Hand back the tokens of the rows not claimed. The count of tokens in circulation never
+		// depends on what the store returned: each started attempt returns exactly the token it
+		// holds, and a store that returns more than n rows (it must not; HUB-452) makes the
+		// surplus rows wait for a token of their own instead of exceeding Senders.
+		for range max(n-len(claimed), 0) {
 			slots <- struct{}{}
+		}
+		if len(claimed) > n {
+			d.deps.Log.WarnContext(ctx, "callback.claim_overflow", slog.Int("asked", n), slog.Int("got", len(claimed)))
 		}
 		if err != nil {
 			if ctx.Err() == nil {
@@ -262,8 +273,11 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		} else {
 			backoff = d.opts.PollInterval
 		}
-		for _, row := range claimed {
+		for i, row := range claimed {
 			wg.Go(func() {
+				if i >= n {
+					<-slots // surplus row: take a token of its own (returned below)
+				}
 				defer func() { slots <- struct{}{} }()
 				d.attempt(work, row)
 			})
@@ -320,6 +334,7 @@ type result struct {
 	httpStatus int
 	errClass   string
 	permanent  bool // dead-letter now, retrying cannot help
+	hold       bool // not sent and not an attempt: wait and look again (disabled endpoint)
 	blocked    *BlockedError
 	sent       bool // a request was attempted (latency observed)
 	duration   time.Duration
@@ -347,6 +362,9 @@ func (d *Dispatcher) attempt(ctx context.Context, row delivery) {
 	if res.errClass != "" {
 		delay, exhausted := d.retryDelay(row.Attempts)
 		switch {
+		case res.hold:
+			// Nothing was sent: wait without using up an attempt of the retry schedule.
+			o.Status, o.RetryIn, o.Hold = statusRetryScheduled, disabledHold, true
 		case res.permanent || exhausted:
 			o.Status = statusDeadLettered
 		default:
@@ -380,7 +398,9 @@ func (d *Dispatcher) attempt(ctx context.Context, row delivery) {
 		return
 	}
 	d.deliveries.WithLabelValues(row.TenantID, o.Status).Inc()
-	d.audit(row, o, res)
+	if !o.Hold { // a hold sent nothing and is not an attempt: no audit event (its seq would repeat)
+		d.audit(row, o, res)
+	}
 	attrs := []slog.Attr{
 		slog.String("delivery_id", row.ID), slog.String("request_id", row.RequestID), slog.String("tenant", row.TenantID),
 		slog.String("endpoint_id", row.EndpointID), slog.String("event", row.EventType), slog.Int("attempt", row.Attempts),
@@ -406,8 +426,8 @@ func (d *Dispatcher) send(ctx context.Context, row delivery) result {
 		return result{errClass: errEndpointUnknown, permanent: true}
 	case ep.Tenant != row.TenantID:
 		return result{errClass: errTenantMismatch, permanent: true}
-	case ep.Disabled: // held, not lost: deliveries resume on the schedule once it is re-enabled
-		return result{errClass: errEndpointDisabled}
+	case ep.Disabled: // held, not lost: the try is not counted, deliveries resume once it is re-enabled
+		return result{errClass: errEndpointDisabled, hold: true}
 	}
 	secrets, err := d.deps.Secrets.SigningSecrets(ctx, ep.SecretRef)
 	if err != nil {

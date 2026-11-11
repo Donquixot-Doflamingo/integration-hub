@@ -65,7 +65,7 @@ Account YAML `state`, `credentials_ref`; vendor `health_probe`.
 | Metric | `hub_requests_total{code="UPSTREAM_AUTH_FAILED",account}` | watched after promote |
 | Metric | `credential_expiry_days` | |
 | Alert | any `UPSTREAM_AUTH_FAILED` | page |
-| Log | `credentials decrypted` (info), `credentials reloaded after rotation` (info) | account@version only, never values (HUB-177) |
+| Log | `credentials decrypted` (info), `credentials reloaded after rotation` (info; a warning `credential reload after rotation loaded nothing for some accounts` when the cache still lacks accounts, HUB-454) | account@version only, never values (HUB-177) |
 | Change log | `addNextCredential`, `promoteNextCredential`, `deleteOldCredential`, `retireAccount` | slot metadata (version, fingerprint), never values |
 
 ## Security & PII

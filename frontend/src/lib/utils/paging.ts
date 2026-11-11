@@ -6,8 +6,14 @@
 export const PAGE_SIZES = [25, 50, 100, 200] as const;
 export const DEFAULT_PAGE_SIZE = 50;
 const MAX_CURSOR = 512;
-/** Bound on the back trail so URLs stay reasonable; older pages fall back to "First page". */
+/** Bound on the back trail so URLs stay reasonable. */
 const MAX_TRAIL = 20;
+/**
+ * First entry of a trail that had to drop its oldest cursors (HUB-455). Past it the page number is
+ * unknown and Previous stops at the oldest page the trail still knows: without the marker the
+ * number restarted at 21 and Previous jumped to the first page. `~` cannot start a cursor.
+ */
+const TRUNCATED = '~';
 
 export interface Paging {
 	cursor: string | undefined;
@@ -39,7 +45,12 @@ export function pagingParams(p: Paging): [string, string][] {
 }
 
 export function nextPaging(p: Paging, nextCursor: string): Paging {
-	return { ...p, cursor: nextCursor, prev: [...p.prev, p.cursor ?? ''].slice(-MAX_TRAIL) };
+	let prev = [...p.prev, p.cursor ?? ''];
+	if (prev.length > MAX_TRAIL) {
+		const known = prev.filter((c) => c !== TRUNCATED);
+		prev = [TRUNCATED, ...known.slice(-(MAX_TRAIL - 1))];
+	}
+	return { ...p, cursor: nextCursor, prev };
 }
 
 /** The previous page, or null on the first page. */
@@ -47,10 +58,13 @@ export function previousPaging(p: Paging): Paging | null {
 	if (!p.cursor) return null;
 	const prev = [...p.prev];
 	const back = prev.pop();
+	// The trail ends here: the page before this one is not known, so Previous is not offered.
+	if (back === TRUNCATED) return null;
 	return { ...p, cursor: back || undefined, prev };
 }
 
-/** 1-based page number as far as the trail knows. */
-export function pageNumber(p: Paging): number {
+/** 1-based page number, or null once the trail was truncated (the API has no totals to recover it). */
+export function pageNumber(p: Paging): number | null {
+	if (p.prev[0] === TRUNCATED) return null;
 	return p.cursor ? p.prev.length + 1 : 1;
 }

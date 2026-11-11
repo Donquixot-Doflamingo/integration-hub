@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **16**
+Total tickets: **300** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **27**
 
 ## Epics
 
@@ -22,7 +22,7 @@ Total tickets: **289** · done: **204** · todo: **69** · other (in-progress/in
 | EP-11 | MCP server + consumer skill + SDK | parallel to M3–M7 | F-20, F-21 | HUB-300–HUB-329 | 22 | 13 |
 | EP-12 | Release 2 (DESIGN §19 Phase 2) | Phase 2 | F-22 | HUB-330–HUB-399 | 22 | 7 |
 | EP-13 | Operability follow-ups (found writing the M8 runbooks) | M8+ | F-18, F-15 | HUB-400–HUB-429 | 32 | 8 |
-| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 14 | 0 |
+| EP-14 | Remove capabilities: schema registry on the integration and the endpoint (ADR-0023) | post-M8 | F-23 | HUB-431–HUB-459 | 25 | 0 |
 
 ## EP-00 — Phase-1 foundation (docs, skills, agents, contracts, repo + GitHub setup)
 
@@ -3725,6 +3725,447 @@ Checked on the product owner's Mac on 2026-11-08 (gateway log, and agify called 
 - [x] estimate@1 allows 10 s to connect and 15 s in total
 - [x] The examples use their own `hub_examples` database unless HUB_PG_DSN is set, and create it when missing
 - [x] Example tests and the offline run.sh pass with a fresh database
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-446 — Old stored snapshot blocks every admin call; connects wait for a silent AAAA lookup
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-445 · **Feature:** F-23 · **Stories:** US-2301
+- **Branch:** `fix/HUB-446-snapshot-upgrade-and-dialer`
+
+Found while onboarding a public API from the console on the product owner's Mac (2026-11-08):
+1. **Unloadable snapshot.** A snapshot archived by the console before ADR-0023 held a response transformer with a `vendor_endpoint`. The upgrade of old blobs (format 1 without capabilities) did not drop it, so `Build` refused the blob and every admin read answered a bare 500 `INTERNAL_ERROR`, every write a publish-check failure naming an unrelated object.
+2. **Silent AAAA lookup.** The product owner's DNS never answers AAAA queries. `net.Dialer` resolves A and AAAA together and waits for both (5 s), so every connect to a vendor timed out (`UPSTREAM_TIMEOUT`) although curl connected in 40 ms.
+
+**Acceptance criteria**
+- [x] Old blobs without capabilities upgrade their transformer files too (capability, operation, and `vendor_endpoint` of a response transformer); the checksum still covers the files as archived
+- [x] The default upstream dialer looks up IPv4 and IPv6 separately and dials the first family that answers, falls back to the other, gives each address an equal share of the connect timeout, and reports a timeout as a timeout
+- [x] Tests: blob upgrade regression; dialer with a silent family, a dead first address, nothing resolving
+
+### HUB-447 — Transformer bugs: creds guard bypass, zero-decimal currencies, NaN/Inf, format()
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** — · **Feature:** F-04 · **Stories:** —
+- **Branch:** `fix/HUB-447-transform-bugs`
+
+Four bugs in `backend/internal/transform`, found by review and reproduced by running code:
+1. **creds guard bypass.** The compiler looked only for the identifier `creds`, so `$env.creds.token` or `$env["creds"].token` put credentials into the vendor body (rule "creds only in headers/query") or session, and a header built that way was not marked a credential target, so the Authorization value showed up in the schema-checked request.
+2. **Zero-decimal currencies.** `currencyMinor("1000", "XOF")` returned 100000 (100x overcharge): only JPY, KRW, VND and CLP were known as zero-decimal.
+3. **NaN and Inf.** `req.a / req.b` with b = 0 gave +Inf and passed; the body then failed to encode, or "+Inf" was sent as a header or query value.
+4. **format().** JSON numbers are float64, so `format("%d", req.n)` gave `%!d(float64=3)`, `%s` gave `%!s(float64=3)` and `%v` of 1000000.0 gave `1e+06`, all silently.
+
+**Acceptance criteria**
+- [x] Any `$`-prefixed identifier (`$env`) is rejected at compile time in body, headers, query, auth and session; existing transformers still compile
+- [x] currencyMinor knows the full ISO 4217 minor-unit table and refuses an unknown currency code
+- [x] NaN and ±Inf anywhere in a request or response transformer's output fail with an EvalError (TRANSFORM_FAILED)
+- [x] format() formats whole-number floats as integers and returns an error on a bad verb or wrong type (`%!`)
+- [x] Each bug has a failing table-driven test first; `go test -race ./internal/transform/...` and the config-loading packages are green
+
+### HUB-448 — Secrets with JSON/URL-special characters are stored unmasked in audit trail and logs
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-084 · **Feature:** F-18 · **Stories:** —
+- **Branch:** `fix/HUB-448-redact-escaped-secrets`
+
+A reviewer proved with a throwaway test that a credential such as `pa&ss<w>"rd\1` is stored unmasked in the `request.transformed` and `vendor.responded` events (policies full and masked) and in the dead letter's `last_vendor_request` / `last_vendor_response`. `audit.Trail.redact` replaced credential values only as raw bytes inside payloads that were already JSON-encoded (`json.Marshal` escapes `& < > " \` and non-ASCII), and upstream URLs percent-encode query values. The logger's `telemetry.SecretSet` had the same gap: an error or message carrying a JSON body or URL with the secret in an encoded form was not masked.
+
+**Acceptance criteria**
+- [x] Each registered secret is also redacted in its JSON-escaped forms (with and without HTML escaping), URL query- and path-escaped forms and base64 forms (standard and URL alphabets), in the audit trail and in the log redactor; forms are matched longest first; derived forms equal to the raw value or shorter than the 6-byte minimum are skipped
+- [x] Tests for `pa&ss<w>"rd\1`, `päss wörd`, `a+b/c=d`, `tok%en` and a plain value cover request.transformed / vendor.responded under full and masked, the dead-letter source (`Trail.Stored`) and the redacting slog handler; they fail without the fix; non-secret text is unchanged
+- [x] The log denylist also covers `x-api-key`, `access_token`, `client_secret`, `refresh_token`
+- [x] Audit and telemetry tests with `-race`, `go vet` and golangci-lint green
+
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-449 — Delivery correctness: replay expiry, callback payload shape, truncated and redirect responses
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-444 · **Feature:** F-09 · **Stories:** US-0901
+- **Branch:** `fix/HUB-449-delivery-correctness`
+
+Four confirmed bugs found in review of the delivery path:
+1. **Replay expiry.** `Outbox.Replay` reset the `expires_at` column but the envelope JSON kept the original one, and the worker reads the JSON: a dead letter replayed after its original TTL (default 6 h, DLQ retention 14 days) was claimed and expired at once, never delivered.
+2. **Callback payload shape.** `request.completed` needs an object result, but pass-through results (ADR-0023) can be an array, a string or empty (204). The enqueue failed inside the terminal transaction, rolling back the Succeed: the request was reclaimed after the visibility timeout, the vendor was called again, and after two crashes it was dead-lettered as poison although the vendor had succeeded each time.
+3. **Truncated responses.** A vendor body over `MaxResponseBytes` was flagged `Truncated` but only audited: the caller got a 200 with a cut body.
+4. **Redirects.** The upstream client never follows redirects, but only status >= 400 counted as an error: a 301/302/307/308 mapped to success with an empty or garbage output, and the breaker recorded success.
+
+**Acceptance criteria**
+- [x] Replay writes the new expiry into the envelope JSON; a replay after the original TTL is delivered, not expired
+- [x] A callback payload problem never fails or rolls back a request's terminal transition; the vendor is called once
+- [x] A truncated vendor response is a failed attempt (pass-through and transformer paths): UPSTREAM_REJECTED, reason response_truncated, not retryable, not counted by the breaker
+- [x] An unmatched 3xx is UPSTREAM_REJECTED, non-retryable, without the Location in the message; a transformer's explicit `errors:` rules still match first
+- [x] Each fix has a test that failed before it; queue, delivery, callbacks and transform suites green
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-450 — Edge: idempotency key released after a successful call, trailing JSON junk accepted, scope and integration enumeration
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-088 · **Feature:** F-05 · **Stories:** —
+- **Branch:** `fix/HUB-450-edge-fixes`
+
+Reviewer findings on the request edge:
+1. `settle` released the Idempotency-Key whenever `Complete` failed, also after a successful vendor call (for example a pass-through 200 body over the 1 MiB replay limit). A retry with the same key then called the vendor again, which double-charges money-moving integrations.
+2. `readJSONBody` used `dec.More()`, which is false before a closing `]` or `}`, so `{"a":1}]` was accepted and failed later as a retryable 500 `persist_failed`.
+3. `ScopeRequestsRead` is defined but `getRequestStatus` never checks it.
+4. An existing but ungranted integration answers 403 `not_granted` on invoke and dry-run while an unknown one answers 404, so a tenant can enumerate integration IDs.
+
+Findings 3 and 4 are reported, not changed: the frozen caller contract says request status needs scope `invoke` (no 403 declared on `getRequestStatus`) and documents 403 `not_granted` on invoke. Both need a contract change request (see the final report of this ticket).
+
+**Acceptance criteria**
+- [x] A 200/202 whose replay copy cannot be stored never releases the key; the key is kept as "completed, response not stored" and a retry answers 409 `IDEMPOTENCY_CONFLICT` (reason `completed_not_stored`) until the key's TTL
+- [x] Failures (not 200/202) still release the key
+- [x] A trailing `]`, `}` or second JSON value after the body is 400 `VALIDATION_FAILED`; trailing whitespace is accepted
+- [x] Table-driven tests written first and failing for each fixed finding
+- [x] Findings 3 and 4 written up as contract change requests
+
+### HUB-451 — Control plane: publish deadlock, non-atomic publish and change log, unexplained 500 on an unloadable snapshot
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** — · **Feature:** F-16 · **Stories:** —
+- **Branch:** `fix/HUB-451-control-plane`
+
+Reviewer findings on the admin API, the publisher and the snapshot archive:
+1. **Deadlock.** `Publisher.locked` held a pool connection per edit while blocked on `pg_advisory_lock`; the holder needs a second connection (archive transaction, change log). With as many concurrent edits as pool connections, all admin DB access hangs.
+2. **Not atomic.** The snapshot committed first and the change-log row came after; a failed insert left a live snapshot without a change, and createAccount / registrar flows then rolled their credentials back. A no-op publish attributed the existing snapshot to the no-op author.
+3. **Unexplained 500.** When the newest archived snapshot cannot be loaded, every admin read and write answered a bare 500; the node logged the same generic warning every 5 s.
+4. **TOCTOU.** The config-directory archive (`mayArchiveConfig` then `Publish`) and `UpgradeLegacyArchive` could overwrite a UI publish that landed in between.
+5. `createIntegration` accepted an empty `owner_tenant`.
+6. Malformed pagination cursors (change log, integrations, access lists) silently returned page 1.
+7. `createAPIKey` left duplicate scopes (`slices.Compact` on unsorted input).
+8. Tenants / accounts / api-keys / registrar reads rebuilt the snapshot from the blob on every call.
+
+**Acceptance criteria**
+- [x] Concurrent edits (more than the pool size) all finish; the edit lock holds no pool connection
+- [x] Snapshot and change-log row commit in one transaction; `snapshot_version` is set only when a snapshot was written
+- [x] An unloadable newest snapshot answers an actionable error naming the version and cause; nodes log one ERROR naming the version and the fix, rate-limited
+- [x] The config-directory archive and the legacy upgrade check the latest version under the archive lock
+- [x] Empty or unknown `owner_tenant` is 400 VALIDATION_FAILED at `/owner_tenant`
+- [x] Malformed cursors are 400; API-key scopes are sorted and unique
+- [x] Access reads reuse a snapshot cached by archive checksum
+
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-452 — Callbacks: AAAA stall in the SSRF guard, over-claiming dispatcher, disabled endpoints burn retries
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-119 · **Feature:** F-11 · **Stories:** —
+- **Branch:** `fix/HUB-452-callbacks`
+
+Reviewer findings on `backend/internal/callbacks`:
+1. **AAAA stall (high).** The guard resolves with one `LookupNetIP("ip")`, which waits for A and AAAA together, then dials the vetted addresses one after another on ONE 5 s budget. On a resolver that never answers AAAA, or an AAAA record that black-holes and sorts first, one attempt uses the whole 5 s: every callback ends as `timeout`, is retried on the 11-step schedule, while curl works. `CheckURL` at registration has the same lookup.
+2. **Over-claim (medium).** `claimDue` takes `LIMIT n` due rows plus `LIMIT n` abandoned rows with no outer limit, so a claim can return 2n rows while only n sender tokens were freed. The token accounting then goes negative, concurrency exceeds `Senders`, surplus goroutines block forever on `slots <-` and `Run` never returns at shutdown.
+3. **Disabled endpoints burn attempts (low).** A disabled endpoint is held with `endpoint_disabled`, but every try counts as one of the 11 attempts, so after about 20 h disabled the callbacks are dead-lettered although the comment says they resume once re-enabled.
+
+**Acceptance criteria**
+- [x] Guard looks up A and AAAA in parallel, takes the first family that answers and falls back to the other, vets every resolved address (refuse the host if any is refused), and gives each address an equal share of the remaining time
+- [x] Tests: resolver that never answers one family, dead first address, all private still refused, mixed public+private refused
+- [x] One claim returns at most n rows (single LIMIT over the union) and Run's token accounting does not depend on how many rows came back; integration test with a due backlog plus expired in-flight rows
+- [x] A disabled endpoint reschedules without counting the attempt (fixed capped hold); documented in F-11
+
+
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-453 — Outbox: one bad envelope blocks a whole batch, expiry loop can spin, credential misses burn attempts
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-444 · **Feature:** F-09 · **Stories:** —
+- **Branch:** `fix/HUB-453-outbox-resilience`
+
+Four resilience bugs found in review of the queue and the delivery worker:
+1. **Head-of-line block in the queue.** `ClaimWithin` commits the batch as `in_flight` before decoding, then discards every claimed row when one envelope does not decode (for example an older stored format that sorts first). Whole batches wait for the 30 s visibility, `crashes` rises and good envelopes are dead-lettered as poison. `DueExpiries` fails the same way, so the scheduler's expiry pass never runs.
+2. **Expiry loop can spin.** `Scheduler.expire` ignores a failed `Transitions.Expire`, so the row stays due; with 100 or more such rows the `for` loop never ends (no sleep, no ctx check), with fewer they block newer expiries.
+3. **Credential misses burn attempts.** A credential cache miss returns a retryable error without touching the vendor, but the worker counts it on the 8-step schedule: a credential outage of about 2 h dead-letters healthy requests.
+4. **Drain fails open.** With the shared breaker state unreadable (Redis down) the drain assumes "long closed" and releases parked envelopes at 100 % of the account rate.
+
+**Acceptance criteria**
+- [x] An undecodable envelope is dead-lettered (reason `poison`, never the payload in a log) and the rest of the claimed batch is returned; same for `DueExpiries`
+- [x] The expiry sweep stops when a pass makes no progress, checks ctx, and skips a row that keeps failing (bounded retries with backoff, one log per stuck row)
+- [x] A credential cache miss defers the envelope without counting an attempt, with a bounded delay, and is visible in a metric and a log
+- [x] The drain holds while the breaker state is unreadable (one log, a metric) and resumes when it is readable again
+- [x] A failing test per bug first (the expiry one is a unit test that did not compile before); queue and delivery unit and integration suites green with `-race`; golangci-lint clean
+- Follow-ups: `TestReleaseInArrivalOrder` is flaky (ids made in one millisecond are not ULID-ordered); a poison envelope dead-lettered by the queue leaves its audit request row non-terminal
+
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-454 — Credential cache noise and stale loader; a failed listener leaves the process hanging
+- **Epic:** EP-14 · **Type:** fix · **Area:** backend
+- **Status:** in-review · **Depends on:** HUB-084 · **Feature:** F-07 · **Stories:** US-0701
+- **Branch:** `fix/HUB-454-creds-and-run-lifecycle`
+
+Reviewer findings:
+1. Every cache miss kicks a reload (1 per second at most). With the secrets file missing each reload reads the file, counts `creds_decrypts_total` and logs two lines, a pair per second under traffic. A missing secrets file was an error, so a gateway on the dev config with no `hubctl creds set` run warned every 150 s forever.
+2. A key file missing at start made the loader an empty one for the life of the process: `hubctl creds init-key` later never took effect, and the rotation ping logged `credentials reloaded after rotation` at Info with an empty cache.
+3. When a listener failed at runtime the context was not cancelled, so `wg.Wait()` blocked on the watchers and the process never exited with code 1; a second SIGTERM was swallowed until `run` returned.
+
+**Acceptance criteria**
+- [x] Miss-triggered reloads back off exponentially after consecutive failures, up to the periodic refresh interval; a failure is logged once per state change and recovery once
+- [x] `credentials decrypted` is not logged, and `creds_decrypts_total` not incremented, when nothing was decrypted
+- [x] A missing secrets file is an empty store (one warning at startup naming the path); an unreadable, corrupt or undecryptable file stays an error
+- [x] The key file and secrets file are re-opened on every refresh; the rotation log line is a warning when nothing loaded
+- [x] A listener that fails at runtime cancels the role and `Run` returns that error; the first signal restores default handling so a second one terminates
+- [x] Readiness behaviour in the ops docs unchanged
+
+
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-455 — Console: admin shown as tenant viewer when /me fails, expired sessions cannot recover, filters silently dropped, empty lookups
+- **Epic:** EP-14 · **Type:** fix · **Area:** frontend
+- **Status:** in-review · **Depends on:** HUB-436 · **Feature:** F-19 · **Stories:** —
+- **Branch:** `fix/HUB-455-console-error-states`
+
+A code review of the console found states where it lies to the operator or leaves them stuck:
+1. When `/me` fails with anything but 401 the access is `NO_ACCESS` (tenant-scoped, no tenants): an admin sees Accounts/Vendors as forbidden, an empty Tenants list, a false 404 on `/tenants/<id>`, and no vendor/account columns, until a hard reload.
+2. An expired session (8 h token) mid-use: the error panel has no sign-in link and Retry repeats the 401; custom `enhance` callbacks (goldens, dry run, DLQ count, draft save/check) ignore the action's `redirect(303, /login)`.
+3. A filter value that fails the client pattern (short slug, bad code) is silently dropped: unfiltered list, no chip, no error. In the DLQ this also drives the replay/purge count.
+4. Failed lookups (vendors, accounts, transformers, endpoints) render empty pickers with no message; only the first 25 vendors are read.
+5. A quota cannot be cleared (`daily` emptied gives "Nothing changed"); the contract allows `null`.
+6. DLQ replay trusts the earlier dry-run count; only purge re-counts.
+7. "Run publish checks" ignores an error or redirect result.
+8. Pager shows a wrong page number after 20 pages (trail is capped).
+9. Request timeline sorts by `seq` first; replays may reuse it.
+10. `toLocalInput` drops seconds, so Search shifts a `from`/`to` bound.
+
+**Acceptance criteria**
+- [x] 1: unknown access shows an ErrorPanel with Retry on every role-dependent page; unknown is never tenant-scoped
+- [x] 2: UNAUTHORIZED errors link to sign-in; `redirect` results are applied in every custom `enhance` callback
+- [x] 3: an invalid filter value shows a field error (aria-invalid, described-by) and the search does not run
+- [x] 4: lookup failures are shown; all vendors are read by following cursors
+- [x] 5: an emptied quota field sends `null`
+- [x] 6-10: fixed with a failing test first, or reported as not done
+- [x] `npm run check && npm run lint && npm test` green
+### Critical path (Release 1)
+
+Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.
+
+HUB-012 → HUB-020 → HUB-040 → HUB-041 → HUB-043 → HUB-044 → HUB-084 → HUB-085 → HUB-088 → HUB-115 → HUB-116 → HUB-146 → HUB-149 → HUB-151 → HUB-152 → HUB-154 → HUB-230 → HUB-232 → HUB-237
+
+- HUB-012 — Install toolchain on the dev machine
+- HUB-020 — Create backend Go module and package layout
+- HUB-040 — Config domain types
+- HUB-041 — Loaders: capability (compiled JSON Schema), vendor, account
+- HUB-043 — Cross-reference validation with path-qualified errors
+- HUB-044 — Snapshot build and atomic swap
+- HUB-084 — CredentialSource: local encrypted file, cache and redaction
+- HUB-085 — Auth schemes: static headers, bearer, basic
+- HUB-088 — Invoke handlers (sync pipeline)
+- HUB-115 — Async mode and request status endpoint
+- HUB-116 — Wait mode
+- HUB-146 — Parking on open breaker
+- HUB-149 — Ramped drain scheduler
+- HUB-151 — Chaos 2: vendor recovers and drain ramps
+- HUB-152 — Chaos 3: re-open mid-drain
+- HUB-154 — Chaos 5: failover target serves; M5 summary
+- HUB-230 — Metrics: full §16.2 set
+- HUB-232 — Alert rules and dashboards as code
+- HUB-237 — Runbooks and M8 summary
+
+Anything that delays these tickets delays Release 1. The admin console and MCP tracks have slack until HUB-277 and HUB-307 respectively.
+
+### HUB-456 — Dev tooling: examples clobber the dev stack, orphan processes, unsafe pid handling, compose ports on all interfaces
+- **Epic:** EP-14 · **Type:** fix · **Area:** infra
+- **Status:** in-review · **Depends on:** HUB-445, HUB-286 · **Feature:** F-23 · **Stories:** —
+- **Branch:** `fix/HUB-456-dev-tooling`
+
+Reviewer findings on `scripts/dev-up.sh`, `scripts/dev-down.sh`, `examples/lib/local-hub.sh` and `deploy/docker-compose.yml`:
+1. **Examples clobber the dev stack (high).** The examples' default mockvendor ports (8099/8098) are the dev stack's. With `make dev-up` running, an example's mockvendor fails to bind, the readiness wait succeeds against the dev stack's healthz, and `mock_scenario` resets the dev stack's mockvendor and replaces its routes. An orphan example gateway on 18080/18090 answers the same way.
+2. **Orphans.** `trap ... EXIT` does not run on SIGKILL, so an example's gateway and mockvendor outlive it.
+3. **dev-up failure leaves processes running** and the next run reports "port N is already in use" without pointing at `dev-down.sh`.
+4. A relative `DEV_STATE` breaks the console start and the blob URL (they run after a `cd`).
+5. **Pid files are trusted blindly.** A pid reused after a reboot gives a false "already running", and `dev-down.sh` would TERM/KILL an unrelated process.
+6. Compose publishes Postgres (hub/hub) and Redis (no auth) on all interfaces.
+7. `hub_post` prints nothing for a non-JSON body (the `||` fallback tests sed, not python).
+8. Credentials are created only when `dev.key` is missing: an interrupted first run leaves `dev-secrets.enc` missing or truncated for good.
+9. The snapshot check only tests that the latest blob file exists; an archived snapshot that cannot be loaded surfaces late as INTERNAL_ERROR.
+
+**Acceptance criteria**
+- [x] Examples default to ports outside the dev stack's range (mockvendor 18099/18098), refuse to start when a port they need is already listening (message names the port and the likely culprit), and send control calls only to the mockvendor they started
+- [x] Examples write pid files and kill stale ones (command line verified) at setup
+- [x] `dev-up.sh` stops what it started when it fails, never on success; the "already in use" message names `scripts/dev-down.sh` and the live or stale pid file
+- [x] `DEV_STATE` may be relative
+- [x] `dev-up.sh` and `dev-down.sh` verify the command line of every pid before treating it as ours or signalling it
+- [x] Compose binds Postgres and Redis to 127.0.0.1; nothing relied on the wider binding
+- [x] `hub_post` prints the raw body when it is not JSON
+- [x] Credentials are created and recreated together (key and encrypted file)
+- [x] The snapshot check message tells how to read `.dev-stack/logs/admin.log` and to use `DEV_RESET=1`
+- [x] Shell tests under `scripts/tests/` pass (`make test-scripts`); `bash -n` clean
+
+Not verified by running: a full `scripts/dev-up.sh` / `dev-down.sh` / any `examples/*/run.sh` end to end (a live dev stack shares this machine's ports, Postgres and Redis). The failure-trap path of dev-up was exercised up to its port check only. Archived-snapshot detection is a warning after start (the hub binary has no archive verifier; no Go change). Follow-up idea: a CI job for `make test-scripts`.
+
+
 ### Critical path (Release 1)
 
 Longest dependency chain among open tickets, counting each ticket as ~1 day: **19 tickets**.

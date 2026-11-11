@@ -66,9 +66,11 @@ type Cache struct {
 	gen  atomic.Pointer[generation]
 	kick chan struct{} // cap 1: a miss asks Run for an early reload
 
-	mu         sync.Mutex // serialises reloads; guards wanted and lastReload
+	mu         sync.Mutex // serialises reloads; guards wanted, lastReload and the failure state
 	wanted     []string
 	lastReload time.Time
+	failures   int    // consecutive failed reloads; drives the backoff of miss-triggered reloads
+	lastFail   string // error text of the failure already logged; "" while healthy
 
 	misses   *prometheus.CounterVec
 	decrypts prometheus.Counter
@@ -192,6 +194,21 @@ func (c *Cache) Warm(ctx context.Context, accountIDs []string) error {
 	return c.reloadLocked(ctx)
 }
 
+// Served reports how many accounts the cache is asked to serve and how many have a live
+// entry now, for callers that must say truthfully whether a reload loaded anything.
+func (c *Cache) Served() (wanted, served int) {
+	c.mu.Lock()
+	ids := slices.Clone(c.wanted)
+	c.mu.Unlock()
+	g, now := c.gen.Load(), c.opts.Now()
+	for _, id := range ids {
+		if e := g.active[id]; e != nil && now.Before(e.expires) {
+			served++
+		}
+	}
+	return len(ids), served
+}
+
 // Refresh reloads the current account set now.
 func (c *Cache) Refresh(ctx context.Context) error {
 	c.mu.Lock()
@@ -200,7 +217,7 @@ func (c *Cache) Refresh(ctx context.Context) error {
 }
 
 // Run refreshes the cache every RefreshEvery and soon after a miss (at most once per
-// MinRefreshGap), until ctx ends. Start it once per process; it is the only background
+// MinRefreshGap, doubling with each consecutive failure up to RefreshEvery), until ctx ends. Start it once per process; it is the only background
 // goroutine of the cache.
 func (c *Cache) Run(ctx context.Context) {
 	t := time.NewTicker(c.opts.RefreshEvery)
@@ -220,12 +237,38 @@ func (c *Cache) Run(ctx context.Context) {
 func (c *Cache) backgroundRefresh(ctx context.Context, onMiss bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if onMiss && c.opts.Now().Sub(c.lastReload) < c.opts.MinRefreshGap {
+	if onMiss && c.opts.Now().Sub(c.lastReload) < c.missGapLocked() {
 		return
 	}
-	if err := c.reloadLocked(ctx); err != nil && ctx.Err() == nil {
-		c.opts.Logger.WarnContext(ctx, "credential cache refresh failed", slog.Any("error", err), slog.Bool("on_miss", onMiss))
+	err := c.reloadLocked(ctx)
+	if ctx.Err() != nil {
+		return
 	}
+	switch {
+	case err != nil:
+		// One line per state change: a source that stays broken does not log on every attempt.
+		if msg := err.Error(); msg != c.lastFail {
+			c.lastFail = msg
+			c.opts.Logger.WarnContext(ctx, "credential cache refresh failed", slog.Any("error", err), slog.Bool("on_miss", onMiss),
+				slog.Int("consecutive_failures", c.failures))
+		}
+	case c.lastFail != "":
+		c.lastFail = ""
+		c.opts.Logger.InfoContext(ctx, "credential cache refresh recovered", slog.Bool("on_miss", onMiss))
+	}
+}
+
+// missGapLocked is the minimum time between miss-triggered reloads: MinRefreshGap, doubled per
+// consecutive failure and capped at RefreshEvery (the periodic refresh always runs).
+func (c *Cache) missGapLocked() time.Duration {
+	gap := c.opts.MinRefreshGap
+	for range c.failures {
+		if gap >= c.opts.RefreshEvery {
+			return c.opts.RefreshEvery
+		}
+		gap *= 2
+	}
+	return min(gap, max(c.opts.RefreshEvery, c.opts.MinRefreshGap))
 }
 
 // reloadLocked loads the wanted accounts and publishes a new generation. Callers hold c.mu.
@@ -235,8 +278,15 @@ func (c *Cache) reloadLocked(ctx context.Context) error {
 		c.gen.Store(emptyGeneration())
 		return nil
 	}
-	c.decrypts.Inc()
 	loaded, loadErr := c.loader.Load(ctx, c.wanted)
+	if len(loaded) > 0 || loadErr != nil { // an empty store decrypts nothing
+		c.decrypts.Inc()
+	}
+	if loadErr != nil {
+		c.failures++
+	} else {
+		c.failures = 0
+	}
 	now := c.opts.Now()
 	expires := now.Add(c.opts.TTL)
 	old := c.gen.Load()
@@ -287,6 +337,9 @@ func (c *Cache) reloadLocked(ctx context.Context) error {
 		if e := next.active[id]; e != nil {
 			versions = append(versions, fmt.Sprintf("%s@v%d", id, e.creds.Version))
 		}
+	}
+	if len(versions) == 0 {
+		return loadErr
 	}
 	c.opts.Logger.InfoContext(ctx, "credentials decrypted", slog.Int("accounts", len(versions)), slog.Any("active_versions", versions),
 		slog.Bool("complete", loadErr == nil))

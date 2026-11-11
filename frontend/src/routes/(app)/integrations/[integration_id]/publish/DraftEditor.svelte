@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { enhance } from '$app/forms';
+	import { applyAction, enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import {
 		fromPlainError,
@@ -21,6 +21,7 @@
 	} from '$lib/api/types';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ErrorPanel from '$lib/components/ErrorPanel.svelte';
+	import FormProblems from '$lib/components/FormProblems.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import DiffSplit from '$lib/components/diff/DiffSplit.svelte';
@@ -170,6 +171,8 @@
 					await update({ reset: false });
 				} else if (result.type === 'failure') {
 					failure(result.data as ActionFailureData);
+				} else if (result.type === 'redirect') {
+					await applyAction(result);
 				} else {
 					saveError = new HubApiError({
 						status: result.status ?? 500,
@@ -193,6 +196,14 @@
 					report = (result.data as ActionSuccessData<ValidationReport>).result;
 				} else if (result.type === 'failure') {
 					failure(result.data as ActionFailureData);
+				} else if (result.type === 'redirect') {
+					await applyAction(result);
+				} else {
+					saveError = new HubApiError({
+						status: result.status ?? 500,
+						code: 'UNEXPECTED_RESPONSE',
+						message: 'The console could not run the publish checks. Try again.'
+					});
 				}
 			} finally {
 				checking = false;
@@ -248,6 +259,10 @@
 
 <form class="draft" method="POST" action="?/saveDraft" use:enhance={save} novalidate>
 	{#if mode === 'form'}
+		<FormProblems
+			title="Some pickers are empty because their lists did not load. Type the values, or reload."
+			items={looked.problems.map((message) => ({ message }))}
+		/>
 		<input type="hidden" name="spec" value={current} />
 		{#if saveFields.spec}<p class="fk-error" role="alert">{saveFields.spec}</p>{/if}
 		<SpecForm

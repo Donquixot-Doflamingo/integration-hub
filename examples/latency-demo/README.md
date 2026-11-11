@@ -25,7 +25,7 @@ LATENCY_TARGET=mock examples/latency-demo/run.sh    # offline: mockvendor stands
 Output from a `LATENCY_TARGET=mock` run on the 2-CPU build machine, ports shown as the defaults (yours will differ):
 
 ```text
-Target: mock   direct: POST http://127.0.0.1:8099/post   via Hub: POST http://127.0.0.1:18080/v1/integrations/int_latency_echo/invoke
+Target: mock   direct: POST http://127.0.0.1:18099/post   via Hub: POST http://127.0.0.1:18080/v1/integrations/int_latency_echo/invoke
                n  errors    p50 ms    p95 ms    p99 ms   mean ms
 direct       192       0      50.9      51.5      52.9      50.9
 via Hub      192       0      51.6      53.5      54.6      51.7

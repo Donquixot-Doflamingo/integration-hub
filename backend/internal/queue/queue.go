@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -62,7 +63,20 @@ type Outbox struct {
 	// Visibility is how long a claim is exclusive (default 30 s).
 	Visibility time.Duration
 	Now        func() time.Time
+	// Log reports envelopes parked as poison (slog.Default when nil). Never the payload.
+	Log *slog.Logger
 }
+
+func (o *Outbox) log() *slog.Logger {
+	if o.Log != nil {
+		return o.Log
+	}
+	return slog.Default()
+}
+
+// poisonReason is the dead-letter reason of a stored envelope that no longer decodes (an older
+// format, or damage): the queue cannot deliver it and must not let it block its neighbours.
+const poisonReason = "poison"
 
 func (o *Outbox) visibility() time.Duration {
 	if o.Visibility <= 0 {
@@ -181,6 +195,7 @@ func (o *Outbox) ClaimWithin(ctx context.Context, db DB, worker, pool string, n,
 	}
 	defer rows.Close()
 	var out []Claimed
+	var undecodable []string
 	for rows.Next() {
 		var c Claimed
 		var id, prev string
@@ -191,7 +206,10 @@ func (o *Outbox) ClaimWithin(ctx context.Context, db DB, worker, pool string, n,
 		}
 		attempt := c.Attempt
 		if err := json.Unmarshal(body, &c.Envelope); err != nil {
-			return nil, fmt.Errorf("queue: decode envelope %s: %w", id, err)
+			// The batch is already committed as in_flight: one bad row must not discard the rest
+			// (HUB-453). It is dead-lettered below, once the rows are read.
+			undecodable = append(undecodable, id)
+			continue
 		}
 		c.Attempt, c.Status = attempt, core.State(prev) // the row's attempt, not the stored envelope's
 		if account != nil && endpoint != nil {
@@ -199,7 +217,38 @@ func (o *Outbox) ClaimWithin(ctx context.Context, db DB, worker, pool string, n,
 		}
 		out = append(out, c)
 	}
-	return out, rows.Err()
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	for _, id := range undecodable {
+		o.deadLetterUndecodable(ctx, db, id, worker)
+	}
+	return out, nil
+}
+
+// deadLetterUndecodable moves a row whose envelope does not decode to hub.dead_letters as poison,
+// so it can never be claimed or listed again, and logs it once with its request id (never the
+// payload). worker names the claim that holds it; "" is a waiting row (accepted, retry_scheduled,
+// parked) the expiry pass found. A failure leaves the row where it was (a claimed one is
+// reclaimed after the visibility window) and is logged; the caller carries on with the others.
+func (o *Outbox) deadLetterUndecodable(ctx context.Context, db DB, id, worker string) {
+	tag, err := db.Exec(ctx, `
+		WITH gone AS (
+			DELETE FROM hub.outbox WHERE request_id = $1 AND (
+				(status = 'in_flight' AND claimed_by = $2) OR ($2 = '' AND status IN ('accepted', 'retry_scheduled', 'parked')))
+			RETURNING request_id, tenant_id, integration_id, attempt, envelope)
+		INSERT INTO hub.dead_letters (request_id, created_at, tenant_id, integration_id, reason, last_error, attempts, envelope)
+		SELECT request_id, $3, tenant_id, integration_id, $4, $5, attempt, envelope FROM gone
+		ON CONFLICT (request_id) DO UPDATE SET created_at = EXCLUDED.created_at, reason = EXCLUDED.reason,
+			last_error = EXCLUDED.last_error, attempts = EXCLUDED.attempts, envelope = EXCLUDED.envelope, replayed_at = NULL`,
+		id, worker, o.now(), poisonReason, "stored envelope does not decode")
+	switch {
+	case err != nil:
+		o.log().ErrorContext(ctx, "queue.poison_dead_letter_failed", slog.String("request_id", id), slog.String("error", err.Error()))
+	case tag.RowsAffected() > 0:
+		o.log().ErrorContext(ctx, "queue.poison_envelope", slog.String("request_id", id), slog.String("reason", poisonReason))
+	}
 }
 
 func guarded(tag pgconn.CommandTag, err error, op, id string) error {
@@ -428,26 +477,39 @@ func (o *Outbox) ExpireClaimed(ctx context.Context, db DB, id, worker string) er
 	return guarded(tag, err, "expire", id)
 }
 
-// DueExpiries lists up to n waiting envelopes whose TTL passed (scheduler).
+// DueExpiries lists up to n waiting envelopes whose TTL passed (scheduler). A stored envelope
+// that does not decode is dead-lettered as poison and left out (it would otherwise head the list
+// for ever, HUB-453).
 func (o *Outbox) DueExpiries(ctx context.Context, db DB, n int) ([]core.Envelope, error) {
-	rows, err := db.Query(ctx, `SELECT envelope, attempt FROM hub.outbox WHERE status IN ('accepted', 'retry_scheduled', 'parked')
+	rows, err := db.Query(ctx, `SELECT request_id, envelope, attempt FROM hub.outbox WHERE status IN ('accepted', 'retry_scheduled', 'parked')
 		AND expires_at <= $1 ORDER BY expires_at LIMIT $2`, o.now(), n)
 	if err != nil {
 		return nil, fmt.Errorf("queue: due expiries: %w", err)
 	}
-	envs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (core.Envelope, error) {
+	defer rows.Close()
+	var envs []core.Envelope
+	var undecodable []string
+	for rows.Next() {
+		var id string
 		var body []byte
-		var e core.Envelope
 		var attempt int
-		if err := row.Scan(&body, &attempt); err != nil {
-			return e, err
+		if err := rows.Scan(&id, &body, &attempt); err != nil {
+			return nil, fmt.Errorf("queue: due expiries: %w", err)
 		}
-		err := json.Unmarshal(body, &e)
+		var e core.Envelope
+		if err := json.Unmarshal(body, &e); err != nil {
+			undecodable = append(undecodable, id)
+			continue
+		}
 		e.Attempt = attempt // the row's count, not the stored envelope's
-		return e, err
-	})
-	if err != nil {
+		envs = append(envs, e)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("queue: due expiries: %w", err)
+	}
+	for _, id := range undecodable {
+		o.deadLetterUndecodable(ctx, db, id, "")
 	}
 	return envs, nil
 }
@@ -463,7 +525,9 @@ func (o *Outbox) PruneDeadLetters(ctx context.Context, db DB, retention time.Dur
 
 // Replay puts a dead letter back as accepted, due now (dead_lettered → accepted; operator
 // replay, DESIGN §10.6). The worker re-resolves and re-transforms. A dead letter whose body was
-// erased (EraseDeadLetters) has nothing to deliver: ErrLost.
+// erased (EraseDeadLetters) has nothing to deliver: ErrLost. The new expiry is written to the
+// column and into the envelope JSON: the worker checks the JSON's, so a stale one would expire
+// a late replay unattempted (HUB-449).
 func (o *Outbox) Replay(ctx context.Context, db DB, id string, expiresAt time.Time) error {
 	now := o.now()
 	tag, err := db.Exec(ctx, `
@@ -473,8 +537,9 @@ func (o *Outbox) Replay(ctx context.Context, db DB, id string, expiresAt time.Ti
 			RETURNING request_id, tenant_id, integration_id, envelope)
 		INSERT INTO hub.outbox (request_id, status, pool, tenant_id, integration_id, attempt, next_attempt_at, expires_at, envelope, created_at)
 		SELECT request_id, 'accepted', CASE WHEN envelope->>'pool' = 'llm' THEN 'llm' ELSE 'messaging' END,
-			tenant_id, integration_id, 0, $2, $3, jsonb_set(envelope, '{attempt}', '0'), $2 FROM dl`,
-		id, now, expiresAt)
+			tenant_id, integration_id, 0, $2, $3, 
+			jsonb_set(jsonb_set(envelope, '{attempt}', '0'), '{expires_at}', to_jsonb($4::text)), $2 FROM dl`,
+		id, now, expiresAt, expiresAt.UTC().Format(time.RFC3339Nano))
 	return guarded(tag, err, "replay", id)
 }
 

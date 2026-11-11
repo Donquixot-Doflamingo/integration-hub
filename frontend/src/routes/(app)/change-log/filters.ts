@@ -1,4 +1,5 @@
 import type { ListChangeLogQuery, ObjectType } from '$lib/api/types';
+import { droppedFields, type FilterProblems } from '$lib/utils/filter-problems';
 import { pagingParams, parsePaging, type Paging } from '$lib/utils/paging';
 import { normalizeTime, timeChip } from '$lib/utils/time';
 
@@ -146,19 +147,44 @@ export function chipValue(key: FilterKey, filters: Filters): string {
 	return v;
 }
 
-export function filtersFromForm(form: FormData): { filters: Filters; limit: number | null } {
+const problemMessages: Record<FilterKey, string> = {
+	actor: 'Use at most 256 characters.',
+	object_id: 'Use at most 128 characters.',
+	action: 'Use an operation id such as publishIntegration (letters and digits, lower-case first).',
+	object_type: 'Pick a listed type.',
+	from: 'Enter a valid date and time.',
+	to: 'Enter a valid date and time.'
+};
+
+/**
+ * `problems` names each non-empty field that did not fit its rule: the page marks it and does not
+ * search, instead of listing everything with the filter silently gone (HUB-455).
+ */
+export function filtersFromForm(form: FormData): {
+	filters: Filters;
+	limit: number | null;
+	problems: FilterProblems<FilterKey>;
+} {
 	const params = new URLSearchParams();
+	const raw: Partial<Record<FilterKey, string>> = {};
 	for (const key of [...TEXT_KEYS, 'object_type'] as const) {
 		const v = form.get(key);
-		if (typeof v === 'string' && v.trim()) params.set(key, v.trim());
+		if (typeof v === 'string' && v.trim()) {
+			params.set(key, v.trim());
+			raw[key] = v.trim();
+		}
 	}
 	for (const key of ['from', 'to'] as const) {
-		const v = normalizeTime(String(form.get(key) ?? ''));
+		const text = String(form.get(key) ?? '').trim();
+		if (text) raw[key] = text;
+		const v = normalizeTime(text);
 		if (v) params.set(key, v);
 	}
 	const limit = Number(form.get('limit'));
+	const filters = parseListState(params).filters;
 	return {
-		filters: parseListState(params).filters,
+		filters,
+		problems: droppedFields(raw, filters, problemMessages),
 		limit: Number.isFinite(limit) && limit > 0 ? limit : null
 	};
 }

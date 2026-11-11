@@ -79,6 +79,19 @@ func TestDomainFunctions(t *testing.T) {
 		{src: `currencyMinor("1.005", "INR")`, wantErr: "INR allows 2 decimals"},
 		{src: `currencyMinor("1.5", "JPY")`, wantErr: "JPY allows 0 decimals"},
 		{src: `currencyMinor("abc", "INR")`, wantErr: "not a decimal amount"},
+		{src: `currencyMinor("1000", "XOF")`, want: 1000},
+		{src: `currencyMinor("1000", "XAF")`, want: 1000},
+		{src: `currencyMinor(1000, "ISK")`, want: 1000},
+		{src: `currencyMinor("5", "UGX")`, want: 5},
+		{src: `currencyMinor("5", "XPF")`, want: 5},
+		{src: `currencyMinor("1.5", "XOF")`, wantErr: "XOF allows 0 decimals"},
+		{src: `currencyMinor("1.2345", "CLF")`, want: 12345},
+		{src: `currencyMinor("1.2345", "UYW")`, want: 12345},
+		{src: `currencyMinor("1.23", "BHD")`, want: 1230},
+		{src: `currencyMinor("1.2345", "BHD")`, wantErr: "BHD allows 3 decimals"},
+		{src: `currencyMinor("12.34", "usd")`, want: 1234},
+		{src: `currencyMinor("1", "XXX")`, wantErr: "not a known ISO 4217 currency"},
+		{src: `currencyMinor("1", "ABC")`, wantErr: "not a known ISO 4217 currency"},
 		{src: `currencyMinor("1", "RUPEES")`, wantErr: "not an ISO 4217 code"},
 		{src: `maskPAN("ABCDE1234F")`, want: "XXXXXX234F"},
 		{src: `maskPAN("4111 1111 1111 1111")`, want: "XXXXXXXXXXXX1111"},
@@ -99,6 +112,31 @@ func TestMasksNeverReturnTheFullIdentifier(t *testing.T) {
 			clean := strings.TrimSpace(id)
 			if clean != "" && got == clean {
 				t.Errorf("%s(%q) returned the identifier unmasked", fn, id)
+			}
+		}
+	}
+}
+
+// Every ISO 4217 exponent other than 2, and a sample of 2-digit codes, must be known: a missing
+// zero-decimal currency would overcharge 100x, so an unknown code is refused, never guessed.
+func TestCurrencyMinorExponents(t *testing.T) {
+	zero := "BIF CLP DJF GNF ISK JPY KMF KRW PYG RWF UGX UYI VND VUV XAF XOF XPF"
+	three := "BHD IQD JOD KWD LYD OMR TND"
+	four := "CLF UYW"
+	two := "AED INR USD EUR GBP BRL MXN ZAR NGN KES CNY AUD CAD CHF SGD HKD THB IDR PHP PKR BDT LKR NPR SAR QAR EGP TRY"
+	for exp, codes := range map[int]string{0: zero, 3: three, 4: four, 2: two} {
+		for _, c := range strings.Fields(codes) {
+			got, err := run(t, `currencyMinor("1", "`+c+`")`, Input{})
+			if err != nil {
+				t.Errorf("%s: %v", c, err)
+				continue
+			}
+			want := int64(1)
+			for i := 0; i < exp; i++ {
+				want *= 10
+			}
+			if got != want {
+				t.Errorf("currencyMinor(1, %s) = %v, want %d", c, got, want)
 			}
 		}
 	}

@@ -303,6 +303,7 @@ Accounts hold `active` and `next` credentials. In-flight calls keep what was alr
 - Data: `??` (coalesce) `merge pick omit flatten map filter len toJSON fromJSON`
 - Encoding/identity: `uuid sha256 hmacSHA256 base64 urlEncode`
 - Domain: `phoneE164 emailNormalize currencyMinor maskPAN maskAadhaar`
+- Notes (HUB-447): `format` is `fmt.Sprintf` for JSON data: a whole-number float (JSON numbers are float64) is printed as an integer by `%d`, `%v`, `%s` and `%x` (`format("%d", 3.0)` is `3`, `format("%v", 1000000.0)` is `1000000`), and a layout that does not fit its arguments (bad verb, wrong type, wrong count) is a TRANSFORM_FAILED error instead of `%!d(float64=3)` text. `currencyMinor` knows the full ISO 4217 minor-unit table and refuses an unknown currency. A NaN or ±Inf result (division by zero) fails the run. `$env` is not available in expressions.
 
 ### 7.4 Examples (CleverTap shapes are illustrative; verify against current CleverTap upload API docs)
 

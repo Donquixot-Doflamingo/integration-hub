@@ -224,7 +224,17 @@ func notFound(what string) *Error {
 // fail writes err: an *Error as is, anything else as a logged 500.
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	var e *Error
-	if !errors.As(err, &e) {
+	var load *control.SnapshotLoadError
+	if errors.As(err, &load) && !errors.As(err, &e) {
+		// Every read and write starts from the newest archived snapshot: say which one is broken
+		// and why, instead of a bare internal error (HUB-451). The contract has no 503 or
+		// dedicated code, so it stays INTERNAL_ERROR with the detail in message and meta.
+		s.d.Log.ErrorContext(r.Context(), "newest archived snapshot cannot be loaded", slog.String("route", r.Pattern),
+			slog.Int64("archive_version", load.Version), slog.String("error", err.Error()))
+		e = &Error{Status: http.StatusInternalServerError, Code: CodeInternalError, Retryable: false,
+			Message: fmt.Sprintf("The newest archived configuration snapshot (v%d) cannot be loaded: %s. Reads and edits are refused until it is repaired by an operator (restore the blob or remove the unloadable snapshot row; see the runbook).", load.Version, load.Reason()),
+			Meta:    map[string]any{"cause": "snapshot_unloadable", "snapshot_version": load.Version}}
+	} else if !errors.As(err, &e) {
 		s.d.Log.ErrorContext(r.Context(), "admin operation failed", slog.String("route", r.Pattern), slog.String("error", err.Error()))
 		e = internalError()
 	}

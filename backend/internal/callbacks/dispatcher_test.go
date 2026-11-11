@@ -36,6 +36,8 @@ type fakeStore struct {
 	lose    bool
 	maxN    int
 	claims  int
+	// overClaim makes claim return up to twice the rows asked for, like the SQL did before HUB-452.
+	overClaim bool
 }
 
 func (f *fakeStore) claim(_ context.Context, _ string, n int, _ time.Duration) ([]delivery, error) {
@@ -43,6 +45,9 @@ func (f *fakeStore) claim(_ context.Context, _ string, n int, _ time.Duration) (
 	defer f.mu.Unlock()
 	f.claims++
 	f.maxN = max(f.maxN, n)
+	if f.overClaim {
+		n *= 2
+	}
 	k := min(n, len(f.queue))
 	out := f.queue[:k]
 	f.queue = f.queue[k:]
@@ -112,10 +117,12 @@ type receiver struct {
 	status   atomic.Int64
 	hits     atomic.Int64
 	verified atomic.Int64
-	mu       sync.Mutex
-	headers  []http.Header
-	bodies   [][]byte
-	secrets  [][]byte
+	// inflight/maxInflight count concurrent requests; delay (ns) slows every answer.
+	inflight, maxInflight, delay atomic.Int64
+	mu                           sync.Mutex
+	headers                      []http.Header
+	bodies                       [][]byte
+	secrets                      [][]byte
 }
 
 // first returns the headers and body of the first request.
@@ -134,6 +141,15 @@ func newReceiver(t *testing.T, secrets ...string) *receiver {
 	r.status.Store(http.StatusNoContent)
 	r.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		r.hits.Add(1)
+		cur := r.inflight.Add(1)
+		defer r.inflight.Add(-1)
+		for {
+			m := r.maxInflight.Load()
+			if cur <= m || r.maxInflight.CompareAndSwap(m, cur) {
+				break
+			}
+		}
+		time.Sleep(time.Duration(r.delay.Load()))
 		body, _ := io.ReadAll(req.Body)
 		if err := Verify(req.Header.Get(SignatureHeader), body, r.secrets, time.Now(), 0); err == nil {
 			r.verified.Add(1)
@@ -230,6 +246,7 @@ func TestDispatcherAttemptOutcomes(t *testing.T) {
 		status     int
 		want       string
 		errClass   string
+		hold       bool // the attempt is given back, nothing audited
 		hits       int64
 		httpStatus int
 	}{
@@ -242,7 +259,8 @@ func TestDispatcherAttemptOutcomes(t *testing.T) {
 		{name: "endpoint of another tenant dead-letters", endpoint: "reg_other_tenant", attempt: 1, want: statusDeadLettered, errClass: errTenantMismatch},
 		{name: "secret not loaded retried", endpoint: "reg_nosecret", attempt: 1, want: statusRetryScheduled, errClass: errSecretUnavailable},
 		{name: "ssrf blocked retried", endpoint: "reg_private", attempt: 1, want: statusRetryScheduled, errClass: errSSRFBlocked},
-		{name: "disabled endpoint held, not sent", endpoint: "reg_off", attempt: 1, want: statusRetryScheduled, errClass: errEndpointDisabled},
+		// Held on the last attempt of the schedule too: not sent, not counted, never dead-lettered.
+		{name: "disabled endpoint held, not sent", endpoint: "reg_off", attempt: 3, want: statusRetryScheduled, errClass: errEndpointDisabled, hold: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fx := newDispatchFixture(t, DispatcherOptions{})
@@ -255,6 +273,18 @@ func TestDispatcherAttemptOutcomes(t *testing.T) {
 			o, ok := fx.store.outcome(row.ID)
 			if !ok || o.Status != tc.want || o.Error != tc.errClass || o.HTTPStatus != tc.httpStatus {
 				t.Fatalf("outcome = %+v (recorded %v), want %s/%s/%d", o, ok, tc.want, tc.errClass, tc.httpStatus)
+			}
+			if o.Hold != tc.hold || (tc.hold && o.RetryIn != disabledHold) {
+				t.Fatalf("outcome hold = %v retry in %v, want hold %v (%v)", o.Hold, o.RetryIn, tc.hold, disabledHold)
+			}
+			if tc.hold {
+				if n := len(fx.sink.all()); n != 0 {
+					t.Fatalf("a hold emitted %d audit events", n)
+				}
+				if got := testutil.ToFloat64(fx.d.deliveries.WithLabelValues("orders-service", tc.want)); got != 1 {
+					t.Fatalf("callback_deliveries_total{%s} = %v", tc.want, got)
+				}
+				return
 			}
 			if tc.want == statusRetryScheduled {
 				base := []time.Duration{5 * time.Second, 30 * time.Second}[tc.attempt-1]
@@ -409,5 +439,38 @@ func TestRunDeliversAndStopsCleanly(t *testing.T) {
 	}
 	if testutil.ToFloat64(fx.d.oldest) != 3 || testutil.ToFloat64(fx.d.dlq) != 2 {
 		t.Fatal("queue gauges not sampled")
+	}
+}
+
+// TestRunSurvivesAnOverClaim: a store that returns more rows than it was asked for (the SQL did,
+// HUB-452) must not push concurrency above Senders, leak a goroutine, or hang shutdown.
+func TestRunSurvivesAnOverClaim(t *testing.T) {
+	fx := newDispatchFixture(t, DispatcherOptions{Senders: 3, ClaimBatch: 3, PollInterval: 5 * time.Millisecond, SampleEvery: time.Hour})
+	fx.store.overClaim = true
+	fx.rcv.delay.Store(int64(20 * time.Millisecond))
+	for range 30 {
+		fx.store.queue = append(fx.store.queue, testRow(t, "reg_orders_cb", 1))
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- fx.d.Run(ctx) }()
+	deadline := time.Now().Add(10 * time.Second)
+	for fx.store.recorded() < 30 {
+		if time.Now().After(deadline) {
+			t.Fatalf("delivered %d of 30", fx.store.recorded())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not stop: a goroutine is stuck on the token channel")
+	}
+	if m := fx.rcv.maxInflight.Load(); m > 3 {
+		t.Fatalf("%d concurrent attempts with 3 senders", m)
 	}
 }

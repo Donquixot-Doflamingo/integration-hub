@@ -76,6 +76,10 @@ export function accessFromRoles(roles: readonly Role[], tenants: readonly string
 	};
 }
 
+/**
+ * `/me` failed: nothing is known. Not `tenantScoped` (HUB-455): unknown is not "restricted", and
+ * treating an admin as a tenant viewer hid whole sections. The layout shows a retry panel instead.
+ */
 export const NO_ACCESS: Access = {
 	known: false,
 	roles: [],
@@ -83,7 +87,7 @@ export const NO_ACCESS: Access = {
 	role: null,
 	canMutate: false,
 	isAdmin: false,
-	tenantScoped: true
+	tenantScoped: false
 };
 
 export function accessFromMe(me: ApiResult<Me>): Access {

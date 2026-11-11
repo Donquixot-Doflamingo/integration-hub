@@ -51,6 +51,7 @@ type roleRegistry struct {
 	afterSwap  func(*registry.Snapshot)
 	// archiveSeen is the newest archive version this node has considered (follow).
 	archiveSeen atomic.Int64
+	unloadable  unloadableLog
 	rdb         *redis.Client
 }
 
@@ -93,11 +94,16 @@ func (r *roleRegistry) load(ctx context.Context) {
 	}
 	actx, cancel := context.WithTimeout(ctx, archiveTimeout)
 	defer cancel()
-	if snap, src, v, err := r.archive.Latest(actx, timeNow()); err == nil {
+	asnap, asrc, v, err := r.archive.Latest(actx, timeNow())
+	if err == nil {
 		r.log.WarnContext(ctx, "booted from the archived snapshot", slog.Int64("archive_version", v))
-		snap.Version = archiveVersion(v)
-		r.adopt(ctx, src, snap, "archive")
+		asnap.Version = archiveVersion(v)
+		r.adopt(ctx, asrc, asnap, "archive")
 		return
+	}
+	var le *control.SnapshotLoadError
+	if errors.As(err, &le) {
+		r.logUnloadable(ctx, err)
 	} else if !errors.Is(err, control.ErrNoSnapshot) {
 		r.failures.WithLabelValues("archive_error").Inc()
 		r.log.WarnContext(ctx, "archived snapshot unavailable", slog.String("error", err.Error()))
@@ -160,8 +166,10 @@ func (r *roleRegistry) adopt(ctx context.Context, src registry.Sources, snap *re
 	if r.cfg.Role == Admin && origin == "config" && r.mayArchiveConfig(ctx) {
 		actx, cancel := context.WithTimeout(ctx, archiveTimeout)
 		defer cancel()
-		v, published, err := r.archive.Publish(actx, src, snap, control.ConfigAuthorPrefix+r.cfg.ConfigDir, "config directory changed")
+		v, published, err := r.archiveConfig(actx, src, snap)
 		switch {
+		case errors.Is(err, control.ErrArchiveRefused):
+			r.log.InfoContext(ctx, "archive holds published changes: config directory not archived (ADR-0010)")
 		case err != nil:
 			r.failures.WithLabelValues("archive_error").Inc()
 			r.log.ErrorContext(ctx, "snapshot not archived", slog.String("error", err.Error()))
@@ -236,7 +244,9 @@ func (r *roleRegistry) watch(ctx context.Context) {
 			if r.cfg.Role == Admin && r.mayArchiveConfig(ctx) {
 				actx, cancel := context.WithTimeout(ctx, archiveTimeout)
 				defer cancel()
-				if v, _, err := r.archive.Publish(actx, r.src, s, control.ConfigAuthorPrefix+r.cfg.ConfigDir, "config directory changed"); err != nil {
+				if v, _, err := r.archiveConfig(actx, r.src, s); errors.Is(err, control.ErrArchiveRefused) {
+					r.log.InfoContext(ctx, "archive holds published changes: config directory not archived (ADR-0010)")
+				} else if err != nil {
 					r.failures.WithLabelValues("archive_error").Inc()
 					r.log.ErrorContext(ctx, "snapshot not archived", slog.String("error", err.Error()))
 				} else {
@@ -249,6 +259,19 @@ func (r *roleRegistry) watch(ctx context.Context) {
 	if err != nil {
 		r.log.ErrorContext(ctx, "config watcher stopped", slog.String("error", err.Error()))
 	}
+}
+
+// archiveConfig archives the config directory's snapshot, re-checking mayArchiveConfig's rule
+// under the archive lock: a UI publish that landed since that read is never overwritten.
+func (r *roleRegistry) archiveConfig(ctx context.Context, src registry.Sources, snap *registry.Snapshot) (int64, bool, error) {
+	return r.archive.PublishWith(ctx, src, snap, control.ConfigAuthorPrefix+r.cfg.ConfigDir, "config directory changed", control.PublishOptions{
+		Guard: func(latest control.Meta, exists bool) error {
+			if exists && !strings.HasPrefix(latest.Author, control.ConfigAuthorPrefix) {
+				return control.ErrArchiveRefused
+			}
+			return nil
+		},
+	})
 }
 
 // mayArchiveConfig: the config directory is a bootstrap (ADR-0010). It is archived while the
@@ -317,13 +340,42 @@ func (r *roleRegistry) syncArchive(ctx context.Context) {
 	snap, src, v, err := r.archive.Latest(actx, timeNow())
 	if err != nil {
 		r.failures.WithLabelValues("fetch_error").Inc()
-		r.log.WarnContext(ctx, "archived snapshot not loaded: keeping the current one", slog.String("error", err.Error()))
+		r.logUnloadable(ctx, err)
 		return
 	}
+	r.unloadable = unloadableLog{}
 	r.archiveSeen.Store(v)
 	r.log.InfoContext(ctx, "snapshot.applied from the archive", slog.Int64("archive_version", v), slog.String("checksum", snap.Checksum))
 	snap.Version = archiveVersion(v)
 	r.adopt(ctx, src, snap, "archive")
+}
+
+// unloadableEvery is how often the same unloadable snapshot is logged again (the follow loop
+// retries every few seconds).
+const unloadableEvery = 10 * time.Minute
+
+// unloadableLog remembers what logUnloadable last said.
+type unloadableLog struct {
+	version int64
+	at      time.Time
+}
+
+// logUnloadable reports a failed archive fetch. An unloadable newest snapshot is one clear ERROR
+// naming the version and the way out, repeated at most every unloadableEvery; the node keeps
+// serving its current snapshot meanwhile. syncArchive runs on one goroutine, so no lock.
+func (r *roleRegistry) logUnloadable(ctx context.Context, err error) {
+	var le *control.SnapshotLoadError
+	if !errors.As(err, &le) {
+		r.log.WarnContext(ctx, "archived snapshot not loaded: keeping the current one", slog.String("error", err.Error()))
+		return
+	}
+	now := timeNow()
+	if r.unloadable.version == le.Version && now.Sub(r.unloadable.at) < unloadableEvery {
+		return
+	}
+	r.unloadable = unloadableLog{version: le.Version, at: now}
+	r.log.ErrorContext(ctx, "newest archived snapshot cannot be loaded: this node keeps serving its current snapshot and the admin API refuses edits until it is repaired (restore its blob from backup, or delete the unloadable row from hub.config_snapshots so the previous version becomes the newest; in dev: DEV_RESET=1 make dev-up)",
+		slog.Int64("archive_version", le.Version), slog.String("reason", le.Reason()), slog.String("error", err.Error()))
 }
 
 // pruneLoop deletes archived snapshots older than 90 days, at start and then hourly (scheduler).

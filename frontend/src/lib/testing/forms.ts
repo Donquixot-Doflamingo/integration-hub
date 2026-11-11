@@ -47,6 +47,7 @@ export function useActions(
 		cookies: opts.cookies ?? {}
 	};
 	state.submissions = [];
+	applied.length = 0;
 }
 
 /** Every form post seen by the fake `enhance` since `useActions`. */
@@ -149,7 +150,12 @@ export function enhance(form: HTMLFormElement, submit?: SubmitFunction) {
 	};
 }
 
-export async function applyAction(_result: ActionResult) {}
+/** Results handed to `applyAction` since the test started (a redirect result lands here). */
+export const applied: ActionResult[] = [];
+
+export async function applyAction(result: ActionResult) {
+	applied.push(result);
+}
 export function deserialize(text: string) {
 	return JSON.parse(text);
 }

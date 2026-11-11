@@ -3,6 +3,7 @@ package transform
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -180,6 +181,9 @@ func scalarString(v any) (string, error) {
 	case int64:
 		return strconv.FormatInt(x, 10), nil
 	case float64:
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			return "", errNonFinite
+		}
 		return strconv.FormatFloat(x, 'f', -1, 64), nil
 	}
 	return "", fmt.Errorf("must evaluate to a string, number or bool, got %T", v)

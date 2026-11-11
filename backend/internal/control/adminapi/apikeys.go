@@ -51,6 +51,18 @@ func randomToken(n int) string {
 	return string(out)
 }
 
+// uniqueScopes drops repeated scopes anywhere in the list and keeps the caller's order
+// (slices.Compact only removed neighbours).
+func uniqueScopes(scopes []string) []string {
+	out := make([]string, 0, len(scopes))
+	for _, s := range scopes {
+		if !slices.Contains(out, s) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // mintKey returns a new key record and its plaintext (hk_live_ + 32 random characters).
 func mintKey(now time.Time, scopes []string, description string, expiresAt *time.Time) (registry.APIKey, string) {
 	secret := "hk_live_" + randomToken(32)
@@ -192,7 +204,7 @@ func (s *Server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	if body.Description != nil {
 		desc = *body.Description
 	}
-	key, secret := mintKey(s.d.Now(), slices.Compact(slices.Clone(body.Scopes)), desc, body.ExpiresAt)
+	key, secret := mintKey(s.d.Now(), uniqueScopes(body.Scopes), desc, body.ExpiresAt)
 	res, err := pub.Edit(r.Context(), func(tr control.Tree, snap *registry.Snapshot) (control.Change, error) {
 		t, ok := snap.Tenants[body.TenantID]
 		if !ok {
