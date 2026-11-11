@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `fix(frontend)` · Regenerate the typed client and role table for contract 2.1.1; correct the hubmcp README (HUB-469) · HUB-469 · F-24
+  - `npm run gen:api` output matches contract hub-admin 2.1.1 again, so the two generated-file freshness tests pass
+  - `contracts/mcp/README.md` states that `HUB_ADMIN_BASE_URL` is required with `HUB_ADMIN_TOKEN` (except on a loopback gateway) and that the ISFC key env form is loopback-only
 - 2026-11-11 · `docs(tickets)` · Set EP-15 ticket statuses from the branch history and mark the OBSERVABILITY ISFC signals implemented (HUB-460) · HUB-460 · F-24
   - HUB-461 and HUB-469 to HUB-497 move from todo to in-review with acceptance boxes ticked only where tests exist; boxes stay open for real ISFC, promtool, the policy copy to the ISFC repo, the QA Entra check, the CI-runner benchmark and `e2e-real`; HUB-462 to HUB-464 stay blocked
   - OBSERVABILITY section 15 and the F-25 tenant surface now say what is implemented (the HubAdminAuthzUnavailable alert exists); ticket counters recomputed
