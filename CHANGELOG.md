@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(tech)` · Add the ISFC identity, tenancy and authorization plan (HUB-460) · HUB-460 · F-24
+  - `docs/tech/AUTH_PLAN.md` proposes ISFC login (Email OTP, Microsoft) for the console, one OPA policy per admin operation, tenants owned by ISFC and synced into the Hub, and callers as ISFC backend clients
+  - Lists 16 gaps found in ISFC and the Hub, six ISFC change requests, the contract changes, decisions D1–D9 and 39 draft tickets (HUB-460 to HUB-498, epic EP-15); nothing is built yet
 - 2026-11-08 · `test(scripts)` · Add make test-scripts and close out HUB-456 (HUB-456) · HUB-456 · F-23
   - `make test-scripts` runs the hermetic shell tests for the dev tooling; HUB-456 is in review with what was and was not run
 - 2026-11-08 · `fix(examples)` · Keep the examples off the dev stack's ports and processes (HUB-456) · HUB-456 · F-23
