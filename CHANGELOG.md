@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `chore(infra)` · Make the dev Postgres and Redis ports configurable (HUB-461) · HUB-461 · F-24
+  - `HUB_PG_PORT` and `HUB_REDIS_PORT` move the compose Postgres and Redis host ports; `HUB_GATEWAY_PORT` and `HUB_ADMIN_PORT` are aliases of the existing `DEV_*` variables; defaults are unchanged
+  - `docs/runbooks/isfc-local.md` describes running the ISFC local stack beside the Hub
 - 2026-11-11 · `docs(tech)` · Add the ISFC identity, tenancy and authorization plan (HUB-460) · HUB-460 · F-24
   - `docs/tech/AUTH_PLAN.md` proposes ISFC login (Email OTP, Microsoft) for the console, one OPA policy per admin operation, tenants owned by ISFC and synced into the Hub, and callers as ISFC backend clients
   - Lists 16 gaps found in ISFC and the Hub, six ISFC change requests, the contract changes, decisions D1–D9 and 39 draft tickets (HUB-460 to HUB-498, epic EP-15); nothing is built yet

@@ -26,6 +26,9 @@
 #   DEV_STATE                    state directory (default <repo>/.dev-stack)
 #   DEV_CONSOLE_PORT (5173), DEV_GATEWAY_PORT (8080), DEV_ADMIN_PORT (8081),
 #   DEV_MOCKVENDOR_PORT (8099), DEV_MOCKVENDOR_CONTROL_PORT (8098), DEV_OPS_PORT_BASE (19190)
+#   HUB_GATEWAY_PORT, HUB_ADMIN_PORT   aliases of DEV_GATEWAY_PORT / DEV_ADMIN_PORT (HUB-461)
+#   HUB_PG_PORT (5432), HUB_REDIS_PORT (6379)   host ports of the compose Postgres and Redis, so the
+#                                ISFC local stack (8080, 8081, 5432, 6379) can run beside the Hub
 #   DEV_SEED_TRAFFIC=0           do not send the sample requests
 #   DEV_SKIP_BUILD=1             reuse backend/bin and frontend/node_modules as they are
 #   DEV_RESET=1                  recreate the compose Postgres and Redis when the database holds
@@ -51,8 +54,8 @@ export NO_PROXY="${NO_PROXY:+$NO_PROXY,}localhost,127.0.0.1,::1" no_proxy="${no_
 
 bin="$root/backend/bin"
 console_port="${DEV_CONSOLE_PORT:-5173}"
-gw_port="${DEV_GATEWAY_PORT:-8080}"
-admin_port="${DEV_ADMIN_PORT:-8081}"
+gw_port="${DEV_GATEWAY_PORT:-${HUB_GATEWAY_PORT:-8080}}"
+admin_port="${DEV_ADMIN_PORT:-${HUB_ADMIN_PORT:-8081}}"
 mv_port="${DEV_MOCKVENDOR_PORT:-8099}"
 mv_ctl_port="${DEV_MOCKVENDOR_CONTROL_PORT:-8098}"
 ops_base="${DEV_OPS_PORT_BASE:-19190}"
@@ -131,8 +134,8 @@ else
     say "Docker is not running (on macOS: colima start): using Postgres and Redis on localhost"
   fi
 fi
-export HUB_PG_DSN="${HUB_PG_DSN:-postgres://hub:hub@localhost:5432/hub?sslmode=disable}"
-export HUB_REDIS_ADDR="${HUB_REDIS_ADDR:-localhost:6379}"
+export HUB_PG_DSN="${HUB_PG_DSN:-postgres://hub:hub@localhost:${HUB_PG_PORT:-5432}/hub?sslmode=disable}"
+export HUB_REDIS_ADDR="${HUB_REDIS_ADDR:-localhost:${HUB_REDIS_PORT:-6379}}"
 
 port_open() { (exec 3<>"/dev/tcp/$1/$2") 2>/dev/null; }
 redis_host="${HUB_REDIS_ADDR%:*}"
