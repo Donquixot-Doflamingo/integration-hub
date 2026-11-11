@@ -205,3 +205,22 @@ func TestISFCTokenRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// HUB_TENANT_ID picks the ISFC tenant the signed-in user acts in on hub_admin_* calls; the
+// admin token stays the user's own bearer token.
+func TestAdminCallsCarryTheTenantHeader(t *testing.T) {
+	hub := newFakeHub(t)
+	hub.on("searchRequests", hub.adm("searchRequests", 200, ""))
+	env := map[string]string{"HUB_ADMIN_TOKEN": testAdminToken, "HUB_ADMIN_BASE_URL": hub.srv.URL + "/admin/v1"}
+	cs := connect(t, isfcTestApp(t, hub.srv.URL, appOpts{}, env))
+	if out := callTool(t, cs, toolAdminSearch, map[string]any{}); out.res.IsError {
+		t.Fatalf("search failed: %s", out.json)
+	}
+	h := hub.callsTo("searchRequests")[0].Header
+	if h.Get("X-Tenant-Id") != testTenantUUID || h.Get("Authorization") != "Bearer "+testAdminToken {
+		t.Errorf("tenant %q, authorization %q", h.Get("X-Tenant-Id"), h.Get("Authorization"))
+	}
+	if h.Get("x-isfc-api-key") != "" {
+		t.Error("the ISFC backend key was sent to the admin API: admin tools act as the user")
+	}
+}

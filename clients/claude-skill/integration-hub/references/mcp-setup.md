@@ -40,7 +40,7 @@ see your shell's `PATH`. `hubmcp -transport stdio` is the default; logs go to st
 | `HUB_ISFC_CLIENT_ID` + `HUB_ISFC_API_KEY` | one of | one of, on stdio | Your ISFC backend client and the key `integration-hub` issued to it (instead of `HUB_API_KEY`; both set is a startup error). Secret |
 | `HUB_TENANT_ID` | only for a multi-tenant ISFC key | optional | ISFC tenant UUID, sent as `X-Tenant-Id` |
 | `HUB_ADMIN_TOKEN` | **unset** | required | **Your own** OIDC access token from your identity provider (local dev: the token `hubctl login -dev` saves), never a shared or service token. Unset → no `hub_admin_*` tool exists. Secret |
-| `HUB_ADMIN_BASE_URL` | — | set it | Control-plane URL **including `/admin/v1`**, e.g. `http://localhost:8081/admin/v1`. Defaults to `HUB_BASE_URL` + `/admin/v1`, which is wrong when the gateway and admin are on different hosts or ports (local dev: 8080 vs 8081) |
+| `HUB_ADMIN_BASE_URL` | — | required | Control-plane URL **including `/admin/v1`**, e.g. `http://localhost:8081/admin/v1`. The admin API is not served below `HUB_BASE_URL`: hubmcp guesses only for a loopback gateway (same host, port 8081) and otherwise refuses to start without it. With ISFC sign-in it is the gateway route to the Hub admin API, e.g. `https://gateway.example.com/hub/admin/v1`, and `HUB_TENANT_ID` picks the tenant you act in |
 
 Rules for the admin profile:
 - **stdio only.** Admin write tools are registered only on stdio, run by you on your machine. Never
@@ -60,6 +60,9 @@ Rules for the admin profile:
   # HUBCTL_TOKEN_FILE overrides. Dev tokens last 8 hours.
   export HUB_ADMIN_TOKEN="$(cat ~/.config/hubctl/token)"
   ```
+- ISFC sign-in (staging and production): `hubctl login -isfc` signs you in with your ISFC account in
+  the browser and saves the token the same way; export it as `HUB_ADMIN_TOKEN` and point
+  `HUB_ADMIN_BASE_URL` at the gateway route (see the table above).
 - **No deletes, ever.** Deleting, purging or replaying the DLQ, unseal, pause/resume, disabling
   tenants or callback endpoints, key revoke/rotate, secret rotation, credential changes, account
   drain/retire and breaker force stay manual in the console for roles that have them. Account

@@ -92,6 +92,9 @@ type appOpts struct {
 func newTestApp(t testing.TB, baseURL string, o appOpts) *app {
 	t.Helper()
 	env := map[string]string{"HUB_BASE_URL": baseURL, "HUB_API_KEY": testKey, "HUB_ADMIN_TOKEN": o.adminToken}
+	if o.adminToken != "" { // the fake Hub serves /admin/v1 beside /v1
+		env["HUB_ADMIN_BASE_URL"] = baseURL + "/admin/v1"
+	}
 	var args []string
 	if o.transport != "" {
 		args = []string{"-transport", o.transport}

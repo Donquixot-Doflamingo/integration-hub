@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -66,6 +67,19 @@ func (c config) String() string {
 		c.transport, c.addr, c.baseURL, c.adminBaseURL, setOrUnset(c.apiKey), setOrUnset(c.adminToken), c.isfcClientID, setOrUnset(c.isfcAPIKey), c.tenantID)
 }
 
+// localAdminBaseURL is where `dev-up` serves the admin API for a gateway on a loopback host:
+// the same host on port 8081. It returns "" for any other host, which must name its admin URL.
+func localAdminBaseURL(baseURL string) string {
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	if h := u.Hostname(); h != "localhost" && !isLoopback(net.JoinHostPort(h, "0")) {
+		return ""
+	}
+	return u.Scheme + "://" + net.JoinHostPort(u.Hostname(), "8081") + "/admin/v1"
+}
+
 func setOrUnset(s secret) string {
 	if s == "" {
 		return "(unset)"
@@ -94,16 +108,20 @@ func loadConfig(args []string, getenv func(string) string, stderr io.Writer) (co
 	c.baseURL = strings.TrimRight(getenv("HUB_BASE_URL"), "/")
 	c.apiKey = secret(getenv("HUB_API_KEY"))
 	c.adminToken = secret(getenv("HUB_ADMIN_TOKEN"))
-	c.adminBaseURL = getenv("HUB_ADMIN_BASE_URL")
-	if c.adminBaseURL == "" && c.baseURL != "" {
-		c.adminBaseURL = c.baseURL + "/admin/v1"
-	}
+	c.adminBaseURL = strings.TrimRight(getenv("HUB_ADMIN_BASE_URL"), "/")
 	c.isfcClientID = strings.TrimSpace(getenv("HUB_ISFC_CLIENT_ID"))
 	c.isfcAPIKey = secret(getenv("HUB_ISFC_API_KEY"))
 	c.tenantID = strings.TrimSpace(getenv("HUB_TENANT_ID"))
 	var errs []error
 	if c.baseURL == "" {
 		errs = append(errs, errors.New("HUB_BASE_URL is required"))
+	}
+	if c.adminBaseURL == "" && c.adminToken != "" {
+		// The admin API is not served below HUB_BASE_URL (the gateway): locally it listens on :8081,
+		// in production it is the ISFC gateway route (AUTH_PLAN G16). Guess only for the local stack.
+		if c.adminBaseURL = localAdminBaseURL(c.baseURL); c.adminBaseURL == "" {
+			errs = append(errs, errors.New("HUB_ADMIN_BASE_URL is required with HUB_ADMIN_TOKEN (the control-plane URL including /admin/v1, or the ISFC gateway route to it)"))
+		}
 	}
 	hasISFC := c.isfcClientID != "" && strings.TrimSpace(string(c.isfcAPIKey)) != ""
 	if (c.isfcClientID != "") != (strings.TrimSpace(string(c.isfcAPIKey)) != "") {
@@ -175,6 +193,7 @@ func newApp(c config, contract *toolContract, log *slog.Logger, secrets *secretS
 		if a.admin, err = newAdminClient(c.adminBaseURL, c.adminToken, hc, ua, ops); err != nil {
 			return nil, err
 		}
+		a.admin.tenant = c.tenantID
 	}
 	return a, nil
 }

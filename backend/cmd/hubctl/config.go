@@ -74,12 +74,7 @@ func (c *adminClient) liveTree(ctx context.Context) (map[string][]byte, int64, e
 
 // raw GETs a non-JSON-envelope body (the snapshot blob).
 func (c *adminClient) raw(ctx context.Context, path string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/admin/v1"+path, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	resp, err := c.http.Do(req)
+	resp, err := c.send(ctx, http.MethodGet, c.base+"/admin/v1"+path, nil, "", nil)
 	if err != nil {
 		return nil, err
 	}

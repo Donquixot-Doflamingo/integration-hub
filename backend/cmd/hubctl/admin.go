@@ -10,26 +10,40 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/pkg/hubclient"
 )
 
 // hubctl talks to the control plane (/admin/v1) with an OIDC bearer token (DESIGN §16.1).
-// Token: -token, else HUB_ADMIN_TOKEN, else the file `hubctl login` writes.
+// Token: -token, else HUB_ADMIN_TOKEN, else the file `hubctl login` writes. In ISFC mode the token
+// is the user's ISFC access token and HUB_ADMIN_URL is the gateway route. Automation (CI) sets
+// HUBCTL_ISFC_CLIENT_ID and HUBCTL_ISFC_CLIENT_SECRET instead: hubctl fetches that client's key
+// from auth-service and calls the admin directly with x-isfc-client-id and x-isfc-api-key
+// (AUTH_PLAN §7.5). HUB_TENANT_ID sends X-Tenant-Id.
 
 const adminUsage = `admin commands (control plane, HUB_ADMIN_URL default http://localhost:8081):
+  login -isfc [-isfc-auth-url URL] [-port N] [-no-browser]
+      Sign in with ISFC: authorization code with PKCE and a loopback redirect
+      (http://127.0.0.1:<port>/callback) on the public "hubctl" client. The token is saved (mode
+      0600) for later commands. Set HUB_ADMIN_URL to the gateway route of the Hub admin API (hubctl
+      appends /admin/v1). The auth URL defaults to HUBCTL_ISFC_AUTH_URL.
   login -dev [-role admin|editor|viewer|tenant_viewer] [-sub ID] [-email E] [-tenant T]
       Dev only: get a token from the admin's OIDC stub (HUB_ADMIN_DEV_OIDC=true) and save it
-      (mode 0600) for later commands. With a real issuer, export HUB_ADMIN_TOKEN instead.
+      (mode 0600) for later commands. With another issuer, export HUB_ADMIN_TOKEN instead.
   whoami
       Print the subject, roles and tenant scope of the current token (GET /admin/v1/me).
 
-common flags: -admin-url URL, -token TOKEN`
+common flags: -admin-url URL, -token TOKEN, -tenant-id UUID (HUB_TENANT_ID), -isfc-auth-url URL
+machine mode (CI): HUBCTL_ISFC_CLIENT_ID + HUBCTL_ISFC_CLIENT_SECRET + HUBCTL_ISFC_AUTH_URL, and
+  HUB_ADMIN_URL set to the admin listener itself (not the gateway). Machines cannot unseal or purge.`
 
 // adminFlags are the connection flags every admin command takes.
 type adminFlags struct {
-	url, token string
+	url, token, tenantID, isfcAuthURL string
 }
 
 func (a *adminFlags) register(fs *flag.FlagSet) {
@@ -39,6 +53,8 @@ func (a *adminFlags) register(fs *flag.FlagSet) {
 	}
 	fs.StringVar(&a.url, "admin-url", def, "control plane base URL")
 	fs.StringVar(&a.token, "token", "", "bearer token (default HUB_ADMIN_TOKEN, then the saved login)")
+	fs.StringVar(&a.tenantID, "tenant-id", os.Getenv("HUB_TENANT_ID"), "ISFC tenant UUID, sent as X-Tenant-Id")
+	fs.StringVar(&a.isfcAuthURL, "isfc-auth-url", os.Getenv("HUBCTL_ISFC_AUTH_URL"), "ISFC auth-service base URL (login -isfc and machine mode)")
 }
 
 // tokenFile is where `hubctl login` keeps the token: HUBCTL_TOKEN_FILE, else
@@ -54,25 +70,98 @@ func tokenFile() string {
 	return filepath.Join(dir, "hubctl", "token")
 }
 
-// client builds the admin client from the flags and the token sources.
+// client builds the admin client from the flags and the credential sources: -token, else the ISFC
+// machine credential (HUBCTL_ISFC_CLIENT_ID and _SECRET), else HUB_ADMIN_TOKEN, else the saved login.
 func (a *adminFlags) client() (*adminClient, error) {
-	tok := a.token
-	if tok == "" {
-		tok = os.Getenv("HUB_ADMIN_TOKEN")
+	hc := &http.Client{Timeout: 60 * time.Second}
+	c := &adminClient{base: strings.TrimSuffix(a.url, "/"), http: hc, tenant: strings.TrimSpace(a.tenantID)}
+	id, secret := os.Getenv("HUBCTL_ISFC_CLIENT_ID"), os.Getenv("HUBCTL_ISFC_CLIENT_SECRET")
+	if (id == "") != (secret == "") {
+		return nil, errors.New("HUBCTL_ISFC_CLIENT_ID and HUBCTL_ISFC_CLIENT_SECRET must be set together")
 	}
-	if tok == "" {
+	if a.token != "" {
+		c.token = a.token
+		return c, nil
+	}
+	if id != "" {
+		if os.Getenv("HUB_ADMIN_TOKEN") != "" {
+			return nil, errors.New("both an ISFC machine credential (HUBCTL_ISFC_CLIENT_ID) and HUB_ADMIN_TOKEN are set; unset one")
+		}
+		if a.isfcAuthURL == "" {
+			return nil, errors.New("machine mode needs the ISFC auth-service URL: HUBCTL_ISFC_AUTH_URL or -isfc-auth-url")
+		}
+		cred, err := hubclient.NewISFCCredential(id, secret, a.isfcAuthURL, &http.Client{Timeout: 30 * time.Second})
+		if err != nil {
+			return nil, err
+		}
+		c.isfc = cred
+		return c, nil
+	}
+	c.token = os.Getenv("HUB_ADMIN_TOKEN")
+	if c.token == "" {
 		b, err := os.ReadFile(tokenFile())
 		if err != nil {
-			return nil, errors.New("no admin token: run `hubctl login -dev` (dev) or export HUB_ADMIN_TOKEN")
+			return nil, errors.New("no admin credential: run `hubctl login -isfc`, or `hubctl login -dev` locally, export HUB_ADMIN_TOKEN, or set HUBCTL_ISFC_CLIENT_ID and HUBCTL_ISFC_CLIENT_SECRET")
 		}
-		tok = strings.TrimSpace(string(b))
+		c.token = strings.TrimSpace(string(b))
 	}
-	return &adminClient{base: strings.TrimSuffix(a.url, "/"), token: tok, http: &http.Client{Timeout: 60 * time.Second}}, nil
+	return c, nil
 }
 
 type adminClient struct {
 	base, token string
 	http        *http.Client
+	isfc        *hubclient.ISFCCredential // machine mode: x-isfc-client-id and x-isfc-api-key instead of a bearer token
+	tenant      string                    // X-Tenant-Id
+}
+
+// send performs one request with the client's credential. In machine mode a 401 or 403 makes it
+// fetch a new key once and send the request again (the ISFC auth libraries' rule); a key that did
+// not change is not retried. The caller closes the body.
+func (c *adminClient) send(ctx context.Context, method, target string, body []byte, contentType string, extra http.Header) (*http.Response, error) {
+	exchange := func(key string) (*http.Response, error) {
+		var rd io.Reader
+		if body != nil {
+			rd = bytes.NewReader(body)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, target, rd)
+		if err != nil {
+			return nil, err
+		}
+		for k, vs := range extra {
+			req.Header[k] = vs
+		}
+		if c.isfc != nil {
+			req.Header.Set("x-isfc-client-id", c.isfc.ClientID())
+			req.Header.Set("x-isfc-api-key", key)
+		} else {
+			req.Header.Set("Authorization", "Bearer "+c.token)
+		}
+		if c.tenant != "" {
+			req.Header.Set("X-Tenant-Id", c.tenant)
+		}
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		return c.http.Do(req)
+	}
+	if c.isfc == nil {
+		return exchange("")
+	}
+	key, err := c.isfc.Key(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	resp, err := exchange(key)
+	if err != nil || (resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden) {
+		return resp, err
+	}
+	fresh, ferr := c.isfc.Key(ctx, key)
+	if ferr != nil || fresh == key {
+		return resp, nil //nolint:nilerr // report the admin's answer, not a failed refresh
+	}
+	_ = resp.Body.Close()
+	return exchange(fresh)
 }
 
 // apiError is an admin error envelope, printed with its request id so support can find it.
@@ -103,23 +192,19 @@ func (e *apiError) Error() string {
 // do sends one /admin/v1 request; body (if non-nil) is sent as JSON and out (if non-nil)
 // receives the JSON answer.
 func (c *adminClient) do(ctx context.Context, method, path string, body, out any) error {
-	var rd io.Reader
+	var payload []byte
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
 			return err
 		}
-		rd = bytes.NewReader(b)
+		payload = b
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.base+"/admin/v1"+path, rd)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	ct := ""
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		ct = "application/json"
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.send(ctx, method, c.base+"/admin/v1"+path, payload, ct, nil)
 	if err != nil {
 		return fmt.Errorf("admin %s %s: %w", method, path, err)
 	}
@@ -153,6 +238,9 @@ func loginCmd(args []string, stdout, stderr io.Writer) int {
 	var a adminFlags
 	a.register(fs)
 	dev := fs.Bool("dev", false, "use the admin's dev OIDC stub")
+	isfc := fs.Bool("isfc", false, "sign in with ISFC (PKCE, loopback redirect)")
+	port := fs.Int("port", 0, "login -isfc: loopback port for the redirect (default: any free port)")
+	noBrowser := fs.Bool("no-browser", false, "login -isfc: print the URL, do not open a browser")
 	role := fs.String("role", "admin", "role to request")
 	sub := fs.String("sub", "", "subject (default $USER@hubctl)")
 	email := fs.String("email", "", "email (the change log's actor)")
@@ -160,8 +248,15 @@ func loginCmd(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		return 2
 	}
+	if *dev && *isfc {
+		fmt.Fprintln(stderr, "hubctl: use -dev or -isfc, not both")
+		return 2
+	}
+	if *isfc {
+		return loginISFCCmd(isfcLoginOptions{authURL: strings.TrimSuffix(a.isfcAuthURL, "/"), clientID: isfcLoginClientID, port: *port, noBrowser: *noBrowser}, stdout, stderr)
+	}
 	if !*dev {
-		fmt.Fprintln(stderr, "hubctl: only `login -dev` is built in; with a real issuer, get a token from it and export HUB_ADMIN_TOKEN")
+		fmt.Fprintln(stderr, "hubctl: use `login -isfc` (ISFC sign-in) or `login -dev` (local dev issuer); with another issuer, get a token from it and export HUB_ADMIN_TOKEN")
 		return 2
 	}
 	if *sub == "" {
@@ -192,16 +287,34 @@ func loginCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "hubctl: dev token: HTTP %d (is the admin running with HUB_ADMIN_DEV_OIDC=true?)\n", resp.StatusCode)
 		return 1
 	}
-	path := tokenFile()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		fmt.Fprintf(stderr, "hubctl: %v\n", err)
-		return 1
-	}
-	if err := os.WriteFile(path, []byte(out.AccessToken+"\n"), 0o600); err != nil {
+	path, err := saveToken(out.AccessToken)
+	if err != nil {
 		fmt.Fprintf(stderr, "hubctl: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "logged in as %s (%s) for %s; token saved to %s\n", *sub, *role, time.Duration(out.ExpiresIn)*time.Second, path)
+	return 0
+}
+
+// loginISFCCmd signs in with ISFC and saves the token like `login -dev` does.
+func loginISFCCmd(o isfcLoginOptions, stdout, stderr io.Writer) int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	return loginISFCCmdWith(ctx, o, stdout, stderr)
+}
+
+func loginISFCCmdWith(ctx context.Context, o isfcLoginOptions, stdout, stderr io.Writer) int {
+	tok, err := loginISFC(ctx, o, stdout)
+	if err != nil {
+		fmt.Fprintf(stderr, "hubctl: login -isfc: %v\n", err)
+		return 1
+	}
+	path, err := saveToken(tok.AccessToken)
+	if err != nil {
+		fmt.Fprintf(stderr, "hubctl: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "logged in with ISFC for %s; token saved to %s (set HUB_ADMIN_URL to the gateway route of the Hub admin API)\n", tok.ExpiresIn, path)
 	return 0
 }
 

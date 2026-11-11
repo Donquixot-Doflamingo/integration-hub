@@ -288,8 +288,8 @@ func TestHTTPConfig(t *testing.T) {
 		{name: "ipv6 loopback", args: []string{"-transport", "http", "-addr", "[::1]:9000"}},
 		{name: "remote without flag", args: []string{"-transport", "http", "-addr", "0.0.0.0:8090"}, wantErr: "-allow-remote"},
 		{name: "remote with flag", args: []string{"-transport", "http", "-addr", "0.0.0.0:8090", "-allow-remote"}},
-		{name: "admin token on loopback", args: []string{"-transport", "http"}, env: map[string]string{"HUB_ADMIN_TOKEN": testAdminToken}},
-		{name: "admin token on a remote listener", args: []string{"-transport", "http", "-addr", "0.0.0.0:8090", "-allow-remote"}, env: map[string]string{"HUB_ADMIN_TOKEN": testAdminToken}, wantErr: "HUB_ADMIN_TOKEN is refused"},
+		{name: "admin token on loopback", args: []string{"-transport", "http"}, env: map[string]string{"HUB_ADMIN_TOKEN": testAdminToken, "HUB_ADMIN_BASE_URL": "http://adm:8081/admin/v1"}},
+		{name: "admin token on a remote listener", args: []string{"-transport", "http", "-addr", "0.0.0.0:8090", "-allow-remote"}, env: map[string]string{"HUB_ADMIN_TOKEN": testAdminToken, "HUB_ADMIN_BASE_URL": "http://adm:8081/admin/v1"}, wantErr: "HUB_ADMIN_TOKEN is refused"},
 		{name: "stdio still needs HUB_API_KEY", args: []string{"-transport", "stdio"}, wantErr: "HUB_API_KEY is required"},
 	}
 	for _, tt := range tests {

@@ -100,6 +100,7 @@ type adminClient struct {
 	http      *http.Client
 	userAgent string
 	allowed   map[string]adminRoute // operationId -> route
+	tenant    string                // ISFC tenant UUID (HUB_TENANT_ID), sent as X-Tenant-Id
 }
 
 // newAdminClient builds the client for the given operations (operationId -> the method the
@@ -200,6 +201,9 @@ func (c *adminClient) do(ctx context.Context, call adminCall) (*adminReply, erro
 	req.Header.Set("Authorization", "Bearer "+string(c.token))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
+	if c.tenant != "" { // in ISFC mode the gateway reads it to pick the tenant the user acts in
+		req.Header.Set("X-Tenant-Id", c.tenant)
+	}
 	if call.body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
