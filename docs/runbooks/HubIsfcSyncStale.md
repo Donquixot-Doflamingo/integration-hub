@@ -28,5 +28,5 @@
 - The lag lasts more than an hour, or a revoked caller key must stop working now (disable the caller's tenant with `updateTenant` while ISFC is down).
 
 ## Related
-- [runbook index](README.md)
+- [runbook index](README.md), [ISFC authentication runbook](isfc-auth.md) (key revocation while the sync is stale)
 - [AUTH_PLAN §6.2, §11](../tech/AUTH_PLAN.md), [F-25 Tenants from ISFC](../features/F-25-tenants-from-isfc.md), [OBSERVABILITY §15](../tech/OBSERVABILITY.md)

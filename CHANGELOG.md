@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `chore(deploy)` · Add ISFC deployment manifests, the HubAdminAuthzUnavailable alert, the ISFC runbook and dev-up --isfc (HUB-497) · HUB-497 · F-24
+  - deploy/isfc holds the OPA sidecar values (opa.enabled, platform integration-hub), the gateway route and a NetworkPolicy that opens the admin port to the ISFC gateway and labelled automation only
+  - New alert HubAdminAuthzUnavailable (OPA errors above 1% for 5 minutes) with promtool tests and a runbook; docs/runbooks/isfc-auth.md covers OPA down, sync stale and key revocation
+  - `scripts/dev-up.sh --isfc` starts the admin in ISFC mode and the console with PUBLIC_AUTH_MODE=isfc from ISFC_* URLs and refuses to start without them; the default stack now starts the console with NODE_ENV=test because the console refuses the dev role picker otherwise
 - 2026-11-11 · `contract(admin)` · Document the 403 responses of getMe and getRequestStatus (HUB-469) · HUB-469 · F-24
   - `hub-admin` and `hub-public` 2.1.1 list 403 where the Hub already returns it (no Hub role; credential without `requests_read`)
 - 2026-11-11 · `feat(frontend)` · Restrict the dev login to mock builds and tests, and refuse it at start-up (HUB-495) · HUB-495 · F-24

@@ -1,0 +1,60 @@
+# Values for the Hub admin Deployment in ISFC mode (HUB-497, AUTH_PLAN §7, §9, §17).
+#
+# Shape of ISFC's `deploy/charts/isfc-service` values: `opa.enabled: true` adds the OPA sidecar,
+# `opa.platform` names the platform whose bundle it loads (the Rego lives in ISFC's
+# authz-policies/integration-hub/, decision D3). The chart is in the ISFC repo and is not vendored
+# here, so the keys under `opa`, `service` and `env` follow its conventions and have NOT been
+# rendered against it: run `helm template` there before the first deploy.
+#
+# Secrets never go in this file: the two `*FromSecret` entries name Kubernetes secrets that the
+# platform team creates (HUB_ISFC_CLIENT_SECRET is the Hub backend client's secret; never log it).
+# Replace every <placeholder>.
+
+nameOverride: hub-admin
+
+service:
+  # The admin listener (hub admin -http-addr). Only the NetworkPolicy in networkpolicy-hub-admin.yaml
+  # lets pods reach it: the ISFC api-gateway and allow-listed automation.
+  port: 8081
+  # Ops port (health, metrics): scraped by Prometheus, never routed through the gateway.
+  opsPort: 9090
+
+opa:
+  enabled: true
+  platform: integration-hub
+  # The sidecar listens on the pod's loopback only: no Service or Ingress exposes it.
+  port: 8181
+
+env:
+  HUB_ADMIN_AUTH_MODE: isfc
+  # Sidecar address and decision path: POST $HUB_OPA_URL/v1/data/integrationhub/decision.
+  HUB_OPA_URL: http://127.0.0.1:8181
+  # The Hub backend client's ISFC id; its Rego package is the id without "-". ISFC generates ids:
+  # put the real one here, or authorization answers every request with a deny.
+  HUB_OPA_CLIENT_ID: integration-hub
+  HUB_OPA_TIMEOUT: 200ms
+  # Hydra: tokens are verified here (signature, iss, exp), not trusted from gateway headers alone.
+  HUB_OIDC_ISSUER: https://<hydra issuer>/
+  HUB_ISFC_JWKS_URL: https://<hydra issuer>/.well-known/jwks.json
+  HUB_ISFC_CONSOLE_CLIENT_ID: integration-hub-console
+  HUB_ISFC_PLATFORM_TENANT_ID: <ISFC UUID of the platform tenant>
+  # Tenants come from ISFC (reconciler in the worker; createTenant answers 409 here).
+  HUB_TENANT_SOURCE: isfc
+  HUB_ISFC_AUTH_URL: https://<auth-service host>
+  HUB_ISFC_CLIENT_ID: <Hub backend client id>
+  HUB_ISFC_RECONCILE_INTERVAL: 5m
+
+secretEnv:
+  HUB_ISFC_CLIENT_SECRET:
+    secretKeyFromSecret: { name: hub-isfc-client, key: client-secret }
+  # Only when ISFC pushes events (ISFC-CR-2); empty disables POST /internal/isfc/events.
+  HUB_ISFC_EVENTS_SECRET:
+    secretKeyFromSecret: { name: hub-isfc-events, key: hmac-secret }
+
+# The gateway role accepts ISFC caller credentials next to hk_live_ keys (AUTH_PLAN §8.2). Set it
+# in the gateway Deployment's values, not here: HUB_EDGE_ISFC_AUTH=on. The worker needs the same
+# HUB_TENANT_SOURCE / HUB_ISFC_* settings as the admin (it runs the reconciler).
+
+podLabels:
+  # The NetworkPolicy selects the admin by this label.
+  app.kubernetes.io/name: hub-admin

@@ -6,10 +6,11 @@
 | `smoke/` | M0 smoke test (`smoke/m0.sh`, CI job `smoke-m0`) | HUB-032 |
 | `alerts/` | Prometheus alert rules (DESIGN §16.3) and their promtool unit tests | HUB-232 |
 | `dashboards/` | Grafana dashboards: tenant, vendor/account, platform | HUB-232 |
+| `isfc/` | Admin plane in ISFC mode: OPA sidecar values, gateway route, NetworkPolicy ([README](isfc/README.md)) | HUB-497 |
 | `k8s/` | manifests (later) | — |
 
 ## Alerts (`alerts/`)
-- `hub.rules.yaml`: one rule per DESIGN §16.3 alert, in groups `hub-resilience`, `hub-delivery`, `hub-errors`, `hub-platform`. Labels: `severity` = `page` | `warn`. Annotations: `summary`, `description`, `runbook_url` (`docs/runbooks/<AlertName>.md`, HUB-237). Expressions and caveats: `docs/tech/OBSERVABILITY.md` §11.1, ADR-0014.
+- `hub.rules.yaml`: one rule per DESIGN §16.3 alert, in groups `hub-resilience`, `hub-delivery`, `hub-errors`, `hub-platform`, `hub-isfc` (the ISFC alerts, HUB-482, HUB-497). Labels: `severity` = `page` | `warn`. Annotations: `summary`, `description`, `runbook_url` (`docs/runbooks/<AlertName>.md`, HUB-237). Expressions and caveats: `docs/tech/OBSERVABILITY.md` §11.1, ADR-0014.
 - `*_test.yml`: `promtool test rules` unit tests, a firing and a non-firing case for every alert.
 - Load it as a Prometheus rule file (`rule_files: [hub.rules.yaml]`). Rules and dashboards read classic histogram buckets (`*_bucket`): if the Prometheus scrape uses native histograms, set `always_scrape_classic_histograms: true` on the Hub job.
 - Rules rely on the scrape label `instance` (one per Hub process) and nothing else from the scrape config.

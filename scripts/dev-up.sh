@@ -2,6 +2,7 @@
 # One-command local stack for manual testing of the admin console against a real Hub (HUB-286).
 #
 #   scripts/dev-up.sh            # or: make dev-up
+#   scripts/dev-up.sh --isfc     # console and admin in ISFC mode (see below)
 #   scripts/dev-down.sh          # or: make dev-down
 #
 # Starts, in order:
@@ -19,6 +20,13 @@
 # relative path is taken from where you run the command). If a step fails, what this run started is
 # stopped again. A pid file is only trusted when its process runs the Hub binary (HUB-456).
 # Works on macOS arm64 (Homebrew Go + node@22, Colima) and on Linux. Needs: go, node 22, npm, curl.
+#
+# --isfc (HUB-497): the console signs in through an ISFC stack that is already running (see
+#   docs/runbooks/isfc-local.md) and the admin runs with HUB_ADMIN_AUTH_MODE=isfc instead of the dev
+#   issuer: PUBLIC_AUTH_MODE=isfc for the console. The URLs come from the environment, and dev-up
+#   refuses to start without them (scripts/lib/isfc.sh lists them): ISFC_AUTH_URL, ISFC_OIDC_ISSUER,
+#   ISFC_ADMIN_UPSTREAM, HUB_OPA_URL; optional ISFC_GATEWAY_URL, ISFC_PLATFORM_TENANT_ID.
+#   It starts no ISFC, Hydra or OPA of its own and never calls an ISFC you did not point it at.
 #
 # Settings (environment):
 #   HUB_PG_DSN, HUB_REDIS_ADDR   use these services instead of docker compose
@@ -38,7 +46,34 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/pids.sh
 source "$here/lib/pids.sh"
+# shellcheck source=lib/isfc.sh
+source "$here/lib/isfc.sh"
 root="$(cd "$here/.." && pwd)"
+
+isfc_mode=0
+for arg in "$@"; do
+  case "$arg" in
+  --isfc) isfc_mode=1 ;;
+  -h | --help)
+    sed -n '2,/^set -euo/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  *)
+    printf '\033[31mdev-up:\033[0m unknown argument %s (only --isfc and --help exist)\n' "$arg" >&2
+    exit 2
+    ;;
+  esac
+done
+if [ "$isfc_mode" = 1 ]; then
+  # Before anything starts: a half-configured ISFC run must not leave a stack behind.
+  if ! problems="$(isfc_check)"; then
+    printf '\033[31mdev-up:\033[0m --isfc is not configured:\n%s\n  See the header of scripts/lib/isfc.sh and docs/runbooks/isfc-local.md.\n' "$(printf '%s\n' "$problems" | sed 's/^/  - /')" >&2
+    exit 1
+  fi
+  admin_env=() console_env=()
+  while IFS= read -r line; do admin_env+=("$line"); done < <(isfc_admin_env)
+  while IFS= read -r line; do console_env+=("$line"); done < <(isfc_console_env)
+fi
 # A relative DEV_STATE is relative to where the command was typed, not to the places this script
 # cd's into (the console runs inside frontend/).
 state="$(abs_path "${DEV_STATE:-$root/.dev-stack}")"
@@ -267,9 +302,15 @@ say "starting mockvendor on $mv_url"
 start mockvendor "$bin/mockvendor" -addr "$host:$mv_port" -control-addr "$host:$mv_ctl_port"
 wait_url "$mv_ctl_url/__control/healthz" mockvendor
 
-say "starting hub admin on $admin_url (dev OIDC issuer on)"
-start admin "$bin/hub" admin -http-addr "$host:$admin_port" -ops-addr "$host:$ops_base" \
-  -data-dir "$state/data-admin" -admin-dev-oidc -admin-public-url "$admin_url" "${common[@]}"
+if [ "$isfc_mode" = 1 ]; then
+  say "starting hub admin on $admin_url (ISFC mode: gateway identity, Hydra token, OPA at $HUB_OPA_URL)"
+  start admin env "${admin_env[@]}" "$bin/hub" admin -http-addr "$host:$admin_port" -ops-addr "$host:$ops_base" \
+    -data-dir "$state/data-admin" -admin-public-url "$admin_url" "${common[@]}"
+else
+  say "starting hub admin on $admin_url (dev OIDC issuer on)"
+  start admin "$bin/hub" admin -http-addr "$host:$admin_port" -ops-addr "$host:$ops_base" \
+    -data-dir "$state/data-admin" -admin-dev-oidc -admin-public-url "$admin_url" "${common[@]}"
+fi
 wait_url "http://$host:$ops_base/readyz" admin
 
 say "starting hub gateway, worker and scheduler"
@@ -306,11 +347,18 @@ fi
 say "starting the console on $console_url"
 (
   cd frontend
-  PUBLIC_AUTH_MODE=dev \
-    HUB_DEV_OIDC_ISSUER="$admin_url" \
-    HUB_ADMIN_UPSTREAM="$admin_url" \
-    HUB_SESSION_SECRET="$(cat "$state/session.secret")" \
-    start console npm run dev -- --host localhost --port "$console_port" --strictPort
+  if [ "$isfc_mode" = 1 ]; then
+    start console env "${console_env[@]}" HUB_SESSION_SECRET="$(cat "$state/session.secret")" \
+      npm run dev -- --host localhost --port "$console_port" --strictPort
+  else
+    # The console refuses the dev role picker unless NODE_ENV=test. This is the LOCAL dev issuer
+    # stack (admin started with -admin-dev-oidc on loopback), never a deployment.
+    NODE_ENV=test PUBLIC_AUTH_MODE=dev \
+      HUB_DEV_OIDC_ISSUER="$admin_url" \
+      HUB_ADMIN_UPSTREAM="$admin_url" \
+      HUB_SESSION_SECRET="$(cat "$state/session.secret")" \
+      start console npm run dev -- --host localhost --port "$console_port" --strictPort
+  fi
 )
 wait_url "$console_url/login" console 300
 
@@ -321,9 +369,14 @@ cat <<EOF
 $(printf '\033[1m')Integration Hub dev stack is up.$(printf '\033[0m')
 
   Console        $console_url
-                 Sign in: pick a role (admin, editor, viewer or tenant viewer with tenant
-                 orders-service). The admin's dev issuer mints the token; no password.
-  Admin API      $admin_url/admin/v1        (hubctl login -dev -admin-url $admin_url)
+$(if [ "$isfc_mode" = 1 ]; then
+  printf '                 ISFC mode: sign in with your ISFC account (local Email OTP is 123456).\n'
+  printf '                 Admin auth: gateway identity + Hydra token + OPA (%s).\n' "$HUB_OPA_URL"
+else
+  printf '                 Sign in: pick a role (admin, editor, viewer or tenant viewer with tenant\n'
+  printf '                 orders-service). The admin'"'"'s dev issuer mints the token; no password.\n'
+fi)
+  Admin API      $admin_url/admin/v1        ($(if [ "$isfc_mode" = 1 ]; then printf 'reached through the ISFC gateway route; hubctl login -isfc'; else printf 'hubctl login -dev -admin-url %s' "$admin_url"; fi))
   Gateway        $gw_url/v1
   mockvendor     $mv_url   control $mv_ctl_url/__control
   Ops            admin :$ops_base  gateway :$((ops_base + 1))  worker :$((ops_base + 2))  scheduler :$((ops_base + 3))  (/healthz /readyz /metrics)

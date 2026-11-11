@@ -1,0 +1,25 @@
+# ISFC api-gateway routing document entry for the Hub admin API (AUTH_PLAN §9, HUB-497).
+# Add it to the gateway's routing configuration in the ISFC repo; this copy is the Hub's record of
+# what the console, hubctl and hubmcp expect. Replace <domain> and <ns>.
+#
+# What it does:
+#   https://hub.internal.<domain>/hub/admin/v1/tenants  ->  http://hub-admin.<ns>...:8081/admin/v1/tenants
+#   - the gateway authenticates the user's Hydra token and checks the session, resolves the tenant
+#     (`tenant: required`) and sets the x-isfc-* identity headers; the Hub admin trusts them only
+#     together with a JWT it verifies itself, and only from the gateway (networkpolicy-hub-admin.yaml)
+#   - automation does NOT use this route: it calls the admin listener directly with
+#     x-isfc-client-id + x-isfc-api-key (AUTH_PLAN §7.5)
+# Who points at it:
+#   console          HUB_ADMIN_UPSTREAM=https://hub.internal.<domain>/hub        (it adds /admin/v1/...)
+#   hubctl (people)  HUB_ADMIN_URL=https://hub.internal.<domain>/hub             (hubctl adds /admin/v1)
+#   hubmcp           HUB_ADMIN_BASE_URL=https://hub.internal.<domain>/hub/admin/v1
+- name: integration-hub-admin
+  hosts: [hub.internal.<domain>]
+  prefix: /hub/admin
+  upstream: http://hub-admin.<ns>.svc.cluster.local:8081
+  strip_prefix: true
+  rewrite_prefix: /admin
+  auth: required
+  tenant: required
+  rate_limit: per-user
+  timeout: 30s
