@@ -57,18 +57,29 @@ func httpTestServer(t *testing.T, hub *fakeHub, withAdmin bool) *httptest.Server
 	if err != nil {
 		t.Fatal(err)
 	}
-	ha := &httpAuth{newClient: a.newHub, now: time.Now, verified: map[[32]byte]verifiedKey{}}
-	ts := httptest.NewServer(httpHandler(srv, ha, a.log))
+	ha := &httpAuth{newClient: a.newHub, newISFC: a.newISFC, now: time.Now, verified: map[[32]byte]verifiedKey{}}
+	return httpServe(t, httpHandler(srv, ha, a.log))
+}
+
+func httpServe(t *testing.T, h http.Handler) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
 	return ts
 }
 
 func connectHTTP(t *testing.T, endpoint, token string) (*mcp.ClientSession, error) {
 	t.Helper()
-	hc := &http.Client{Transport: http.DefaultTransport}
-	if token != "" {
-		hc.Transport = bearer{token: token, next: http.DefaultTransport}
+	if token == "" {
+		return connectHTTPWith(t, endpoint, http.DefaultTransport)
 	}
+	return connectHTTPWith(t, endpoint, bearer{token: token, next: http.DefaultTransport})
+}
+
+// connectHTTPWith connects through rt, which sets the credential headers.
+func connectHTTPWith(t *testing.T, endpoint string, rt http.RoundTripper) (*mcp.ClientSession, error) {
+	t.Helper()
+	hc := &http.Client{Transport: rt}
 	tr := &mcp.StreamableClientTransport{Endpoint: endpoint, HTTPClient: hc, DisableStandaloneSSE: true, MaxRetries: -1}
 	return mcp.NewClient(&mcp.Implementation{Name: "http-test", Version: "1"}, nil).Connect(t.Context(), tr, nil)
 }

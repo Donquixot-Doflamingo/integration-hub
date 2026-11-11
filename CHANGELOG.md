@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(mcp)` · Add the ISFC credential to the Go SDK and hubmcp and onboard teams in the consumer skill (HUB-489) · HUB-489 · F-24
+  - `hubclient.WithISFC(clientID, secret, authURL)` fetches, caches and refreshes the caller's ISFC key (once on 401 or 403); `WithISFCKey` and `WithTenantID` cover a held key and a multi-tenant key
+  - hubmcp reads HUB_ISFC_CLIENT_ID, HUB_ISFC_API_KEY and HUB_TENANT_ID; the HTTP transport accepts x-isfc-client-id and x-isfc-api-key per request, and a loopback server may hold one in its environment
+  - The consumer skill explains onboarding a calling team (ISFC client, key, tenant grants) and marks `hk_live_` keys as legacy
 - 2026-11-11 · `feat(frontend)` · Add the tenant switcher and send X-Tenant-Id through the admin proxy (HUB-494) · HUB-494 · F-24
   - A tenant switcher in the top bar lists the tenants ISFC gives the operator for the console (`GET {gateway}/auth/oauth2/panels`), the platform tenant first; the choice is kept in the encrypted session and checked against ISFC on the server
   - The admin proxy sends the chosen tenant as `X-Tenant-Id`, adopts the tenant the gateway used when none was chosen (`X-Isfc-Tenant-Id`), and never forwards a tenant header from the browser

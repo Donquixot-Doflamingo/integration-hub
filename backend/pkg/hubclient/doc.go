@@ -33,9 +33,21 @@
 // from the contract's enum, Retryable and RetryAfter. Retry only when IsRetryable(err) is true,
 // with the same Idempotency-Key, after RetryAfter. This package does not retry by itself.
 //
+// # ISFC backend clients
+//
+// A service on the company identity platform authenticates as its ISFC backend client instead of
+// with a tenant key (contract scheme isfcS2S). WithISFC fetches the key from the auth-service,
+// caches it, and fetches it again once when the Hub answers 401 or 403 (the ISFC auth libraries'
+// rule); WithTenantID sends X-Tenant-Id for a key that covers several tenants:
+//
+//	c, err := hubclient.New(hubURL, "", hubclient.WithISFC(clientID, secret, authURL), hubclient.WithTenantID(tenant))
+//
+// WithISFCKey sends a key the caller already holds, without refreshing it.
+//
 // # Security
 //
-// The API key is sent only in the Authorization header. It is never part of an error, a
+// The API key is sent only in the Authorization header (an ISFC key only in x-isfc-api-key, with
+// the client secret used for the key fetch alone). It is never part of an error, a
 // formatted Client or a slog value. The debug-only X-Hub-Integration-Version header is ignored.
 //
 // The package imports nothing from internal/: it is public and must build on its own.

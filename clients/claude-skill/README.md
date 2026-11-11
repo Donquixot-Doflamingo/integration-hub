@@ -93,14 +93,17 @@ your service repo's `AGENTS.md` (read by Codex, Cursor and many other agents; Co
 in total by default: [Codex: AGENTS.md](https://developers.openai.com/codex/guides/agents-md)).
 
 ### Then, for every tool
-1. Set `HUB_BASE_URL` and `HUB_API_KEY` in your environment from your secret manager, never in code
-   or committed files. Ask the platform team for a key of your tenant (scope `invoke`; a developer
-   key may add `dry_run`).
+1. Set `HUB_BASE_URL` and your credential in your environment from your secret manager, never in code
+   or committed files. Preferred: your team's ISFC backend client (`<team>-backend`); a Hub admin
+   issues it a key from `integration-hub` with the `HUB_CALLER` role, and the tenant admin grants your
+   tenant its integrations (steps in `integration-hub/SKILL.md`, "Onboarding a calling team").
+   Legacy: a Hub tenant key `HUB_API_KEY` (`hk_live_...`, scope `invoke`; a developer key may add
+   `dry_run`), which keeps working.
 2. Optional: add the `hubmcp` MCP server so the assistant can discover, dry-run and invoke for you:
    [`integration-hub/references/mcp-setup.md`](integration-hub/references/mcp-setup.md).
 
 ## Version and updates
-- Skill version: **0.2.0** (caller contract `hub-public.v1` 1.0.1; MCP tools `hubmcp-tools` 1.1.0).
+- Skill version: **0.3.0** (caller contract `hub-public.v1` 2.1.0; MCP tools `hubmcp-tools` 2.1.0).
 - The skill is maintained by the Hub's `contract-steward` and docs owners. It is updated in the same
   PR as any caller-visible change (Hub `AGENTS.md` §8 step 9), so `main` of the Hub repo always holds
   the current version.

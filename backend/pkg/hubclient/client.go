@@ -30,6 +30,9 @@ type Client struct {
 	apiKey     string
 	httpClient *http.Client
 	userAgent  string
+	isfc       *ISFCCredential // set by WithISFC / WithISFCKey; then apiKey is empty
+	isfcCfg    *isfcConfig
+	tenantID   string
 }
 
 // Option configures a Client in New.
@@ -56,7 +59,9 @@ func WithUserAgent(product string) Option {
 }
 
 // New returns a client for the Hub at baseURL (for example "https://hub.prod.internal") that
-// authenticates with the tenant API key apiKey. A path in baseURL is kept as a prefix.
+// authenticates with the tenant API key apiKey. A path in baseURL is kept as a prefix. With
+// WithISFC or WithISFCKey the client authenticates as an ISFC backend client instead and apiKey
+// must be empty (the Hub rejects a request that carries both kinds of credential).
 func New(baseURL, apiKey string, opts ...Option) (*Client, error) {
 	u, err := url.Parse(strings.TrimRight(baseURL, "/"))
 	if err != nil {
@@ -68,9 +73,6 @@ func New(baseURL, apiKey string, opts ...Option) (*Client, error) {
 	if u.RawQuery != "" || u.Fragment != "" || u.User != nil {
 		return nil, errors.New("hubclient: base URL must not carry a query, fragment or user info")
 	}
-	if strings.TrimSpace(apiKey) == "" {
-		return nil, errors.New("hubclient: API key is empty")
-	}
 	c := &Client{
 		baseURL:    u,
 		apiKey:     apiKey,
@@ -80,11 +82,25 @@ func New(baseURL, apiKey string, opts ...Option) (*Client, error) {
 	for _, o := range opts {
 		o(c)
 	}
+	switch {
+	case c.isfcCfg != nil && strings.TrimSpace(apiKey) != "":
+		return nil, errors.New("hubclient: use either an API key or an ISFC credential, not both")
+	case c.isfcCfg != nil:
+		if c.isfc, err = c.isfcCfg.build(c.httpClient); err != nil {
+			return nil, err
+		}
+	case strings.TrimSpace(apiKey) == "":
+		return nil, errors.New("hubclient: API key is empty")
+	}
+	c.isfcCfg = nil // holds the secret; the credential keeps it from here
 	return c, nil
 }
 
 // String describes the client without its API key.
 func (c *Client) String() string {
+	if c.isfc != nil {
+		return "hubclient.Client{BaseURL: " + c.baseURL.String() + ", ISFCClientID: " + c.isfc.clientID + ", ISFCKey: [redacted]}"
+	}
 	return "hubclient.Client{BaseURL: " + c.baseURL.String() + ", APIKey: [redacted]}"
 }
 
@@ -93,6 +109,9 @@ func (c *Client) GoString() string { return c.String() }
 
 // LogValue keeps the API key out of slog output.
 func (c *Client) LogValue() slog.Value {
+	if c.isfc != nil {
+		return slog.GroupValue(slog.String("base_url", c.baseURL.String()), slog.String("isfc_client_id", c.isfc.clientID), slog.String("isfc_key", "[redacted]"))
+	}
 	return slog.GroupValue(slog.String("base_url", c.baseURL.String()), slog.String("api_key", "[redacted]"))
 }
 
@@ -115,7 +134,33 @@ type response struct {
 
 // do sends cl and reads the whole response. Transport and context errors are returned wrapped
 // (errors.Is(err, context.Canceled) works); any status is returned as a response.
+//
+// With an ISFC credential a 401 or 403 makes the client fetch a new key and send the call once
+// more, as the ISFC auth libraries do; a key that did not change is not retried.
 func (c *Client) do(ctx context.Context, cl call) (*response, error) {
+	if c.isfc == nil {
+		return c.exchange(ctx, cl, "")
+	}
+	key, err := c.isfc.Key(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.exchange(ctx, cl, key)
+	if err != nil || (resp.status != http.StatusUnauthorized && resp.status != http.StatusForbidden) {
+		return resp, err
+	}
+	fresh, ferr := c.isfc.Key(ctx, key)
+	if ferr != nil {
+		return resp, nil //nolint:nilerr // report the Hub's answer, not the refresh failure
+	}
+	if fresh == key {
+		return resp, nil
+	}
+	return c.exchange(ctx, cl, fresh)
+}
+
+// exchange is one HTTP round trip; isfcKey is the x-isfc-api-key to send, empty for a tenant key.
+func (c *Client) exchange(ctx context.Context, cl call, isfcKey string) (*response, error) {
 	// The base URL has no query or fragment (New checks), so the escaped path appends cleanly.
 	target := c.baseURL.String() + cl.path
 	if len(cl.query) > 0 {
@@ -132,7 +177,15 @@ func (c *Client) do(ctx context.Context, cl call) (*response, error) {
 	for k, vs := range cl.header {
 		req.Header[k] = vs
 	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if c.isfc != nil {
+		req.Header.Set("x-isfc-client-id", c.isfc.clientID)
+		req.Header.Set("x-isfc-api-key", isfcKey)
+		if c.tenantID != "" && req.Header.Get("X-Tenant-Id") == "" {
+			req.Header.Set("X-Tenant-Id", c.tenantID)
+		}
+	} else {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
 	if cl.body != nil {
