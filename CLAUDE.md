@@ -10,6 +10,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish.
 - Product: `docs/product/PRD.md`, `docs/product/USER_STORIES.md`, `docs/product/PERSONAS.md`
 - Features: `docs/features/README.md` (index of `F-XX` docs)
 - Tech: `docs/tech/TECH_SPEC.md`, `docs/tech/OBSERVABILITY.md`, `docs/tech/TESTING_STRATEGY.md`, `docs/tech/SECURITY.md`, `docs/tech/adr/`
+- ISFC identity, tenancy and authorization (planned, EP-15): plan `docs/tech/AUTH_PLAN.md`, features `docs/features/F-24-isfc-identity-and-authz.md` and `docs/features/F-25-tenants-from-isfc.md`, ADRs 0026 to 0028
 - Contracts (frozen API): `contracts/` (OpenAPI 3.1, JSON Schema, MCP tool contract)
 - Backlog: `docs/tickets/TICKETS.md`
 - Process: `docs/process/GIT_WORKFLOW.md`, `docs/process/CONTRACT_CHANGES.md`, `docs/process/RELEASE.md`
@@ -17,6 +18,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish.
 
 ## Current phase
 - **Phase 1 (merged):** repo foundation. Docs, contracts, skills, agents, tickets.
+- **Phase 15 (branch `phase-15/isfc-auth`, EP-15, in progress):** ISFC identity, tenancy and authorization (F-24, F-25). Plan approved 2026-11-11 (decisions D1–D9 accepted); docs and ADRs written, code behind mode flags that default to today's behaviour. Phase 0 spikes (HUB-462 to HUB-464) are blocked on a live ISFC stack.
 - **Phase 2 (in progress):** M0–M8 done (`docs/milestones/M0.md` … `M8.md`; M8 has open items, see its Deferred list). v1.0.0 release notes drafted in `docs/releases/v1.0.0.md`. Code, milestone by milestone, from DESIGN.md §19 (M0 → M8), with the admin console (EP-10) and MCP server (EP-11) in parallel against the frozen contracts.
 
 ## Working rules (DESIGN §0)
@@ -25,6 +27,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish.
 - **Never call real vendors in tests.** Use `backend/cmd/mockvendor`. Real vendor payloads in the design are illustrative: verify against the vendor's current API docs and cite the doc URL in the transformer file.
 - **Every transformer ships with golden fixtures.** Publishing a transformer without passing goldens must be impossible.
 - **Never log secrets.** Credentials only enter through `creds.*` in header/query/auth targets. The logger redacts by value.
+- **ISFC is the identity and tenant source** (planned, EP-15; see `docs/tech/AUTH_PLAN.md`, F-24, F-25). **Never call a real ISFC (or Entra) in tests**: use `mockisfc` and a fake OPA or OPA container. ISFC API keys are hashed on read, never stored or logged in plaintext. No OPA or ISFC call on the `/v1` sync path.
 - Table-driven tests. `go test -race` in CI. Integration tests use real Postgres and Redis (docker compose or testcontainers).
 - **Contract first**: no endpoint, field or event shape is coded before it is in `contracts/`. Only `contract-steward` edits `contracts/`.
 - **Never commit to `main`.** Work on `<type>/HUB-###-slug` branches and open a PR. Every commit adds its own `CHANGELOG.md` entry.

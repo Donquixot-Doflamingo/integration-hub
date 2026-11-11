@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **339** · done: **204** · todo: **104** · other (in-progress/in-review/blocked): **31**
+Total tickets: **339** · done: **204** · todo: **100** · other (in-progress/in-review/blocked): **35**
 
 ## Epics
 
@@ -3720,9 +3720,9 @@ Read the tenant and client APIs with the `integration-hub` S2S key, and confirm 
 - **Branch:** `docs/HUB-465-adr-isfc-admin-authz`
 
 **Acceptance criteria**
-- [ ] ADR-0026 Accepted; ADR-0005 and ADR-0022 marked "partly superseded" with a link (done); PRD DV entry for the platform tenant (with HUB-468).
+- [x] ADR-0026 Accepted; ADR-0005 and ADR-0022 marked "partly superseded" with a link; PRD DV entry for the platform tenant (DV-8, added with HUB-468).
 
-Progress: ADR-0026 written (Accepted 2026-11-11); ADR-0005 and ADR-0022 marked partly superseded. The PRD DV entry (DV-8) lands with HUB-468, so the last box stays open until then.
+Progress: ADR-0026 written (Accepted 2026-11-11); ADR-0005 and ADR-0022 marked partly superseded; PRD DV-8 added.
 
 ### HUB-466 — ADR-0027: tenants owned by ISFC, Hub keeps a synced copy
 - **Epic:** EP-15 · **Type:** docs · **Area:** docs
@@ -3744,13 +3744,13 @@ Progress: ADR-0028 written (Accepted 2026-11-11) with the DESIGN §18.5 argument
 
 ### HUB-468 — Feature docs, stories, PRD, SECURITY / TECH_SPEC / OBSERVABILITY updates
 - **Epic:** EP-15 · **Type:** docs · **Area:** docs
-- **Status:** in-progress · **Depends on:** HUB-465, HUB-466, HUB-467 · **Feature:** F-24, F-25 · **Stories:** US-24xx, US-25xx
+- **Status:** in-review · **Depends on:** HUB-465, HUB-466, HUB-467 · **Feature:** F-24, F-25 · **Stories:** US-24xx, US-25xx
 - **Branch:** `docs/HUB-468-isfc-feature-docs`
 
 **Acceptance criteria**
-- [ ] F-24 and F-25 created from the template and indexed; user stories with Given/When/Then; PRD FR/NFR added.
-- [ ] SECURITY §7 matrix matches `TestRBACMatrix`; TECH_SPEC drift (G12) fixed; OBSERVABILITY lists §11.
-- [ ] `TESTING_STRATEGY.md` describes `mockisfc`; CLAUDE.md and AGENTS.md rule "never call real ISFC in tests".
+- [x] F-24 and F-25 created from the template and indexed; user stories with Given/When/Then; PRD FR/NFR added.
+- [x] SECURITY §7 matrix matches `TestRBACMatrix`; TECH_SPEC drift (G12) fixed; OBSERVABILITY lists §11.
+- [x] `TESTING_STRATEGY.md` describes `mockisfc`; CLAUDE.md and AGENTS.md rule "never call real ISFC in tests".
 
 ### HUB-469 — contract(admin): ISFC security schemes, tenant ISFC fields, sync operations
 - **Epic:** EP-15 · **Type:** contract · **Area:** contracts

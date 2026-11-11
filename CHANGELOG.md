@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(agents)` · Make ISFC the documented identity and tenant source and ban real ISFC in tests (HUB-468) · HUB-468 · F-24
+  - AGENTS.md and CLAUDE.md add the rule: ISFC is the identity and tenant source (planned, EP-15), tests never call a real ISFC or Entra (use mockisfc), ISFC keys are never stored or logged in plaintext, and /v1 makes no OPA or ISFC call
+  - CLAUDE.md points at AUTH_PLAN, F-24, F-25 and ADR-0026 to ADR-0028; HUB-465 to HUB-468 are in review
 - 2026-11-11 · `docs(tech)` · Document the ISFC signals and the mockisfc test rule (HUB-468) · HUB-468 · F-24
   - OBSERVABILITY §15 lists the planned authz, authn, edge-auth and sync metrics, logs, span and alerts
   - TESTING_STRATEGY §5.1 describes mockisfc and the rule that tests never call a real ISFC or Entra

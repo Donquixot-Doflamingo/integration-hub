@@ -12,7 +12,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish. C
 | `docs/DESIGN.md` | The agreed design (source of truth for *behaviour*). Do not edit it casually: record deviations in an ADR. | lead |
 | `docs/product/` | `PRD.md`, `USER_STORIES.md`, `PERSONAS.md` | lead / docs |
 | `docs/features/` | One doc per feature, `F-XX-<slug>.md`, from `_TEMPLATE.md`. `README.md` is the index. | whoever builds the feature |
-| `docs/tech/` | `TECH_SPEC.md`, `OBSERVABILITY.md`, `TESTING_STRATEGY.md`, `SECURITY.md`, `adr/NNNN-*.md` | lead / backend |
+| `docs/tech/` | `TECH_SPEC.md`, `OBSERVABILITY.md`, `TESTING_STRATEGY.md`, `SECURITY.md`, `AUTH_PLAN.md` (ISFC identity, tenancy and authorization plan, EP-15), `adr/NNNN-*.md` | lead / backend |
 | `docs/tickets/TICKETS.md` | The ticket backlog (no external tracker yet). | everyone |
 | `docs/process/` | Git workflow, contract-change process, release process | lead |
 | `contracts/` | **Frozen API contracts**: OpenAPI 3.1 YAML (admin, public caller API), the MCP tool contract and JSON Schemas for webhook events | `contract-steward` |
@@ -30,6 +30,7 @@ Always respond in **English**, even when the user writes in Hindi or Hinglish. C
 4. **Every transformer ships with golden fixtures.** You must not be able to publish a transformer whose goldens fail.
 5. **Never log secrets.** Credentials only enter through `creds.*` in header/query/auth targets. The logger redacts by value.
 6. Table-driven tests. `go test -race` in CI. Integration tests use real Postgres and Redis.
+7. **ISFC is the identity and tenant source** (planned, EP-15; today the dev issuer and local tenants still apply, `docs/tech/AUTH_PLAN.md`, F-24, F-25). **Never call a real ISFC (or Entra) in tests**: use `mockisfc` and a fake OPA or OPA container, as with vendors and `mockvendor`. Never store or log an ISFC API key in plaintext; the Hub keeps only hashes. No OPA or ISFC call on the `/v1` sync path.
 
 ## 4. Contract-first workflow (frontend and backend run in parallel)
 The contracts in `contracts/` are the only interface between backend, frontend, MCP server and SDKs.
