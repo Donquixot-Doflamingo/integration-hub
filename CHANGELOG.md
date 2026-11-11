@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `chore(hubmcp)` · Re-sync the embedded hubmcp tool contract to 2.1.0 (HUB-471) · HUB-471 · F-24
+  - `backend/cmd/hubmcp/hubmcp-tools.json` is again a byte copy of `contracts/mcp/hubmcp-tools.json` (`go generate ./cmd/hubmcp`); the hubmcp tests, including the operation classification that now lists syncTenants and syncTenant, pass
 - 2026-11-11 · `feat(frontend)` · Refresh ISFC tokens once, end expired sessions at /login?expired=1 and log out at ISFC (HUB-492) · HUB-492 · F-24
   - The session cookie is AES-GCM encrypted (key `HUB_SESSION_SECRET`): the access and refresh tokens cannot be read from its value, and a login cookie cannot be used as a session
   - The server refreshes the access token a minute before it expires, or once after the gateway refuses it, single-flight per refresh token; a 409 from ISFC is retried once after 300 ms; the rotated tokens go into the new cookie

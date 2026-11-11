@@ -1,7 +1,7 @@
 {
   "$comment": "MCP tool contract for hubmcp (backend/cmd/hubmcp). Frozen; edit only via a CCR to contract-steward. JSON Schemas are 2020-12. See README.md in this folder.",
   "contract": "hubmcp-tools",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "server": {
     "name": "hubmcp",
     "title": "Integration Hub",
@@ -11,9 +11,12 @@
   "config": {
     "env": [
       { "name": "HUB_BASE_URL", "required": true, "description": "Base URL of the Hub gateway, e.g. http://localhost:8080. The admin API is reached at HUB_ADMIN_BASE_URL or, if unset, HUB_BASE_URL with /admin/v1." },
-      { "name": "HUB_API_KEY", "required": true, "secret": true, "description": "Tenant API key (scope `invoke`; add `dry_run` to enable hub_dry_run). Sent as `Authorization: Bearer`. Never logged or echoed." },
-      { "name": "HUB_ADMIN_TOKEN", "required": false, "secret": true, "description": "The signed-in user's own OIDC access token (from their identity provider; locally `hubctl login -dev`), never a shared or service token. When unset, no hub_admin_* tool is registered. Admin read tools follow the existing transport rule; admin write tools are registered only on stdio. The Hub's RBAC (x-required-role) decides what the user may do." },
-      { "name": "HUB_ADMIN_BASE_URL", "required": false, "description": "Override for the control-plane base URL, e.g. http://localhost:8081/admin/v1." }
+      { "name": "HUB_API_KEY", "required": false, "secret": true, "description": "Tenant API key (scope `invoke`; add `dry_run` to enable hub_dry_run). Sent as `Authorization: Bearer`. Never logged or echoed. Required unless the ISFC credential (HUB_ISFC_CLIENT_ID + HUB_ISFC_API_KEY) is set; setting both is a startup error." },
+      { "name": "HUB_ISFC_CLIENT_ID", "required": false, "description": "Id of the ISFC backend client that owns HUB_ISFC_API_KEY. Sent as `x-isfc-client-id` on tenant tools. Set together with HUB_ISFC_API_KEY." },
+      { "name": "HUB_ISFC_API_KEY", "required": false, "secret": true, "description": "ISFC API key issued by the integration-hub client to HUB_ISFC_CLIENT_ID. Sent as `x-isfc-api-key` on tenant tools instead of HUB_API_KEY. This is the credential for the streamable-http transport, where one shared server acts for a backend client rather than a signed-in user. Never logged or echoed." },
+      { "name": "HUB_TENANT_ID", "required": false, "description": "ISFC tenant UUID. Sent as `X-Tenant-Id` on tenant tools when the ISFC credential covers more than one tenant (the Hub answers 400 without it), and on hub_admin_* calls to pick the ISFC tenant the signed-in user acts in. Ignored with HUB_API_KEY, which belongs to one tenant." },
+      { "name": "HUB_ADMIN_TOKEN", "required": false, "secret": true, "description": "The signed-in user's own access token (the OIDC token, or in ISFC mode the user's ISFC JWT; locally `hubctl login -dev`), never a shared or service token. When unset, no hub_admin_* tool is registered. Admin read tools follow the existing transport rule; admin write tools are registered only on stdio. The Hub's RBAC (x-required-role, x-required-permission) decides what the user may do." },
+      { "name": "HUB_ADMIN_BASE_URL", "required": false, "description": "Override for the control-plane base URL. Locally e.g. http://localhost:8081/admin/v1. In ISFC mode it is the ISFC api-gateway route to the Hub admin API (the admin listener accepts only gateway traffic), e.g. https://gateway.example.com/integration-hub/admin/v1; the gateway authenticates the user's token and adds the identity headers." }
     ]
   },
   "rules": [
@@ -50,6 +53,8 @@
     { "spec": "hub-admin.v1.yaml", "operationId": "rotateRegistrarSecret", "http_method": "POST", "reason": "Rotation retires the old signing secret and mints a new one; console only." }
   ],
   "not_exposed_operations": [
+    { "spec": "hub-admin.v1.yaml", "operationId": "syncTenants", "http_method": "POST", "reason": "Runs the ISFC reconciler for every tenant; a platform operator action from the console (or the scheduled sync). Can be added by a CCR." },
+    { "spec": "hub-admin.v1.yaml", "operationId": "syncTenant", "http_method": "POST", "reason": "Runs the ISFC reconciler for one tenant; console action. Can be added by a CCR." },
     { "spec": "hub-admin.v1.yaml", "operationId": "getMe", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
     { "spec": "hub-admin.v1.yaml", "operationId": "testAccountConnection", "http_method": "POST", "reason": "Makes a real call to the vendor with the account credentials; run it from the console." },
     { "spec": "hub-admin.v1.yaml", "operationId": "listTransformers", "http_method": "GET", "reason": "Read-only; not needed for onboarding yet. Can be added by a CCR." },
@@ -601,7 +606,7 @@
       "audience": "admin",
       "description": "Admin write tool: merge-patch a tenant's display_name, description, contact and rate_limit; only the fields you pass change. A rate_limit change applies to the tenant's live traffic within seconds (too low a value throttles every call it makes), so: 1) hub_admin_get_tenant; 2) show the user current and new values; 3) after explicit approval, call with confirm=true and if_match set to the etag. Disabling a tenant is not possible through MCP; it stays a manual console action. Needs the admin role (FORBIDDEN otherwise).",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "updateTenant", "http_method": "PATCH" }],
-      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_admin", "transport": ["stdio"] },
       "requires_confirm": "live_traffic",
       "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
@@ -629,7 +634,7 @@
         }
       },
       "safety": [
-        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: tenant_admin; admin also qualifies); a lower role gets FORBIDDEN as an isError result.",
         "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
         "requires_confirm=live_traffic: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
         "Never sends disabled (no kill switch through MCP).",
@@ -1842,7 +1847,7 @@
       "audience": "admin",
       "description": "Admin write tool: register a tenant's HTTPS callback URL, where the Hub sends async results and delivery events, signed with a secret the Hub generates. The host must be allowlisted and resolve to a public address (VALIDATION_FAILED otherwise). Integrations subscribe to it in their spec (webhooks[].endpoint_id). Agree on tenant and URL with the user, then call with confirm=true. SENSITIVE OUTPUT: `signing_secret` is shown exactly once. Give it to the user once, verbatim, to store in their secret manager for verifying X-Hub-Signature. Never repeat it, never put it in another tool call, file, code sample or memory. If it is lost, the user rotates it in the console. Needs the admin role (FORBIDDEN otherwise).",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "createRegistrarEndpoint", "http_method": "POST" }],
-      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_admin", "transport": ["stdio"] },
       "requires_confirm": "mints_secret",
       "sensitive_output": ["/signing_secret"],
       "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
@@ -1870,7 +1875,7 @@
         }
       },
       "safety": [
-        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: tenant_admin; admin also qualifies); a lower role gets FORBIDDEN as an isError result.",
         "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
         "requires_confirm=mints_secret: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
         "sensitive_output /signing_secret: never logged by hubmcp, returned only in this one result; any later tool call whose arguments contain a Hub secret is refused (SECRET_IN_INPUT).",
@@ -1890,7 +1895,7 @@
       "audience": "admin",
       "description": "Admin write tool: merge-patch a callback endpoint's url or description. A new URL receives the callbacks of every subscribed integration right away (same SSRF guard and allowlist as create), so: 1) hub_admin_get_registrar_endpoint; 2) show the user old and new URL and how many integrations subscribe; 3) after explicit approval, call with confirm=true and if_match set to the etag. Disabling an endpoint and rotating or deleting its secret are not possible through MCP; they stay manual console actions. Needs the admin role (FORBIDDEN otherwise).",
       "maps_to": [{ "spec": "hub-admin.v1.yaml", "operationId": "updateRegistrarEndpoint", "http_method": "PATCH" }],
-      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "admin", "transport": ["stdio"] },
+      "requires": { "env": "HUB_ADMIN_TOKEN", "x-required-role": "tenant_admin", "transport": ["stdio"] },
       "requires_confirm": "live_traffic",
       "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
       "inputSchema": {
@@ -1916,7 +1921,7 @@
         }
       },
       "safety": [
-        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: admin); a lower role gets FORBIDDEN as an isError result.",
+        "Mutating. Registered only when HUB_ADMIN_TOKEN is set and the transport is stdio; acts as the signed-in user. The Hub's RBAC decides (x-required-role: tenant_admin; admin also qualifies); a lower role gets FORBIDDEN as an isError result.",
         "reason is required; the change log records it with the user's identity and the \" (via hubmcp)\" marker.",
         "requires_confirm=live_traffic: refuses locally (CONFIRMATION_REQUIRED, no Hub call) unless confirm=true.",
         "Never sends disabled; never rotates or deletes the secret.",
