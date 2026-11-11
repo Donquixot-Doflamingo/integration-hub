@@ -273,6 +273,15 @@ func hasScope(k registry.APIKey, scope, integrationID string) bool {
 	return slices.Contains(k.Scopes, scope) || (integrationID != "" && slices.Contains(k.Scopes, scope+":"+integrationID))
 }
 
+// hasAnyScope reports whether the key carries scope for at least one integration or globally.
+func hasAnyScope(k registry.APIKey, scope string) bool {
+	return slices.ContainsFunc(k.Scopes, func(s string) bool { return s == scope || strings.HasPrefix(s, scope+":") })
+}
+
+func missingScope(scope string) *core.CanonicalError {
+	return &core.CanonicalError{Code: core.CodeForbidden, Message: "The API key lacks scope " + scope, Reason: core.Ptr("missing_scope")}
+}
+
 // authorizeIntegration resolves the integration's visibility for the caller: unknown → 404, not
 // owner or grantee → 403 not_granted, missing scope → 403 missing_scope ("" = any key may).
 func authorizeIntegration(c Caller, integrationID, scope string) (*registry.Integration, *core.CanonicalError) {
@@ -284,7 +293,7 @@ func authorizeIntegration(c Caller, integrationID, scope string) (*registry.Inte
 		return nil, &core.CanonicalError{Code: core.CodeForbidden, Message: "The tenant may not use this integration", Reason: core.Ptr("not_granted")}
 	}
 	if scope != "" && !hasScope(c.Key, scope, integrationID) {
-		return nil, &core.CanonicalError{Code: core.CodeForbidden, Message: "The API key lacks scope " + scope, Reason: core.Ptr("missing_scope")}
+		return nil, missingScope(scope)
 	}
 	return in, nil
 }

@@ -18,7 +18,7 @@ Bad requests must fail immediately and cheaply, never after queueing (DESIGN §5
 ## Goals / Non-goals
 **Goals**
 - Bearer tenant key → hash lookup in the snapshot (no DB). Keys shown once, stored hashed, rotatable with overlap (DESIGN §16.5).
-- Owner/grantee check (`integration_grants`); API key scopes `invoke`, `dry_run`, `requests_read`, each optionally narrowed to one integration as `<scope>:<integration_id>` (`hub-admin.v1.yaml#/components/schemas/ApiKeyScope`). `dry_run` is not granted by default. A missing scope gives 403 `FORBIDDEN`, reason `missing_scope`.
+- Owner/grantee check (`integration_grants`); API key scopes `invoke`, `dry_run`, `requests_read`, each optionally narrowed to one integration as `<scope>:<integration_id>` (`hub-admin.v1.yaml#/components/schemas/ApiKeyScope`). `dry_run` is not granted by default. A missing scope gives 403 `FORBIDDEN`, reason `missing_scope`. `GET /v1/requests/{id}` needs `requests_read` for Hub keys and ISFC keys (`HUB:REQUESTS_READ`) alike (HUB-415, HUB-487); a key with only `invoke` can no longer read request status.
 - Body size limits: 1 MB (the 4 MB LLM limit waits for an explicit integration setting, HUB-439, [ADR-0024](../tech/adr/0024-llm-body-limit-and-pool-without-capability-names.md)).
 - Schema validation of the body and declared caller headers against the operation's `request_schema`, switchable per operation (`validate_input`, default on), with JSON-pointer details; `VALIDATION_FAILED` never deferred to a queue. Only declared caller headers reach the transformer as `hdr.*`.
 - Discovery: `GET /v1/integrations`, `GET /v1/integrations/{id}` (operations with their request schemas; `GET /v1/capabilities/{capability}` was removed in 2.0.0).

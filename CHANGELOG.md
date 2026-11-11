@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(edge)` · Enforce requests_read on request status and map ISFC permissions to scopes (HUB-487) · HUB-487 · F-24
+  - `GET /v1/requests/{id}` now needs the `requests_read` scope (or `requests_read:<integration>` for that integration's requests) for Hub keys and ISFC keys alike; a key with only `invoke` gets 403 `missing_scope` there (fixes HUB-415)
+  - ISFC permissions `HUB:INVOKE`, `HUB:DRY_RUN` and `HUB:REQUESTS_READ` give the scopes `invoke`, `dry_run` and `requests_read`; any other permission grants nothing
 - 2026-11-11 · `feat(authz)` · Add entry.rego, the permission catalogue and the ISFC seed script for integration-hub (HUB-477) · HUB-477 · F-24
   - `authz-policies/integration-hub/entry.rego` is the ISFC panel template with the `ISFC_ADMIN` shortcut removed and `platform_scope`, `tenant_scope` and API-key helpers added (a key is judged as a key, the decision meta reports `key_permissions`); `metadata.yaml` and `catalogue.json` (the HUB_* roles and permissions of AUTH_PLAN section 7.4)
   - `scripts/isfc-seed-hub.py` creates, idempotently and through auth-service's admin APIs only, the console and backend clients, permissions, roles, the platform tenant, mapping, EMAIL_OTP and an optional automation client with a `HUB_CI` key; it never prints a token, secret or key (tested against a fake auth-service)
