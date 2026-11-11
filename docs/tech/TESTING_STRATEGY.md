@@ -101,6 +101,14 @@ Contract change → `contracts/` commit → backend contract tests fail until im
   - Admin: every mutation writes `change_log`; `hubctl apply` idempotent; `plan` shows exact diffs (M7).
   - Schema registry (ADR-0023, F-23): `TestAgifyOnboardedWithoutCapabilities` onboards a public API through the admin API alone (auth `none`, endpoint request schema, credential-less account, `endpoint_schema` and `goldens_pass` refusals, response transformer output, pass-through, `validate_input` on and off, discovery without vendor); `TestE2EPassThrough` (gateway, contract-validated) and `TestWorkerPassThrough` (async); `TestAuthNoneAccounts`; `TestRemoveCapabilitiesMigration` (00011 up/down over old data); `TestUpgradeLegacyArchive` (format-1 archive, drafts and pending upgraded once at admin boot).
 
+### 5.1 ISFC tests: `mockisfc`, never a real ISFC (planned, EP-15)
+Same rule as "never call real vendors" (AGENTS.md §3.3), applied to ISFC and Entra. Source: [AUTH_PLAN](AUTH_PLAN.md) §18; ISFC code is not reachable from CI.
+- **`mockisfc`** (HUB-481: `backend/cmd/mockisfc` or a test server package) is a fake auth-service: tenants (`GET|POST /api/v1/tenant`, `GET /api/v1/tenant/:id`), client metadata with `tenancy` and `tenants`, `GET /api/v1/client/configuration/<client>` with API keys, S2S key fetch (`GET|POST /api/v1/client/api-key`), `POST /oauth2/token` and a JWKS endpoint that mints RS256 test tokens. All ISFC tests use it.
+- **OPA**: a fake OPA for unit tests (allow, deny, error, timeout); a real OPA container (testcontainers) only for the integration run of the generated RBAC matrix. Real policies are `opa test`ed in CI; the generator runs with `--check`.
+- **Scenarios**: `TestRBACMatrix` in both admin auth modes (`jwt`; `isfc` with signed RS256 tokens, generated headers, real policies); forged `x-isfc-*` without a valid JWT is 401; cross-tenant is 404; machine principal refused for unseal and purge; reconcile lifecycle (every row of ADR-0027); id derivation with collisions; revoke in `mockisfc` gives 401 at the edge after one reconcile; redaction of `x-isfc-api-key`, tokens and cookies.
+- **Manual (not CI)**: Phase 0 spikes against the ISFC local stack (HUB-462 to HUB-464, OTP `123456`) and the Microsoft check against Entra in QA are manual notes, never automated tests.
+- **Perf**: HUB-490 benchmarks the `auth` stage with 10k ISFC keys; the hot-path budget is unchanged.
+
 ## 6. Chaos tests (mockvendor, DESIGN §19 M5)
 `mockvendor` control API sets per-route behaviour: latency (fixed/random), status codes, error ratio, 429 + `Retry-After`, hard down (connection refused), slow drip, malformed body; records received requests. Tests run the hub roles in-process (gateway, worker, scheduler) with real Postgres/Redis and a fake clock where possible (breaker windows, drain ramp) or shortened config windows where real time is needed.
 

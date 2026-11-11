@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(tech)` · Document the ISFC signals and the mockisfc test rule (HUB-468) · HUB-468 · F-24
+  - OBSERVABILITY §15 lists the planned authz, authn, edge-auth and sync metrics, logs, span and alerts
+  - TESTING_STRATEGY §5.1 describes mockisfc and the rule that tests never call a real ISFC or Entra
 - 2026-11-11 · `docs(tech)` · Fix the RBAC matrix and docs drift, add ISFC trust boundaries and env vars (HUB-468) · HUB-468 · F-24
   - SECURITY §7 now matches the contract's x-required-role and TestRBACMatrix (74 operations); it no longer lets editors create vendors, accounts, tenants or keys, and no longer shows tenant_viewer reading the change log
   - SECURITY lists the planned ISFC trust boundaries and gaps G4, G5, G6, G15, and says plainly that the console has no CSP yet and its session cookie is signed, not encrypted
