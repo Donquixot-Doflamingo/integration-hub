@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Accepted |
+| Status | Accepted; partly superseded by [ADR-0026](0026-isfc-identity-and-per-operation-admin-policies.md) (auth parts only) |
 | Date | 2026-10-31 |
 | Deciders | lead, user |
 | DESIGN refs | §16.1, §19 (Phase 2 lists "admin UI") |

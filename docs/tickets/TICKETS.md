@@ -3716,11 +3716,13 @@ Read the tenant and client APIs with the `integration-hub` S2S key, and confirm 
 
 ### HUB-465 — ADR-0026: ISFC identity and per-operation OPA policies for the admin API
 - **Epic:** EP-15 · **Type:** docs · **Area:** docs
-- **Status:** todo · **Depends on:** HUB-463 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-463 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `docs/HUB-465-adr-isfc-admin-authz`
 
 **Acceptance criteria**
-- [ ] ADR-0026 Accepted; ADR-0005 and ADR-0022 marked "partly superseded" with a link; PRD DV entry for the platform tenant.
+- [ ] ADR-0026 Accepted; ADR-0005 and ADR-0022 marked "partly superseded" with a link (done); PRD DV entry for the platform tenant (with HUB-468).
+
+Progress: ADR-0026 written (Accepted 2026-11-11); ADR-0005 and ADR-0022 marked partly superseded. The PRD DV entry (DV-8) lands with HUB-468, so the last box stays open until then.
 
 ### HUB-466 — ADR-0027: tenants owned by ISFC, Hub keeps a synced copy
 - **Epic:** EP-15 · **Type:** docs · **Area:** docs

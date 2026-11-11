@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(adr)` · Add ADR-0026 ISFC identity and per-operation admin policies (HUB-465) · HUB-465 · F-24
+  - ADR-0026 records ISFC as the identity provider, the platform tenant, gateway identity plus one OPA policy per admin operation, and the machine-principal rules (planned, EP-15)
+  - ADR-0005 and ADR-0022 are marked partly superseded (auth parts only)
 - 2026-11-11 · `docs(tickets)` · Move the ISFC auth plan tickets into the backlog and record decisions D1-D9 (HUB-460) · HUB-460 · F-24
   - `docs/tickets/TICKETS.md` gains epic EP-15 with tickets HUB-460 to HUB-498 (HUB-461 port work is todo, HUB-462 to HUB-464 are blocked on a live ISFC stack); the ID-range and feature tables list EP-15, F-24 and F-25
   - `docs/tech/AUTH_PLAN.md` records the accepted answer to each of D1-D9 and is marked approved; HUB-460 is in review

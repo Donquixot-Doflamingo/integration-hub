@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Accepted |
+| Status | Accepted; partly superseded by [ADR-0026](0026-isfc-identity-and-per-operation-admin-policies.md) (auth parts only) |
 | Date | 2026-11-07 |
 | Deciders | frontend-engineer (for lead review) |
 | DESIGN refs | §16.1; ADR-0005; F-19 "Open questions: hosting"; F-16 / M7 dev OIDC issuer; SECURITY §2 |
