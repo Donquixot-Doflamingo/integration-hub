@@ -1,0 +1,47 @@
+# Admin API authorization policies (HUB-478, HUB-479): `node scripts/gen-authz.mjs --check` fails when a
+# Rego policy of authz-policies/integration-hub is missing, stale, or disagrees with the admin
+# contract (x-required-role, x-required-permission); then `opa check --strict` and `opa test`, including
+# the generated RBAC matrix, run with the OPA image ISFC pins. Runs when the policies, the generator, the
+# admin contract or this workflow change.
+name: authz
+
+on:
+  pull_request:
+    paths:
+      - 'authz-policies/**'
+      - 'scripts/gen-authz.mjs'
+      - 'scripts/check-authz.sh'
+      - 'contracts/openapi/hub-admin.v1.yaml'
+      - '.github/workflows/authz.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'authz-policies/**'
+      - 'scripts/gen-authz.mjs'
+      - 'scripts/check-authz.sh'
+      - 'contracts/openapi/hub-admin.v1.yaml'
+      - '.github/workflows/authz.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: authz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  authz-policies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: contracts/tools/.nvmrc
+          cache: npm
+          cache-dependency-path: contracts/tools/package-lock.json
+      - name: Install the pinned contract toolchain (the generator reads the contract with its YAML parser)
+        working-directory: contracts/tools
+        run: npm ci --no-audit --no-fund
+      - name: make authz-check (gen-authz --check, opa check --strict, opa test)
+        run: make authz-check

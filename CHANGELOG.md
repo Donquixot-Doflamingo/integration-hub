@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(authz)` · Generate one Rego policy per admin operation from the contract (HUB-478) · HUB-478 · F-24
+  - `scripts/gen-authz.mjs` reads `x-required-role` and `x-required-permission` from `hub-admin.v1.yaml` and writes one policy per operationId (path regex with gin-style shadowing exclusions, permission, scope, human-only for unseal and purge), `catalogue.json` and the generated RBAC matrix test; it refuses a contract whose roles and permissions drift apart
+  - `--check` fails on a missing, stale or disagreeing policy (hand edits that keep path, permission and scope are allowed); `make authz-check` and the `authz` workflow run it with `opa check --strict` and `opa test` (docker when opa is not installed)
 - 2026-11-11 · `feat(edge)` · Enforce requests_read on request status and map ISFC permissions to scopes (HUB-487) · HUB-487 · F-24
   - `GET /v1/requests/{id}` now needs the `requests_read` scope (or `requests_read:<integration>` for that integration's requests) for Hub keys and ISFC keys alike; a key with only `invoke` gets 403 `missing_scope` there (fixes HUB-415)
   - ISFC permissions `HUB:INVOKE`, `HUB:DRY_RUN` and `HUB:REQUESTS_READ` give the scopes `invoke`, `dry_run` and `requests_read`; any other permission grants nothing
