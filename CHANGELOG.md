@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(tickets)` · Move the ISFC auth plan tickets into the backlog and record decisions D1-D9 (HUB-460) · HUB-460 · F-24
+  - `docs/tickets/TICKETS.md` gains epic EP-15 with tickets HUB-460 to HUB-498 (HUB-461 port work is todo, HUB-462 to HUB-464 are blocked on a live ISFC stack); the ID-range and feature tables list EP-15, F-24 and F-25
+  - `docs/tech/AUTH_PLAN.md` records the accepted answer to each of D1-D9 and is marked approved; HUB-460 is in review
 - 2026-11-11 · `chore(infra)` · Make the dev Postgres and Redis ports configurable (HUB-461) · HUB-461 · F-24
   - `HUB_PG_PORT` and `HUB_REDIS_PORT` move the compose Postgres and Redis host ports; `HUB_GATEWAY_PORT` and `HUB_ADMIN_PORT` are aliases of the existing `DEV_*` variables; defaults are unchanged
   - `docs/runbooks/isfc-local.md` describes running the ISFC local stack beside the Hub

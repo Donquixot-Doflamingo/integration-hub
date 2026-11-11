@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | **Proposed** (plan only; nothing in this document is built yet) |
+| Status | **Approved 2026-11-11** (decisions D1–D9 recorded in §19). Implementation is tracked in EP-15; nothing in this document is built until its ticket is `done` |
 | Date | 2026-11-11 |
 | Ticket | HUB-460 (this plan); work tickets HUB-461 to HUB-498, epic EP-15 (§17) |
 | Features | F-24 ISFC identity and authorization, F-25 Tenants from ISFC (to be created, §16) |
@@ -524,7 +524,7 @@ Every new name is added to `docs/tech/OBSERVABILITY.md` and the feature docs (AG
 
 ## 17. Tickets: EP-15 "ISFC identity, tenancy and authorization" (HUB-460 to HUB-499)
 
-Ticket format follows `docs/tickets/README.md`. These are **drafts**; they move into `TICKETS.md` (and the EP-15 row into the ID-range table) once this plan is approved. Stories use the feature prefix until real ids exist.
+Ticket format follows `docs/tickets/README.md`. These tickets were copied into `docs/tickets/TICKETS.md` (EP-15) on 2026-11-11 and the EP-15 row was added to the ID-range table; `TICKETS.md` is now the source of truth for their status. The text below is the original plan and is not kept in sync. Stories use the feature prefix until real ids exist.
 
 ### Phase 0: Verify (no product code)
 
@@ -942,3 +942,19 @@ Split into three tickets before starting (link tool / CSP / acceptance).
 | D7 | Machines allowed to unseal audit or purge the DLQ? | **No** |
 | D8 | Event transport from ISFC | **SQS** (ISFC already uses it; LocalStack locally), behind an interface |
 | D9 | Microsoft SSO timing | Build now; **enable in production after ISFC-CR-4** (id_token verification); need Entra `tenant_id` / `client_id` for QA |
+
+### Decisions
+
+Recorded 2026-11-11. The product owner accepted the recommendation for every decision.
+
+| # | Question | Recommendation | Answer |
+| --- | --- | --- | --- |
+| D1 | How the console handles platform-wide resources under `tenancy: required` | Platform tenant (§2.2 option A) | Accepted: platform tenant (recommendation accepted 2026-11-11) |
+| D2 | OPA on the caller plane | In-memory check of the same ISFC key data, no OPA hop; embedded OPA only if HUB-490 proves it fits | Accepted: in-memory caller check, no OPA hop (recommendation accepted 2026-11-11) |
+| D3 | Where the Rego lives | ISFC `authz-policies/integration-hub/`, generator and tests in the Hub CI | Accepted: Rego in ISFC `authz-policies`, generator in the Hub (recommendation accepted 2026-11-11) |
+| D4 | Add a `tenant_admin` role now | Yes | Accepted: add `tenant_admin` (recommendation accepted 2026-11-11) |
+| D5 | Interim caller linking until ISFC-CR-1 | One caller client per tenant + Hub-side list, removed after CR-1 | Accepted: interim one caller client per tenant (recommendation accepted 2026-11-11) |
+| D6 | Should `ISFC_ADMIN` count as Hub admin? | No | Accepted: no (recommendation accepted 2026-11-11) |
+| D7 | Machines allowed to unseal audit or purge the DLQ? | No | Accepted: no (recommendation accepted 2026-11-11) |
+| D8 | Event transport from ISFC | SQS, behind an interface | Accepted: SQS behind an interface (recommendation accepted 2026-11-11) |
+| D9 | Microsoft SSO timing | Build now; enable in production after ISFC-CR-4 | Accepted: build now, enable in production after ISFC-CR-4 (recommendation accepted 2026-11-11) |
