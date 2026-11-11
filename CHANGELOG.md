@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(frontend)` · Add the tenant switcher and send X-Tenant-Id through the admin proxy (HUB-494) · HUB-494 · F-24
+  - A tenant switcher in the top bar lists the tenants ISFC gives the operator for the console (`GET {gateway}/auth/oauth2/panels`), the platform tenant first; the choice is kept in the encrypted session and checked against ISFC on the server
+  - The admin proxy sends the chosen tenant as `X-Tenant-Id`, adopts the tenant the gateway used when none was chosen (`X-Isfc-Tenant-Id`), and never forwards a tenant header from the browser
+  - Switching reloads every page load and `/me`, so the roles of the new tenant apply at once; `GW_015` (no access to that tenant) is shown with its own message and a pointer to the switcher
+  - New settings `HUB_ISFC_GATEWAY_URL` and `HUB_ISFC_PLATFORM_TENANT_ID`
 - 2026-11-11 · `perf(edge)` · Benchmark the auth stage with 10k ISFC keys and record the result (HUB-490) · HUB-490 · F-24
   - `make bench-auth` times the whole auth middleware over 10,000 ISFC keys (and 10,000 Hub keys for comparison) and fails above 100 µs p99; measured p99 is about 2.5 µs, the same as a Hub key
   - LATENCY.md §7 records the numbers and what the benchmark does not cover; embedded OPA on /v1 stays unneeded

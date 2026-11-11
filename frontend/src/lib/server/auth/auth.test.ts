@@ -153,24 +153,24 @@ function cookieJar(initial: Record<string, string> = {}) {
 }
 
 describe('guards', () => {
-	it('redirects unauthenticated users to login with the page they asked for', () => {
+	it('redirects unauthenticated users to login with the page they asked for', async () => {
 		const event = { locals: { session: null }, url: new URL('http://c.test/dlq?tenant_id=a') };
-		try {
-			appLayoutLoad(event as never);
-			expect.unreachable();
-		} catch (e) {
-			expect(isRedirect(e)).toBe(true);
-			expect(e).toMatchObject({ status: 303, location: '/login?next=%2Fdlq%3Ftenant_id%3Da' });
-		}
+		const err = await Promise.resolve(appLayoutLoad(event as never)).catch((e) => e);
+		expect(isRedirect(err)).toBe(true);
+		expect(err).toMatchObject({ status: 303, location: '/login?next=%2Fdlq%3Ftenant_id%3Da' });
 	});
 
-	it('gives the page the token-free session', () => {
+	it('gives the page the token-free session', async () => {
 		const s = session({ accessToken: 'tok' });
-		const out = appLayoutLoad({ locals: { session: s }, url: new URL('http://c.test/') } as never);
+		const out = await appLayoutLoad({
+			locals: { session: s },
+			url: new URL('http://c.test/')
+		} as never);
 		expect(out).toEqual({
 			session: toPublicSession(s),
 			isfcMode: false,
-			isfcAdminUrl: null
+			isfcAdminUrl: null,
+			tenantSwitcher: null
 		});
 		expect(JSON.stringify(out)).not.toContain('tok');
 	});

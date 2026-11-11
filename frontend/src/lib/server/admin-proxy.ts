@@ -2,7 +2,10 @@ import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { DEFAULT_ADMIN_API_BASE, ETAG_HEADER, REQUEST_ID_HEADER } from '$lib/api/client';
 import { isTokenRefusal, normalizeGatewayError } from './gateway-errors';
+import { isTenantUuid } from '$lib/auth/tenant-choice';
+import { writeSessionCookie } from './auth/cookie';
 import { refreshForEvent } from './auth/refresh';
+import { sessionSecret } from './auth';
 
 /**
  * Same-origin proxy for the admin API (HUB-286, ADR-0022).
@@ -67,6 +70,12 @@ export interface ForwardHooks {
 	 * `GW_004`). Returns the refreshed token, or null when the session could not be refreshed.
 	 */
 	refreshToken?: () => Promise<string | null>;
+	/**
+	 * The gateway echoed the tenant it used (`X-Isfc-Tenant-Id`) for a request that named none
+	 * (it fell back to the user's top tenant): the session should adopt it. Never called when the
+	 * request carried an explicit tenant.
+	 */
+	onTenantEcho?: (tenantId: string) => void;
 }
 
 /** Forwards one admin API request upstream with the session token. Never throws. */
@@ -86,6 +95,10 @@ export async function forwardToAdmin(
 	// Always the session's token (or none): a header sent by the browser is never passed on.
 	const token = event.locals.session?.accessToken;
 	if (token) headers.set('authorization', `Bearer ${token}`);
+	// ISFC: the tenant the operator works in (HUB-494). The gateway checks the user may enter it
+	// (403 GW_015 otherwise) and sends the Hub that tenant's roles.
+	const tenant = token ? (event.locals.session?.tenantId ?? null) : null;
+	if (tenant && isTenantUuid(tenant)) headers.set('x-tenant-id', tenant);
 
 	const body = SAFE_METHODS.has(request.method) ? undefined : await request.arrayBuffer();
 	const send = () =>
@@ -121,6 +134,8 @@ export async function forwardToAdmin(
 			`The admin API at ${upstream} did not answer. Is the hub admin role running?`
 		);
 	}
+	const echoed = res.headers.get('x-isfc-tenant-id')?.trim().toLowerCase();
+	if (!tenant && echoed && isTenantUuid(echoed)) hooks.onTenantEcho?.(echoed);
 	res = await normalizeGatewayError(res);
 	const out = new Headers();
 	for (const name of RESPONSE_HEADERS) {
@@ -143,6 +158,18 @@ export const proxyAdminApi: Handle = async ({ event, resolve }) => {
 	// ISFC sessions refresh once on a gateway "token no longer valid" (HUB-492); the new cookie is
 	// set on this response, so the browser keeps the rotated tokens.
 	return forwardToAdmin(event, upstream, fetch, {
+		onTenantEcho: (tenantId) => {
+			const session = event.locals.session;
+			const secret = sessionSecret();
+			if (!session || session.provider !== 'isfc' || !secret) return;
+			event.locals.session = { ...session, tenantId };
+			writeSessionCookie(
+				event.cookies,
+				event.locals.session,
+				secret,
+				event.url.protocol === 'https:'
+			);
+		},
 		refreshToken: async () => {
 			const outcome = await refreshForEvent(event, { fetch: event.fetch, force: true });
 			return outcome === 'refreshed' ? (event.locals.session?.accessToken ?? null) : null;

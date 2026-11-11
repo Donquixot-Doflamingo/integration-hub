@@ -294,15 +294,13 @@ describe('refreshForEvent / authenticate', () => {
 		expect(e.event.locals.session).toBeNull();
 		expect(e.event.locals.sessionEnded).toBe(true);
 		expect(e.deleted).toContain('hub_console_session');
-		try {
+		const err = await Promise.resolve(
 			appLayoutLoad({
 				locals: e.event.locals,
 				url: new URL('https://console.test/tenants')
-			} as never);
-			expect.unreachable();
-		} catch (err) {
-			expect(err).toMatchObject({ status: 303, location: '/login?next=%2Ftenants&expired=1' });
-		}
+			} as never)
+		).catch((x) => x);
+		expect(err).toMatchObject({ status: 303, location: '/login?next=%2Ftenants&expired=1' });
 	});
 
 	it('when ISFC is down the session is kept, so the operator is not signed out by an outage', async () => {

@@ -137,3 +137,74 @@ describe('forwardToAdmin with an ISFC session', () => {
 		});
 	});
 });
+
+// HUB-494: the proxy sends the session's tenant and learns the gateway's default.
+describe('X-Tenant-Id through the proxy', () => {
+	const TENANT = '22222222-2222-4222-8222-222222222222';
+	const ECHO = '11111111-1111-4111-8111-111111111111';
+
+	function ev(session: object | null) {
+		const url = new URL('http://localhost:5173/admin/v1/me');
+		return {
+			request: new Request(url),
+			url,
+			isSubRequest: false,
+			locals: { session }
+		} as never;
+	}
+
+	it('sends the tenant of the session next to the token', async () => {
+		const f = vi.fn<typeof fetch>(async () => Response.json({}));
+		await forwardToAdmin(ev({ accessToken: 't', tenantId: TENANT }), UPSTREAM, f);
+		expect((f.mock.calls[0]![1]!.headers as Headers).get('x-tenant-id')).toBe(TENANT);
+	});
+
+	it('never forwards an X-Tenant-Id from the browser, and sends none without a chosen tenant', async () => {
+		const f = vi.fn<typeof fetch>(async () => Response.json({}));
+		const url = new URL('http://localhost:5173/admin/v1/me');
+		const forged = {
+			request: new Request(url, { headers: { 'x-tenant-id': TENANT } }),
+			url,
+			isSubRequest: false,
+			locals: { session: { accessToken: 't', tenantId: null } }
+		} as never;
+		await forwardToAdmin(forged, UPSTREAM, f);
+		expect((f.mock.calls[0]![1]!.headers as Headers).get('x-tenant-id')).toBeNull();
+	});
+
+	it('does not send a tenant that is not a UUID (the gateway would answer GW_016)', async () => {
+		const f = vi.fn<typeof fetch>(async () => Response.json({}));
+		await forwardToAdmin(ev({ accessToken: 't', tenantId: 'orders-service' }), UPSTREAM, f);
+		expect((f.mock.calls[0]![1]!.headers as Headers).get('x-tenant-id')).toBeNull();
+	});
+
+	it('adopts the tenant the gateway used when none was sent', async () => {
+		const f = vi.fn<typeof fetch>(async () =>
+			Response.json({}, { headers: { 'x-isfc-tenant-id': ECHO.toUpperCase() } })
+		);
+		const onTenantEcho = vi.fn();
+		await forwardToAdmin(ev({ accessToken: 't', tenantId: null }), UPSTREAM, f, { onTenantEcho });
+		expect(onTenantEcho).toHaveBeenCalledExactlyOnceWith(ECHO);
+	});
+
+	it('does not let a late answer undo a switch: no adoption when a tenant was sent', async () => {
+		const f = vi.fn<typeof fetch>(async () =>
+			Response.json({}, { headers: { 'x-isfc-tenant-id': ECHO } })
+		);
+		const onTenantEcho = vi.fn();
+		await forwardToAdmin(ev({ accessToken: 't', tenantId: TENANT }), UPSTREAM, f, { onTenantEcho });
+		expect(onTenantEcho).not.toHaveBeenCalled();
+	});
+
+	it('ignores an echo that is not a UUID, and does not forward the header to the page', async () => {
+		const f = vi.fn<typeof fetch>(async () =>
+			Response.json({}, { headers: { 'x-isfc-tenant-id': 'evil<script>' } })
+		);
+		const onTenantEcho = vi.fn();
+		const res = await forwardToAdmin(ev({ accessToken: 't', tenantId: null }), UPSTREAM, f, {
+			onTenantEcho
+		});
+		expect(onTenantEcho).not.toHaveBeenCalled();
+		expect(res.headers.get('x-isfc-tenant-id')).toBeNull();
+	});
+});

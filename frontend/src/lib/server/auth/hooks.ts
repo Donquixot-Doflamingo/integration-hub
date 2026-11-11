@@ -1,6 +1,7 @@
 import type { Handle, HandleFetch } from '@sveltejs/kit';
 import { adminApiBase } from '$lib/api/console';
 import { resolveBaseUrl } from '$lib/api/client';
+import { isTenantUuid } from '$lib/auth/tenant-choice';
 import { clearSessionCookie, readSessionCookie } from './cookie';
 import { decodeSession } from './session';
 import { refreshForEvent } from './refresh';
@@ -34,6 +35,10 @@ export const attachAdminToken: HandleFetch = async ({ event, request, fetch }) =
 		const base = resolveBaseUrl(adminApiBase(), event.url.origin);
 		if (request.url === base || request.url.startsWith(`${base}/`)) {
 			request.headers.set('Authorization', `Bearer ${token}`);
+			const tenant = event.locals.session?.tenantId;
+			if (tenant && isTenantUuid(tenant) && !request.headers.has('X-Tenant-Id')) {
+				request.headers.set('X-Tenant-Id', tenant);
+			}
 		}
 	}
 	return fetch(request);
