@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(tickets)` · Set EP-15 ticket statuses from the branch history and mark the OBSERVABILITY ISFC signals implemented (HUB-460) · HUB-460 · F-24
+  - HUB-461 and HUB-469 to HUB-497 move from todo to in-review with acceptance boxes ticked only where tests exist; boxes stay open for real ISFC, promtool, the policy copy to the ISFC repo, the QA Entra check, the CI-runner benchmark and `e2e-real`; HUB-462 to HUB-464 stay blocked
+  - OBSERVABILITY section 15 and the F-25 tenant surface now say what is implemented (the HubAdminAuthzUnavailable alert exists); ticket counters recomputed
 - 2026-11-11 · `feat(frontend)` · Add a nonce-based Content-Security-Policy to the console (HUB-499) · HUB-499 · F-24
   - Every console page now sends `default-src 'self'`, script nonces from SvelteKit (no `unsafe-inline`), `frame-ancestors 'none'`, `object-src 'none'` and `base-uri 'self'`; in ISFC mode `connect-src` and `form-action` also allow the `HUB_ISFC_AUTH_URL` origin for the Microsoft step and the login redirect
   - New Playwright spec `csp.test.ts` checks the header and that signed-in pages raise no violation; the mock e2e suite passes (117 tests); SECURITY §2.2 now describes the policy as implemented (gap G12)

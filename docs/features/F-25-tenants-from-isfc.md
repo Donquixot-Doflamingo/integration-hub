@@ -38,10 +38,10 @@ Tenants are created in the Hub and again in ISFC, and access is granted twice. P
 ## UX / API surface
 | Surface | Item | Contract ref |
 | --- | --- | --- |
-| Admin API | `Tenant.isfc{tenant_id,key,name,status,linked,synced_at}`, `Tenant.setup` (read-only) | planned, HUB-469 |
-| Admin API | `syncTenants`, `syncTenant` ("Sync now"); `createTenant` answers 409 `tenant_managed_by_isfc` | planned, HUB-469 |
+| Admin API | `Tenant.isfc{tenant_id,key,name,status,linked,synced_at}`, `Tenant.setup` (read-only) | hub-admin 2.1.0 (HUB-469) |
+| Admin API | `syncTenants`, `syncTenant` ("Sync now"); `createTenant` answers 409 `tenant_managed_by_isfc` | hub-admin 2.1.0 (HUB-469) |
 | Console | tenant list and detail with ISFC fields read-only, "setup pending" badge, last synced, "Sync now", "Complete setup" | — |
-| CLI | `hubctl tenants link <hub-id> <isfc-uuid>` plus an unmatched report | — (HUB-498) |
+| CLI | `hubctl tenants link <hub-id> <isfc-uuid>` and `--report` (Hub tenants with no ISFC link). Edits the tenant YAML in the config tree, offline (HUB-498); `hubctl apply` refuses the link because the admin API has no operation for it (contract change request open) | — |
 
 ## Behaviour & rules
 1. `HUB_TENANT_SOURCE=local` (default) = today's behaviour. `isfc` starts the reconciler (worker role, leader only) and blocks `createTenant`.

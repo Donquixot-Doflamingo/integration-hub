@@ -2,7 +2,7 @@
 
 Single source of truth for planned work until an external tracker exists. Format and rules: `AGENTS.md` §5, definition of done: `AGENTS.md` §9, how to work this file: [`README.md`](README.md). Behaviour is defined by `docs/DESIGN.md`; section references below (`§x.y`) point there.
 
-Total tickets: **340** · done: **204** · todo: **99** · other (in-progress/in-review/blocked): **37**
+Total tickets: **340** · done: **204** · todo: **69** · other (in-progress/in-review/blocked): **67**
 
 ## Epics
 
@@ -3661,7 +3661,7 @@ The 4 MB body limit and the `llm` worker pool were chosen from `llm.*` capabilit
 
 ### HUB-461 — Run the ISFC local stack beside the Hub
 - **Epic:** EP-15 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-460 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-460 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `chore/HUB-461-isfc-local-stack`
 
 Make the Hub's local ports configurable so both stacks run at once (G11), and document the start order.
@@ -3669,9 +3669,11 @@ Make the Hub's local ports configurable so both stacks run at once (G11), and do
 Status note: the port-configurability part is `todo` and can start now. The runbook verification part is blocked: needs a running ISFC local stack and ISFC team input; implemented against documented ISFC code behaviour, to be verified.
 
 **Acceptance criteria**
-- [ ] `scripts/dev-up.sh` honours `HUB_GATEWAY_PORT`, `HUB_ADMIN_PORT`, `HUB_PG_PORT`, `HUB_REDIS_PORT`; `deploy/docker-compose.yml` reads them.
+- [x] `scripts/dev-up.sh` honours `HUB_GATEWAY_PORT`, `HUB_ADMIN_PORT`, `HUB_PG_PORT`, `HUB_REDIS_PORT`; `deploy/docker-compose.yml` reads them.
 - [ ] `docs/runbooks/isfc-local.md`: ISFC `SETUP.md` steps + Hub steps, verified on one machine.
 - [ ] Existing `dev-up.sh` defaults unchanged (e2e-real still green).
+
+Progress (2026-11-11): ports are configurable (`e58fced`, `make test-scripts` green, compose config checked with overridden ports). Open: the runbook was never run on a machine with the ISFC stack, and `e2e-real` was not re-run to confirm the defaults.
 
 ### HUB-462 — Spike: console login and gateway headers end to end
 - **Epic:** EP-15 · **Type:** test · **Area:** infra
@@ -3754,201 +3756,207 @@ Progress: ADR-0028 written (Accepted 2026-11-11) with the DESIGN §18.5 argument
 
 ### HUB-469 — contract(admin): ISFC security schemes, tenant ISFC fields, sync operations
 - **Epic:** EP-15 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-465, HUB-466 · **Feature:** F-24, F-25 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-465, HUB-466 · **Feature:** F-24, F-25 · **Stories:** —
 - **Branch:** `contract/HUB-469-admin-isfc`
 
 **Acceptance criteria**
-- [ ] §14 admin changes in `hub-admin.v1.yaml`; `info.version` minor bump; `contracts/CHANGELOG.md` entry; lint green; backend and frontend notified.
+- [x] §14 admin changes in `hub-admin.v1.yaml`; `info.version` minor bump; `contracts/CHANGELOG.md` entry; lint green; backend and frontend notified.
 
 ### HUB-470 — contract(public): ISFC S2S security scheme and X-Tenant-Id
 - **Epic:** EP-15 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-467 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-467 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `contract/HUB-470-public-isfc`
 
 **Acceptance criteria**
-- [ ] `isfcS2S` scheme and optional `X-Tenant-Id`; no vendor, account or version field; minor bump; changelog.
+- [x] `isfcS2S` scheme and optional `X-Tenant-Id`; no vendor, account or version field; minor bump; changelog.
 
 ### HUB-471 — contract(mcp): ISFC settings for hubmcp
 - **Epic:** EP-15 · **Type:** contract · **Area:** contracts
-- **Status:** todo · **Depends on:** HUB-469 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-469 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `contract/HUB-471-mcp-isfc`
 
 **Acceptance criteria**
-- [ ] `HUB_TENANT_ID`, gateway `HUB_ADMIN_BASE_URL`, ISFC credentials for HTTP transport; changelog.
+- [x] `HUB_TENANT_ID`, gateway `HUB_ADMIN_BASE_URL`, ISFC credentials for HTTP transport; changelog.
 
 **Phase 2: Backend, admin plane**
 
 ### HUB-472 — RS256 JWKS support in the admin JWT verifier
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-462 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-462 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `feat/HUB-472-rs256-jwks`
 
 **Acceptance criteria**
-- [ ] `RemoteKeys` parses RSA keys (≥ 2048 bits) as well as P-256; `JWTVerifier` accepts RS256 and ES256 (explicit allow-list, no `none`, no HS*).
-- [ ] Table tests: RS256 valid, wrong kid, rotated key, short RSA key refused; existing ES256 tests unchanged.
+- [x] `RemoteKeys` parses RSA keys (≥ 2048 bits) as well as P-256; `JWTVerifier` accepts RS256 and ES256 (explicit allow-list, no `none`, no HS*).
+- [x] Table tests: RS256 valid, wrong kid, rotated key, short RSA key refused; existing ES256 tests unchanged.
 
 ### HUB-473 — ISFC gateway identity → Principal (`HUB_ADMIN_AUTH_MODE=isfc`)
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-469, HUB-472 · **Feature:** F-24 · **Stories:** US-24xx
+- **Status:** in-review · **Depends on:** HUB-469, HUB-472 · **Feature:** F-24 · **Stories:** US-24xx
 - **Branch:** `feat/HUB-473-isfc-principal`
 
 **Acceptance criteria**
-- [ ] Header parser + token/header cross-check (§7.1 steps 2–4); platform vs tenant scope per §2.2; malformed `sub-attrs` → no roles.
-- [ ] Mode flag; `jwt` mode byte-for-byte unchanged (existing tests green).
-- [ ] Metric `hub_admin_authn_failures_total{reason}`.
+- [x] Header parser + token/header cross-check (§7.1 steps 2–4); platform vs tenant scope per §2.2; malformed `sub-attrs` → no roles.
+- [x] Mode flag; `jwt` mode byte-for-byte unchanged (existing tests green).
+- [x] Metric `hub_admin_authn_failures_total{reason}`.
 
 ### HUB-474 — OPA decision client for the admin API
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-473 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-473 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `feat/HUB-474-opa-client`
 
 **Acceptance criteria**
-- [ ] Sidecar-compatible input; deny → 403, error or timeout → 503 `authz_unavailable`; `hub_admin_authz_duration_ms{decision}`; span `admin.authz.opa`.
-- [ ] `HUB_OPA_DISABLED=true` refused unless `HUB_ENV=test`.
-- [ ] Unit tests with a fake OPA; integration test with a real OPA container (testcontainers).
+- [x] Sidecar-compatible input; deny → 403, error or timeout → 503 `authz_unavailable`; `hub_admin_authz_duration_ms{decision}`; span `admin.authz.opa`.
+- [x] `HUB_OPA_DISABLED=true` refused unless `HUB_ENV=test`.
+- [x] Unit tests with a fake OPA; integration test with a real OPA container (testcontainers).
 
 ### HUB-475 — Wire ISFC mode into the admin server, `/me`, change log
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-474 · **Feature:** F-24 · **Stories:** US-24xx
+- **Status:** in-review · **Depends on:** HUB-474 · **Feature:** F-24 · **Stories:** US-24xx
 - **Branch:** `feat/HUB-475-admin-isfc-wiring`
 
 **Acceptance criteria**
-- [ ] `authorize` = Principal → OPA → role check; `/me` per §7.2; change-log actor = email (or `client:<id>`).
-- [ ] `TestRBACMatrix` runs in both modes (ISFC mode with signed RS256 test tokens + generated headers + real policies).
+- [x] `authorize` = Principal → OPA → role check; `/me` per §7.2; change-log actor = email (or `client:<id>`).
+- [x] `TestRBACMatrix` runs in both modes (ISFC mode with signed RS256 test tokens + generated headers + real policies).
 
 ### HUB-476 — Machine principals on the admin API (ISFC API keys)
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-475 · **Feature:** F-24 · **Stories:** US-24xx
+- **Status:** in-review · **Depends on:** HUB-475 · **Feature:** F-24 · **Stories:** US-24xx
 - **Branch:** `feat/HUB-476-admin-machine-keys`
 
 **Acceptance criteria**
-- [ ] `x-isfc-client-id` + `x-isfc-api-key` accepted directly; OPA decides; principal `client:<id>`; unseal and purge refused for machines.
-- [ ] Logger redacts `x-isfc-api-key` by value (test).
+- [x] `x-isfc-client-id` + `x-isfc-api-key` accepted directly; OPA decides; principal `client:<id>`; unseal and purge refused for machines.
+- [x] Logger redacts `x-isfc-api-key` by value (test).
 
 **Phase 3: Rego**
 
 ### HUB-477 — `entry.rego` and permission catalogue for `integration-hub`
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-463, HUB-469 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-463, HUB-469 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `feat/HUB-477-authz-entry`
 
 **Acceptance criteria**
-- [ ] `entry.rego` from the ISFC panel template + `platform_scope`, `tenant_scope`; `ISFC_ADMIN` shortcut removed (D6).
+- [x] `entry.rego` from the ISFC panel template + `platform_scope`, `tenant_scope`; `ISFC_ADMIN` shortcut removed (D6).
 - [ ] Permission and role catalogue (§7.4) seeded by `scripts/isfc-seed-hub.py`.
+
+Progress: `entry.rego` (ISFC_ADMIN shortcut removed) and the catalogue in `scripts/isfc-seed-hub.py` are tested against a fake auth-service only; the seed script has not been run against a real ISFC.
 
 ### HUB-478 — Policy generator from the admin contract
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-477 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-477 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `feat/HUB-478-authz-generator`
 
 **Acceptance criteria**
-- [ ] `scripts/gen-authz.mjs` writes one file per operation (path regex with shadowing exclusions, permission, scope); `--check` fails on missing or disagreeing files.
-- [ ] CI job runs `--check` and `opa test`.
+- [x] `scripts/gen-authz.mjs` writes one file per operation (path regex with shadowing exclusions, permission, scope); `--check` fails on missing or disagreeing files.
+- [x] CI job runs `--check` and `opa test`.
 
 ### HUB-479 — 74 admin policies + Rego RBAC matrix tests
 - **Epic:** EP-15 · **Type:** test · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-478 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-478 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `test/HUB-479-authz-policies`
 
 **Acceptance criteria**
-- [ ] One policy per `operationId`; generated `rbac_matrix_test.rego` mirrors `TestRBACMatrix` (every op × role × scope); cross-tenant and machine cases.
+- [x] One policy per `operationId`; generated `rbac_matrix_test.rego` mirrors `TestRBACMatrix` (every op × role × scope); cross-tenant and machine cases.
 - [ ] Policies copied to ISFC `authz-policies/integration-hub/`; `scripts/check.sh integration-hub` green there.
 
 **Phase 4: Tenant sync**
 
+Progress: 76 policies, `scripts/check-authz.sh` green (opa test 94/94, opa 1.4.2 in docker). The policies are not copied to the ISFC repo yet, and `scripts/check.sh integration-hub` there has not run.
+
 ### HUB-480 — Tenant ISFC fields, setup state, sync tables
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-469 · **Feature:** F-25 · **Stories:** US-25xx
+- **Status:** in-review · **Depends on:** HUB-469 · **Feature:** F-25 · **Stories:** US-25xx
 - **Branch:** `feat/HUB-480-tenant-isfc-fields`
 
 **Acceptance criteria**
-- [ ] `registry.Tenant` gains `isfc` and `setup`; loader validates; old YAML loads unchanged.
-- [ ] Goose migration for `hub.isfc_sync_runs` and `hub.isfc_caller_keys`; integration test on real Postgres.
-- [ ] Edge refuses `setup: pending` tenants (401) only when `HUB_TENANT_SOURCE=isfc`.
+- [x] `registry.Tenant` gains `isfc` and `setup`; loader validates; old YAML loads unchanged.
+- [x] Goose migration for `hub.isfc_sync_runs` and `hub.isfc_caller_keys`; integration test on real Postgres.
+- [x] Edge refuses `setup: pending` tenants (401) only when `HUB_TENANT_SOURCE=isfc`.
 
 ### HUB-481 — ISFC client and `mockisfc`
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-464 · **Feature:** F-25 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-464 · **Feature:** F-25 · **Stories:** —
 - **Branch:** `feat/HUB-481-isfc-client`
 
 **Acceptance criteria**
-- [ ] `internal/isfc` client: fetch own key from auth-service (client credentials), refresh once on 401/403; tenants, client metadata, client configuration; timeouts; no secret in logs.
-- [ ] `backend/cmd/mockisfc` (or a test server package) serving the same endpoints + JWKS + token mint; used by all ISFC tests.
+- [x] `internal/isfc` client: fetch own key from auth-service (client credentials), refresh once on 401/403; tenants, client metadata, client configuration; timeouts; no secret in logs.
+- [x] `backend/cmd/mockisfc` (or a test server package) serving the same endpoints + JWKS + token mint; used by all ISFC tests.
 
 ### HUB-482 — Tenant reconciler
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-480, HUB-481 · **Feature:** F-25 · **Stories:** US-25xx
+- **Status:** in-review · **Depends on:** HUB-480, HUB-481 · **Feature:** F-25 · **Stories:** US-25xx
 - **Branch:** `feat/HUB-482-tenant-reconciler`
 
 **Acceptance criteria**
-- [ ] Leader-only loop in `worker`; create `pending`, update names, disable on INACTIVE or unlink, re-enable; never deletes; id derivation per §2.1 with collision test.
+- [x] Leader-only loop in `worker`; create `pending`, update names, disable on INACTIVE or unlink, re-enable; never deletes; id derivation per §2.1 with collision test.
 - [ ] Dry-run mode; change-log actor `isfc-sync`; ISFC down keeps last state; metrics and alert per §11.
-- [ ] Table tests for every lifecycle row in §2.1.
+- [x] Table tests for every lifecycle row in §2.1.
+
+Progress: the alert rule and its promtool unit test exist, but promtool is not installed here, so the alert test has not run; the box stays open until it does.
 
 ### HUB-483 — Caller-key sync and gateway reload
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-482 · **Feature:** F-24 · **Stories:** US-25xx
+- **Status:** in-review · **Depends on:** HUB-482 · **Feature:** F-24 · **Stories:** US-25xx
 - **Branch:** `feat/HUB-483-caller-key-sync`
 
 **Acceptance criteria**
-- [ ] Reconciler hashes keys on read into `hub.isfc_caller_keys` (with tenants once CR-1 exists, else the interim Hub-side mapping); Redis notify; gateway nodes rebuild an in-memory map without touching the snapshot.
-- [ ] Test: revoked in mockisfc → 401 at the edge after one reconcile.
+- [x] Reconciler hashes keys on read into `hub.isfc_caller_keys` (with tenants once CR-1 exists, else the interim Hub-side mapping); Redis notify; gateway nodes rebuild an in-memory map without touching the snapshot.
+- [x] Test: revoked in mockisfc → 401 at the edge after one reconcile.
 
 ### HUB-484 — Sync triggers: ISFC events and "Sync now"
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-482 · **Feature:** F-25 · **Stories:** US-25xx
+- **Status:** in-review · **Depends on:** HUB-482 · **Feature:** F-25 · **Stories:** US-25xx
 - **Branch:** `feat/HUB-484-sync-triggers`
 
 **Acceptance criteria**
-- [ ] `syncTenants` / `syncTenant` admin ops; event consumer behind an interface (SQS or webhook per D8) that only triggers a reconcile; duplicate and out-of-order events harmless (test).
+- [x] `syncTenants` / `syncTenant` admin ops; event consumer behind an interface (SQS or webhook per D8) that only triggers a reconcile; duplicate and out-of-order events harmless (test).
 
 ### HUB-485 — Console: ISFC-managed tenants and setup flow
 - **Epic:** EP-15 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-469 · **Feature:** F-25 · **Stories:** US-25xx
+- **Status:** in-review · **Depends on:** HUB-469 · **Feature:** F-25 · **Stories:** US-25xx
 - **Branch:** `feat/HUB-485-console-isfc-tenants`
 
 **Acceptance criteria**
-- [ ] Tenant list and detail show ISFC fields read-only, setup badge, last synced, "Sync now"; create hidden in ISFC mode; "Complete setup" flow.
-- [ ] MSW handlers and unit tests; axe clean.
+- [x] Tenant list and detail show ISFC fields read-only, setup badge, last synced, "Sync now"; create hidden in ISFC mode; "Complete setup" flow.
+- [x] MSW handlers and unit tests; axe clean.
 
 **Phase 5: Caller plane**
 
 ### HUB-486 — Edge: accept ISFC S2S credentials
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-470, HUB-483 · **Feature:** F-24 · **Stories:** US-24xx
+- **Status:** in-review · **Depends on:** HUB-470, HUB-483 · **Feature:** F-24 · **Stories:** US-24xx
 - **Branch:** `feat/HUB-486-edge-isfc-auth`
 
 **Acceptance criteria**
-- [ ] §8.2 rules behind `HUB_EDGE_ISFC_AUTH`; `hub_edge_auth_total{method,result}`; `hk_` path unchanged (existing edge tests green).
-- [ ] Table tests: wrong client id, revoked, multi-tenant key without `X-Tenant-Id`, tenant not in key, pending tenant, suspended tenant.
+- [x] §8.2 rules behind `HUB_EDGE_ISFC_AUTH`; `hub_edge_auth_total{method,result}`; `hk_` path unchanged (existing edge tests green).
+- [x] Table tests: wrong client id, revoked, multi-tenant key without `X-Tenant-Id`, tenant not in key, pending tenant, suspended tenant.
 
 ### HUB-487 — Scopes from ISFC permissions
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-486, HUB-415 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-486, HUB-415 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `feat/HUB-487-isfc-scopes`
 
 **Acceptance criteria**
-- [ ] `HUB:INVOKE`, `HUB:DRY_RUN` and `HUB:REQUESTS_READ` map to the existing scopes; `requests_read` enforced for both credential types.
+- [x] `HUB:INVOKE`, `HUB:DRY_RUN` and `HUB:REQUESTS_READ` map to the existing scopes; `requests_read` enforced for both credential types.
 
 ### HUB-488 — Audit and logs for ISFC callers
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-486 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-486 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `feat/HUB-488-isfc-caller-audit`
 
 **Acceptance criteria**
-- [ ] `request.received` carries `caller_client_id` and `isfc_key_id`; redaction test for `x-isfc-api-key`.
+- [x] `request.received` carries `caller_client_id` and `isfc_key_id`; redaction test for `x-isfc-api-key`.
 
 ### HUB-489 — SDK, hubmcp HTTP transport and consumer skill
 - **Epic:** EP-15 · **Type:** feat · **Area:** mcp
-- **Status:** todo · **Depends on:** HUB-486, HUB-471 · **Feature:** F-24 · **Stories:** US-24xx
+- **Status:** in-review · **Depends on:** HUB-486, HUB-471 · **Feature:** F-24 · **Stories:** US-24xx
 - **Branch:** `feat/HUB-489-sdk-mcp-isfc`
 
 **Acceptance criteria**
-- [ ] `pkg/hubclient` `WithISFC`; hubmcp HTTP accepts ISFC credentials; `clients/claude-skill` onboarding per §8.1.
+- [x] `pkg/hubclient` `WithISFC`; hubmcp HTTP accepts ISFC credentials; `clients/claude-skill` onboarding per §8.1.
 
 ### HUB-490 — Benchmark: auth stage with ISFC keys (and embedded OPA, if D2 asks)
 - **Epic:** EP-15 · **Type:** perf · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-486 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-486 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `perf/HUB-490-isfc-auth-bench`
 
 **Acceptance criteria**
@@ -3957,67 +3965,75 @@ Progress: ADR-0028 written (Accepted 2026-11-11) with the DESIGN §18.5 argument
 
 **Phase 6: Console login and tools**
 
+Progress: `make bench-auth` gives p99 2.4 to 2.8 µs for 10k ISFC keys (`docs/tech/LATENCY.md` §7), measured on an Apple M4, not the CI runner. Left open until the CI runner confirms it; D2 chose the in-memory check, so the embedded-OPA box does not apply unless that changes.
+
 ### HUB-491 — Console ISFC provider: Email OTP, callback, code exchange
 - **Epic:** EP-15 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-462 · **Feature:** F-24 · **Stories:** US-24xx
+- **Status:** in-review · **Depends on:** HUB-462 · **Feature:** F-24 · **Stories:** US-24xx
 - **Branch:** `feat/HUB-491-console-isfc-otp`
 
 Replaces the HUB-282 stub (HUB-282 closed as superseded).
 
 **Acceptance criteria**
-- [ ] Login page lists Email OTP and Microsoft from `/oauth2/method/<client>`; PKCE S256, `state`, `nonce` in an encrypted short-lived cookie; callback validates `state`; server-side code exchange with `x-device-id` and User-Agent.
-- [ ] Unit tests with a fake auth-service; error messages for `AS_FB_21`, `AS_VE_34`.
+- [x] Login page lists Email OTP and Microsoft from `/oauth2/method/<client>`; PKCE S256, `state`, `nonce` in an encrypted short-lived cookie; callback validates `state`; server-side code exchange with `x-device-id` and User-Agent.
+- [x] Unit tests with a fake auth-service; error messages for `AS_FB_21`, `AS_VE_34`.
 
 ### HUB-492 — Encrypted session, refresh, logout
 - **Epic:** EP-15 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-491 · **Feature:** F-24 · **Stories:** US-24xx
+- **Status:** in-review · **Depends on:** HUB-491 · **Feature:** F-24 · **Stories:** US-24xx
 - **Branch:** `feat/HUB-492-console-session`
 
 **Acceptance criteria**
-- [ ] AES-GCM session (token unreadable from the cookie value: test); single-flight refresh with 409 retry; expiry → `/login?expired=1`; logout calls ISFC and clears the cookie.
+- [x] AES-GCM session (token unreadable from the cookie value: test); single-flight refresh with 409 retry; expiry → `/login?expired=1`; logout calls ISFC and clears the cookie.
 
 ### HUB-493 — Microsoft SSO button
 - **Epic:** EP-15 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-491, HUB-464 · **Feature:** F-24 · **Stories:** US-24xx
+- **Status:** in-review · **Depends on:** HUB-491, HUB-464 · **Feature:** F-24 · **Stories:** US-24xx
 - **Branch:** `feat/HUB-493-console-microsoft`
 
 **Acceptance criteria**
-- [ ] Browser starts the Hydra flow with server-issued PKCE and state; Entra redirect; lands on `/auth/callback`; tested against a fake provider in unit tests; manual check against Entra in QA (D9).
+- [x] Browser starts the Hydra flow with server-issued PKCE and state; Entra redirect; lands on `/auth/callback`; tested against a fake provider in unit tests.
+- [ ] Manual check against Entra in QA (D9).
+
 
 ### HUB-494 — Tenant switcher and `X-Tenant-Id` through the proxy
 - **Epic:** EP-15 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-492, HUB-475 · **Feature:** F-24 · **Stories:** US-24xx
+- **Status:** in-review · **Depends on:** HUB-492, HUB-475 · **Feature:** F-24 · **Stories:** US-24xx
 - **Branch:** `feat/HUB-494-console-tenant-switcher`
 
 **Acceptance criteria**
-- [ ] Dropdown from `/oauth2/panels` (platform tenant first); choice kept in the session; proxy sends `X-Tenant-Id`, syncs `X-Isfc-Tenant-Id`; switching clears caches and reloads `/me`; 403 `GW_015` message.
+- [x] Dropdown from `/oauth2/panels` (platform tenant first); choice kept in the session; proxy sends `X-Tenant-Id`, syncs `X-Isfc-Tenant-Id`; switching clears caches and reloads `/me`; 403 `GW_015` message.
 
 ### HUB-495 — Dev login restricted to mock builds; real local stack on ISFC
 - **Epic:** EP-15 · **Type:** feat · **Area:** frontend
-- **Status:** todo · **Depends on:** HUB-494 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-494 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `feat/HUB-495-dev-login-mock-only`
 
 **Acceptance criteria**
-- [ ] `PUBLIC_AUTH_MODE=dev` refused outside mock or test builds; mock e2e (29 specs) still green.
+- [x] `PUBLIC_AUTH_MODE=dev` refused outside mock or test builds; mock e2e (29 specs) still green.
 - [ ] `dev-up.sh --isfc` runs the console in ISFC mode; `e2e-real` signs in with Email OTP `123456` against local ISFC.
+
+Progress: `dev-up.sh --isfc` is covered by script tests (`dev_up_isfc_test.sh`); `e2e-real` against a local ISFC was not run.
 
 ### HUB-496 — hubctl ISFC login and machine mode; hubmcp base URL
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
-- **Status:** todo · **Depends on:** HUB-476, HUB-471 · **Feature:** F-24 · **Stories:** US-24xx
+- **Status:** in-review · **Depends on:** HUB-476, HUB-471 · **Feature:** F-24 · **Stories:** US-24xx
 - **Branch:** `feat/HUB-496-hubctl-isfc`
 
 **Acceptance criteria**
-- [ ] `hubctl login -isfc` (PKCE loopback); `HUBCTL_ISFC_CLIENT_ID/SECRET` machine mode; `HUB_TENANT_ID`; hubmcp default admin URL fixed (G16); tests against mockisfc.
+- [x] `hubctl login -isfc` (PKCE loopback); `HUBCTL_ISFC_CLIENT_ID/SECRET` machine mode; `HUB_TENANT_ID`; hubmcp default admin URL fixed (G16); tests against mockisfc.
 
 **Phase 7: Rollout**
 
 ### HUB-497 — Deployment: OPA sidecar, gateway routes, network policy
 - **Epic:** EP-15 · **Type:** chore · **Area:** infra
-- **Status:** todo · **Depends on:** HUB-479, HUB-475 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-479, HUB-475 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `chore/HUB-497-isfc-deploy`
 
 **Acceptance criteria**
 - [ ] Helm values (ISFC `deploy/charts/isfc-service`, `opa.enabled`, `opa.platform: integration-hub`); gateway route from §9; network policy: admin listener reachable only from the gateway and allow-listed automation; runbook `docs/runbooks/isfc-auth.md` (OPA down, sync stale, key revocation).
+
+Progress: manifests, alert, runbook and script tests exist (`8cd510d`). Open: promtool is not installed here (alert tests not run); the Helm values live in the ISFC chart and were not applied to a cluster.
 
 ### HUB-498 — Link existing tenants (hubctl) and ISFC acceptance
 - **Epic:** EP-15 · **Type:** feat · **Area:** backend
