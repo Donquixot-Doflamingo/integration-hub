@@ -522,6 +522,7 @@ Source: [AUTH_PLAN](AUTH_PLAN.md) §5, §6, §7, §8, [ADR-0026](adr/0026-isfc-i
 | `HUB_EDGE_ISFC_AUTH` | `off`; `on` accepts `x-isfc-client-id` + `x-isfc-api-key` in addition to `hk_live_` keys | gateway |
 | `HUB_TENANT_SOURCE` | `local`; `isfc` starts the reconciler and makes `createTenant` answer 409 `tenant_managed_by_isfc` | admin, worker |
 | `HUB_OPA_URL` | unset; base URL of the OPA sidecar (`POST /v1/data/integrationhub/decision`), required in `isfc` admin mode | admin |
+| `HUB_OPA_CLIENT_ID` | `integration-hub`; ISFC client id of the Hub backend client; its Rego package is the id without `-` (ISFC generates ids, so set the real one) | admin |
 | `HUB_OPA_TIMEOUT` | `200ms`; an error or timeout is 503 `authz_unavailable` (fail closed) | admin |
 | `HUB_OPA_DISABLED` | `false`; refused unless `HUB_ENV=test` | admin, tests only |
 | `HUB_ISFC_AUTH_URL` | unset; auth-service base URL for the reconciler, key fetch and (console) login | admin, worker |

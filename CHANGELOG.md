@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(tech)` · List HUB_OPA_CLIENT_ID in the TECH_SPEC settings (HUB-477) · HUB-477 · F-24
+  - TECH_SPEC section on environment variables gains `HUB_OPA_CLIENT_ID`, the client id whose id without `-` is the Rego package of the admin policies
 - 2026-11-11 · `test(frontend)` · Cover the Microsoft SSO round trip against a fake provider (HUB-493) · HUB-493 · F-24
   - The Microsoft button asks the server for the PKCE challenge and state, opens Hydra's flow in the browser with credentials, goes to Entra, and lands on `/auth/callback`, where the server checks `state` and exchanges the code; the whole chain is tested against fakes (no real ISFC or Entra)
   - The button shows ISFC and network failures and becomes usable again, also after the browser's back button from Entra; production still waits for ISFC-CR-4 (D9)
