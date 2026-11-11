@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/authz"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/callbacks"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/delivery"
@@ -79,6 +80,7 @@ func catalogRegistry(t *testing.T) *prometheus.Registry {
 	}
 	idempotency.New(nil, m, idempotency.Options{})
 	isfcsync.NewMetrics(m.Registry, nil)
+	authz.NewMetrics(m.Registry)
 	if _, err := callbacks.NewEnqueuer(noSnapshots{}, m, callbacks.EnqueueOptions{}); err != nil {
 		t.Fatal(err)
 	}

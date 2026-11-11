@@ -34,7 +34,7 @@ const runbookBase = "https://github.com/Donquixot-Doflamingo/integration-hub/blo
 var (
 	histogramNames = []string{
 		"hub_overhead_ms", "hub_stage_duration_ms", "hub_wait_ms", "vendor_latency_ms",
-		"redis_op_duration_seconds", "callback_latency_seconds", "go_sched_latencies_seconds",
+		"redis_op_duration_seconds", "callback_latency_seconds", "go_sched_latencies_seconds", "hub_admin_authz_duration_ms",
 	}
 	summaryNames = []string{"go_gc_duration_seconds"}
 )

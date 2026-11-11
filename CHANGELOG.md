@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `test(roles)` · Register the admin authz metric in the metrics catalogue tests (HUB-474) · HUB-474 · F-24
+  - `TestAlertRulesUseExportedMetrics` knows `hub_admin_authz_duration_ms`, so the `HubAdminAuthzUnavailable` alert query is checked against an exported metric
 - 2026-11-11 · `chore(deploy)` · Add ISFC deployment manifests, the HubAdminAuthzUnavailable alert, the ISFC runbook and dev-up --isfc (HUB-497) · HUB-497 · F-24
   - deploy/isfc holds the OPA sidecar values (opa.enabled, platform integration-hub), the gateway route and a NetworkPolicy that opens the admin port to the ISFC gateway and labelled automation only
   - New alert HubAdminAuthzUnavailable (OPA errors above 1% for 5 minutes) with promtool tests and a runbook; docs/runbooks/isfc-auth.md covers OPA down, sync stale and key revocation
