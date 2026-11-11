@@ -481,11 +481,12 @@ Also new for the load runs: `net/http/pprof` is mounted on the ops port of every
 | Log | `admin.authz` | subject, client, tenant, operation, decision, reason; **no token and no `x-isfc-sub-attrs` dump** |
 | Log | `isfc.sync` | run id, created/updated/disabled counts |
 | Log | `request.received` (audit event, F-08) | adds `caller_client_id`, `isfc_key_id`, key hash; never the key |
-| Trace | span `admin.authz.opa` | `decision` |
+| Trace | span `admin.authz.opa` | `authz.decision=allow\|deny\|error` |
 | Alert | `HubAdminAuthzUnavailable` | OPA errors > 1 % for 5 min |
 | Alert | `HubIsfcSyncStale` | `hub_isfc_sync_lag_seconds` > 900 (also fires after 3 failed runs in a row) |
 
 - The logger redacts `x-isfc-api-key` and Hydra tokens by value (test required in HUB-476 and HUB-488).
 - `hub_isfc_sync_failures_total` counts failed runs; a failed fetch never disables tenants (ADR-0027).
+- Implemented (HUB-473 to HUB-476): `hub_admin_authz_duration_ms`, `hub_admin_authn_failures_total`, the `admin.authz` log (allow at debug, deny at info, OPA error at warn) and the `admin.authz.opa` span exist in the admin role when `HUB_ADMIN_AUTH_MODE=isfc`. The sync, edge and alert signals are still planned.
 - `hub_admin_authz_duration_ms` is the only per-request cost added on `/admin/v1`; `/v1` gains no OPA or ISFC call (ADR-0028).
 

@@ -13,6 +13,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/authz"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
 
 const (
@@ -145,7 +148,7 @@ func TestISFCAuthenticate(t *testing.T) {
 func TestISFCModeServer(t *testing.T) {
 	iss := newRSIssuer(t, testHydra, "rs-1", 2048)
 	reg := prometheus.NewRegistry()
-	s := New(Deps{ISFC: testISFCAuth(t, iss), Metrics: reg})
+	s := New(Deps{ISFC: testISFCAuth(t, iss), Authz: authz.Disabled{}, Metrics: reg})
 	call := func(tok string, g gatewayHeaders) *httptest.ResponseRecorder {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, Base+"/snapshots", nil) // needs viewer
 		if tok != "" {
@@ -198,5 +201,29 @@ func TestRoleHierarchy(t *testing.T) {
 	}
 	if !(Principal{Roles: []Role{RoleTenantAdmin}}).Scoped() || (Principal{Roles: []Role{RoleViewer, RoleTenantViewer}}).Scoped() {
 		t.Error("scope: tenant_admin is scoped, viewer+tenant_viewer is not")
+	}
+}
+
+func TestTenantResolverFromSnapshot(t *testing.T) {
+	snap := &registry.Snapshot{Tenants: map[string]*registry.Tenant{
+		"hl-home":   {Tenant: "hl-home", ISFC: &registry.TenantISFC{TenantID: testTenantHL}},
+		"legacy-co": {Tenant: "legacy-co"}, // not linked to ISFC
+	}}
+	cur := snap
+	resolve := TenantResolverFromSnapshot(func() *registry.Snapshot { return cur })
+	if id, ok := resolve(t.Context(), testTenantHL); !ok || id != "hl-home" {
+		t.Fatalf("%q %v", id, ok)
+	}
+	if _, ok := resolve(t.Context(), testTenantUnk); ok {
+		t.Fatal("an unsynced tenant resolved")
+	}
+	// A new snapshot is indexed anew.
+	cur = &registry.Snapshot{Tenants: map[string]*registry.Tenant{"hl-renamed": {Tenant: "hl-renamed", ISFC: &registry.TenantISFC{TenantID: testTenantHL}}}}
+	if id, ok := resolve(t.Context(), testTenantHL); !ok || id != "hl-renamed" {
+		t.Fatalf("%q %v", id, ok)
+	}
+	cur = nil
+	if _, ok := resolve(t.Context(), testTenantHL); ok {
+		t.Fatal("nil snapshot resolved a tenant")
 	}
 }

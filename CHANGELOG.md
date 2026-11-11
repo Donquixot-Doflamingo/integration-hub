@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(adminapi)` · Wire ISFC mode into the admin server, /me and the RBAC matrix (HUB-475) · HUB-475 · F-24
+  - In `HUB_ADMIN_AUTH_MODE=isfc` every admin request goes authenticate, OPA (deny 403, error or timeout 503 `authz_unavailable`, no engine also 503), then the in-process role check; the change log actor is the email
+  - `/me` keeps its shape (mapped Hub roles, the Hub id of the tenant for tenant scope); new UI gates `tenants:setup` and `tenants:sync`, and `registrar:write` now needs `tenant_admin`
+  - A `tenant_admin` can create, change, delete and rotate registrar endpoints of its own tenant only; `TestRBACMatrix` covers tenant_admin and runs in both modes (jwt, and isfc with RS256 tokens, generated gateway headers and a catalogue OPA)
 - 2026-11-11 · `feat(authz)` · Add the OPA decision client for the admin API (HUB-474) · HUB-474 · F-24
   - New `internal/authz`: a sidecar-compatible OPA input (`sub`, `http`, `client`, `tenant`), deny is a decision and a timeout, error or missing decision is `ErrUnavailable` (fail closed); the API key prints as `***`
   - Settings `HUB_OPA_URL`, `HUB_OPA_TIMEOUT` (default 200ms), `HUB_OPA_DISABLED` (refused unless `HUB_ENV=test`); metric `hub_admin_authz_duration_ms{decision}` and span `admin.authz.opa`

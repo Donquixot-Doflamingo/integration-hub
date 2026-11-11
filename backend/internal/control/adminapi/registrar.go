@@ -29,11 +29,11 @@ func init() { registrars = append(registrars, (*Server).registerRegistrar) }
 
 func (s *Server) registerRegistrar() {
 	s.handle("listRegistrarEndpoints", RoleTenantViewer, false, "GET /registrar-endpoints", s.listRegistrar)
-	s.handle("createRegistrarEndpoint", RoleAdmin, true, "POST /registrar-endpoints", s.createRegistrar)
+	s.handle("createRegistrarEndpoint", RoleTenantAdmin, true, "POST /registrar-endpoints", s.createRegistrar)
 	s.handle("getRegistrarEndpoint", RoleTenantViewer, false, "GET /registrar-endpoints/{endpoint_id}", s.getRegistrar)
-	s.handle("updateRegistrarEndpoint", RoleAdmin, true, "PATCH /registrar-endpoints/{endpoint_id}", s.updateRegistrar)
-	s.handle("deleteRegistrarEndpoint", RoleAdmin, true, "DELETE /registrar-endpoints/{endpoint_id}", s.deleteRegistrar)
-	s.handle("rotateRegistrarSecret", RoleAdmin, true, "POST /registrar-endpoints/{endpoint_id}/rotate-secret", s.rotateRegistrarSecret)
+	s.handle("updateRegistrarEndpoint", RoleTenantAdmin, true, "PATCH /registrar-endpoints/{endpoint_id}", s.updateRegistrar)
+	s.handle("deleteRegistrarEndpoint", RoleTenantAdmin, true, "DELETE /registrar-endpoints/{endpoint_id}", s.deleteRegistrar)
+	s.handle("rotateRegistrarSecret", RoleTenantAdmin, true, "POST /registrar-endpoints/{endpoint_id}/rotate-secret", s.rotateRegistrarSecret)
 }
 
 var defaultRegistrarGuard = sync.OnceValue(func() *callbacks.Guard { return callbacks.NewGuard(callbacks.GuardOptions{}) })
@@ -185,6 +185,10 @@ func (s *Server) createRegistrar(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	if !principal(r).SeesTenant(body.TenantID) { // a tenant_admin creates endpoints for its own tenant only
+		s.fail(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: "tenant_id is outside the caller's tenants"})
+		return
+	}
 	id := body.EndpointID
 	if !accessSlugRE.MatchString(id) {
 		s.fail(w, r, badRequest("/endpoint_id", "endpoint_id must match "+accessSlugRE.String()))
@@ -287,7 +291,7 @@ func (s *Server) updateRegistrar(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("endpoint_id")
 	res, err := pub.Edit(r.Context(), func(t control.Tree, snap *registry.Snapshot) (control.Change, error) {
 		e, ok := snap.Registrar[id]
-		if !ok {
+		if !ok || !principal(r).SeesTenant(e.Tenant) { // a tenant_admin reaches its own tenant's endpoints only
 			return control.Change{}, notFound("Registrar endpoint")
 		}
 		if err := accessIfMatch(r, accessETag(e)); err != nil {
@@ -343,7 +347,7 @@ func (s *Server) deleteRegistrar(w http.ResponseWriter, r *http.Request) {
 	var secretID string
 	res, err := pub.Edit(r.Context(), func(t control.Tree, snap *registry.Snapshot) (control.Change, error) {
 		e, ok := snap.Registrar[id]
-		if !ok {
+		if !ok || !principal(r).SeesTenant(e.Tenant) { // a tenant_admin reaches its own tenant's endpoints only
 			return control.Change{}, notFound("Registrar endpoint")
 		}
 		// Every version that names it would fail the snapshot build, so any subscriber blocks.
@@ -411,7 +415,7 @@ func (s *Server) rotateRegistrarSecret(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	res, err := pub.Edit(ctx, func(t control.Tree, snap *registry.Snapshot) (control.Change, error) {
 		e, ok := snap.Registrar[id]
-		if !ok {
+		if !ok || !principal(r).SeesTenant(e.Tenant) { // a tenant_admin reaches its own tenant's endpoints only
 			return control.Change{}, notFound("Registrar endpoint")
 		}
 		sid, err := creds.SecretID(e.SecretRef)

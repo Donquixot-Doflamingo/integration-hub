@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/authz"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control/adminapi"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/creds"
@@ -15,7 +18,7 @@ import (
 
 // adminHandler is the admin role's public surface: /admin/v1 and, in dev, the OIDC issuer stub
 // (/.well-known/openid-configuration, /oidc/*).
-func adminHandler(ctx context.Context, cfg Config, m *telemetry.Metrics, log *slog.Logger, st *stores, reg *roleRegistry) (http.Handler, error) {
+func adminHandler(ctx context.Context, cfg Config, m *telemetry.Metrics, log *slog.Logger, secrets *telemetry.SecretSet, tp trace.TracerProvider, st *stores, reg *roleRegistry) (http.Handler, error) {
 	probe, err := upstream.New(m, upstream.Options{}) // account connection tests (admin metrics)
 	if err != nil {
 		return nil, err
@@ -23,6 +26,7 @@ func adminHandler(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 	var verifier adminapi.Verifier
 	var dev *adminapi.DevIssuer
 	var isfc *adminapi.ISFCAuth
+	var decider authz.Decider
 	switch {
 	case cfg.AdminAuthMode == adminapi.AuthModeISFC:
 		// Identity comes from the ISFC gateway headers plus a Hydra token verified here (RS256 or ES256).
@@ -30,8 +34,19 @@ func adminHandler(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 			Tokens:           &adminapi.JWTVerifier{Issuer: cfg.OIDCIssuer, Audience: cfg.OIDCAudience, Keys: adminapi.RemoteKeys(cfg.OIDCIssuer, nil)},
 			ConsoleClientID:  cfg.ISFCConsoleClientID,
 			PlatformTenantID: cfg.ISFCPlatformTenantID,
+			ResolveTenant:    adminapi.TenantResolverFromSnapshot(reg.store.Snapshot),
 		}
-		log.InfoContext(ctx, "admin auth mode isfc", slog.String("issuer", cfg.OIDCIssuer), slog.String("console_client", cfg.ISFCConsoleClientID))
+		if cfg.OPADisabled { // Load already refused this outside HUB_ENV=test
+			decider = authz.Disabled{}
+			log.WarnContext(ctx, "admin authorization is DISABLED (HUB_OPA_DISABLED, HUB_ENV=test): every request that authenticates is allowed")
+		} else {
+			c, err := authz.New(authz.Config{URL: cfg.OPAURL, Timeout: cfg.OPATimeout, Metrics: authz.NewMetrics(m.Registry), Tracer: tp.Tracer("hub/admin")})
+			if err != nil {
+				return nil, err
+			}
+			decider = c
+		}
+		log.InfoContext(ctx, "admin auth mode isfc", slog.String("issuer", cfg.OIDCIssuer), slog.String("console_client", cfg.ISFCConsoleClientID), slog.String("opa", cfg.OPAURL))
 	case cfg.AdminDevOIDC:
 		var err error
 		if dev, err = adminapi.NewDevIssuer(cfg.AdminPublicURL); err != nil {
@@ -62,7 +77,7 @@ func adminHandler(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 	} else {
 		log.WarnContext(ctx, "no credential store: rotation endpoints answer 500 until `hubctl creds init-key`", slog.String("error", err.Error()))
 	}
-	api := adminapi.New(adminapi.Deps{Pool: st.pg, Redis: st.rdb, Verifier: verifier, ISFC: isfc, Metrics: m.Registry, Publisher: pub, Rotator: rot, Archive: reg.archive,
+	api := adminapi.New(adminapi.Deps{Pool: st.pg, Redis: st.rdb, Verifier: verifier, ISFC: isfc, Authz: decider, Secrets: secrets, Metrics: m.Registry, Publisher: pub, Rotator: rot, Archive: reg.archive,
 		Snapshot: reg.store.Snapshot, Log: log, Sealer: auditSealer(ctx, cfg, log), Upstream: probe,
 		CallbackHosts: cfg.CallbackHosts})
 	mux := http.NewServeMux()

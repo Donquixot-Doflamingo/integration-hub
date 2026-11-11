@@ -21,9 +21,11 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/authz"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
 )
 
@@ -39,6 +41,12 @@ type Deps struct {
 	// ISFC, when set, switches the server to HUB_ADMIN_AUTH_MODE=isfc: identity comes from the
 	// ISFC gateway headers and a verified token instead of Verifier (nil: the jwt mode).
 	ISFC *ISFCAuth
+	// Authz decides every request in ISFC mode (an *authz.Client, or authz.Disabled in tests). nil
+	// in ISFC mode refuses every request with 503 authz_unavailable (fail closed).
+	Authz authz.Decider
+	// Secrets is the process's redaction set; API keys of machine callers are added by value
+	// (HUB-476). nil: nothing is registered.
+	Secrets *telemetry.SecretSet
 	// Metrics receives the auth metrics of the ISFC mode (nil: none are recorded).
 	Metrics   prometheus.Registerer
 	Publisher *control.Publisher
@@ -171,8 +179,9 @@ func (s *Server) authorize(op string, min Role, next http.Handler) http.Handler 
 }
 
 // authorizeISFC is authorize for HUB_ADMIN_AUTH_MODE=isfc: authenticate (token plus gateway
-// headers), then the in-process role check.
-func (s *Server) authorizeISFC(_ string, min Role, next http.Handler) http.Handler {
+// headers), ask OPA (a deny is 403, an error or timeout 503 authz_unavailable), then keep the
+// in-process role check as a second layer (AUTH_PLAN §7.1).
+func (s *Server) authorizeISFC(op string, min Role, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p, aerr := s.d.ISFC.authenticate(r)
 		if aerr != nil {
@@ -182,9 +191,27 @@ func (s *Server) authorizeISFC(_ string, min Role, next http.Handler) http.Handl
 		}
 		if len(p.Roles) == 0 {
 			s.authn.fail(authnNoRoles)
+			s.logAuthz(r, p, op, authz.DecisionDeny, "no Hub role in this tenant")
 			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: "No Hub role in this tenant"})
 			return
 		}
+		if s.d.Authz == nil {
+			s.logAuthz(r, p, op, authz.DecisionError, "no policy engine configured")
+			writeError(w, r, authzUnavailable())
+			return
+		}
+		d, err := s.d.Authz.Decide(r.Context(), s.opaInput(r, p))
+		if err != nil {
+			s.logAuthz(r, p, op, authz.DecisionError, err.Error())
+			writeError(w, r, authzUnavailable())
+			return
+		}
+		if !d.Allow {
+			s.logAuthz(r, p, op, authz.DecisionDeny, d.Reason)
+			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: "Not permitted by the authorization policy"})
+			return
+		}
+		s.logAuthz(r, p, op, authz.DecisionAllow, d.Reason)
 		if !p.Allows(min) {
 			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: fmt.Sprintf("Requires role '%s'", min)})
 			return
@@ -193,6 +220,35 @@ func (s *Server) authorizeISFC(_ string, min Role, next http.Handler) http.Handl
 		ctx = control.WithChangeMeta(ctx, p.RoleNames(), RequestID(ctx))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// opaInput is the sidecar-compatible policy input of one request: the subject with its gateway
+// attributes, the path the Hub sees, the client, and the tenant of the request.
+func (s *Server) opaInput(r *http.Request, p Principal) authz.Input {
+	sub := make(map[string]any, len(p.SubAttrs)+2)
+	for k, v := range p.SubAttrs {
+		sub[k] = v
+	}
+	sub["id"], sub["type"] = p.Subject, p.SubType
+	in := authz.Input{Sub: sub, HTTP: authz.HTTP{Method: r.Method, Path: r.URL.Path}, Client: authz.Caller{ClientID: p.ClientID}}
+	if p.ISFCTenantID != "" {
+		in.Tenant = &authz.Tenant{ID: p.ISFCTenantID}
+	}
+	return in
+}
+
+// logAuthz is the admin.authz log: who, where, which operation and the decision. It never
+// carries a token, the attributes or a key.
+func (s *Server) logAuthz(r *http.Request, p Principal, op, decision, reason string) {
+	level := slog.LevelDebug
+	switch decision {
+	case authz.DecisionDeny:
+		level = slog.LevelInfo
+	case authz.DecisionError:
+		level = slog.LevelWarn
+	}
+	s.d.Log.Log(r.Context(), level, "admin.authz", slog.String("subject", p.Subject), slog.String("client", p.ClientID),
+		slog.String("tenant", p.ISFCTenantID), slog.String("operation", op), slog.String("decision", decision), slog.String("reason", reason))
 }
 
 type requestIDKey struct{}
