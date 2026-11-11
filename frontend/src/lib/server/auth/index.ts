@@ -50,7 +50,8 @@ export function resolveAuthMode(opts: {
 	};
 }
 
-function resolution(): ModeResolution {
+/** The mode of this deployment, or why none is usable (see `resolveAuthMode`). */
+export function authModeResolution(): ModeResolution {
 	return resolveAuthMode({
 		mocking: __API_MOCKING__,
 		mode: publicEnv.PUBLIC_AUTH_MODE,
@@ -60,11 +61,11 @@ function resolution(): ModeResolution {
 
 /** The provider this deployment uses, or null when the mode is refused or unset. */
 export function authMode(): AuthProviderId | null {
-	return resolution().mode;
+	return authModeResolution().mode;
 }
 
 export function authProvider(): AuthProvider {
-	const r = resolution();
+	const r = authModeResolution();
 	if (r.mode === 'dev') {
 		// Against a running Hub the admin's dev issuer mints the token (HUB-286); tests only.
 		return createDevProvider({
@@ -101,4 +102,16 @@ export function sessionSecret(): string | null {
 	if (authMode() !== 'dev') return null;
 	devSecret ??= randomBytes(32).toString('base64url');
 	return devSecret;
+}
+
+/**
+ * Start-up check (SvelteKit `init`, HUB-495): a deployed console must not run with the dev role
+ * picker, so an explicit `PUBLIC_AUTH_MODE=dev` outside mock builds and tests stops the server
+ * from starting. An unset or unknown mode starts, says why in the log, and nobody can sign in.
+ */
+export function assertAuthModeAtStartup(log: (msg: string) => void = console.error): void {
+	const r = authModeResolution();
+	if (r.mode !== null) return;
+	if (publicEnv.PUBLIC_AUTH_MODE?.trim() === 'dev') throw new Error(r.reason);
+	log(`[console] ${r.reason} Nobody can sign in until it is fixed.`);
 }

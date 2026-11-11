@@ -5,7 +5,7 @@ import { isTenantUuid } from '$lib/auth/tenant-choice';
 import { clearSessionCookie, readSessionCookie } from './cookie';
 import { decodeSession } from './session';
 import { refreshForEvent } from './refresh';
-import { sessionSecret } from './index';
+import { authMode, sessionSecret } from './index';
 
 /**
  * Reads the session cookie into `event.locals.session`, refreshing the ISFC tokens when due. A cookie that no longer verifies (wrong
@@ -15,8 +15,13 @@ import { sessionSecret } from './index';
 export const authenticate: Handle = async ({ event, resolve }) => {
 	const raw = readSessionCookie(event.cookies);
 	const secret = sessionSecret();
-	const session = raw && secret ? decodeSession(raw, secret) : null;
-	if (raw && !session) clearSessionCookie(event.cookies);
+	const decoded = raw && secret ? decodeSession(raw, secret) : null;
+	// A session made by another provider than the one this deployment runs (a dev picker cookie
+	// after a switch to ISFC, or the reverse) is not accepted, even though it decrypts.
+	const session = decoded && decoded.provider === authMode() ? decoded : null;
+	if (raw && !session) {
+		clearSessionCookie(event.cookies, event.url ? event.url.protocol === 'https:' : undefined);
+	}
 	event.locals.session = session;
 	event.locals.sessionEnded = !!raw && !session;
 	// An ISFC access token about to expire is refreshed before anything uses it (single flight).

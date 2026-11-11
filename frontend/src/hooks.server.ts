@@ -1,6 +1,7 @@
-import type { HandleFetch } from '@sveltejs/kit';
+import type { HandleFetch, ServerInit } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { proxyAdminApi, serializeAdminHeaders } from '$lib/server/admin-proxy';
+import { assertAuthModeAtStartup } from '$lib/server/auth';
 import { attachAdminToken, authenticate } from '$lib/server/auth/hooks';
 import { rejectDoubleSlashPaths } from '$lib/server/security';
 
@@ -15,6 +16,9 @@ export const handle = sequence(
 	proxyAdminApi,
 	serializeAdminHeaders
 );
+
+// A deployed console refuses to start with the dev role picker (HUB-495).
+export const init: ServerInit = () => assertAuthModeAtStartup();
 
 export const handleFetch: HandleFetch = async (input) => {
 	if (__API_MOCKING__) {

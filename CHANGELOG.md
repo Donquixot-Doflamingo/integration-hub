@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(frontend)` · Restrict the dev login to mock builds and tests, and refuse it at start-up (HUB-495) · HUB-495 · F-24
+  - `PUBLIC_AUTH_MODE=dev` works only in mock builds (`HUB_API_MOCKING=true`) and when `NODE_ENV=test`; in a deployment it stops the console from starting, and an unset or unknown mode starts but nobody can sign in (the login page says why)
+  - A session made by the other provider is not accepted (a dev cookie after a switch to ISFC, or the reverse), even though it decrypts
+  - The mock e2e suite (115 Playwright tests in 29 spec files) stays green; frontend README documents the ISFC settings
+  - Heads-up: `scripts/dev-up.sh` still starts the console with `PUBLIC_AUTH_MODE=dev`; it needs `NODE_ENV=test` or the ISFC mode (owned outside the console)
 - 2026-11-11 · `chore(isfc)` · Fix lint findings in the ISFC client, mock, sync and wiring (HUB-482) · HUB-482 · F-25
   - No behaviour change; the events webhook trigger now receives the request context, mockisfc has no unused state, and the ISFC test helpers pass the context
 - 2026-11-11 · `fix(frontend)` · Put refreshed session cookies on proxied admin responses (HUB-492) · HUB-492 · F-24
