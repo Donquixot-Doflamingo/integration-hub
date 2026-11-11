@@ -1,0 +1,63 @@
+# promtool unit tests for HubAdminAuthzUnavailable (HUB-497). Run: promtool test rules deploy/alerts/*_test.yml
+rule_files:
+  - hub.rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # 5% of the decisions fail (1 error per 20 allows): the ratio is above 1% from the start, so the
+  # alert is pending after 1 minute of data and fires once it has held for 5 minutes.
+  - name: more than 1 percent OPA errors for 5 minutes warn
+    interval: 1m
+    input_series:
+      - series: 'hub_admin_authz_duration_ms_count{decision="error",instance="adm-1"}'
+        values: '0+1x20'
+      - series: 'hub_admin_authz_duration_ms_count{decision="allow",instance="adm-1"}'
+        values: '0+19x20'
+      - series: 'hub_admin_authz_duration_ms_count{decision="deny",instance="adm-1"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: HubAdminAuthzUnavailable
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: HubAdminAuthzUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: warn
+            exp_annotations:
+              summary: "Admin authorization (OPA) is failing"
+              description: "More than 1% of admin authorization decisions failed for 5 minutes (OPA unreachable, too slow or erroring). The admin API and the console fail closed with 503 authz_unavailable; the /v1 data plane does not use OPA and is not affected."
+              runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/HubAdminAuthzUnavailable.md"
+
+  # 0.5% errors is below the threshold, and decisions that are only denials are not errors.
+  - name: half a percent errors and plain denials stay quiet
+    interval: 1m
+    input_series:
+      - series: 'hub_admin_authz_duration_ms_count{decision="error",instance="adm-1"}'
+        values: '0+1x20'
+      - series: 'hub_admin_authz_duration_ms_count{decision="allow",instance="adm-1"}'
+        values: '0+150x20'
+      - series: 'hub_admin_authz_duration_ms_count{decision="deny",instance="adm-1"}'
+        values: '0+49x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: HubAdminAuthzUnavailable
+        exp_alerts: []
+
+  # No errors at all, and a process that serves no admin traffic (no increase, 0/0): quiet.
+  - name: no errors and no traffic stay quiet
+    interval: 1m
+    input_series:
+      - series: 'hub_admin_authz_duration_ms_count{decision="error",instance="adm-1"}'
+        values: '0x20'
+      - series: 'hub_admin_authz_duration_ms_count{decision="allow",instance="adm-1"}'
+        values: '0+10x20'
+      - series: 'hub_admin_authz_duration_ms_count{decision="error",instance="adm-2"}'
+        values: '0x20'
+      - series: 'hub_admin_authz_duration_ms_count{decision="allow",instance="adm-2"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: HubAdminAuthzUnavailable
+        exp_alerts: []

@@ -732,3 +732,64 @@ Replaces capabilities ([ADR-0023](../tech/adr/0023-remove-capabilities-integrati
 ### US-2313 — LLM integrations get their body limit and pool back
 **As a** service developer, **I want** an explicit integration setting for LLM workloads, **so that** large prompts get the 4 MB limit and async work uses the `llm` pool again. · **Should** (planned, HUB-439, ADR-0024)
 - **Given** an integration with the setting, **when** I send a 3 MB body, **then** it is accepted and its async work is queued in the `llm` pool; other integrations keep 1 MB and `messaging`.
+
+## F-24 ISFC identity and authorization
+
+Planned (EP-15): none of these stories is shipped yet. Design: [ADR-0026](../tech/adr/0026-isfc-identity-and-per-operation-admin-policies.md), [ADR-0028](../tech/adr/0028-caller-auth-with-isfc-backend-clients-checked-in-memory.md), [AUTH_PLAN](../tech/AUTH_PLAN.md). Feature doc: [F-24](../features/F-24-isfc-identity-and-authz.md).
+
+### US-2401 — Operator signs in with Email OTP or Microsoft
+**As an** operator, **I want** to sign in to the console through ISFC with Email OTP or Microsoft, **so that** I use my company identity and the Hub keeps no passwords or user tables. · **Must** (planned, HUB-491, HUB-492, HUB-493)
+- **Given** the console in `PUBLIC_AUTH_MODE=isfc`, **when** I open `/login`, **then** I see exactly the methods ISFC lists for the console client, limited to Email OTP and Microsoft.
+- **Given** I complete the Email OTP or Microsoft flow, **when** ISFC redirects to `/auth/callback`, **then** the console checks `state`, exchanges the code on the server and stores the tokens in an encrypted session; no token reaches page JavaScript and `code` is removed from the URL.
+- **Given** my session expires or I log out, **when** I make the next request, **then** I am sent to `/login` and ISFC is told to end the session.
+- **Given** a deployed (non-mock, non-test) console, **when** `PUBLIC_AUTH_MODE=dev` is set, **then** it refuses to start.
+
+### US-2402 — Platform admin acts across all tenants
+**As a** platform admin, **I want** to work on vendors, accounts, transformers, snapshots and breakers, and across all tenants, **so that** I run the platform from one login. · **Must** (planned, HUB-473, HUB-475, HUB-494)
+- **Given** I hold `HUB_ADMIN`, `HUB_EDITOR` or `HUB_VIEWER` in the platform tenant, **when** I call the admin API with `X-Tenant-Id` set to the platform tenant, **then** I act as `admin`, `editor` or `viewer` with an unscoped principal and see every tenant.
+- **Given** I only hold `ISFC_ADMIN` in ISFC, **when** I call any admin operation, **then** I am refused (403): `ISFC_ADMIN` is not a Hub admin.
+- **Given** any admin operation, **when** the role and the operation's `x-required-role` disagree with the OPA policy, **then** the more restrictive answer applies.
+
+### US-2403 — Tenant admin finishes setup of their tenant
+**As a** tenant admin, **I want** to finish the Hub-side setup of my own tenant after it was linked in ISFC, **so that** my team can start calling integrations without a platform admin doing it for me. · **Must** (planned, HUB-473, HUB-485)
+- **Given** I hold `HUB_TENANT_ADMIN` in a linked tenant whose setup is `pending`, **when** I open that tenant in the console, **then** I can complete setup (display name, callback endpoints, view caller links) and I see only that tenant.
+- **Given** the same role, **when** I request another tenant's objects, **then** the answer is 404, and vendor or account endpoints answer 403.
+- **Given** I hold `HUB_TENANT_VIEWER` only, **when** I try to change setup, **then** the answer is 403.
+
+### US-2404 — Access is denied without a role
+**As a** security reviewer, **I want** every admin call without a valid token, matching headers and a granting role to be refused, **so that** forged headers and missing roles never reach a handler. · **Must** (planned, HUB-473, HUB-474)
+- **Given** a request with `x-isfc-*` headers but no valid Hydra JWT, **when** it reaches the admin listener, **then** it is 401.
+- **Given** a valid token whose `sub` or `client_id` differs from `x-isfc-sub-id` or `x-isfc-client-id`, **when** it is sent, **then** it is 401 and `hub_admin_authn_failures_total{reason="header_mismatch"}` increases.
+- **Given** a user with no Hub role in the chosen tenant, **when** they call any operation, **then** it is 403 (ISFC `GW_015` at the gateway when they have no access to that tenant).
+- **Given** OPA is down or slower than `HUB_OPA_TIMEOUT`, **when** an admin call arrives, **then** it fails closed with 503 `authz_unavailable`.
+
+### US-2405 — Automation calls the admin API with an ISFC key
+**As a** platform engineer, **I want** CI and scripts to call the admin API as an ISFC backend client, **so that** `hubctl apply` runs without a human token and is attributable. · **Should** (planned, HUB-476, HUB-496)
+- **Given** a client with an ISFC API key holding only `HUB_INTEGRATION:WRITE`, **when** it calls `x-isfc-client-id` + `x-isfc-api-key` directly, **then** it may publish integrations and nothing else, and the change log actor is `client:<id>`.
+- **Given** any machine principal, **when** it calls `unsealRequest` or `purgeDeadLetters`, **then** it is refused whatever its permissions.
+- **Given** a request carrying `x-isfc-api-key`, **when** it is logged, **then** the key is redacted by value.
+
+## F-25 Tenants from ISFC
+
+Planned (EP-15): none of these stories is shipped yet. Design: [ADR-0027](../tech/adr/0027-tenants-owned-by-isfc-hub-keeps-a-synced-copy.md), [ADR-0028](../tech/adr/0028-caller-auth-with-isfc-backend-clients-checked-in-memory.md). Feature doc: [F-25](../features/F-25-tenants-from-isfc.md).
+
+### US-2501 — A tenant appears in the Hub after it is linked in ISFC
+**As a** platform admin, **I want** a tenant linked to the Integration Hub in ISFC to appear in the console by itself, **so that** nobody creates a tenant twice or grants access twice. · **Must** (planned, HUB-480, HUB-482, HUB-485)
+- **Given** `HUB_TENANT_SOURCE=isfc` and an ACTIVE ISFC tenant newly listed in the console client's `tenants`, **when** the reconciler runs (event, 5-minute tick or "Sync now"), **then** a Hub tenant exists with `setup: pending`, a Hub id derived from the ISFC key, and a change-log entry by `isfc-sync`.
+- **Given** the ISFC key `HL`, **when** the Hub id is derived, **then** it is at least 3 characters (`hl-t`), is suffixed `-2`, `-3` on collision, and never changes afterwards.
+- **Given** `HUB_TENANT_SOURCE=isfc`, **when** an admin calls `createTenant`, **then** the answer is 409 `tenant_managed_by_isfc`.
+- **Given** ISFC is unreachable, **when** a reconcile fails, **then** the last good state stays and `hub_isfc_sync_failures_total` increases; no tenant is disabled.
+
+### US-2502 — A tenant is disabled when it is deactivated in ISFC
+**As a** security reviewer, **I want** a tenant that is INACTIVE or unlinked in ISFC to stop working in the Hub, **so that** offboarding in ISFC is enough. · **Must** (planned, HUB-482, HUB-486)
+- **Given** a synced tenant, **when** ISFC marks it INACTIVE or removes it from the console client's `tenants`, **then** the next reconcile sets the Hub tenant `disabled`, its callers get 401, and the console shows "Disabled in ISFC"; nothing is deleted.
+- **Given** the tenant is re-activated or re-linked, **when** the reconciler runs, **then** it is `active` again, and a `suspended` set in the Hub is kept.
+- **Given** a tenant created before ISFC, **when** an admin runs `hubctl tenants link <hub-id> <isfc-uuid>`, **then** sync updates it instead of creating a duplicate.
+
+### US-2503 — A caller team onboards with an ISFC backend client
+**As a** service developer, **I want** my service to call the Hub as an ISFC backend client using the ISFC auth lib, **so that** I do not handle a Hub-specific key. · **Must** (planned, HUB-483, HUB-486, HUB-487, HUB-489)
+- **Given** my `<team>-backend` client holds a key issued by `integration-hub` for my tenant, **when** my service calls `/v1/integrations/{id}/invoke` with `x-isfc-client-id` and `x-isfc-api-key`, **then** the Hub checks the key in memory (no OPA hop, no ISFC call) and the call continues as today (grants, limits, validation).
+- **Given** my key covers more than one tenant, **when** I omit `X-Tenant-Id`, **then** the answer is 400; a tenant outside the key gets 403.
+- **Given** the key is revoked in ISFC, **when** one reconcile has run, **then** my calls get 401 (up to the reconcile interval without ISFC events).
+- **Given** both an `x-isfc-api-key` and an `Authorization: Bearer hk_...` header, **when** I call, **then** the answer is 400; a legacy `hk_live_` key alone keeps working until the cut-off.
+- **Given** any response, **when** I read it, **then** it names no vendor, account or version (DESIGN §0).

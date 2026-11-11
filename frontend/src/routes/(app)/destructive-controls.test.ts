@@ -6,7 +6,7 @@ import { presets } from '$lib/api/mocks/scenarios';
 import { server } from '$lib/api/mocks/server';
 import { requiredRoles, type OperationId } from '$lib/api/roles.gen';
 import type { Breaker, Role } from '$lib/api/types';
-import { accessFromRoles, type Access } from '$lib/auth/roles';
+import { accessFromRoles, hasRole, type Access } from '$lib/auth/roles';
 import { useActions } from '$lib/testing/forms';
 import DlqPage from './dlq/+page.svelte';
 import { load as dlqLoad } from './dlq/+page';
@@ -31,8 +31,7 @@ import { actions as transformerVersionActions } from './transformers/[transforme
 
 vi.mock('$app/navigation', () => ({ invalidateAll: vi.fn(), invalidate: vi.fn(), goto: vi.fn() }));
 
-const ROLES: Role[] = ['admin', 'editor', 'viewer', 'tenant_viewer'];
-const RANK: Record<Role, number> = { tenant_viewer: 0, viewer: 1, editor: 2, admin: 3 };
+const ROLES: Role[] = ['admin', 'editor', 'viewer', 'tenant_viewer', 'tenant_admin'];
 const TENANT = 'orders-service';
 
 interface Control {
@@ -40,6 +39,8 @@ interface Control {
 	name: RegExp;
 	op: OperationId;
 	min: Role;
+	/** The control needs more than the operation's role (updateTenant's `disabled` is platform-only). */
+	stricter?: boolean;
 	kind?: 'button' | 'link';
 }
 
@@ -50,7 +51,8 @@ interface Screen {
 	controls: Control[];
 }
 
-const access = (role: Role) => accessFromRoles([role], role === 'tenant_viewer' ? [TENANT] : []);
+const access = (role: Role) =>
+	accessFromRoles([role], role === 'tenant_viewer' || role === 'tenant_admin' ? [TENANT] : []);
 
 const breaker = contractMocks.listBreakers.example.items[0]!;
 const b = (over: Partial<Breaker>): Breaker => ({ ...breaker, ...over });
@@ -149,16 +151,16 @@ const screens: Screen[] = [
 			await screen.findByRole('table', { name: `Callback endpoints of ${TENANT}` });
 		},
 		controls: [
-			{ name: /^Edit tenant$/, op: 'updateTenant', min: 'admin' },
-			{ name: /^(Disable|Enable) tenant$/, op: 'updateTenant', min: 'admin' },
+			{ name: /^Edit tenant$/, op: 'updateTenant', min: 'tenant_admin' },
+			{ name: /^(Disable|Enable) tenant$/, op: 'updateTenant', min: 'admin', stricter: true },
 			{ name: /^Create API key$/, op: 'createApiKey', min: 'admin' },
 			{ name: /^Rotate hk_/, op: 'rotateApiKey', min: 'admin' },
 			{ name: /^Revoke hk_/, op: 'revokeApiKey', min: 'admin' },
-			{ name: /^Register endpoint$/, op: 'createRegistrarEndpoint', min: 'admin' },
-			{ name: /^Edit reg_/, op: 'updateRegistrarEndpoint', min: 'admin' },
-			{ name: /^(Disable|Enable) reg_/, op: 'updateRegistrarEndpoint', min: 'admin' },
-			{ name: /^Rotate secret of reg_/, op: 'rotateRegistrarSecret', min: 'admin' },
-			{ name: /^Delete reg_/, op: 'deleteRegistrarEndpoint', min: 'admin' }
+			{ name: /^Register endpoint$/, op: 'createRegistrarEndpoint', min: 'tenant_admin' },
+			{ name: /^Edit reg_/, op: 'updateRegistrarEndpoint', min: 'tenant_admin' },
+			{ name: /^(Disable|Enable) reg_/, op: 'updateRegistrarEndpoint', min: 'tenant_admin' },
+			{ name: /^Rotate secret of reg_/, op: 'rotateRegistrarSecret', min: 'tenant_admin' },
+			{ name: /^Delete reg_/, op: 'deleteRegistrarEndpoint', min: 'tenant_admin' }
 		]
 	},
 	{
@@ -185,7 +187,7 @@ const screens: Screen[] = [
 describe('destructive controls follow x-required-role (HUB-288)', () => {
 	it('the matrix agrees with the contract', () => {
 		for (const s of screens) {
-			for (const c of s.controls)
+			for (const c of s.controls.filter((c) => !c.stricter))
 				expect(`${c.op}: ${requiredRoles[c.op]}`).toBe(`${c.op}: ${c.min}`);
 		}
 	});
@@ -195,7 +197,7 @@ describe('destructive controls follow x-required-role (HUB-288)', () => {
 			await s.mount(access(role));
 			for (const c of s.controls) {
 				const found = screen.queryAllByRole(c.kind ?? 'button', { name: c.name });
-				const allowed = RANK[role] >= RANK[c.min];
+				const allowed = hasRole([role], c.min);
 				expect({ control: String(c.name), present: found.length > 0 }).toEqual({
 					control: String(c.name),
 					present: allowed

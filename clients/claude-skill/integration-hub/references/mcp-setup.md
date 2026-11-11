@@ -36,9 +36,11 @@ see your shell's `PATH`. `hubmcp -transport stdio` is the default; logs go to st
 | Variable | Tenant profile | Admin profile | Meaning |
 | --- | --- | --- | --- |
 | `HUB_BASE_URL` | required | required | Gateway base URL, e.g. `http://localhost:8080`. Use a non-production environment for experiments |
-| `HUB_API_KEY` | required | required on stdio | Your tenant key (scope `invoke`; add `dry_run` for `hub_dry_run`). Secret |
+| `HUB_API_KEY` | one of | one of, on stdio | Your tenant key (scope `invoke`; add `dry_run` for `hub_dry_run`). Legacy: prefer the ISFC credential below. Secret |
+| `HUB_ISFC_CLIENT_ID` + `HUB_ISFC_API_KEY` | one of | one of, on stdio | Your ISFC backend client and the key `integration-hub` issued to it (instead of `HUB_API_KEY`; both set is a startup error). Secret |
+| `HUB_TENANT_ID` | only for a multi-tenant ISFC key | optional | ISFC tenant UUID, sent as `X-Tenant-Id` |
 | `HUB_ADMIN_TOKEN` | **unset** | required | **Your own** OIDC access token from your identity provider (local dev: the token `hubctl login -dev` saves), never a shared or service token. Unset → no `hub_admin_*` tool exists. Secret |
-| `HUB_ADMIN_BASE_URL` | — | set it | Control-plane URL **including `/admin/v1`**, e.g. `http://localhost:8081/admin/v1`. Defaults to `HUB_BASE_URL` + `/admin/v1`, which is wrong when the gateway and admin are on different hosts or ports (local dev: 8080 vs 8081) |
+| `HUB_ADMIN_BASE_URL` | — | required | Control-plane URL **including `/admin/v1`**, e.g. `http://localhost:8081/admin/v1`. The admin API is not served below `HUB_BASE_URL`: hubmcp guesses only for a loopback gateway (same host, port 8081) and otherwise refuses to start without it. With ISFC sign-in it is the gateway route to the Hub admin API, e.g. `https://gateway.example.com/hub/admin/v1`, and `HUB_TENANT_ID` picks the tenant you act in |
 
 Rules for the admin profile:
 - **stdio only.** Admin write tools are registered only on stdio, run by you on your machine. Never
@@ -58,6 +60,9 @@ Rules for the admin profile:
   # HUBCTL_TOKEN_FILE overrides. Dev tokens last 8 hours.
   export HUB_ADMIN_TOKEN="$(cat ~/.config/hubctl/token)"
   ```
+- ISFC sign-in (staging and production): `hubctl login -isfc` signs you in with your ISFC account in
+  the browser and saves the token the same way; export it as `HUB_ADMIN_TOKEN` and point
+  `HUB_ADMIN_BASE_URL` at the gateway route (see the table above).
 - **No deletes, ever.** Deleting, purging or replaying the DLQ, unseal, pause/resume, disabling
   tenants or callback endpoints, key revoke/rotate, secret rotation, credential changes, account
   drain/retire and breaker force stay manual in the console for roles that have them. Account
@@ -189,7 +194,8 @@ admin entry only in the **global** `~/.cursor/mcp.json`, never in a committed pr
 
 If the platform team hosts `hubmcp -transport http` (default listen `127.0.0.1:8090`; a non-loopback
 address needs `-allow-remote`), each client connects to `<url>/mcp` and authenticates with **its own
-tenant key** as `Authorization: Bearer <key>`. Only tenant tools and admin read tools exist there,
+credential**: a tenant key as `Authorization: Bearer <key>`, or its ISFC backend client as the
+headers `x-isfc-client-id` and `x-isfc-api-key` (plus `X-Tenant-Id` for a multi-tenant key); not both. Only tenant tools and admin read tools exist there,
 never admin write tools.
 
 | Client | Config |
@@ -197,6 +203,10 @@ never admin write tools.
 | Claude Code `.mcp.json` | `{"type": "http", "url": "https://hubmcp.example.internal/mcp", "headers": {"Authorization": "Bearer ${HUB_API_KEY}"}}` |
 | Codex `config.toml` | `url = "https://hubmcp.example.internal/mcp"` and `bearer_token_env_var = "HUB_API_KEY"` |
 | Cursor `mcp.json` | `{"url": "https://hubmcp.example.internal/mcp", "headers": {"Authorization": "Bearer ${env:HUB_API_KEY}"}}` |
+| Claude Code `.mcp.json`, ISFC | `{"type": "http", "url": "https://hubmcp.example.internal/mcp", "headers": {"x-isfc-client-id": "${ISFC_CLIENT_ID}", "x-isfc-api-key": "${HUB_ISFC_API_KEY}"}}` |
+
+A server started on a loopback address with `HUB_ISFC_CLIENT_ID` and `HUB_ISFC_API_KEY` uses that
+credential for requests that bring none; a remote-reachable server refuses to start with it.
 
 ## 8. Tools
 

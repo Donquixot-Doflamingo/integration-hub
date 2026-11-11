@@ -16,14 +16,22 @@ Never add a vendor SDK or vendor URL when an integration exists.
 1. Never invoke a money- or quota-moving integration (OTP send, bureau pull, penny drop, payment,
    mandate, paid bulk LLM job, messages to real users) without the user's explicit "yes" in this
    conversation. Dry-run first, show what will be sent, ask, then invoke.
-2. Never print, paste, hard-code or commit `HUB_API_KEY` or any secret. Read keys from the
+2. Never print, paste, hard-code or commit `HUB_API_KEY`, `HUB_ISFC_API_KEY`, an ISFC client secret
+   or any other secret. Read keys from the
    environment or a secret manager. If a key appears in chat, tell the user to rotate it.
 3. Use fake test data (no real PAN, Aadhaar, phone numbers, OTPs). Never put them in idempotency keys.
 4. A `202` is **not** success. Never report a queued request as done.
 
 ## Calling it
 Environment: `HUB_BASE_URL`, `HUB_API_KEY` (tenant key). Header on every call:
-`Authorization: Bearer $HUB_API_KEY`. If MCP tools `hub_list_integrations`,
+`Authorization: Bearer $HUB_API_KEY`. That `hk_live_` key is the **legacy** credential. Teams on the
+company identity platform use their backend client instead: send `x-isfc-client-id` and
+`x-isfc-api-key` (no `Authorization`; both together is a 400), plus `X-Tenant-Id: <tenant uuid>` when
+the key covers several tenants. Onboarding: the team creates `<team>-backend`; a Hub admin issues it a
+key from `integration-hub` (role `HUB_CALLER`, the tenants it acts for); the tenant admin grants the
+tenant its integrations in the Hub console; the service uses the platform's auth library or the Go
+SDK option `hubclient.WithISFC(clientID, secret, authURL)`, which fetches the key and refreshes it
+once on 401 or 403. If MCP tools `hub_list_integrations`,
 `hub_describe_integration`, `hub_dry_run`, `hub_invoke`, `hub_get_request` exist, prefer them.
 
 1. **Discover**: `GET /v1/integrations` (what this tenant may call: operations with their

@@ -31,10 +31,18 @@ var allowed = map[string][]string{
 	"upstream":    {"registry", "creds"},
 	"callbacks":   {"registry", "audit"},
 	"delivery":    {"registry", "resolve", "transform", "creds", "upstream", "queue", "sessions", "audit", "callbacks"},
-	"edge":        {"registry", "resolve", "transform", "creds", "upstream", "queue", "sessions", "idempotency", "audit", "delivery"},
-	"webhooks":    {"registry", "transform", "audit", "callbacks"},
-	// control/adminapi reuses the callbacks SSRF guard to vet registrar URLs (HUB-206).
-	"control": {"registry", "transform", "resolve", "creds", "upstream", "queue", "audit", "sessions", "callbacks"},
+	"edge":        {"registry", "resolve", "transform", "creds", "upstream", "queue", "sessions", "idempotency", "audit", "delivery", "isfc"},
+	// isfc is the ISFC auth-service client, its fake (isfc/mockisfc) and the in-memory caller-key map
+	// the edge reads (HUB-481, HUB-483). isfcsync is the tenant and caller-key reconciler (HUB-482):
+	// it edits config through control and reads ISFC through isfc.
+	"isfc":     {"registry"},
+	"isfcsync": {"registry", "control", "isfc"},
+	"webhooks": {"registry", "transform", "audit", "callbacks"},
+	// authz is the OPA decision client of the admin plane (HUB-474); it imports nothing internal.
+	"authz": {},
+	// control/adminapi reuses the callbacks SSRF guard to vet registrar URLs (HUB-206) and asks
+	// authz for admin decisions in ISFC mode (HUB-475).
+	"control": {"registry", "transform", "resolve", "creds", "upstream", "queue", "audit", "sessions", "callbacks", "authz"},
 	// testkit holds test-only helpers (in-process mockvendor, fixtures). Production code never imports it.
 	"testkit": {},
 }

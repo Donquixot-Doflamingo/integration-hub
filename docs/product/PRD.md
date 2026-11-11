@@ -102,7 +102,7 @@ flowchart LR
 
 ## 7. Agreed deviations from DESIGN.md (additive)
 
-These are agreed additions. DV-1 to DV-6 break no DESIGN §2 decision; DV-7 turns D11 into guidance (see its row). Each is recorded as an ADR in `docs/tech/adr/`.
+These are agreed additions. DV-1 to DV-6 break no DESIGN §2 decision; DV-7 turns D11 into guidance (see its row); DV-8 changes who owns identity and tenants (planned, EP-15). Each is recorded as an ADR in `docs/tech/adr/`.
 
 | # | Deviation | Why | Respects |
 | --- | --- | --- | --- |
@@ -113,6 +113,7 @@ These are agreed additions. DV-1 to DV-6 break no DESIGN §2 decision; DV-7 turn
 | DV-5 | **Consumer Claude skill** (`clients/claude-skill/integration-hub/SKILL.md`), copied to `~/.claude/skills/integration-hub/`. | Teach correct Hub usage (idempotency, 202 handling, signature verification) | §4.5 SDK rule |
 | DV-6 | **Caller dry-run is a documented, scope-gated exception to the no-vendor-leak rule** (see OI-1): it returns the exact upstream request (method, URL, headers, body) with credentials and secret values replaced by `***`. It requires API-key scope `dry_run`, which is not granted by default and is meant for integration developers during onboarding and debugging; callers must never build logic on its output (it changes at every Hub-side cutover). Decided by the lead and frozen in `contracts/openapi/hub-public.v1.yaml` 1.0.0. | DESIGN §4.1 dry-run "returns the vendor request"; integration developers need the exact request to debug mappings | §0 and D12 hold for every other caller operation; the exception is explicit (`x-audience: integration-developers`), audited (`dry_run: true`) and opt-in per key |
 | DV-7 | **Capabilities removed; schema registry on the integration and the endpoint** ([ADR-0023](../tech/adr/0023-remove-capabilities-integration-owns-its-request-schema.md), owner decision 2026-11-07). No capability objects, files, APIs or fields. Each integration version declares its **operations**, each with a `request_schema` (caller body and optional headers, each field required or optional) and `validate_input` (default on: live input checked, 400 `VALIDATION_FAILED`). Each vendor endpoint version declares the `request_schema` it accepts (path, query, headers, body); its `response_schema` is optional and never enforced. The **request transformer** is always required and **proven by samples**: the Hub refuses one whose sample output differs from the expected request or breaks the endpoint's schema, naming the field (samples check the transformer, not callers; the vendor request is never re-checked live). The **response transformer** is optional; its output is returned unchanged; without one the call is **pass-through** (vendor status and body unchanged, only `Content-Type` and `Retry-After` vendor headers, `X-Hub-Pass-Through: true`; sync only, async failures keep `UPSTREAM_*`). Auth scheme `none` for public APIs. Contracts 2.0.0 (breaking, pre-1.0, owner-approved). The LLM body limit and pool wait for an explicit setting ([ADR-0024](../tech/adr/0024-llm-body-limit-and-pool-without-capability-names.md), HUB-439); old data is upgraded in code ([ADR-0025](../tech/adr/0025-pre-adr-0023-data-upgraded-in-code.md)). | Onboarding an API from the panel needed a code change first (a capability under `contracts/`); the capability added nothing the integration and the endpoint could not say themselves | §0 holds for the contract and headers (a pass-through body is the vendor's own, the owner's choice); D12 holds. Replaces DESIGN §3 (capability as the canonical contract), §4 (response validation), §7 (transformers bound to a capability); D11 becomes guidance |
+| DV-8 | **ISFC owns identity and tenants** (planned, EP-15; [ADR-0026](../tech/adr/0026-isfc-identity-and-per-operation-admin-policies.md), [ADR-0027](../tech/adr/0027-tenants-owned-by-isfc-hub-keeps-a-synced-copy.md), [ADR-0028](../tech/adr/0028-caller-auth-with-isfc-backend-clients-checked-in-memory.md); owner decisions D1–D9 of 2026-11-11 in `docs/tech/AUTH_PLAN.md` §19). Console users sign in through ISFC (Email OTP, Microsoft SSO). The Hub verifies the Hydra JWT itself, builds the principal from the ISFC gateway headers and asks OPA for one policy per admin operation. **One ISFC tenant is the platform tenant** (D1): a request in it, with `HUB_ADMIN`, `HUB_EDITOR` or `HUB_VIEWER`, is platform scope (all tenants, today's unscoped principal); a request in a linked tenant is scoped to that tenant (`tenant_viewer`, new `tenant_admin`, D4). Tenants are created and linked in ISFC and copied into the Hub (read-only `isfc` block, `setup: pending` until finished in the console). Callers may be ISFC backend clients (`x-isfc-client-id` + `x-isfc-api-key`) checked in memory with no OPA hop (D2); `hk_live_` keys stay until a cut-off of at least 6 months. `ISFC_ADMIN` is not a Hub admin (D6); machine principals cannot unseal or purge (D7). Everything is behind mode flags; today's behaviour is the default. | The company already runs ISFC for login, tenants and S2S keys; operators should not manage a second identity system or create every tenant twice | §0 holds (the caller contract is unchanged; ISFC credentials are identity only); §18.5 and §18.6 hold (no network hop on `/v1`). Replaces the auth parts of ADR-0005 and ADR-0022 and DESIGN §16.1's "OIDC" as a generic provider |
 
 ## 8. Functional requirements
 
@@ -218,6 +219,15 @@ Priority: **M** = Must (v1), **S** = Should (v1), **C** = Could, **R2** = Releas
 | FR-52 | Metrics per §16.2, alerts per §16.3 as code, OTel spans per §16.4, dashboards (tenant, vendor, platform) | M | §16 |
 | FR-53 | Every middleware publishes its own duration metric | M | §18.5 |
 
+### 8.11 ISFC identity, tenancy and authorization (F-24, F-25; planned, EP-15)
+| ID | Requirement | Pri | Ref |
+| --- | --- | --- | --- |
+| FR-54 | Console login through ISFC with Email OTP and Microsoft SSO only; tokens stay server-side in an encrypted session; the dev role-picker works only in mock builds and tests | M | DV-8, ADR-0026 |
+| FR-55 | Every admin operation has its own OPA policy; the Hub verifies the JWT, cross-checks the gateway headers, asks OPA (deny 403, error or timeout 503 `authz_unavailable`, fail closed) and keeps the `x-required-role` check; `ISFC_ADMIN` grants nothing; machine principals cannot unseal or purge | M | DV-8, ADR-0026, §16.1 |
+| FR-56 | With `HUB_TENANT_SOURCE=isfc`, tenants come from ISFC: a reconciler (event-triggered, periodic, "Sync now") creates tenants as `setup: pending`, disables them when INACTIVE or unlinked, never deletes, and derives immutable Hub ids; `createTenant` answers 409 `tenant_managed_by_isfc` | M | DV-8, ADR-0027 |
+| FR-57 | Callers may authenticate with ISFC S2S credentials (`x-isfc-client-id` + `x-isfc-api-key`, optional `X-Tenant-Id`), checked in memory against hashed keys synced from ISFC; legacy `hk_live_` keys keep working until the cut-off | M | DV-8, ADR-0028, §4.2 |
+| FR-58 | Automation (CI, hubctl, hubmcp over HTTP) may call the admin API with an ISFC API key as a machine principal, audited as `client:<id>` | S | DV-8, ADR-0026 |
+
 ## 9. Non-functional requirements
 
 | ID | Category | Requirement | Ref |
@@ -240,6 +250,8 @@ Priority: **M** = Must (v1), **S** = Should (v1), **C** = Could, **R2** = Releas
 | NFR-16 | Auditability | sha256 + size for every payload kept even when bodies are masked/sealed/omitted | §13.3 |
 | NFR-17 | Operability | Paged alerts for breaker open > 5 min, parked age > 10 min, queue age > 2 min, DLQ burst, any `UPSTREAM_AUTH_FAILED` or `TRANSFORM_FAILED` | §16.3 |
 | NFR-18 | Testability | No test calls a real vendor; `go test -race` in CI; integration tests on real Postgres/Redis | §0 |
+| NFR-19 | Latency | The `auth` stage budget of §18.6 is unchanged when callers use ISFC credentials: one hash and one in-memory lookup, no network hop and no OPA call on `/v1` (planned, HUB-490 proves it with 10k keys); ISFC and OPA outages never affect `/v1` | §18.5, §18.6, DV-8 |
+| NFR-20 | Security | No test calls a real ISFC or Entra: `mockisfc` and a fake OPA or OPA container only; ISFC API keys are hashed when read and never stored or logged in plaintext | §0, DV-8 |
 
 ## 10. Success metrics
 

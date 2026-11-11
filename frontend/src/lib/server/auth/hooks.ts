@@ -1,16 +1,32 @@
 import type { Handle, HandleFetch } from '@sveltejs/kit';
 import { adminApiBase } from '$lib/api/console';
 import { resolveBaseUrl } from '$lib/api/client';
-import { SESSION_COOKIE, decodeSession } from './session';
-import { sessionSecret } from './index';
+import { isTenantUuid } from '$lib/auth/tenant-choice';
+import { clearSessionCookie, readSessionCookie } from './cookie';
+import { decodeSession } from './session';
+import { refreshForEvent } from './refresh';
+import { authMode, sessionSecret } from './index';
 
-/** Reads the session cookie into `event.locals.session`; drops a cookie that no longer verifies. */
+/**
+ * Reads the session cookie into `event.locals.session`, refreshing the ISFC tokens when due. A cookie that no longer verifies (wrong
+ * key, tampered, expired) is dropped and `locals.sessionEnded` says so, so the login page can
+ * tell the operator the session ended instead of showing a bare sign-in.
+ */
 export const authenticate: Handle = async ({ event, resolve }) => {
-	const raw = event.cookies.get(SESSION_COOKIE);
+	const raw = readSessionCookie(event.cookies);
 	const secret = sessionSecret();
-	const session = raw && secret ? decodeSession(raw, secret) : null;
-	if (raw && !session) event.cookies.delete(SESSION_COOKIE, { path: '/' });
+	const decoded = raw && secret ? decodeSession(raw, secret) : null;
+	// A session made by another provider than the one this deployment runs (a dev picker cookie
+	// after a switch to ISFC, or the reverse) is not accepted, even though it decrypts.
+	const session = decoded && decoded.provider === authMode() ? decoded : null;
+	if (raw && !session) {
+		clearSessionCookie(event.cookies, event.url ? event.url.protocol === 'https:' : undefined);
+	}
 	event.locals.session = session;
+	event.locals.sessionEnded = !!raw && !session;
+	// An ISFC access token about to expire is refreshed before anything uses it (single flight).
+	// If ISFC refuses the refresh token the session is over: the page goes to /login?expired=1.
+	await refreshForEvent(event, { fetch: event.fetch });
 	return resolve(event);
 };
 
@@ -24,6 +40,10 @@ export const attachAdminToken: HandleFetch = async ({ event, request, fetch }) =
 		const base = resolveBaseUrl(adminApiBase(), event.url.origin);
 		if (request.url === base || request.url.startsWith(`${base}/`)) {
 			request.headers.set('Authorization', `Bearer ${token}`);
+			const tenant = event.locals.session?.tenantId;
+			if (tenant && isTenantUuid(tenant) && !request.headers.has('X-Tenant-Id')) {
+				request.headers.set('X-Tenant-Id', tenant);
+			}
 		}
 	}
 	return fetch(request);

@@ -2,17 +2,36 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: Integration Hub - Admin (Control Plane) API
-  version: 2.0.0
+  version: 2.1.1
   summary: Control plane for vendors, accounts, transformers, integrations, tenants and operations.
   description: |
     The control plane (DESIGN §16.1). Unlike the caller API, this API **does** show vendors,
     accounts and versions. Do not proxy it to callers.
 
-    **Auth and RBAC.** OpenID Connect bearer tokens. Each operation declares the minimum role in
-    `x-required-role`. Roles are hierarchical: `admin` ⊃ `editor` ⊃ `viewer`. `tenant_viewer` is a
-    `viewer` restricted to the tenants in the token's `hub_tenants` claim. Operations marked
+    **Auth and RBAC.** Three ways in (`security`, any one of them): `oidc` (an OpenID Connect bearer
+    token, the dev/legacy mode), `isfcGateway` (a bearer JWT sent through the ISFC api-gateway, with
+    an optional `X-Tenant-Id` header that picks the ISFC tenant the request acts in) and
+    `isfcApiKey` (machine access: headers `x-isfc-client-id` + `x-isfc-api-key`, both required).
+    Each operation declares the minimum role in `x-required-role` and the ISFC permission that the
+    gateway policy checks in `x-required-permission`. The two always agree: the permission catalogue
+    is bundled into roles exactly as today's role matrix. Roles are hierarchical: `admin` ⊃ `editor`
+    ⊃ `viewer`. `tenant_viewer` is a `viewer` restricted to the tenants in the caller's tenant scope
+    (the token's `hub_tenants` claim, or the ISFC tenant of the request). Operations marked
     `tenant_viewer` filter their results to those tenants and return 404 for objects outside them.
-    Roles come from the token's `hub_roles` claim. A missing role gives 403 `FORBIDDEN`.
+    `tenant_admin` (since 2.1.0) is a `tenant_viewer` that may also finish the setup of its own
+    tenant (`updateTenant`, the registrar endpoint operations; permission `HUB_TENANT:SETUP`).
+    `admin` satisfies every role. `editor` and `viewer` do **not** satisfy `tenant_admin`, so today's
+    matrix stays exact. Roles come from the token's `hub_roles` claim, or are mapped from the ISFC
+    roles. A missing role gives 403 `FORBIDDEN`. When the policy engine cannot decide, the answer is
+    503 `authz_unavailable` and the request is refused (fail closed).
+
+    **Machine principals** (`isfcApiKey`) are refused for `unsealRequest` and `purgeDeadLetters`,
+    whatever permissions their key holds.
+
+    **Tenants from ISFC (since 2.1.0).** In ISFC mode tenants come from ISFC. `Tenant.isfc` is a
+    read-only copy written by the sync, `Tenant.setup` is `pending` until a tenant admin finishes
+    setup (set `setup: complete` with `updateTenant`; there is no way back), and `createTenant`
+    answers 409 `tenant_managed_by_isfc`. `syncTenants` and `syncTenant` run the sync on demand.
 
     **Change log.** Every mutating operation takes a required `reason` (in the JSON body, or the
     `reason` query parameter for DELETE). It writes a `change_log` row (actor, action, object,
@@ -61,6 +80,9 @@ servers:
         enum: [dev, staging, prod]
 security:
   - oidc: []
+  - isfcGateway: []
+  - isfcApiKey: []
+    isfcApiKeyClientId: []
 tags:
   - name: me
   - name: vendors
@@ -83,6 +105,7 @@ paths:
       operationId: getMe
       tags: [me]
       x-required-role: tenant_viewer
+      x-required-permission: none
       summary: Current user and roles
       description: Identity, roles and tenant scope of the caller. The console uses it to show or hide actions.
       responses:
@@ -105,6 +128,10 @@ paths:
                 token_expires_at: '2026-10-31T10:15:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -114,6 +141,7 @@ paths:
       operationId: listVendors
       tags: [vendors]
       x-required-role: viewer
+      x-required-permission: HUB_VENDOR:READ
       summary: List vendors
       description: Vendor definitions with summary fields for the list view.
       parameters:
@@ -147,12 +175,15 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
       operationId: createVendor
       tags: [vendors]
       x-required-role: admin
+      x-required-permission: HUB_VENDOR:ADMIN
       summary: Create a vendor definition
       description: |
         Creates a vendor (base URLs per region, auth scheme shape, defaults). Endpoints are added with
@@ -233,6 +264,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /vendors/{vendor_id}:
@@ -242,6 +275,7 @@ paths:
       operationId: getVendor
       tags: [vendors]
       x-required-role: viewer
+      x-required-permission: HUB_VENDOR:READ
       summary: Get a vendor definition
       description: Full vendor record including endpoints (all versions).
       responses:
@@ -293,12 +327,15 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     put:
       operationId: updateVendor
       tags: [vendors]
       x-required-role: admin
+      x-required-permission: HUB_VENDOR:ADMIN
       summary: Update a vendor definition
       description: Replaces the mutable fields of a vendor (regions, auth scheme, defaults). It increments `revision`, and integrations pick up the change on the next publish or snapshot. Endpoints are not edited here.
       parameters:
@@ -361,6 +398,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '412':
           $ref: '#/components/responses/PreconditionFailed'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /vendors/{vendor_id}/endpoints:
@@ -370,6 +409,7 @@ paths:
       operationId: listVendorEndpoints
       tags: [vendors]
       x-required-role: viewer
+      x-required-permission: HUB_VENDOR:READ
       summary: List a vendor's endpoints (all versions)
       description: Endpoints are versioned and immutable (`upload@1`, `upload@2`).
       parameters:
@@ -408,12 +448,15 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
       operationId: createVendorEndpoint
       tags: [vendors]
       x-required-role: admin
+      x-required-permission: HUB_VENDOR:ADMIN
       summary: Add an endpoint or a new endpoint version
       description: |
         Creates `<name>@<n+1>`, or `<name>@1` if the name is new. Existing endpoint versions are
@@ -521,6 +564,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /vendors/{vendor_id}/endpoints/{endpoint_ref}:
@@ -531,6 +576,7 @@ paths:
       operationId: getVendorEndpoint
       tags: [vendors]
       x-required-role: viewer
+      x-required-permission: HUB_VENDOR:READ
       summary: Get one endpoint version
       description: One immutable endpoint version, with its `request_schema` and optional `response_schema`.
       responses:
@@ -564,6 +610,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -573,6 +621,7 @@ paths:
       operationId: listAccounts
       tags: [accounts]
       x-required-role: viewer
+      x-required-permission: HUB_ACCOUNT:READ
       summary: List accounts
       description: |
         Credentialed vendor instances with lifecycle state and credential-slot summary. Secrets are
@@ -638,12 +687,15 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
       operationId: createAccount
       tags: [accounts]
       x-required-role: admin
+      x-required-permission: HUB_ACCOUNT:ADMIN
       summary: Create an account
       description: |
         Creates an account in state `active`. Initial credentials (write-only) become the `active`
@@ -718,6 +770,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /accounts/{account_id}:
@@ -727,6 +781,7 @@ paths:
       operationId: getAccount
       tags: [accounts]
       x-required-role: viewer
+      x-required-permission: HUB_ACCOUNT:READ
       summary: Get an account
       description: Full account record. Credential slots show metadata only (version, fingerprint, timestamps).
       responses:
@@ -764,12 +819,15 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     patch:
       operationId: updateAccount
       tags: [accounts]
       x-required-role: admin
+      x-required-permission: HUB_ACCOUNT:ADMIN
       summary: Update account config or quota
       description: JSON merge-patch of `config` and `quota`. Vendor and region are immutable. Credentials change only through the rotation endpoints.
       parameters:
@@ -821,6 +879,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '412':
           $ref: '#/components/responses/PreconditionFailed'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /accounts/{account_id}/test-connection:
@@ -830,6 +890,7 @@ paths:
       operationId: testAccountConnection
       tags: [accounts]
       x-required-role: editor
+      x-required-permission: HUB_ACCOUNT:TEST
       summary: Test the account's credentials against the vendor
       description: |
         Runs the vendor's health probe (dry where the vendor supports it) with the chosen credential
@@ -874,6 +935,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /accounts/{account_id}/credentials/next:
@@ -883,6 +946,7 @@ paths:
       operationId: addNextCredential
       tags: [accounts]
       x-required-role: admin
+      x-required-permission: HUB_ACCOUNT:ADMIN
       summary: 'Rotation step 1: add the `next` credential'
       description: Stores a new credential version in the `next` slot. It replaces an existing un-promoted `next`. In-flight and new calls keep using `active` until promotion (DESIGN §6.6).
       requestBody:
@@ -921,6 +985,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /accounts/{account_id}/credentials/promote:
@@ -930,6 +996,7 @@ paths:
       operationId: promoteNextCredential
       tags: [accounts]
       x-required-role: admin
+      x-required-permission: HUB_ACCOUNT:ADMIN
       summary: 'Rotation step 2: promote `next` to `active`'
       description: |
         `next` becomes `active`. The old `active` moves to the `previous` slot. It is kept, not used,
@@ -971,6 +1038,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /accounts/{account_id}/credentials/delete-old:
@@ -980,6 +1049,7 @@ paths:
       operationId: deleteOldCredential
       tags: [accounts]
       x-required-role: admin
+      x-required-permission: HUB_ACCOUNT:ADMIN
       summary: 'Rotation step 3: delete the `previous` credential'
       description: Destroys the `previous` slot's ciphertext. Returns 409 `CONFLICT` if there is no `previous` slot or `expected_previous_version` does not match.
       requestBody:
@@ -1016,6 +1086,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /accounts/{account_id}/lifecycle:
@@ -1025,6 +1097,7 @@ paths:
       operationId: transitionAccountLifecycle
       tags: [accounts]
       x-required-role: admin
+      x-required-permission: HUB_ACCOUNT:ADMIN
       summary: Move an account through active -> draining -> retired
       description: |
         Allowed transitions: `active -> draining`, `draining -> active`, `draining -> retired`.
@@ -1077,6 +1150,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/LifecycleConflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1086,6 +1161,7 @@ paths:
       operationId: listTransformers
       tags: [transformers]
       x-required-role: viewer
+      x-required-permission: HUB_TRANSFORMER:READ
       summary: List transformers
       description: One row per transformer id, with its latest version.
       parameters:
@@ -1135,6 +1211,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /transformers/dry-run:
@@ -1142,6 +1220,7 @@ paths:
       operationId: dryRunTransformer
       tags: [transformers]
       x-required-role: editor
+      x-required-permission: HUB_TRANSFORMER:WRITE
       summary: Run a transformer (stored or draft) without sending anything
       description: |
         For a request transformer: the caller's input (`input` body and `input_headers`) -> exact
@@ -1196,6 +1275,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /transformers/run-goldens:
@@ -1203,6 +1284,7 @@ paths:
       operationId: runTransformerGoldens
       tags: [transformers]
       x-required-role: editor
+      x-required-permission: HUB_TRANSFORMER:WRITE
       summary: Run the samples (golden fixtures) of a stored or draft transformer
       description: |
         Runs every sample and reports per-sample results. Non-mutating. `createTransformerVersion`
@@ -1268,6 +1350,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /transformers/{transformer_id}:
@@ -1277,6 +1361,7 @@ paths:
       operationId: getTransformer
       tags: [transformers]
       x-required-role: viewer
+      x-required-permission: HUB_TRANSFORMER:READ
       summary: Get a transformer (header + latest version)
       description: The transformer header and its latest version in full.
       responses:
@@ -1319,6 +1404,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /transformers/{transformer_id}/versions:
@@ -1328,6 +1415,7 @@ paths:
       operationId: listTransformerVersions
       tags: [transformers]
       x-required-role: viewer
+      x-required-permission: HUB_TRANSFORMER:READ
       summary: List versions of a transformer
       description: Immutable versions, newest first (YAML and fixtures omitted).
       parameters:
@@ -1354,12 +1442,15 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
       operationId: createTransformerVersion
       tags: [transformers]
       x-required-role: editor
+      x-required-permission: HUB_TRANSFORMER:WRITE
       summary: Create a new immutable transformer version
       description: |
         Creates version `n+1` (or version 1 with a new transformer id). The YAML must compile, pass
@@ -1516,6 +1607,8 @@ paths:
                             - { check: goldens_pass, status: fail, message: "expected 'Michael', got 'Mich ael'", pointer: /fixtures/0/expected_request/query/name, sample: full_name, field: /query/name }
                             - { check: endpoint_schema, status: pass, message: null, pointer: null }
                       request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KQ
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /transformers/{transformer_id}/versions/{version}:
@@ -1526,6 +1619,7 @@ paths:
       operationId: getTransformerVersion
       tags: [transformers]
       x-required-role: viewer
+      x-required-permission: HUB_TRANSFORMER:READ
       summary: Get one transformer version (YAML + samples)
       description: One immutable version.
       responses:
@@ -1560,6 +1654,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1569,6 +1665,7 @@ paths:
       operationId: listIntegrations
       tags: [integrations]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_INTEGRATION:READ
       summary: List integrations
       description: |
         Summary rows for the integrations list view, including the current targets of the active
@@ -1649,12 +1746,15 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
       operationId: createIntegration
       tags: [integrations]
       x-required-role: editor
+      x-required-permission: HUB_INTEGRATION:WRITE
       summary: Create an integration (no active version yet)
       description: |
         Creates the stable ID, owner tenant, grants and the integration-level flags `interactive` and
@@ -1718,6 +1818,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /integrations/{integration_id}:
@@ -1727,6 +1829,7 @@ paths:
       operationId: getIntegration
       tags: [integrations]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_INTEGRATION:READ
       summary: Get an integration
       description: Detail view, including the full active version spec.
       responses:
@@ -1793,12 +1896,15 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     patch:
       operationId: updateIntegration
       tags: [integrations]
       x-required-role: editor
+      x-required-permission: HUB_INTEGRATION:WRITE
       summary: Update integration metadata and grants
       description: Merge-patch of `description`, `grants` and `moves_money_or_quota`. Operations, request schemas, routing and policy change only through versions. `interactive` cannot be changed.
       parameters:
@@ -1851,6 +1957,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '412':
           $ref: '#/components/responses/PreconditionFailed'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /integrations/{integration_id}/versions:
@@ -1860,6 +1968,7 @@ paths:
       operationId: listIntegrationVersions
       tags: [integrations]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_INTEGRATION:READ
       summary: List versions of an integration
       description: All versions (drafts and published), newest first. Specs omitted.
       parameters:
@@ -1894,12 +2003,15 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
       operationId: createIntegrationDraft
       tags: [integrations]
       x-required-role: editor
+      x-required-permission: HUB_INTEGRATION:WRITE
       summary: Create a draft version
       description: |
         Creates draft version `n+1` from a full spec. Omit `spec` to copy `based_on` (default is the
@@ -2062,6 +2174,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /integrations/{integration_id}/versions/{version}:
@@ -2072,6 +2186,7 @@ paths:
       operationId: getIntegrationVersion
       tags: [integrations]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_INTEGRATION:READ
       summary: Get one integration version
       description: Full spec of one version.
       responses:
@@ -2166,12 +2281,15 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     put:
       operationId: updateIntegrationDraft
       tags: [integrations]
       x-required-role: editor
+      x-required-permission: HUB_INTEGRATION:WRITE
       summary: Replace the spec of a draft version
       description: Only drafts can be edited. A published version gives 409 `CONFLICT`.
       requestBody:
@@ -2259,6 +2377,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /integrations/{integration_id}/versions/{version}/validate:
@@ -2269,6 +2389,7 @@ paths:
       operationId: validateIntegrationVersion
       tags: [integrations]
       x-required-role: editor
+      x-required-permission: HUB_INTEGRATION:WRITE
       summary: Run the publish validation without publishing
       description: |
         Runs every DESIGN §6.4 check and returns a report. It is non-mutating, so the request body is
@@ -2327,6 +2448,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /integrations/{integration_id}/versions/{version}/publish:
@@ -2337,6 +2460,7 @@ paths:
       operationId: publishIntegrationVersion
       tags: [integrations]
       x-required-role: editor
+      x-required-permission: HUB_INTEGRATION:WRITE
       summary: Publish a draft version (cutover)
       description: |
         Validates (same checks as `validate`), makes the version immutable and active, and builds a
@@ -2381,6 +2505,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/PublishValidationFailed'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /integrations/{integration_id}/rollback:
@@ -2390,6 +2516,7 @@ paths:
       operationId: rollbackIntegration
       tags: [integrations]
       x-required-role: editor
+      x-required-permission: HUB_INTEGRATION:WRITE
       summary: Roll back by publishing a copy of an older version
       description: Creates and publishes version `n+1` with the content of `to_version` (e.g. v9 = v7). History stays linear (DESIGN §6.4). It runs the full validation (accounts may have been retired since).
       requestBody:
@@ -2432,6 +2559,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/PublishValidationFailed'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /integrations/{integration_id}/diff:
@@ -2441,6 +2570,7 @@ paths:
       operationId: diffIntegrationVersions
       tags: [integrations]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_INTEGRATION:READ
       summary: Diff two versions
       description: Structured diff (RFC 6902-style operations on the spec, including `operations` and their request schemas) plus a unified YAML diff for display. Show it before publishing, so a schema change that breaks callers is seen (D11 guidance - use a new integration ID for that).
       parameters:
@@ -2487,6 +2617,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /integrations/{integration_id}/pause:
@@ -2496,6 +2628,7 @@ paths:
       operationId: pauseIntegration
       tags: [integrations]
       x-required-role: editor
+      x-required-permission: HUB_INTEGRATION:WRITE
       summary: Pause (kill switch)
       description: sync/wait calls get 503 `INTEGRATION_PAUSED`. Nothing new is parked, and workers hold queued envelopes. Other integrations on the same account are unaffected. Pause is not a version. It propagates through the snapshot within about 10 s. Pausing again is a no-op that still logs.
       requestBody:
@@ -2541,6 +2674,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /integrations/{integration_id}/resume:
@@ -2550,6 +2685,7 @@ paths:
       operationId: resumeIntegration
       tags: [integrations]
       x-required-role: editor
+      x-required-permission: HUB_INTEGRATION:WRITE
       summary: Resume a paused integration
       description: Clears the kill switch. Held envelopes resume on their normal schedule.
       requestBody:
@@ -2595,6 +2731,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /integrations/{integration_id}/weights:
@@ -2604,6 +2742,7 @@ paths:
       operationId: updateIntegrationWeights
       tags: [integrations]
       x-required-role: editor
+      x-required-permission: HUB_INTEGRATION:WRITE
       summary: Change target weights (creates a new version)
       description: |
         A shortcut for gradual cutover. It copies the active version, applies the new weights (targets
@@ -2653,6 +2792,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/PublishValidationFailed'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -2662,6 +2803,7 @@ paths:
       operationId: listTenants
       tags: [tenants]
       x-required-role: viewer
+      x-required-permission: HUB_TENANT:READ
       summary: List tenants
       description: Tenants (calling services/teams) with summary counts.
       parameters:
@@ -2680,7 +2822,7 @@ paths:
                 $ref: '#/components/schemas/TenantList'
               example:
                 items:
-                  - { tenant_id: orders-service, display_name: Orders service, disabled: false, integrations_owned: 3, active_api_keys: 2, updated_at: '2026-10-30T12:00:00Z' }
+                  - { tenant_id: orders-service, display_name: Orders service, disabled: false, integrations_owned: 3, active_api_keys: 2, setup: complete, isfc: { tenant_id: 6f1c0b2e-3a4d-4c5e-8f60-1a2b3c4d5e6f, key: ORDERS, name: Orders service, status: ACTIVE, linked: true, synced_at: '2026-10-30T11:55:00Z' }, updated_at: '2026-10-30T12:00:00Z' }
                 next_cursor: null
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -2688,14 +2830,17 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
       operationId: createTenant
       tags: [tenants]
       x-required-role: admin
+      x-required-permission: HUB_TENANT:ADMIN
       summary: Create a tenant
-      description: Creates a tenant. API keys and registrar endpoints are created separately.
+      description: Creates a tenant. API keys and registrar endpoints are created separately. In ISFC mode tenants come from ISFC and this answers 409 `tenant_managed_by_isfc`; link the tenant to the Integration Hub client in ISFC and run `syncTenants`.
       requestBody:
         required: true
         content:
@@ -2732,6 +2877,8 @@ paths:
                   disabled: false
                   integrations_owned: 0
                   active_api_keys: 0
+                  setup: complete
+                  isfc: null
                   created_at: '2026-10-31T09:00:00Z'
                   updated_at: '2026-10-31T09:00:00Z'
         '400':
@@ -2741,7 +2888,9 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/TenantConflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /tenants/{tenant_id}:
@@ -2751,6 +2900,7 @@ paths:
       operationId: getTenant
       tags: [tenants]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_TENANT:READ
       summary: Get a tenant
       description: Tenant detail.
       responses:
@@ -2774,6 +2924,8 @@ paths:
                 disabled: false
                 integrations_owned: 3
                 active_api_keys: 2
+                setup: complete
+                isfc: { tenant_id: 6f1c0b2e-3a4d-4c5e-8f60-1a2b3c4d5e6f, key: ORDERS, name: Orders service, status: ACTIVE, linked: true, synced_at: '2026-10-30T11:55:00Z' }
                 created_at: '2026-06-01T10:00:00Z'
                 updated_at: '2026-10-30T12:00:00Z'
         '401':
@@ -2782,14 +2934,21 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     patch:
       operationId: updateTenant
       tags: [tenants]
-      x-required-role: admin
+      x-required-role: tenant_admin
+      x-required-permission: HUB_TENANT:SETUP
       summary: Update a tenant
-      description: Merge-patch of display fields, rate limit and `disabled`. A disabled tenant's keys get 401.
+      description: |
+        Merge-patch of display fields, rate limit, `disabled` and `setup`. A disabled tenant's keys get 401.
+        A `tenant_admin` may change `display_name`, `description`, `contact`, `rate_limit` and `setup`
+        (only to `complete`) of its own tenant, and gets 403 for `disabled`. ISFC fields (`isfc`) are
+        read-only and cannot be sent.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -2800,6 +2959,7 @@ paths:
               $ref: '#/components/schemas/TenantUpdate'
             example:
               rate_limit: { rps: 300, burst: 600 }
+              setup: complete
               reason: Festive season traffic
       responses:
         '200':
@@ -2824,6 +2984,8 @@ paths:
                   disabled: false
                   integrations_owned: 3
                   active_api_keys: 2
+                  setup: complete
+                  isfc: { tenant_id: 6f1c0b2e-3a4d-4c5e-8f60-1a2b3c4d5e6f, key: ORDERS, name: Orders service, status: ACTIVE, linked: true, synced_at: '2026-10-30T11:55:00Z' }
                   created_at: '2026-06-01T10:00:00Z'
                   updated_at: '2026-10-31T10:00:00Z'
         '400':
@@ -2836,6 +2998,125 @@ paths:
           $ref: '#/components/responses/NotFound'
         '412':
           $ref: '#/components/responses/PreconditionFailed'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tenants/sync:
+    post:
+      operationId: syncTenants
+      tags: [tenants]
+      x-required-role: admin
+      x-required-permission: HUB_TENANT:ADMIN
+      summary: Sync tenants from ISFC now
+      description: |
+        Runs the ISFC reconciler once for all tenants ("Sync now"; since 2.1.0). It pulls the full
+        current state from ISFC and applies it: new linked tenants are created with `setup: pending`,
+        changed names and statuses are copied, tenants that ISFC reports INACTIVE or unlinked are
+        disabled (never deleted). If ISFC is unreachable the Hub keeps its last good state, nothing is
+        disabled, and the answer is 200 with `result: failed`. A manual run always writes one
+        change-log entry. 409 `CONFLICT` while another sync is running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantSyncRequest'
+            example:
+              reason: New tenant linked in ISFC
+      responses:
+        '200':
+          description: The sync ran. `result` says how it went.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSyncResult'
+              example:
+                change_id: chg_01J9Z4B2C3D4E5F6G7H8J9K0NC
+                result: ok
+                started_at: '2026-10-31T10:00:00Z'
+                finished_at: '2026-10-31T10:00:02Z'
+                created: 1
+                updated: 0
+                disabled: 0
+                unchanged: 4
+                error: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /tenants/{tenant_id}/sync:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      operationId: syncTenant
+      tags: [tenants]
+      x-required-role: admin
+      x-required-permission: HUB_TENANT:ADMIN
+      summary: Sync one tenant from ISFC now
+      description: |
+        Runs the reconciler for one tenant (since 2.1.0): refreshes its `isfc` copy and applies the
+        same rules as `syncTenants`. 404 `NOT_FOUND` for an unknown tenant. 409 `CONFLICT` if the
+        tenant has no ISFC link, or a sync is running. A failed fetch is 200 with `result: failed`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantSyncRequest'
+            example:
+              reason: Name changed in ISFC
+      responses:
+        '200':
+          description: The sync ran. `result` says how it went.
+          headers:
+            X-Hub-Request-Id:
+              $ref: '#/components/headers/X-Hub-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSyncChange'
+              example:
+                change_id: chg_01J9Z4B2C3D4E5F6G7H8J9K0ND
+                result: ok
+                error: null
+                tenant:
+                  tenant_id: orders-service
+                  display_name: Orders service
+                  description: Order lifecycle events and notifications
+                  contact: orders-team@example.com
+                  rate_limit: { rps: 300, burst: 600 }
+                  disabled: false
+                  integrations_owned: 3
+                  active_api_keys: 2
+                  setup: complete
+                  isfc: { tenant_id: 6f1c0b2e-3a4d-4c5e-8f60-1a2b3c4d5e6f, key: ORDERS, name: Orders service, status: ACTIVE, linked: true, synced_at: '2026-10-31T10:00:02Z' }
+                  created_at: '2026-06-01T10:00:00Z'
+                  updated_at: '2026-10-31T10:00:02Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -2845,6 +3126,7 @@ paths:
       operationId: listApiKeys
       tags: [api-keys]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_TENANT:READ
       summary: List API keys
       description: Key metadata only. Shows the display prefix, never the secret or the full hash.
       parameters:
@@ -2877,12 +3159,15 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
       operationId: createApiKey
       tags: [api-keys]
       x-required-role: admin
+      x-required-permission: HUB_TENANT:ADMIN
       summary: Create an API key (secret shown once)
       description: Mints a key. `secret` appears only in this response. The Hub stores only its hash. Scopes are `invoke`, `dry_run` and `requests_read`, each optionally narrowed to one integration as `<scope>:<integration_id>`.
       requestBody:
@@ -2919,6 +3204,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /api-keys/{key_id}:
@@ -2928,6 +3215,7 @@ paths:
       operationId: getApiKey
       tags: [api-keys]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_TENANT:READ
       summary: Get API key metadata
       description: Metadata only.
       responses:
@@ -2947,6 +3235,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /api-keys/{key_id}/revoke:
@@ -2956,6 +3246,7 @@ paths:
       operationId: revokeApiKey
       tags: [api-keys]
       x-required-role: admin
+      x-required-permission: HUB_TENANT:ADMIN
       summary: Revoke an API key immediately
       description: Effective on all nodes within the snapshot propagation window (about 10 s). Revoking an already-revoked key gives 409 `CONFLICT`.
       requestBody:
@@ -2989,6 +3280,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /api-keys/{key_id}/rotate:
@@ -2998,6 +3291,7 @@ paths:
       operationId: rotateApiKey
       tags: [api-keys]
       x-required-role: admin
+      x-required-permission: HUB_TENANT:ADMIN
       summary: Rotate an API key with overlap
       description: Mints a replacement key with the same tenant and scopes. The old key stays valid for `overlap_ms` (state `expiring`) and is then revoked automatically. The new secret is shown once.
       requestBody:
@@ -3034,6 +3328,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -3043,6 +3339,7 @@ paths:
       operationId: listRegistrarEndpoints
       tags: [registrar-endpoints]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_TENANT:READ
       summary: List registrar endpoints
       description: Tenant webhook destinations. Signing secrets are never returned.
       parameters:
@@ -3069,12 +3366,15 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
       operationId: createRegistrarEndpoint
       tags: [registrar-endpoints]
-      x-required-role: admin
+      x-required-role: tenant_admin
+      x-required-permission: HUB_TENANT:SETUP
       summary: Register a webhook endpoint (signing secret shown once)
       description: The URL host must be allowlisted. The SSRF guard resolves the host and rejects private or link-local ranges (400 `VALIDATION_FAILED`).
       requestBody:
@@ -3113,6 +3413,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /registrar-endpoints/{endpoint_id}:
@@ -3122,6 +3424,7 @@ paths:
       operationId: getRegistrarEndpoint
       tags: [registrar-endpoints]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_TENANT:READ
       summary: Get a registrar endpoint
       description: Endpoint detail, including which integration versions subscribe to it.
       responses:
@@ -3143,12 +3446,15 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     patch:
       operationId: updateRegistrarEndpoint
       tags: [registrar-endpoints]
-      x-required-role: admin
+      x-required-role: tenant_admin
+      x-required-permission: HUB_TENANT:SETUP
       summary: Update URL, description or disabled flag
       description: Merge-patch. The same SSRF guard applies to a new URL.
       parameters:
@@ -3187,12 +3493,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '412':
           $ref: '#/components/responses/PreconditionFailed'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
     delete:
       operationId: deleteRegistrarEndpoint
       tags: [registrar-endpoints]
-      x-required-role: admin
+      x-required-role: tenant_admin
+      x-required-permission: HUB_TENANT:SETUP
       summary: Delete a registrar endpoint
       description: Refused with 409 `CONFLICT` while any active or draft integration version subscribes to it. Pending callback deliveries to it are dead-lettered.
       parameters:
@@ -3219,6 +3528,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /registrar-endpoints/{endpoint_id}/rotate-secret:
@@ -3227,7 +3538,8 @@ paths:
     post:
       operationId: rotateRegistrarSecret
       tags: [registrar-endpoints]
-      x-required-role: admin
+      x-required-role: tenant_admin
+      x-required-permission: HUB_TENANT:SETUP
       summary: Rotate the signing secret with overlap
       description: New secret shown once. For `overlap_ms`, callbacks carry two `v1=` signatures (new and old).
       requestBody:
@@ -3261,6 +3573,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -3270,6 +3584,7 @@ paths:
       operationId: listSnapshots
       tags: [snapshots]
       x-required-role: viewer
+      x-required-permission: HUB_PLATFORM:READ
       summary: List config snapshots
       description: Newest first. Retained 90 days.
       parameters:
@@ -3295,6 +3610,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /snapshots/latest:
@@ -3302,6 +3619,7 @@ paths:
       operationId: getLatestSnapshot
       tags: [snapshots]
       x-required-role: viewer
+      x-required-permission: HUB_PLATFORM:READ
       summary: Latest snapshot (long-poll)
       description: |
         Used by nodes (service-account tokens with role `viewer`). With `If-None-Match: "<version>"` and
@@ -3349,6 +3667,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /snapshots/{snapshot_version}:
@@ -3358,6 +3678,7 @@ paths:
       operationId: getSnapshot
       tags: [snapshots]
       x-required-role: viewer
+      x-required-permission: HUB_PLATFORM:READ
       summary: Get snapshot metadata and diff summary
       description: Metadata plus the list of objects changed versus the previous snapshot.
       responses:
@@ -3390,6 +3711,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /snapshots/{snapshot_version}/blob:
@@ -3399,6 +3722,7 @@ paths:
       operationId: getSnapshotBlob
       tags: [snapshots]
       x-required-role: viewer
+      x-required-permission: HUB_PLATFORM:READ
       summary: Download the snapshot blob
       description: The full registry content (no secrets; credentials only as references) that nodes compile. Verify `checksum` after download. The format is internal to the backend (`x-internal-format`).
       responses:
@@ -3426,6 +3750,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -3435,6 +3761,7 @@ paths:
       operationId: searchRequests
       tags: [requests]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_REQUEST:READ
       summary: Search requests
       description: Request explorer. Filters combine with AND. Multi-value filters (`status`, `code`) are OR within the filter. The time range applies to `created_at` and is required to span ≤ 31 days. Sorted newest first.
       parameters:
@@ -3521,6 +3848,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /requests/{request_id}:
@@ -3530,6 +3859,7 @@ paths:
       operationId: getRequest
       tags: [requests]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_REQUEST:READ
       summary: Get a request
       description: Full request record. Bodies follow the audit payload policy. Under `sealed` they are null and `sealed` is true. Use `unsealRequest`.
       responses:
@@ -3574,6 +3904,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /requests/{request_id}/timeline:
@@ -3583,6 +3915,7 @@ paths:
       operationId: getRequestTimeline
       tags: [requests]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_REQUEST:READ
       summary: Audit timeline of a request
       description: All audit events (DESIGN §13.1) in `seq` order. It always includes sha256 and byte size of each payload, even when the body is masked, sealed or metadata-only.
       responses:
@@ -3610,6 +3943,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /requests/{request_id}/attempts:
@@ -3619,6 +3954,7 @@ paths:
       operationId: listRequestAttempts
       tags: [requests]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_REQUEST:READ
       summary: Upstream attempts of a request
       description: One row per attempt. Each records the integration version it used (DESIGN §6.3).
       responses:
@@ -3641,6 +3977,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /requests/{request_id}/unseal:
@@ -3650,6 +3988,7 @@ paths:
       operationId: unsealRequest
       tags: [requests]
       x-required-role: admin
+      x-required-permission: HUB_REQUEST:UNSEAL
       summary: Unseal sealed payloads (audited)
       description: |
         Decrypts sealed payloads of the selected events (all events if `event_seqs` is omitted) and
@@ -3695,6 +4034,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -3704,6 +4045,7 @@ paths:
       operationId: listDeadLetters
       tags: [dlq]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_DLQ:READ
       summary: List dead-lettered requests
       description: Kept for 14 days. Newest first.
       parameters:
@@ -3762,6 +4104,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /dlq/{request_id}:
@@ -3771,6 +4115,7 @@ paths:
       operationId: getDeadLetter
       tags: [dlq]
       x-required-role: tenant_viewer
+      x-required-permission: HUB_DLQ:READ
       summary: Get a DLQ entry
       description: Includes the canonical payload, last vendor request and response (per payload policy), and attempt history.
       responses:
@@ -3806,6 +4151,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /dlq/replay:
@@ -3813,6 +4160,7 @@ paths:
       operationId: replayDeadLetters
       tags: [dlq]
       x-required-role: editor
+      x-required-permission: HUB_DLQ:REPLAY
       summary: Replay DLQ entries by ids or by filter
       description: |
         Moves the matching entries back to `accepted`. They re-resolve and re-transform, so a
@@ -3851,6 +4199,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /dlq/purge:
@@ -3858,6 +4208,7 @@ paths:
       operationId: purgeDeadLetters
       tags: [dlq]
       x-required-role: admin
+      x-required-permission: HUB_DLQ:PURGE
       summary: Purge DLQ entries by ids or by filter
       description: 'Permanently removes the DLQ entries. The request ledger and audit stay (retention rules apply). The same selection rules as replay apply. `dry_run: true` counts only.'
       requestBody:
@@ -3892,6 +4243,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -3901,6 +4254,7 @@ paths:
       operationId: listBreakers
       tags: [breakers]
       x-required-role: viewer
+      x-required-permission: HUB_BREAKER:READ
       summary: List circuit breakers (per account + endpoint)
       description: The vendor health board. One row per `(account, endpoint)` that has seen traffic or is forced.
       parameters:
@@ -3944,6 +4298,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /breakers/{account_id}/{endpoint_ref}:
@@ -3954,6 +4310,7 @@ paths:
       operationId: getBreaker
       tags: [breakers]
       x-required-role: viewer
+      x-required-permission: HUB_BREAKER:READ
       summary: Get one breaker
       description: Breaker detail with recent transitions, probe results and the integrations that use it.
       responses:
@@ -3993,6 +4350,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /breakers/{account_id}/{endpoint_ref}/force-open:
@@ -4003,6 +4362,7 @@ paths:
       operationId: forceOpenBreaker
       tags: [breakers]
       x-required-role: admin
+      x-required-permission: HUB_BREAKER:ADMIN
       summary: Force a breaker open
       description: Holds the breaker open (traffic follows `on_circuit_open`, async parks) until `duration_ms` elapses or `clearBreakerForce` is called. Shared across nodes in about 1 s.
       requestBody:
@@ -4035,6 +4395,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /breakers/{account_id}/{endpoint_ref}/force-close:
@@ -4045,6 +4407,7 @@ paths:
       operationId: forceCloseBreaker
       tags: [breakers]
       x-required-role: admin
+      x-required-permission: HUB_BREAKER:ADMIN
       summary: Force a breaker closed
       description: Closes the breaker and starts the ramped drain of parked envelopes (DESIGN §10.5). The breaker is held closed until `duration_ms` elapses or `clearBreakerForce` is called. Failures are still counted but do not trip it while forced.
       requestBody:
@@ -4077,6 +4440,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /breakers/{account_id}/{endpoint_ref}/clear-force:
@@ -4087,6 +4452,7 @@ paths:
       operationId: clearBreakerForce
       tags: [breakers]
       x-required-role: admin
+      x-required-permission: HUB_BREAKER:ADMIN
       summary: Return a forced breaker to automatic control
       description: Removes a force-open or force-close. The breaker resumes normal state evaluation. It gives 409 `CONFLICT` if the breaker is not forced.
       requestBody:
@@ -4120,6 +4486,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -4129,6 +4497,7 @@ paths:
       operationId: listChangeLog
       tags: [change-log]
       x-required-role: viewer
+      x-required-permission: HUB_PLATFORM:READ
       summary: List change-log entries
       description: Every admin mutation, newest first. `before`/`after` are omitted in the list. Secrets never appear (write-only fields are recorded as a fingerprint).
       parameters:
@@ -4180,6 +4549,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
   /change-log/{change_id}:
@@ -4195,6 +4566,7 @@ paths:
       operationId: getChangeLogEntry
       tags: [change-log]
       x-required-role: viewer
+      x-required-permission: HUB_PLATFORM:READ
       summary: Get one change-log entry (with before/after)
       description: Full entry including `before` and `after` object snapshots.
       responses:
@@ -4225,6 +4597,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AuthzUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -4237,6 +4611,31 @@ components:
         OIDC access token (Authorization: Bearer). Claims used: `sub`, `email`, `name`,
         `hub_roles` (array of admin|editor|viewer|tenant_viewer), `hub_tenants` (array, for
         tenant_viewer). In dev, `hub admin` runs an OIDC stub (DESIGN §19 M7).
+    isfcGateway:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Bearer JWT issued by the ISFC identity provider and forwarded by the ISFC api-gateway
+        (`HUB_ADMIN_AUTH_MODE=isfc`, since 2.1.0). The gateway also sends the `x-isfc-*` identity
+        headers (subject, tenant, roles). The client picks the ISFC tenant to act in with the
+        `X-Tenant-Id` request header (an ISFC tenant UUID); without it the gateway falls back to the
+        user's default tenant. The Hub verifies the token itself and refuses a request whose headers
+        do not match it.
+    isfcApiKey:
+      type: apiKey
+      in: header
+      name: x-isfc-api-key
+      description: |
+        Machine access (automation, CI). An ISFC API key issued by the `integration-hub` client.
+        Must be sent together with `x-isfc-client-id` (scheme `isfcApiKeyClientId`): both are
+        required in the same security requirement. The key's permissions decide what the caller may
+        do. Never logged.
+    isfcApiKeyClientId:
+      type: apiKey
+      in: header
+      name: x-isfc-client-id
+      description: Id of the ISFC client that owns the key in `x-isfc-api-key`. Sent together with `isfcApiKey`.
 
   parameters:
     Cursor:
@@ -4530,6 +4929,54 @@ components:
                   details: []
                   meta: { from: active, to: retired }
                   request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KJ
+    AuthzUnavailable:
+      description: The authorization engine could not decide in time (since 2.1.0). The request is refused (fail closed) and is safe to retry.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminErrorEnvelope'
+          example:
+            error:
+              code: authz_unavailable
+              message: Authorization is temporarily unavailable
+              retryable: true
+              retry_after_ms: 1000
+              details: []
+              meta: null
+              request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KM
+    TenantConflict:
+      description: The tenant already exists, or tenants are managed by ISFC.
+      headers:
+        X-Hub-Request-Id:
+          $ref: '#/components/headers/X-Hub-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminErrorEnvelope'
+          examples:
+            tenant_managed_by_isfc:
+              value:
+                error:
+                  code: tenant_managed_by_isfc
+                  message: Tenants are created in ISFC. Link the tenant to the Integration Hub client there, then run a sync.
+                  retryable: false
+                  retry_after_ms: null
+                  details: []
+                  meta: null
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KN
+            CONFLICT:
+              value:
+                error:
+                  code: CONFLICT
+                  message: tenant 'orders-service' already exists
+                  retryable: false
+                  retry_after_ms: null
+                  details: []
+                  meta: { object_type: tenant, object_id: orders-service }
+                  request_id: req_01J9Z3M1A5B7C9D1E3F5G7H9KP
     PreconditionFailed:
       description: If-Match did not match the current ETag.
       headers:
@@ -4646,7 +5093,10 @@ components:
           $ref: '#/components/schemas/ChangeId'
     Role:
       type: string
-      enum: [admin, editor, viewer, tenant_viewer]
+      description: |
+        `tenant_admin` since 2.1.0. `admin` ⊃ `editor` ⊃ `viewer`; `admin` ⊃ `tenant_admin` ⊃
+        `tenant_viewer`. `editor` and `viewer` do not include `tenant_admin`.
+      enum: [admin, editor, viewer, tenant_viewer, tenant_admin]
     DeliveryMode:
       type: string
       enum: [sync, wait, async, async_callback]
@@ -4691,6 +5141,8 @@ components:
             - RETIRE_BLOCKED
             - RATE_LIMITED
             - INTERNAL_ERROR
+            - tenant_managed_by_isfc
+            - authz_unavailable
         message:
           type: string
         retryable:
@@ -4737,7 +5189,7 @@ components:
           items:
             $ref: '#/components/schemas/Role'
         tenants:
-          description: Tenant scope for tenant_viewer. Empty means all tenants (non-tenant roles).
+          description: Tenant scope for tenant_viewer and tenant_admin. Empty means all tenants (platform roles).
           type: array
           items:
             $ref: '#/components/schemas/Slug'
@@ -5798,29 +6250,63 @@ components:
       properties:
         rps: { type: number, minimum: 0 }
         burst: { type: integer, minimum: 0 }
+    IsfcTenantStatus:
+      description: Status of the tenant in ISFC, copied by the sync.
+      type: string
+      enum: [ACTIVE, INACTIVE]
+    IsfcTenantLink:
+      description: |
+        Read-only copy of the tenant's ISFC record (since 2.1.0), written only by the sync.
+        `null` on tenants that are not linked to ISFC (legacy tenants, or `HUB_TENANT_SOURCE` other
+        than `isfc`). Never settable through this API.
+      type: object
+      required: [tenant_id, key, name, status, linked, synced_at]
+      properties:
+        tenant_id: { description: 'ISFC tenant UUID. This is the link.', type: string, format: uuid }
+        key: { description: 'ISFC tenant key (for example `HL`).', type: string }
+        name: { description: 'ISFC tenant name.', type: string }
+        status: { $ref: '#/components/schemas/IsfcTenantStatus' }
+        linked: { description: 'Whether the tenant is in the Hub client''s tenants list in ISFC.', type: boolean }
+        synced_at: { description: 'When the sync last refreshed this copy.', type: string, format: date-time }
+    TenantSetup:
+      description: |
+        `pending`: created by the sync, the tenant admin has not finished setup, calls are refused.
+        `complete`: normal. Tenants created before 2.1.0 are `complete`.
+      type: string
+      enum: [pending, complete]
     Tenant:
       type: object
-      required: [tenant_id, display_name, disabled, rate_limit, integrations_owned, active_api_keys, created_at, updated_at]
+      required: [tenant_id, display_name, disabled, rate_limit, integrations_owned, active_api_keys, setup, isfc, created_at, updated_at]
       properties:
         tenant_id: { $ref: '#/components/schemas/Slug' }
-        display_name: { type: string }
+        display_name: { description: 'The Hub override if one is set, otherwise the ISFC name.', type: string }
         description: { type: [string, 'null'] }
         contact: { type: [string, 'null'] }
         rate_limit: { $ref: '#/components/schemas/RateLimit' }
         disabled: { type: boolean }
         integrations_owned: { type: integer, minimum: 0 }
         active_api_keys: { type: integer, minimum: 0 }
+        setup: { $ref: '#/components/schemas/TenantSetup' }
+        isfc:
+          oneOf:
+            - $ref: '#/components/schemas/IsfcTenantLink'
+            - type: 'null'
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     TenantSummary:
       type: object
-      required: [tenant_id, display_name, disabled, integrations_owned, active_api_keys, updated_at]
+      required: [tenant_id, display_name, disabled, integrations_owned, active_api_keys, setup, isfc, updated_at]
       properties:
         tenant_id: { $ref: '#/components/schemas/Slug' }
         display_name: { type: string }
         disabled: { type: boolean }
         integrations_owned: { type: integer }
         active_api_keys: { type: integer }
+        setup: { $ref: '#/components/schemas/TenantSetup' }
+        isfc:
+          oneOf:
+            - $ref: '#/components/schemas/IsfcTenantLink'
+            - type: 'null'
         updated_at: { type: string, format: date-time }
     TenantList:
       allOf:
@@ -5849,7 +6335,11 @@ components:
         description: { type: [string, 'null'] }
         contact: { type: [string, 'null'] }
         rate_limit: { $ref: '#/components/schemas/RateLimit' }
-        disabled: { type: boolean }
+        disabled: { description: 'Platform admins only. A `tenant_admin` sending it gets 403.', type: boolean }
+        setup:
+          description: 'Only `complete` is accepted: finishes setup. There is no way back to `pending`.'
+          type: string
+          const: complete
         reason: { $ref: '#/components/schemas/Reason' }
     TenantChange:
       type: object
@@ -5857,6 +6347,37 @@ components:
       properties:
         change_id: { $ref: '#/components/schemas/ChangeId' }
         tenant: { $ref: '#/components/schemas/Tenant' }
+
+    TenantSyncRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { $ref: '#/components/schemas/Reason' }
+    TenantSyncOutcome:
+      description: '`ok`: every step worked. `partial`: some tenants failed, the rest were applied. `failed`: ISFC was unreachable or refused; the last good state is kept and nothing is disabled.'
+      type: string
+      enum: [ok, partial, failed]
+    TenantSyncResult:
+      type: object
+      required: [change_id, result, started_at, finished_at, created, updated, disabled, unchanged, error]
+      properties:
+        change_id: { $ref: '#/components/schemas/ChangeId' }
+        result: { $ref: '#/components/schemas/TenantSyncOutcome' }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        created: { description: 'Tenants created (`setup: pending`).', type: integer, minimum: 0 }
+        updated: { description: 'Tenants whose ISFC copy changed.', type: integer, minimum: 0 }
+        disabled: { description: 'Tenants disabled because ISFC says INACTIVE or unlinked.', type: integer, minimum: 0 }
+        unchanged: { type: integer, minimum: 0 }
+        error: { description: 'Short reason when `result` is not `ok`.', type: [string, 'null'] }
+    TenantSyncChange:
+      type: object
+      required: [change_id, result, tenant, error]
+      properties:
+        change_id: { $ref: '#/components/schemas/ChangeId' }
+        result: { $ref: '#/components/schemas/TenantSyncOutcome' }
+        tenant: { $ref: '#/components/schemas/Tenant' }
+        error: { type: [string, 'null'] }
 
     # ---------------- api keys
     ApiKeyState:

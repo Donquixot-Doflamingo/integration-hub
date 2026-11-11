@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -45,6 +46,10 @@ type config struct {
 	apiKey       secret
 	adminToken   secret
 	adminBaseURL string
+	// ISFC backend-client credential (contract 2.1.0): an alternative to apiKey.
+	isfcClientID string
+	isfcAPIKey   secret
+	tenantID     string // ISFC tenant UUID, sent as X-Tenant-Id
 	// HTTP transport (HUB-301)
 	addr        string
 	allowRemote bool
@@ -58,8 +63,21 @@ const (
 // String describes the configuration without its credentials (fmt does not call String on
 // unexported fields, so the secret type alone would not protect %v of a config).
 func (c config) String() string {
-	return fmt.Sprintf("hubmcp config{transport: %s, addr: %s, base_url: %s, admin_base_url: %s, api_key: %s, admin_token: %s}",
-		c.transport, c.addr, c.baseURL, c.adminBaseURL, setOrUnset(c.apiKey), setOrUnset(c.adminToken))
+	return fmt.Sprintf("hubmcp config{transport: %s, addr: %s, base_url: %s, admin_base_url: %s, api_key: %s, admin_token: %s, isfc_client_id: %s, isfc_api_key: %s, tenant_id: %s}",
+		c.transport, c.addr, c.baseURL, c.adminBaseURL, setOrUnset(c.apiKey), setOrUnset(c.adminToken), c.isfcClientID, setOrUnset(c.isfcAPIKey), c.tenantID)
+}
+
+// localAdminBaseURL is where `dev-up` serves the admin API for a gateway on a loopback host:
+// the same host on port 8081. It returns "" for any other host, which must name its admin URL.
+func localAdminBaseURL(baseURL string) string {
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	if h := u.Hostname(); h != "localhost" && !isLoopback(net.JoinHostPort(h, "0")) {
+		return ""
+	}
+	return u.Scheme + "://" + net.JoinHostPort(u.Hostname(), "8081") + "/admin/v1"
 }
 
 func setOrUnset(s secret) string {
@@ -90,23 +108,42 @@ func loadConfig(args []string, getenv func(string) string, stderr io.Writer) (co
 	c.baseURL = strings.TrimRight(getenv("HUB_BASE_URL"), "/")
 	c.apiKey = secret(getenv("HUB_API_KEY"))
 	c.adminToken = secret(getenv("HUB_ADMIN_TOKEN"))
-	c.adminBaseURL = getenv("HUB_ADMIN_BASE_URL")
-	if c.adminBaseURL == "" && c.baseURL != "" {
-		c.adminBaseURL = c.baseURL + "/admin/v1"
-	}
+	c.adminBaseURL = strings.TrimRight(getenv("HUB_ADMIN_BASE_URL"), "/")
+	c.isfcClientID = strings.TrimSpace(getenv("HUB_ISFC_CLIENT_ID"))
+	c.isfcAPIKey = secret(getenv("HUB_ISFC_API_KEY"))
+	c.tenantID = strings.TrimSpace(getenv("HUB_TENANT_ID"))
 	var errs []error
 	if c.baseURL == "" {
 		errs = append(errs, errors.New("HUB_BASE_URL is required"))
 	}
+	if c.adminBaseURL == "" && c.adminToken != "" {
+		// The admin API is not served below HUB_BASE_URL (the gateway): locally it listens on :8081,
+		// in production it is the ISFC gateway route (AUTH_PLAN G16). Guess only for the local stack.
+		if c.adminBaseURL = localAdminBaseURL(c.baseURL); c.adminBaseURL == "" {
+			errs = append(errs, errors.New("HUB_ADMIN_BASE_URL is required with HUB_ADMIN_TOKEN (the control-plane URL including /admin/v1, or the ISFC gateway route to it)"))
+		}
+	}
+	hasISFC := c.isfcClientID != "" && strings.TrimSpace(string(c.isfcAPIKey)) != ""
+	if (c.isfcClientID != "") != (strings.TrimSpace(string(c.isfcAPIKey)) != "") {
+		errs = append(errs, errors.New("HUB_ISFC_CLIENT_ID and HUB_ISFC_API_KEY must be set together"))
+	}
+	if hasISFC && strings.TrimSpace(string(c.apiKey)) != "" {
+		errs = append(errs, errors.New("HUB_API_KEY and the ISFC credential (HUB_ISFC_CLIENT_ID + HUB_ISFC_API_KEY) are both set; use one"))
+	}
 	switch c.transport {
 	case transportStdio:
-		if strings.TrimSpace(string(c.apiKey)) == "" {
-			errs = append(errs, errors.New("HUB_API_KEY is required (environment only)"))
+		if strings.TrimSpace(string(c.apiKey)) == "" && !hasISFC {
+			errs = append(errs, errors.New("HUB_API_KEY is required (environment only), or the ISFC credential HUB_ISFC_CLIENT_ID + HUB_ISFC_API_KEY"))
 		}
 	case transportHTTP:
 		// Each HTTP client authenticates with its own tenant key (SECURITY §2.5, ADR-0018);
-		// HUB_API_KEY is not used.
+		// HUB_API_KEY is not used. An ISFC credential is accepted per request (the
+		// x-isfc-client-id and x-isfc-api-key headers) and, on a loopback listener only, from the
+		// environment as the credential of every request that brings none.
 		local := isLoopback(c.addr)
+		if hasISFC && (c.allowRemote || !local) {
+			errs = append(errs, errors.New("HUB_ISFC_API_KEY is refused with a remote-reachable http transport: every client would act as that backend client; clients send their own x-isfc-* headers instead"))
+		}
 		if !c.allowRemote && !local {
 			errs = append(errs, fmt.Errorf("addr %q is not a loopback address; pass -allow-remote to listen on it", c.addr))
 		}
@@ -133,12 +170,21 @@ func newApp(c config, contract *toolContract, log *slog.Logger, secrets *secretS
 	a.newHub = func(key string) (*hubclient.Client, error) {
 		return hubclient.New(c.baseURL, key, hubclient.WithHTTPClient(hc), hubclient.WithUserAgent(ua))
 	}
+	a.newISFC = func(clientID, apiKey, tenant string) (*hubclient.Client, error) {
+		return hubclient.New(c.baseURL, "", hubclient.WithISFCKey(clientID, apiKey), hubclient.WithTenantID(tenant),
+			hubclient.WithHTTPClient(hc), hubclient.WithUserAgent(ua))
+	}
 	if _, err := a.newHub("probe-key"); err != nil { // validates HUB_BASE_URL in every mode
 		return nil, err
 	}
 	var err error
 	if c.transport == transportStdio {
-		if a.hub, err = a.newHub(string(c.apiKey)); err != nil {
+		if c.isfcClientID != "" {
+			a.hub, err = a.newISFC(c.isfcClientID, string(c.isfcAPIKey), c.tenantID)
+		} else {
+			a.hub, err = a.newHub(string(c.apiKey))
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -147,6 +193,7 @@ func newApp(c config, contract *toolContract, log *slog.Logger, secrets *secretS
 		if a.admin, err = newAdminClient(c.adminBaseURL, c.adminToken, hc, ua, ops); err != nil {
 			return nil, err
 		}
+		a.admin.tenant = c.tenantID
 	}
 	return a, nil
 }
@@ -160,7 +207,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdin i
 		fmt.Fprintln(stderr, "hubmcp:", err)
 		return 2
 	}
-	secrets := newSecretSet(cfg.apiKey, cfg.adminToken)
+	secrets := newSecretSet(cfg.apiKey, cfg.adminToken, cfg.isfcAPIKey)
 	log := newLogger(stderr, cfg.logLevel, secrets)
 	contract, err := loadContract(toolContractJSON)
 	if err != nil {
@@ -190,7 +237,10 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdin i
 			log.ErrorContext(ctx, "listen", slog.String("addr", cfg.addr), slog.String("error", err.Error()))
 			return 1
 		}
-		ha := &httpAuth{newClient: a.newHub, now: time.Now, verified: map[[32]byte]verifiedKey{}}
+		ha := &httpAuth{newClient: a.newHub, newISFC: a.newISFC, now: time.Now, verified: map[[32]byte]verifiedKey{}}
+		if cfg.isfcClientID != "" { // loopback only (loadConfig)
+			ha.defaultISFC = &isfcDefault{clientID: cfg.isfcClientID, key: string(cfg.isfcAPIKey), tenant: cfg.tenantID}
+		}
 		if err := serveHTTP(ctx, ln, httpHandler(srv, ha, log), log); err != nil {
 			log.ErrorContext(ctx, "http transport failed", slog.String("error", err.Error()))
 			return 1

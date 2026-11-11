@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: Integration Hub - Caller API
-  version: 2.0.0
+  version: 2.1.1
   summary: The vendor-agnostic API internal services call to reach any third party.
   description: |
     Callers send a **stable integration ID**, an **operation** and a **request body** that matches
@@ -21,6 +21,16 @@ info:
 
     Operations tagged `vendor-webhooks` (`x-internal: true`) face vendors, not callers. Operations
     marked `x-status: planned` are reserved for Release 2 and return 404 until then.
+
+    **Authentication (two ways, since 2.1.0).** Either a Hub tenant API key (`bearerAuth`) or an ISFC
+    backend-client credential (`isfcS2S` + `isfcS2SClientId`: the headers `x-isfc-api-key` and
+    `x-isfc-client-id`, both required; the ISFC auth libraries send them). Sending both kinds in
+    one request is a 400 `VALIDATION_FAILED`. An ISFC credential may be valid for several tenants:
+    then send `X-Tenant-Id` (an ISFC tenant UUID, optional otherwise) to say which one the call is
+    for; a missing value gives 400 and a tenant the credential does not cover gives 403 `FORBIDDEN`.
+    The tenant's own state decides the rest: a tenant that is not set up or is disabled gets 401,
+    a suspended tenant 403. Scopes are the same for both: `invoke`, `dry_run`, `requests_read`.
+    Neither credential nor `X-Tenant-Id` ever selects a vendor, account or version.
 
     **Responses.** With a response transformer, a successful call returns its output unchanged
     (200). Without one (**pass-through**), the vendor's status and body are returned unchanged,
@@ -58,6 +68,8 @@ servers:
         enum: [dev, staging, prod]
 security:
   - bearerAuth: [invoke]
+  - isfcS2S: [invoke]
+    isfcS2SClientId: [invoke]
 tags:
   - name: invoke
     description: Invoke an integration operation with a body that matches its request schema.
@@ -103,6 +115,7 @@ paths:
         Caller headers declared in the operation's `request_schema.headers` are available to the
         request transformer as `hdr.*`; no other caller header is.
       parameters:
+        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/IntegrationId'
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/Prefer'
@@ -156,6 +169,7 @@ paths:
         `SESSION_NOT_FOUND`. An operation the integration does not declare gives 404
         `OPERATION_NOT_FOUND`. `default` is accepted here and behaves like `invokeIntegration`.
       parameters:
+        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/IntegrationId'
         - $ref: '#/components/parameters/Operation'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -216,7 +230,10 @@ paths:
         it changes whenever the Hub cuts over.
       security:
         - bearerAuth: [dry_run]
+        - isfcS2S: [dry_run]
+          isfcS2SClientId: [dry_run]
       parameters:
+        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/IntegrationId'
         - name: operation
           in: query
@@ -287,6 +304,7 @@ paths:
         give 404 `REQUEST_NOT_FOUND`, never 403, so request IDs cannot be probed. Poll with backoff
         (start at 500 ms, cap at 30 s) or use callbacks.
       parameters:
+        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/RequestIdPath'
       responses:
         '200':
@@ -339,6 +357,8 @@ paths:
                     error: null
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/RequestNotFound'
         '429':
@@ -358,6 +378,7 @@ paths:
         integration. Request schemas come from the active version; an integration without one
         lists no operations.
       parameters:
+        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -427,6 +448,7 @@ paths:
         and paused flags. It contains no vendor, account or version. Build the invoke body from
         `operations[].request_schema.body`: fields in `required` are required, others optional.
       parameters:
+        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/IntegrationId'
       responses:
         '200':
@@ -838,8 +860,38 @@ components:
         gives 401 `UNAUTHORIZED`. A missing scope gives 403 `FORBIDDEN` with reason `missing_scope`. mTLS client
         identity may replace the bearer key where configured (DESIGN §4.2). That is deployment
         configuration, not part of this contract.
+    isfcS2S:
+      type: apiKey
+      in: header
+      name: x-isfc-api-key
+      description: |
+        ISFC backend-client API key (since 2.1.0), an alternative to `bearerAuth`. OpenAPI cannot AND
+        two apiKey headers inside one scheme, so the credential is two schemes that must be
+        required together: `isfcS2S` (this header) and `isfcS2SClientId`. The Hub looks the key up in
+        memory (no call to ISFC on the request path). An unknown, revoked or inactive key, or a
+        client id that does not match the key, gives 401 `UNAUTHORIZED`. The scopes listed in a
+        security requirement are the Hub scopes the key's permissions must grant
+        (`invoke`, `dry_run`, `requests_read`). Never logged.
+    isfcS2SClientId:
+      type: apiKey
+      in: header
+      name: x-isfc-client-id
+      description: Id of the ISFC client that owns the key in `x-isfc-api-key` (since 2.1.0). Always sent together with `isfcS2S`.
 
   parameters:
+    TenantId:
+      name: X-Tenant-Id
+      in: header
+      required: false
+      description: |
+        ISFC tenant UUID the call is for (since 2.1.0). Needed only when the ISFC credential covers
+        more than one tenant; ignored for a tenant API key (which belongs to one tenant). Missing when
+        needed gives 400 `VALIDATION_FAILED`; a tenant the credential does not cover gives 403
+        `FORBIDDEN`. It identifies the caller's own tenant and has no effect on routing.
+      schema:
+        type: string
+        format: uuid
+      example: 6f1c0b2e-3a4d-4c5e-8f60-1a2b3c4d5e6f
     IntegrationId:
       name: integration_id
       in: path

@@ -8,7 +8,7 @@ import {
 	text
 } from '$lib/server/actions';
 import type { Actions } from './$types';
-import { API_FIELDS, BEFORE_PREFIX, updateBody, valuesFromForm } from '../tenant-form';
+import { API_FIELDS, BEFORE_PREFIX, setupBody, updateBody, valuesFromForm } from '../tenant-form';
 import { createKeyBody, KEY_ID, keyValuesFromForm, overlapFromForm } from './keys';
 import {
 	API_FIELDS as ENDPOINT_FIELDS,
@@ -40,6 +40,44 @@ export const actions = {
 			})
 		);
 		return finish('update', res, API_FIELDS);
+	},
+
+	// HUB-485: finish the setup of a tenant that came from ISFC (updateTenant, tenant_admin). Same
+	// fields as an edit plus `setup: complete`; a tenant admin never sends `disabled` (403).
+	completeSetup: async (event) => {
+		requireSession(event);
+		const form = await event.request.formData();
+		const reason = readReason('completeSetup', form);
+		if (!reason.ok) return reason.failure;
+		const built = setupBody(
+			valuesFromForm(form),
+			valuesFromForm(form, BEFORE_PREFIX),
+			reason.reason
+		);
+		if (!built.ok) return invalid('completeSetup', built.fields);
+		const res = await actionApi(event).call((c) =>
+			c.PATCH('/tenants/{tenant_id}', {
+				params: { path: { tenant_id: event.params.tenant_id }, header: ifMatch(form) },
+				body: built.body
+			})
+		);
+		return finish('completeSetup', res, API_FIELDS);
+	},
+
+	// HUB-485: "Sync now" for one tenant (syncTenant, admin). 409 CONFLICT when the tenant has no
+	// ISFC link or a sync is already running; a failed fetch is a 200 with `result: failed`.
+	syncOne: async (event) => {
+		requireSession(event);
+		const form = await event.request.formData();
+		const reason = readReason('syncOne', form);
+		if (!reason.ok) return reason.failure;
+		const res = await actionApi(event).call((c) =>
+			c.POST('/tenants/{tenant_id}/sync', {
+				params: { path: { tenant_id: event.params.tenant_id } },
+				body: { reason: reason.reason }
+			})
+		);
+		return finish('syncOne', res);
 	},
 
 	setDisabled: async (event) => {

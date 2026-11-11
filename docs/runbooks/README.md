@@ -14,8 +14,11 @@ One runbook per alert in [`deploy/alerts/hub.rules.yaml`](../../deploy/alerts/hu
 | `CredentialExpiringSoon` | warn | An account's credential slot expires in less than 7 days | [CredentialExpiringSoon.md](CredentialExpiringSoon.md) |
 | `HubOverheadP99High` | warn | Hub overhead p99 on sync and wait requests is above 5 ms (SLO S1) | [HubOverheadP99High.md](HubOverheadP99High.md) |
 | `AuditEventsDropped` | warn | Audit events were dropped; some requests have an incomplete audit trail | [AuditEventsDropped.md](AuditEventsDropped.md) |
+| `HubIsfcSyncStale` | warn | The ISFC tenant and caller-key sync has not succeeded for 15 minutes, or failed 3 runs in a row | [HubIsfcSyncStale.md](HubIsfcSyncStale.md) |
+| `HubAdminAuthzUnavailable` | warn | More than 1% of admin authorization decisions (OPA) failed for 5 minutes; the admin API fails closed | [HubAdminAuthzUnavailable.md](HubAdminAuthzUnavailable.md) |
 
 Procedures used by several runbooks:
+- [ISFC authentication](isfc-auth.md): OPA down, sync stale, key revocation.
 - [Credential rotation](credential-rotation.md): add `next`, test, promote, watch 15 minutes, delete old (DESIGN §6.6).
 
 ## Before you start
@@ -33,7 +36,7 @@ curl -sS -H "Authorization: Bearer $HUB_ADMIN_TOKEN" "$HUB_ADMIN_URL/admin/v1/br
 
 Roles: reads need `viewer`; `pauseIntegration`, `replayDeadLetters` and `testAccountConnection` need `editor`; breaker holds, credential rotation and `purgeDeadLetters` need `admin`.
 
-**hubctl** (`backend/cmd/hubctl`) has these operations commands today: `login`, `whoami`, `export`, `plan`, `apply`, `dry-run`, `replay`, `transform test`, `creds`. Everything else in the runbooks goes through the admin API.
+**hubctl** (`backend/cmd/hubctl`) has these operations commands today: `login` (`-isfc` or `-dev`), `whoami`, `export`, `plan`, `apply`, `dry-run`, `replay`, `transform test`, `creds`. Everything else in the runbooks goes through the admin API.
 
 **Logs** are JSON; search by `msg` (for example `breaker.opened`). Logs never hold bodies or secrets: for payloads use the request timeline (`getRequestTimeline`), subject to the integration's payload policy.
 

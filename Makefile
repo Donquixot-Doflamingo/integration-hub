@@ -2,7 +2,7 @@
 NODE22 := /opt/homebrew/opt/node@22/bin
 export PATH := $(NODE22):$(PATH)
 
-.PHONY: doctor up down dev-up dev-down test-scripts check backend-check frontend-check contracts-check contracts-tools contracts-version-check
+.PHONY: doctor up down dev-up dev-down test-scripts check backend-check frontend-check contracts-check contracts-tools contracts-version-check authz-gen authz-check
 
 doctor:
 	$(MAKE) -C backend doctor
@@ -63,3 +63,12 @@ contracts-check: contracts-tools
 BASE ?= origin/main
 contracts-version-check: contracts-tools
 	cd $(CONTRACTS_TOOLS) && node version-check.mjs --base $(BASE)
+
+# Admin API policies (HUB-478, HUB-479): the generator writes one Rego file per operation of the admin
+# contract; authz-check fails if a policy is missing or disagrees with the contract, then runs
+# `opa check --strict` and `opa test` (opa from PATH, else docker). Needs `make contracts-tools` once.
+authz-gen: contracts-tools
+	node scripts/gen-authz.mjs
+
+authz-check: contracts-tools
+	scripts/check-authz.sh

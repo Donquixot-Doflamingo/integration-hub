@@ -1,8 +1,7 @@
 import { isRedirect, type RequestEvent } from '@sveltejs/kit';
 import { describe, expect, it, vi } from 'vitest';
 import { devProvider } from './dev';
-import { authMode, authProvider, sessionSecret } from './index';
-import { oidcProvider } from './oidc';
+import { authMode, authProvider, resolveAuthMode, sessionSecret } from './index';
 import { decodeSession, encodeSession, newSession, toPublicSession, type Session } from './session';
 import { attachAdminToken, authenticate } from './hooks';
 import { load as appLayoutLoad } from '../../../routes/(app)/+layout.server';
@@ -31,17 +30,22 @@ describe('session cookie', () => {
 
 	it.each([
 		{ name: 'missing', value: () => undefined },
-		{ name: 'no signature', value: () => encodeSession(session(), SECRET).split('.')[0] },
 		{ name: 'wrong secret', value: () => encodeSession(session(), 'y'.repeat(40)) },
 		{
-			name: 'tampered payload (role upgrade)',
+			name: 'tampered ciphertext (role upgrade attempt)',
 			value: () => {
-				const [, sig] = encodeSession(session(), SECRET).split('.');
-				const forged = Buffer.from(
-					JSON.stringify({ ...session(), user: { ...session().user, roles: ['admin'] } })
-				).toString('base64url');
-				return `${forged}.${sig}`;
+				const v = encodeSession(session(), SECRET);
+				const raw = Buffer.from(v, 'base64url');
+				raw[raw.length - 3]! ^= 0xff;
+				return raw.toString('base64url');
 			}
+		},
+		{
+			name: 'a plain base64 JSON payload (the old signed format)',
+			value: () =>
+				Buffer.from(
+					JSON.stringify({ ...session(), user: { ...session().user, roles: ['admin'] } })
+				).toString('base64url')
 		},
 		{ name: 'expired', value: () => encodeSession(session({ exp: 1 }), SECRET) },
 		{ name: 'garbage', value: () => 'not-a-cookie' }
@@ -89,20 +93,51 @@ describe('dev provider', () => {
 	});
 });
 
-describe('oidc placeholder', () => {
-	it('lists missing settings and refuses sign-in', async () => {
-		const p = oidcProvider({ issuer: 'https://idp.example' });
-		expect(p.describe()).toMatchObject({
-			provider: 'oidc',
-			ready: false,
-			missing: ['HUB_OIDC_CLIENT_ID', 'HUB_OIDC_REDIRECT_URI']
-		});
-		expect(await p.signIn(form({}))).toMatchObject({ ok: false, status: 503 });
+describe('auth mode (HUB-495)', () => {
+	const r = (mode: string | undefined, over: { mocking?: boolean; nodeEnv?: string } = {}) =>
+		resolveAuthMode({ mocking: false, nodeEnv: 'production', mode, ...over });
+
+	it('isfc is the real login', () => {
+		expect(r('isfc')).toEqual({ mode: 'isfc' });
 	});
 
-	it('is the default outside mock mode, and has no session secret without config', () => {
-		expect(authMode()).toBe('oidc');
-		expect(authProvider().id).toBe('oidc');
+	it('dev is refused outside mock builds and tests', () => {
+		expect(r('dev')).toMatchObject({
+			mode: null,
+			reason: expect.stringMatching(/only allowed in mock builds and tests/)
+		});
+		expect(r('dev', { nodeEnv: 'development' })).toMatchObject({ mode: null });
+		expect(r('dev', { nodeEnv: undefined })).toMatchObject({ mode: null });
+	});
+
+	it('dev is allowed in mock builds and when NODE_ENV=test', () => {
+		expect(r('dev', { mocking: true })).toEqual({ mode: 'dev' });
+		expect(r(undefined, { mocking: true })).toEqual({ mode: 'dev' });
+		expect(r('dev', { nodeEnv: 'test' })).toEqual({ mode: 'dev' });
+	});
+
+	it('an unset or unknown mode is refused (it must be chosen on purpose)', () => {
+		expect(r(undefined)).toMatchObject({ mode: null, reason: expect.stringMatching(/not set/) });
+		expect(r('')).toMatchObject({ mode: null });
+		expect(r('oidc')).toMatchObject({ mode: null, reason: expect.stringMatching(/not a mode/) });
+	});
+
+	it('mock builds always use dev, whatever the setting: there is no identity provider to call', () => {
+		expect(r('isfc', { mocking: true })).toEqual({ mode: 'dev' });
+	});
+});
+
+describe('this test run (NODE_ENV=test, no PUBLIC_AUTH_MODE)', () => {
+	it('refuses sign-in: the mode is unset', async () => {
+		expect(authMode()).toBeNull();
+		const p = authProvider();
+		expect(p.id).toBe('none');
+		expect(await p.describe()).toMatchObject({
+			provider: 'none',
+			ready: false,
+			missing: ['PUBLIC_AUTH_MODE']
+		});
+		expect(await p.signIn(form({}))).toMatchObject({ ok: false, status: 503 });
 		expect(sessionSecret()).toBeNull();
 	});
 });
@@ -118,28 +153,34 @@ function cookieJar(initial: Record<string, string> = {}) {
 }
 
 describe('guards', () => {
-	it('redirects unauthenticated users to login with the page they asked for', () => {
+	it('redirects unauthenticated users to login with the page they asked for', async () => {
 		const event = { locals: { session: null }, url: new URL('http://c.test/dlq?tenant_id=a') };
-		try {
-			appLayoutLoad(event as never);
-			expect.unreachable();
-		} catch (e) {
-			expect(isRedirect(e)).toBe(true);
-			expect(e).toMatchObject({ status: 303, location: '/login?next=%2Fdlq%3Ftenant_id%3Da' });
-		}
+		const err = await Promise.resolve(appLayoutLoad(event as never)).catch((e) => e);
+		expect(isRedirect(err)).toBe(true);
+		expect(err).toMatchObject({ status: 303, location: '/login?next=%2Fdlq%3Ftenant_id%3Da' });
 	});
 
-	it('gives the page the token-free session', () => {
+	it('gives the page the token-free session', async () => {
 		const s = session({ accessToken: 'tok' });
-		const out = appLayoutLoad({ locals: { session: s }, url: new URL('http://c.test/') } as never);
-		expect(out).toEqual({ session: toPublicSession(s) });
+		const out = await appLayoutLoad({
+			locals: { session: s },
+			url: new URL('http://c.test/')
+		} as never);
+		expect(out).toEqual({
+			session: toPublicSession(s),
+			isfcMode: false,
+			isfcAdminUrl: null,
+			tenantSwitcher: null
+		});
+		expect(JSON.stringify(out)).not.toContain('tok');
 	});
 
-	it('authenticate drops a cookie that does not verify', async () => {
+	it('authenticate drops a cookie that does not verify and says the session ended', async () => {
 		const cookies = cookieJar({ hub_console_session: 'forged.value' });
 		const event = { cookies, locals: {} } as unknown as RequestEvent;
 		await authenticate({ event, resolve: async () => new Response('ok') });
 		expect(event.locals.session).toBeNull();
+		expect(event.locals.sessionEnded).toBe(true);
 		expect(cookies.delete).toHaveBeenCalledWith('hub_console_session', { path: '/' });
 	});
 
@@ -168,18 +209,22 @@ describe('guards', () => {
 	});
 });
 
-describe('login page (OIDC placeholder, no secret)', () => {
-	it('reports sign-in unavailable with the missing settings', () => {
-		const out = loginLoad({
+describe('login page (no mode, no secret)', () => {
+	it('reports sign-in unavailable with the missing settings', async () => {
+		const out = await loginLoad({
 			url: new URL('http://c.test/login?next=//evil'),
-			locals: { session: null }
+			locals: { session: null, sessionEnded: false }
 		} as never);
 		expect(out).toMatchObject({
-			login: { provider: 'oidc', ready: false },
+			login: { provider: 'none', ready: false },
 			next: '/',
-			expired: false
+			expired: false,
+			error: null
 		});
-		expect((out as { login: { missing: string[] } }).login.missing).toContain('HUB_SESSION_SECRET');
+		expect((out as { login: { missing: string[] } }).login.missing).toEqual([
+			'PUBLIC_AUTH_MODE',
+			'HUB_SESSION_SECRET'
+		]);
 	});
 
 	it('refuses to sign in without a session secret', async () => {
@@ -188,7 +233,7 @@ describe('login page (OIDC placeholder, no secret)', () => {
 			body: form({ role: 'admin' })
 		});
 		const cookies = cookieJar();
-		const r = await actions.default!({
+		const r = await actions.dev!({
 			request,
 			cookies,
 			url: new URL('http://c.test/login')

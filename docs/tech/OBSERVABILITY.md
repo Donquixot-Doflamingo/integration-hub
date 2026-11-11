@@ -464,3 +464,30 @@ Also new for the load runs: `net/http/pprof` is mounted on the ops port of every
 - **Logs**: §4.1 schema with `role=hubmcp`, `component=tool`, plus `mcp_tool`, `mcp_session` (random id, not user identity). Tool arguments and results are **never logged** (they contain canonical bodies); log `request_id` from Hub responses instead. In stdio mode logs go to **stderr** only (stdout is the protocol channel).
 - **Traces**: span `hubmcp.tool` (server) → child client spans for each Hub HTTP call with `traceparent` propagation, so a tool call links to `hub.edge`.
 - **Alert**: `MCPInvokeErrorsHigh`: `sum(rate(hubmcp_tool_calls_total{tool="hub_invoke", outcome=~"hub_error:.*|transport_error"}[10m])) / sum(rate(hubmcp_tool_calls_total{tool="hub_invoke"}[10m])) > 0.2` for 10 m (warn).
+
+---
+
+## 15. ISFC identity, tenancy and authorization (F-24, F-25)
+> **Status:** implemented on branch `phase-15/isfc-auth` (EP-15, in review). The admin, edge and sync signals below exist; the two alerts exist in `deploy/alerts/hub.rules.yaml` with unit tests in `deploy/alerts/authz_test.yml` and `isfc_test.yml`, but those tests have not been run (promtool is not installed in the build environment) and nothing has run against a real ISFC. Names were fixed here first so the implementing tickets (HUB-473 to HUB-488) and the feature docs agree. Source: [AUTH_PLAN](AUTH_PLAN.md) §11.
+
+| Signal | Name | Labels / fields |
+| --- | --- | --- |
+| Metric | `hub_admin_authz_duration_ms` | `decision=allow\|deny\|error` |
+| Metric | `hub_admin_authn_failures_total` | `reason=no_token\|bad_signature\|header_mismatch\|no_roles` |
+| Metric | `hub_stage_duration_ms{stage="auth"}` | unchanged; the ISFC credential path is included |
+| Metric | `hub_edge_auth_total` | `method=isfc\|hub_key`, `result=ok\|unauthorized\|forbidden\|bad_request\|not_ready` (tracks the retirement of legacy keys; implemented in HUB-486) |
+| Metric | `hub_isfc_sync_runs_total`, `hub_isfc_sync_failures_total`, `hub_isfc_sync_lag_seconds` | `trigger=event\|tick\|manual` |
+| Metric | `hub_isfc_sync_consecutive_failures` (gauge, HUB-482) | none. Failed runs in a row on the leader; 0 on followers. `hub_isfc_sync_runs_total` also has `result=ok\|partial\|failed`; `hub_isfc_sync_lag_seconds` has no label and is 0 on followers (implemented, HUB-482) |
+| Metric | `hub_isfc_caller_keys` (gauge) | none |
+| Log | `admin.authz` | subject, client, tenant, operation, decision, reason; **no token and no `x-isfc-sub-attrs` dump** |
+| Log | `isfc.sync` | run id, created/updated/disabled counts |
+| Log | `request.received` (audit event, F-08) | adds `caller_client_id`, `isfc_key_id`, key hash; never the key |
+| Trace | span `admin.authz.opa` | `authz.decision=allow\|deny\|error` |
+| Alert | `HubAdminAuthzUnavailable` | OPA errors > 1 % for 5 min (`hub_admin_authz_duration_ms_count{decision="error"}` over all decisions; implemented in HUB-497, rule in `deploy/alerts/hub.rules.yaml`, runbook `docs/runbooks/HubAdminAuthzUnavailable.md`) |
+| Alert | `HubIsfcSyncStale` | `hub_isfc_sync_lag_seconds` > 900 (also fires after 3 failed runs in a row, via `hub_isfc_sync_consecutive_failures`); rule in `deploy/alerts/hub.rules.yaml`, runbook `docs/runbooks/HubIsfcSyncStale.md` (HUB-482) |
+
+- The logger redacts `x-isfc-api-key` and Hydra tokens by value (test required in HUB-476 and HUB-488).
+- `hub_isfc_sync_failures_total` counts failed runs; a failed fetch never disables tenants (ADR-0027).
+- Implemented (HUB-473 to HUB-476): `hub_admin_authz_duration_ms`, `hub_admin_authn_failures_total`, the `admin.authz` log (allow at debug, deny at info, OPA error at warn) and the `admin.authz.opa` span exist in the admin role when `HUB_ADMIN_AUTH_MODE=isfc`. The sync, edge and alert signals are still planned.
+- `hub_admin_authz_duration_ms` is the only per-request cost added on `/admin/v1`; `/v1` gains no OPA or ISFC call (ADR-0028).
+

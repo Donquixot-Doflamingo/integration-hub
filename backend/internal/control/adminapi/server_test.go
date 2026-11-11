@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -14,7 +15,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/testkit/contract"
 )
 
-var allRoles = []Role{RoleAdmin, RoleEditor, RoleViewer, RoleTenantViewer}
+var allRoles = []Role{RoleAdmin, RoleEditor, RoleViewer, RoleTenantAdmin, RoleTenantViewer}
 
 // testServer is a server without collaborators and a dev issuer for tokens.
 func testServer(t *testing.T, d Deps) (*Server, *DevIssuer) {
@@ -76,39 +77,85 @@ func TestRoutesMatchContract(t *testing.T) {
 	}
 }
 
-// TestRBACMatrix: for every registered route and every role, a caller below the operation's role
-// gets 403 FORBIDDEN and one at or above it gets past authorization. Tokenless, expired and
-// foreign tokens get 401.
-func TestRBACMatrix(t *testing.T) {
-	spec := contract.Load(t, "hub-admin.v1.yaml")
+// matrixMode is one way of authenticating the RBAC matrix: the jwt mode (dev issuer tokens) or the
+// ISFC mode (RS256 token + gateway headers + OPA). Both must give the same answers.
+type matrixMode struct {
+	name   string
+	server *Server
+	// as builds a request authenticated as role.
+	as func(t *testing.T, role Role, method, path string) *http.Request
+	// bad lists broken credentials, each of which must be 401 on every route.
+	bad map[string]func(t *testing.T, method, path string) *http.Request
+}
+
+func newReq(t *testing.T, method, path string, body io.Reader) *http.Request {
+	t.Helper()
+	req := httptest.NewRequestWithContext(t.Context(), method, path, body)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return req
+}
+
+func jwtMatrixMode(t *testing.T) matrixMode {
 	s, iss := testServer(t, Deps{})
-	h := s.Handler()
 	other, _ := NewDevIssuer("http://admin.test") // same iss, different key
 	expired, _ := iss.Mint(Principal{Subject: "old", Roles: []Role{RoleAdmin}}, -time.Hour)
 	foreign := token(t, other, RoleAdmin)
-	for _, rt := range s.Routes() {
+	withToken := func(tok string) func(*testing.T, string, string) *http.Request {
+		return func(t *testing.T, method, path string) *http.Request {
+			req := newReq(t, method, path, nil)
+			if tok != "" {
+				req.Header.Set("Authorization", "Bearer "+tok)
+			}
+			return req
+		}
+	}
+	return matrixMode{name: "jwt", server: s,
+		as: func(t *testing.T, role Role, method, path string) *http.Request {
+			req := newReq(t, method, path, strings.NewReader(`{}`))
+			req.Header.Set("Authorization", "Bearer "+token(t, iss, role, "orders-service"))
+			return req
+		},
+		bad: map[string]func(*testing.T, string, string) *http.Request{
+			"no token": withToken(""), "expired": withToken(expired), "foreign key": withToken(foreign), "garbage": withToken("a.b.c"),
+		}}
+}
+
+// TestRBACMatrix: for every registered route and every role, a caller below the operation's role
+// gets 403 FORBIDDEN and one at or above it gets past authorization. Tokenless, expired and
+// foreign tokens get 401. It runs in both admin auth modes (HUB_ADMIN_AUTH_MODE=jwt and isfc).
+func TestRBACMatrix(t *testing.T) {
+	spec := contract.Load(t, "hub-admin.v1.yaml")
+	for _, mode := range []matrixMode{jwtMatrixMode(t), isfcMatrixMode(t, spec)} {
+		t.Run(mode.name, func(t *testing.T) { runRBACMatrix(t, spec, mode) })
+	}
+}
+
+func runRBACMatrix(t *testing.T, spec *contract.Spec, mode matrixMode) {
+	h := mode.server.Handler()
+	routes := mode.server.Routes()
+	if len(routes) != 76 {
+		t.Errorf("%d routes registered, the admin contract has 76 operations", len(routes))
+	}
+	for _, rt := range routes {
 		path := Base + samplePath(rt.Path)
 		for _, role := range allRoles {
-			req := httptest.NewRequestWithContext(t.Context(), rt.Method, path, strings.NewReader(`{}`))
-			req.Header.Set("Authorization", "Bearer "+token(t, iss, role, "orders-service"))
-			req.Header.Set("Content-Type", "application/json")
+			req := mode.as(t, role, rt.Method, path)
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			allowed := Principal{Roles: []Role{role}}.Allows(rt.Role)
 			switch {
 			case !allowed && rec.Code != http.StatusForbidden:
 				t.Errorf("%s as %s: %d, want 403", rt.Op, role, rec.Code)
-			case allowed && (rec.Code == http.StatusForbidden || rec.Code == http.StatusUnauthorized):
+			case allowed && (rec.Code == http.StatusForbidden || rec.Code == http.StatusUnauthorized || rec.Code == http.StatusServiceUnavailable):
 				t.Errorf("%s as %s: %d, want past authorization", rt.Op, role, rec.Code)
 			case !allowed:
 				checkResponse(t, spec, req, rec)
 			}
 		}
-		for name, tok := range map[string]string{"no token": "", "expired": expired, "foreign key": foreign, "garbage": "a.b.c"} {
-			req := httptest.NewRequestWithContext(t.Context(), rt.Method, path, nil)
-			if tok != "" {
-				req.Header.Set("Authorization", "Bearer "+tok)
-			}
+		for name, mk := range mode.bad {
+			req := mk(t, rt.Method, path)
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			if rec.Code != http.StatusUnauthorized {
@@ -152,14 +199,15 @@ func TestMe(t *testing.T) {
 			t.Fatalf("%s: %d %s", role, rec.Code, rec.Body)
 		}
 		wantTenants := 0
-		if role == RoleTenantViewer {
+		if role == RoleTenantViewer || role == RoleTenantAdmin {
 			wantTenants = 1
 		}
 		if len(me.Tenants) != wantTenants {
 			t.Fatalf("%s tenants %v", role, me.Tenants)
 		}
 		has := func(p string) bool { return strings.Contains(strings.Join(me.Permissions, ","), p) }
-		if has("dlq:purge") != (role == RoleAdmin) || has("integrations:publish") != (role == RoleAdmin || role == RoleEditor) {
+		if has("dlq:purge") != (role == RoleAdmin) || has("integrations:publish") != (role == RoleAdmin || role == RoleEditor) ||
+			has("registrar:write") != (role == RoleAdmin || role == RoleTenantAdmin) || has("tenants:sync") != (role == RoleAdmin) {
 			t.Fatalf("%s permissions %v", role, me.Permissions)
 		}
 	}
@@ -235,4 +283,9 @@ func TestCallbackHostAllowlist(t *testing.T) {
 			t.Errorf("%s: %v, want %v", raw, got, want)
 		}
 	}
+}
+
+// newTestLogger logs everything (debug included) as text lines into w.
+func newTestLogger(w io.Writer) *slog.Logger {
+	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }

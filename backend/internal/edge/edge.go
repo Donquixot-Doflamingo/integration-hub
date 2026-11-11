@@ -50,6 +50,12 @@ type Deps struct {
 	// Sessions is the vendor session store (HUB-175). nil: Queueing.DB when queueing is wired;
 	// without either, X-Hub-Session is always SESSION_NOT_FOUND and no session can be opened.
 	Sessions sessions.DB
+	// TenantSourceISFC is HUB_TENANT_SOURCE=isfc: tenants come from ISFC, and a tenant whose
+	// setup is still pending is refused with 401 (AUTH_PLAN §2.1, HUB-480).
+	TenantSourceISFC bool
+	// ISFCKeys enables ISFC backend-client credentials (HUB_EDGE_ISFC_AUTH=on): the in-memory map
+	// of ISFC caller keys (*isfc.KeyMap). nil: x-isfc-api-key is not looked at.
+	ISFCKeys CallerKeys
 	Metrics  *telemetry.Metrics
 	Log      *slog.Logger
 	Now      func() time.Time
@@ -68,6 +74,8 @@ type Server struct {
 	rejections *prometheus.CounterVec
 	log        *slog.Logger
 	metrics    *telemetry.Metrics
+	// counters is hub_edge_auth_total.
+	counters *authCounters
 }
 
 // New builds the gateway server and registers its routes.
@@ -93,7 +101,8 @@ func New(d Deps) *Server {
 	if d.Metrics == nil {
 		d.Metrics = telemetry.NewMetrics("gateway", "test")
 	}
-	s := &Server{mux: http.NewServeMux(), deps: d, log: d.Log.With(slog.String("component", "edge")), metrics: d.Metrics}
+	s := &Server{mux: http.NewServeMux(), deps: d, log: d.Log.With(slog.String("component", "edge")), metrics: d.Metrics,
+		counters: newAuthCounters(d.Metrics.Registry)}
 	s.attempter = &delivery.Attempter{Creds: d.Creds, Upstream: d.Upstream, Breakers: d.Breakers, Limiter: d.Limiter, Log: s.log, Now: d.Now}
 	if d.Limiter != nil {
 		s.rejections = d.Limiter.Rejections()

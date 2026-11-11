@@ -29,8 +29,8 @@ adding a vendor SDK when an integration exists.
    in this conversation (bureau pulls, payments, mandates, penny drop, OTP sends, paid LLM bulk
    jobs). Dry-run first, show what will be sent, ask, then invoke. Same for any irreversible side
    effect (messages to real users).
-2. **Never paste, print or commit API keys.** Read `HUB_API_KEY` from the environment or a secret
-   manager. Do not echo it, do not put it in code, tests, `.mcp.json`, chat or logs. If the user
+2. **Never paste, print or commit API keys or client secrets.** Read `HUB_API_KEY` (or
+   `HUB_ISFC_API_KEY`) from the environment or a secret manager. Do not echo it, do not put it in code, tests, `.mcp.json`, chat or logs. If the user
    pastes a key into chat, tell them to rotate it.
 3. Use fake test data (no real PAN/Aadhaar/phone numbers) unless the user explicitly runs a real call.
 4. `202` is **not** success. Never report a queued request as done.
@@ -42,6 +42,30 @@ export HUB_API_KEY="$(<read from your secret manager>)"          # your tenant k
 ```
 All calls: `Authorization: Bearer $HUB_API_KEY`. Keys are per tenant (service), shown once at
 creation, rotatable. Use a non-production environment for experiments.
+
+**Which credential?** Teams on the company identity platform authenticate their backend service
+with its **ISFC client** (`x-isfc-client-id` + `x-isfc-api-key`, no `Authorization` header). The
+`hk_live_` tenant key above is the **legacy** way: it keeps working, but new teams should not start
+with it. Sending both kinds in one request is a `400`.
+
+### Onboarding a calling team (ISFC)
+1. Your team creates its backend client `<team>-backend` in the identity platform (type
+   `backend_services`).
+2. A Hub admin (or your tenant admin) issues that client a key from `integration-hub` with the
+   `HUB_CALLER` role (`HUB:INVOKE`; optionally `HUB:DRY_RUN` and `HUB:REQUESTS_READ`) and the
+   tenants it may act for.
+3. In the Hub console your tenant admin grants your tenant the integrations it needs. Without a
+   grant, discovery is empty and invokes answer `FORBIDDEN`.
+4. Your service uses the identity platform's auth library (it fetches, caches and refreshes the key),
+   or the Go SDK:
+   ```go
+   c, err := hubclient.New(os.Getenv("HUB_BASE_URL"), "",
+       hubclient.WithISFC(os.Getenv("ISFC_CLIENT_ID"), os.Getenv("ISFC_CLIENT_SECRET"), os.Getenv("ISFC_AUTH_URL")),
+       hubclient.WithTenantID(os.Getenv("HUB_TENANT_ID"))) // only if the key covers several tenants
+   ```
+   By hand: send `x-isfc-client-id: <client id>` and `x-isfc-api-key: <key>`; add
+   `X-Tenant-Id: <tenant uuid>` when your key covers more than one tenant (otherwise the Hub
+   answers `400`). A `401` or `403` after a key rotation means: fetch the key again once and retry.
 
 Prefer the MCP server if it is configured (tools `hub_list_integrations`, `hub_describe_integration`,
 `hub_dry_run`, `hub_invoke`, `hub_get_request`): see `references/mcp-setup.md`. `hub_invoke` takes

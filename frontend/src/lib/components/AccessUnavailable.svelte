@@ -16,4 +16,17 @@
 	title="Your access could not be loaded"
 	summary="The console reads your role from the admin API. Until it answers, nothing role-dependent is shown."
 />
+{#if error.meta?.isfc_error_code === 'GW_015'}
+	<!-- HUB-494: the tenant in use is one the operator has no access to. -->
+	<p class="tenant-hint" role="note">
+		Pick another tenant from the tenant switcher in the top bar.
+	</p>
+{/if}
 <ErrorPanel {error} context="Could not load your access" onretry={invalidateAll} />
+
+<style>
+	.tenant-hint {
+		margin: 0 0 var(--space-3);
+		font-weight: 600;
+	}
+</style>

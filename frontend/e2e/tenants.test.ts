@@ -73,3 +73,40 @@ for (const scheme of ['light', 'dark'] as const) {
 		await expectNoSeriousA11yViolations(page);
 	});
 }
+
+// HUB-485: tenants from ISFC (the contract examples carry an `isfc` block).
+for (const scheme of ['light', 'dark'] as const) {
+	test(`ISFC tenant list and detail are axe-clean in ${scheme}`, async ({ page }) => {
+		await page.emulateMedia({ colorScheme: scheme });
+		await signIn(page, { role: 'admin', next: '/tenants' });
+		await expect(page.getByText('Active in ISFC').first()).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Sync now' })).toBeVisible();
+		await expectNoSeriousA11yViolations(page);
+		await page.goto('/tenants/orders-service');
+		await expect(page.getByRole('region', { name: 'ISFC' })).toContainText('ORDERS');
+		await expectNoSeriousA11yViolations(page);
+	});
+}
+
+test('a tenant admin completes the setup of a pending tenant', async ({ page }) => {
+	await useScenario(page, 'tenant-pending');
+	await signIn(page, {
+		role: 'tenant_admin',
+		tenants: 'orders-service',
+		next: '/tenants/orders-service'
+	});
+	const panel = page.getByRole('region', { name: /Finish setting up this tenant/ });
+	await expect(panel).toBeVisible();
+	await expectNoSeriousA11yViolations(page);
+	await panel.getByRole('button', { name: 'Complete setup' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Complete setup of orders-service' });
+	await dialog.getByLabel(/Reason/).fill('Checked with the orders team, OPS-9');
+	const post = page.waitForRequest(
+		(r) => r.method() === 'POST' && r.url().includes('?/completeSetup')
+	);
+	await dialog.getByRole('button', { name: 'Complete setup' }).click();
+	await post;
+	await expect(
+		page.getByRole('status').filter({ hasText: 'Setup of orders-service is complete' })
+	).toBeVisible();
+});

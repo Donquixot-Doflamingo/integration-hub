@@ -197,7 +197,7 @@ func TestAsyncAcceptThenWorkerDelivers(t *testing.T) {
 	}
 	// Tenant-scoped: another tenant's key sees 404, never 403.
 	other := withTenants(t, devSnapshot(t), &registry.Tenant{Tenant: "growth-team", APIKeys: []registry.APIKey{
-		{KeyID: "k", Hash: HashKey(growthKey), Scopes: []string{"invoke"}, State: "active"}}})
+		{KeyID: "k", Hash: HashKey(growthKey), Scopes: []string{"invoke", "requests_read"}, State: "active"}}})
 	q2 := *q
 	q2.h = New(Deps{Snapshots: staticSnapshots{other}, Queueing: &Queueing{DB: q.db}}).Handler()
 	if code, st := q2.status(t, growthKey, id); code != 404 || st["error"].(map[string]any)["code"] != "REQUEST_NOT_FOUND" {

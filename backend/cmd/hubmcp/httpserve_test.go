@@ -57,18 +57,29 @@ func httpTestServer(t *testing.T, hub *fakeHub, withAdmin bool) *httptest.Server
 	if err != nil {
 		t.Fatal(err)
 	}
-	ha := &httpAuth{newClient: a.newHub, now: time.Now, verified: map[[32]byte]verifiedKey{}}
-	ts := httptest.NewServer(httpHandler(srv, ha, a.log))
+	ha := &httpAuth{newClient: a.newHub, newISFC: a.newISFC, now: time.Now, verified: map[[32]byte]verifiedKey{}}
+	return httpServe(t, httpHandler(srv, ha, a.log))
+}
+
+func httpServe(t *testing.T, h http.Handler) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
 	return ts
 }
 
 func connectHTTP(t *testing.T, endpoint, token string) (*mcp.ClientSession, error) {
 	t.Helper()
-	hc := &http.Client{Transport: http.DefaultTransport}
-	if token != "" {
-		hc.Transport = bearer{token: token, next: http.DefaultTransport}
+	if token == "" {
+		return connectHTTPWith(t, endpoint, http.DefaultTransport)
 	}
+	return connectHTTPWith(t, endpoint, bearer{token: token, next: http.DefaultTransport})
+}
+
+// connectHTTPWith connects through rt, which sets the credential headers.
+func connectHTTPWith(t *testing.T, endpoint string, rt http.RoundTripper) (*mcp.ClientSession, error) {
+	t.Helper()
+	hc := &http.Client{Transport: rt}
 	tr := &mcp.StreamableClientTransport{Endpoint: endpoint, HTTPClient: hc, DisableStandaloneSSE: true, MaxRetries: -1}
 	return mcp.NewClient(&mcp.Implementation{Name: "http-test", Version: "1"}, nil).Connect(t.Context(), tr, nil)
 }
@@ -277,8 +288,8 @@ func TestHTTPConfig(t *testing.T) {
 		{name: "ipv6 loopback", args: []string{"-transport", "http", "-addr", "[::1]:9000"}},
 		{name: "remote without flag", args: []string{"-transport", "http", "-addr", "0.0.0.0:8090"}, wantErr: "-allow-remote"},
 		{name: "remote with flag", args: []string{"-transport", "http", "-addr", "0.0.0.0:8090", "-allow-remote"}},
-		{name: "admin token on loopback", args: []string{"-transport", "http"}, env: map[string]string{"HUB_ADMIN_TOKEN": testAdminToken}},
-		{name: "admin token on a remote listener", args: []string{"-transport", "http", "-addr", "0.0.0.0:8090", "-allow-remote"}, env: map[string]string{"HUB_ADMIN_TOKEN": testAdminToken}, wantErr: "HUB_ADMIN_TOKEN is refused"},
+		{name: "admin token on loopback", args: []string{"-transport", "http"}, env: map[string]string{"HUB_ADMIN_TOKEN": testAdminToken, "HUB_ADMIN_BASE_URL": "http://adm:8081/admin/v1"}},
+		{name: "admin token on a remote listener", args: []string{"-transport", "http", "-addr", "0.0.0.0:8090", "-allow-remote"}, env: map[string]string{"HUB_ADMIN_TOKEN": testAdminToken, "HUB_ADMIN_BASE_URL": "http://adm:8081/admin/v1"}, wantErr: "HUB_ADMIN_TOKEN is refused"},
 		{name: "stdio still needs HUB_API_KEY", args: []string{"-transport", "stdio"}, wantErr: "HUB_API_KEY is required"},
 	}
 	for _, tt := range tests {

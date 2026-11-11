@@ -11,6 +11,10 @@ declare global {
 		interface Locals {
 			/** Verified console session (HUB-253), or null when signed out. Server only. */
 			session: Session | null;
+			/** True when a session cookie came in but did not verify or had expired (HUB-492). */
+			sessionEnded: boolean;
+			/** The session cookie was rewritten during this request (refresh, tenant, end). */
+			sessionDirty?: boolean;
 		}
 		// interface PageData {}
 		// interface PageState {}

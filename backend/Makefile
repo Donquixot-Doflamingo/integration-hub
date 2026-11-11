@@ -2,14 +2,14 @@
 SHELL := /bin/bash
 GO ?= go
 BIN := bin
-CMDS := hub hubctl mockvendor hubmcp hubload
+CMDS := hub hubctl mockvendor hubmcp hubload mockisfc
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GOLANGCI_LINT_VERSION := 2.15.0
 COMPOSE := docker compose -f ../deploy/docker-compose.yml
 export HUB_PG_DSN ?= postgres://hub:hub@localhost:5432/hub?sslmode=disable
 export HUB_REDIS_ADDR ?= localhost:6379
 
-.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check goldens monitoring gosec vuln security load soak latency-budget
+.PHONY: all build test itest lint fmt bench run mockvendor migrate up down doctor tidy clean sqlc sqlc-check goldens monitoring gosec vuln security load soak latency-budget bench-auth
 
 all: lint test build
 
@@ -64,6 +64,12 @@ monitoring: ## Alert rules (promtool check + unit tests) and dashboards query on
 
 bench: ## Benchmarks with allocations
 	$(GO) test -run '^$$' -bench . -benchmem ./...
+
+# HUB-490 (docs/tech/LATENCY.md §7): the auth stage with 10,000 ISFC keys (and 10,000 Hub keys for
+# comparison) must stay under 100 us p99 (DESIGN §18.5/§18.6); the benchmark fails above it. Never
+# with -race.
+bench-auth: ## Auth stage benchmark with 10k ISFC keys (fails above 100 us p99)
+	$(GO) test -run '^$$' -bench 'BenchmarkAuth(ISFC10k|HubKeys10k|Middleware)$$' -benchmem -count=3 ./internal/edge/
 
 load: ## M8 load + soak against local roles and mockvendor (deploy/load/run.sh; HUB_PG_DSN must name a *load* database)
 	../deploy/load/run.sh

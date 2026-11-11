@@ -12,15 +12,17 @@ import {
 } from './roles';
 import { HubApiError } from '$lib/api/errors';
 
-// HUB-253: role guard per role. Hierarchy from hub-admin.v1.yaml: admin ⊃ editor ⊃ viewer ⊃ tenant_viewer.
+// HUB-253: role guard per role. Hierarchy from hub-admin.v1.yaml 2.1.0: admin ⊃ editor ⊃ viewer ⊃
+// tenant_viewer, and admin ⊃ tenant_admin ⊃ tenant_viewer (editor and viewer do not satisfy tenant_admin).
 
-const MINS: Role[] = ['tenant_viewer', 'viewer', 'editor', 'admin'];
+const MINS: Role[] = ['tenant_viewer', 'tenant_admin', 'viewer', 'editor', 'admin'];
 
 describe('hasRole', () => {
 	it.each<{ role: Role; allowed: Role[] }>([
-		{ role: 'admin', allowed: ['tenant_viewer', 'viewer', 'editor', 'admin'] },
+		{ role: 'admin', allowed: ['tenant_viewer', 'tenant_admin', 'viewer', 'editor', 'admin'] },
 		{ role: 'editor', allowed: ['tenant_viewer', 'viewer', 'editor'] },
 		{ role: 'viewer', allowed: ['tenant_viewer', 'viewer'] },
+		{ role: 'tenant_admin', allowed: ['tenant_viewer', 'tenant_admin'] },
 		{ role: 'tenant_viewer', allowed: ['tenant_viewer'] }
 	])('$role meets $allowed', ({ role, allowed }) => {
 		for (const min of MINS)
@@ -39,14 +41,45 @@ describe('hasRole', () => {
 });
 
 describe('accessFromRoles (mutation guard)', () => {
-	it.each<{ role: Role; canMutate: boolean; isAdmin: boolean; tenantScoped: boolean }>([
-		{ role: 'admin', canMutate: true, isAdmin: true, tenantScoped: false },
-		{ role: 'editor', canMutate: true, isAdmin: false, tenantScoped: false },
-		{ role: 'viewer', canMutate: false, isAdmin: false, tenantScoped: false },
-		{ role: 'tenant_viewer', canMutate: false, isAdmin: false, tenantScoped: true }
-	])('$role -> canMutate $canMutate', ({ role, canMutate, isAdmin, tenantScoped }) => {
-		const a = accessFromRoles([role], role === 'tenant_viewer' ? ['orders-service'] : []);
-		expect(a).toMatchObject({ known: true, role, canMutate, isAdmin, tenantScoped });
+	it.each<{
+		role: Role;
+		canMutate: boolean;
+		isAdmin: boolean;
+		tenantScoped: boolean;
+		canSetupTenant: boolean;
+	}>([
+		{ role: 'admin', canMutate: true, isAdmin: true, tenantScoped: false, canSetupTenant: true },
+		{ role: 'editor', canMutate: true, isAdmin: false, tenantScoped: false, canSetupTenant: false },
+		{
+			role: 'viewer',
+			canMutate: false,
+			isAdmin: false,
+			tenantScoped: false,
+			canSetupTenant: false
+		},
+		{
+			role: 'tenant_admin',
+			canMutate: false,
+			isAdmin: false,
+			tenantScoped: true,
+			canSetupTenant: true
+		},
+		{
+			role: 'tenant_viewer',
+			canMutate: false,
+			isAdmin: false,
+			tenantScoped: true,
+			canSetupTenant: false
+		}
+	])('$role -> canMutate $canMutate', ({ role, ...want }) => {
+		const tenantRole = role === 'tenant_viewer' || role === 'tenant_admin';
+		const a = accessFromRoles([role], tenantRole ? ['orders-service'] : []);
+		expect(a).toMatchObject({ known: true, role, ...want });
+	});
+
+	it('a tenant role next to a platform role is not tenant scoped', () => {
+		expect(accessFromRoles(['tenant_admin', 'viewer']).tenantScoped).toBe(false);
+		expect(accessFromRoles([]).tenantScoped).toBe(false);
 	});
 });
 

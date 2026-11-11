@@ -7,9 +7,11 @@
 | Env | Required | Meaning |
 | --- | --- | --- |
 | `HUB_BASE_URL` | yes | Gateway base URL (e.g. `http://localhost:8080`) |
-| `HUB_API_KEY` | yes | Tenant API key. It needs scope `invoke`, and also `dry_run` for `hub_dry_run`. Secret: never logged, never in tool output |
-| `HUB_ADMIN_TOKEN` | no | **The signed-in user's own** OIDC access token, never a shared or service token. Get it from your identity provider (locally: `hubctl login -dev`). If unset, no `hub_admin_*` tool is registered. Secret: never logged, never in tool output |
-| `HUB_ADMIN_BASE_URL` | no | Control-plane URL. Defaults to `HUB_BASE_URL` + `/admin/v1` |
+| `HUB_API_KEY` | one of | Tenant API key. It needs scope `invoke`, and also `dry_run` for `hub_dry_run`. Required unless the ISFC credential below is set (both set: startup error). Secret: never logged, never in tool output |
+| `HUB_ISFC_CLIENT_ID`, `HUB_ISFC_API_KEY` | one of | ISFC backend-client credential, sent as `x-isfc-client-id` and `x-isfc-api-key` on tenant tools (hub-public `isfcS2S`). Set both or neither. The env form is for loopback listeners only; a remote HTTP listener expects callers to send the `x-isfc-*` headers themselves. This is the credential for the streamable-http transport, where a shared server acts for a backend client. The key is a secret: never logged, never in tool output |
+| `HUB_TENANT_ID` | no | ISFC tenant UUID, sent as `X-Tenant-Id`. Needed on tenant tools when the ISFC credential covers several tenants; on `hub_admin_*` calls it picks the ISFC tenant the user acts in. Ignored with `HUB_API_KEY` |
+| `HUB_ADMIN_TOKEN` | no | **The signed-in user's own** access token (OIDC token, or in ISFC mode the user's ISFC JWT), never a shared or service token. Get it from your identity provider (locally: `hubctl login -dev`). If unset, no `hub_admin_*` tool is registered. Secret: never logged, never in tool output |
+| `HUB_ADMIN_BASE_URL` | no | Control-plane URL. Required together with `HUB_ADMIN_TOKEN`, except against a loopback gateway, where it defaults to the local admin port (8081). In ISFC mode set it to the ISFC api-gateway route to the Hub admin API: the admin listener only accepts gateway traffic |
 
 ## Tools
 
@@ -53,7 +55,7 @@ Admin write tools (registered when `HUB_ADMIN_TOKEN` is set **and** the transpor
 | Tool | Maps to (`hub-admin#`) | Method | Min. role | `requires_confirm` |
 | --- | --- | --- | --- | --- |
 | `hub_admin_create_tenant` | `createTenant` | POST | admin | |
-| `hub_admin_update_tenant` | `updateTenant` | PATCH | admin | `live_traffic` |
+| `hub_admin_update_tenant` | `updateTenant` | PATCH | tenant_admin | `live_traffic` |
 | `hub_admin_create_api_key` | `createApiKey` | POST | admin | `mints_secret` (output `/secret` sensitive) |
 | `hub_admin_create_vendor` | `createVendor` | POST | admin | |
 | `hub_admin_update_vendor` | `updateVendor` | PUT | admin | `live_traffic` |
@@ -66,8 +68,8 @@ Admin write tools (registered when `HUB_ADMIN_TOKEN` is set **and** the transpor
 | `hub_admin_publish_integration_version` | `publishIntegrationVersion` | POST | editor | `live_traffic` |
 | `hub_admin_set_integration_weights` | `updateIntegrationWeights` | POST | editor | `live_traffic` |
 | `hub_admin_rollback_integration` | `rollbackIntegration` | POST | editor | `live_traffic` |
-| `hub_admin_create_registrar_endpoint` | `createRegistrarEndpoint` | POST | admin | `mints_secret` (output `/signing_secret` sensitive) |
-| `hub_admin_update_registrar_endpoint` | `updateRegistrarEndpoint` | PATCH | admin | `live_traffic` |
+| `hub_admin_create_registrar_endpoint` | `createRegistrarEndpoint` | POST | tenant_admin | `mints_secret` (output `/signing_secret` sensitive) |
+| `hub_admin_update_registrar_endpoint` | `updateRegistrarEndpoint` | PATCH | tenant_admin | `live_traffic` |
 
 Vendor endpoint versions are immutable. To change an endpoint, call `hub_admin_create_vendor_endpoint` with the same name: it creates `<name>@<n+1>`. Accounts cannot be created through MCP yet, because `createAccount` takes credential values (required for every auth scheme except `none`, hub-admin 2.0.0; see `forbidden_operations`).
 

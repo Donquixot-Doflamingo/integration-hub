@@ -14,6 +14,7 @@ import (
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/isfcsync"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 )
 
@@ -99,6 +100,13 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 		reg.upgradeLegacy(ctx, st.pg)
 	}
 	reg.load(ctx)
+	var isync *isfcSync // the worker's ISFC reconciler (HUB_TENANT_SOURCE=isfc)
+	if cfg.Role == Worker {
+		if isync, err = newISFCSync(cfg, log, secrets, st, reg, isfcsync.NewMetrics(metrics.Registry, nil)); err != nil {
+			_ = tp.Shutdown(ctx)
+			return err
+		}
+	}
 	checks := append(append(st.checks(), reg.check()), opts.ExtraChecks...)
 
 	// ops is last so it is closed last: /readyz answers 503 while the public listener drains.
@@ -106,7 +114,7 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	if cfg.Role.servesPublicHTTP() {
 		h := publicHandler(cfg.Role, dp)
 		if cfg.Role == Admin {
-			if h, err = adminHandler(ctx, cfg, metrics, log, st, reg); err != nil {
+			if h, err = adminHandler(ctx, cfg, metrics, log, secrets, tp, st, reg); err != nil {
 				_ = tp.Shutdown(ctx)
 				return err
 			}
@@ -154,6 +162,12 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	wg.Go(func() { reg.follow(loopCtx) }) // every role follows published snapshots (HUB-171)
 	if cfg.Role == Scheduler {
 		wg.Go(func() { reg.pruneLoop(loopCtx) })
+	}
+	if isync != nil {
+		wg.Go(func() { isync.run(loopCtx, st.rdb) }) // leader-only inside (AUTH_PLAN §6.2)
+	}
+	if dp != nil && dp.isfcKeys != nil {
+		wg.Go(func() { runCallerKeyLoader(loopCtx, st, dp.isfcKeys, log) })
 	}
 	for _, l := range lns {
 		wg.Go(func() {

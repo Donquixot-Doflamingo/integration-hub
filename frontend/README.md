@@ -99,33 +99,61 @@ when a page under `src/routes/(app)/` renders its own `{#await}` instead):
 - `/snapshots`: latest marked from `getLatestSnapshot`; `SnapshotChanges` reads `getSnapshot` when a row is expanded.
   Object links for both screens: `$lib/objects.ts`.
 
-## Auth (HUB-253)
-Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`.
-- Provider per deployment (`src/lib/server/auth/`): **dev** (role picker: admin, editor, viewer, tenant viewer
-  with tenants) in mock builds or with `PUBLIC_AUTH_MODE=dev`; otherwise **OIDC**, a placeholder that reports
-  missing `HUB_OIDC_ISSUER` / `HUB_OIDC_CLIENT_ID` / `HUB_OIDC_REDIRECT_URI` and refuses sign-in until HUB-282.
-- Session: HMAC-signed httpOnly SameSite=Lax cookie, 8 h. Key `HUB_SESSION_SECRET` (32+ chars); dev mode
-  without it uses a random per-process key. No token or session data in web storage. Sign out: `POST /logout`.
+## Auth (HUB-253, HUB-491 to HUB-495)
+Every page under `src/routes/(app)/` needs a session; without one you land on `/login?next=<page>`
+(`/login?expired=1` when the session ended). The model is [AUTH_PLAN §9](../docs/tech/AUTH_PLAN.md): the console is a
+backend-for-frontend, **tokens never reach page JavaScript** ([ADR-0005](../docs/tech/adr/0005-sveltekit-admin-console.md), ADR-0022).
+- `PUBLIC_AUTH_MODE` picks the provider (`src/lib/server/auth/`): **`isfc`** is the real login; **`dev`** (role picker)
+  works only in mock builds (`HUB_API_MOCKING=true`, always `dev`) and when `NODE_ENV=test`. Anything else is refused:
+  `dev` in a deployment stops the server from starting, an unset or unknown mode starts but nobody can sign in.
+- ISFC login: `/login` lists **Email OTP** and **Microsoft** from `GET {ISFC_AUTH}/oauth2/method/integration-hub-console`
+  (nothing else). `POST /login?/start` makes PKCE (S256), `state` and `nonce` and keeps them in the AES-GCM `hub_login`
+  cookie (10 min, path `/auth`); Email OTP then redirects to Hydra. Microsoft needs Hydra's CSRF cookie in the browser,
+  so `lib/auth/microsoft.ts` opens the flow with the server's challenge and goes to Entra. `GET /auth/callback` checks
+  `state`, exchanges the code at `POST {ISFC_AUTH}/oauth2/token` with `x-device-id` and the browser's User-Agent, and
+  sets the session. Errors `AS_FB_21`, `AS_VE_34`, `GW_007`, `GW_015` have their own messages (`lib/auth/isfc-errors.ts`).
+- Session: AES-256-GCM encrypted httpOnly SameSite=Lax cookie (8 h, chunked over 4 KB), key `HUB_SESSION_SECRET` (32+
+  chars); the access token is not readable from the cookie value. The dev picker without a secret uses a random
+  per-process key. A session made by the other provider is not accepted. No token in web storage.
+- Refresh (server side): a minute before expiry, or once after the gateway refuses the token (`GW_002/003/004`),
+  single-flight per refresh token; a 409 from ISFC is retried once after 300 ms. A refused refresh token ends the session
+  (`/login?expired=1`); an ISFC outage does not. Sign out: `POST /logout` calls `POST {ISFC_AUTH}/api/v1/logout`, then
+  clears the cookie whatever ISFC answers.
+- Tenants: the top bar switcher lists `GET {gateway}/auth/oauth2/panels` (platform tenant first); the choice is kept in
+  the session and the admin proxy sends it as `X-Tenant-Id` and adopts the gateway's `X-Isfc-Tenant-Id` when none was
+  sent. Switching reloads every load function and `/me`. Gateway errors (`GW_015`, ...) reach the pages as Hub errors.
+- Settings (server, private): `HUB_ISFC_AUTH_URL` (required), `HUB_ISFC_CLIENT_ID` (default `integration-hub-console`),
+  `HUB_ISFC_REDIRECT_URI` (default `<origin>/auth/callback`), `HUB_ISFC_GATEWAY_URL` (tenant switcher),
+  `HUB_ISFC_PLATFORM_TENANT_ID`, `HUB_SESSION_SECRET`, `HUB_ADMIN_UPSTREAM` (the ISFC gateway route of the Hub admin).
+  Public: `PUBLIC_AUTH_MODE`, optional `PUBLIC_ISFC_ADMIN_URL` (link to change ISFC-owned tenant data).
+- CSP (HUB-499): every page carries a nonce-based Content-Security-Policy (`kit.csp` in `svelte.config.js`); in ISFC mode `src/lib/server/csp.ts` adds the `HUB_ISFC_AUTH_URL` origin to `connect-src` and `form-action`. Inline scripts in `app.html` need `nonce="%sveltekit.nonce%"`.
+- Tests never call a real ISFC or Entra: `src/lib/testing/fake-isfc.ts` is the fake auth-service and gateway.
 - Gating: `/me` (awaited in `(app)/+layout.ts`) gives `data.access`; wrap mutation controls in `RoleGate`
-  (hidden for viewer and tenant viewer, and for everyone when `/me` failed). In mock mode MSW's `/me`
+  (hidden for viewer and tenant viewer, and for everyone when `/me` failed). Roles follow contract 2.1.0:
+  `admin` ⊃ `editor` ⊃ `viewer` ⊃ `tenant_viewer`, `admin` ⊃ `tenant_admin` ⊃ `tenant_viewer`. In mock mode MSW's `/me`
   answers as the identity picked at login.
 
-## Against a running Hub (HUB-286)
-`make dev-up` at the repo root starts the whole stack (see the root [`README.md`](../README.md#run-the-whole-stack-locally-manual-testing)). To point a console you run yourself at a Hub:
+## Against a running Hub (HUB-286, HUB-495)
+`make dev-up` at the repo root starts the whole stack (see the root [`README.md`](../README.md#run-the-whole-stack-locally-manual-testing)). To point a console you run yourself at a Hub with ISFC:
 
 ```bash
-PUBLIC_AUTH_MODE=dev \
-HUB_DEV_OIDC_ISSUER=http://127.0.0.1:8081 \
-HUB_ADMIN_UPSTREAM=http://127.0.0.1:8081 \
+PUBLIC_AUTH_MODE=isfc \
+HUB_ISFC_AUTH_URL=https://auth.isfc.example \
+HUB_ISFC_GATEWAY_URL=https://gateway.isfc.example \
+HUB_SESSION_SECRET="$(openssl rand -base64 32)" \
+HUB_ADMIN_UPSTREAM=https://gateway.isfc.example/hub \
 npm run dev
 ```
 
+The dev role picker against a local Hub (`PUBLIC_AUTH_MODE=dev` with `HUB_DEV_OIDC_ISSUER`) now needs `NODE_ENV=test`
+(it is refused otherwise, HUB-495); `scripts/dev-up.sh` is owned outside the console and sets neither yet.
+
 - `HUB_ADMIN_UPSTREAM`: the console server proxies `/admin/v1/**` there and adds the session's bearer token, so the
   token never reaches browser JavaScript ([ADR-0022](../docs/tech/adr/0022-console-same-origin-admin-proxy.md),
-  `src/lib/server/admin-proxy.ts`). Only contract headers pass each way; cross-origin mutations are refused. Unset,
-  `/admin/v1` must be routed to the admin server by whatever is in front of the console.
-- `HUB_DEV_OIDC_ISSUER`: dev sign-in asks the admin's dev OIDC issuer (`hub admin -admin-dev-oidc`) for a token with the
-  picked role and tenants. Never set in production; real OIDC is HUB-282.
+  `src/lib/server/admin-proxy.ts`). Only contract headers pass each way (plus `X-Tenant-Id` from the session); cross-origin
+  mutations are refused. Unset, `/admin/v1` must be routed to the admin server by whatever is in front of the console.
+- `HUB_DEV_OIDC_ISSUER` (dev picker only, mock builds and tests): asks the admin's dev OIDC issuer
+  (`hub admin -admin-dev-oidc`) for a token with the picked role and tenants. Never set in production.
 - Which controls render follows the contract: `RoleGate op="purgeDeadLetters"` / `can(access, op)` read the minimum
   role from `src/lib/api/roles.gen.ts`, generated from each operation's `x-required-role` (HUB-288). A role that cannot
   call an operation does not see its control at all.

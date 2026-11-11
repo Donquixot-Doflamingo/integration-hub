@@ -5,20 +5,48 @@ import type { Me, Role } from '$lib/api/types';
 export type { OperationId };
 
 /**
- * Role model from hub-admin.v1.yaml: `admin` ⊃ `editor` ⊃ `viewer`; `tenant_viewer` is a viewer
- * restricted to the tenants in its token. Each operation declares its minimum role in
- * `x-required-role` (generated into `roles.gen.ts`). The UI does not render what a role cannot do
+ * Role model from hub-admin.v1.yaml (2.1.0): `admin` ⊃ `editor` ⊃ `viewer` ⊃ `tenant_viewer`, and
+ * `admin` ⊃ `tenant_admin` ⊃ `tenant_viewer`. `tenant_viewer` is a viewer restricted to the tenants
+ * in its token; `tenant_admin` is a tenant viewer that may also finish the setup of its own
+ * tenant. `editor` and `viewer` do NOT satisfy `tenant_admin`. Each operation declares its
+ * minimum role in `x-required-role` (generated into `roles.gen.ts`). The UI does not render what a role cannot do
  * (`can`, `RoleGate op=`); the API's 403 stays the truth.
  */
-export const ROLES: readonly Role[] = ['admin', 'editor', 'viewer', 'tenant_viewer'];
+export const ROLES: readonly Role[] = [
+	'admin',
+	'editor',
+	'viewer',
+	'tenant_viewer',
+	'tenant_admin'
+];
 
-const RANK: Record<Role, number> = { tenant_viewer: 0, viewer: 1, editor: 2, admin: 3 };
+/** Which roles each role satisfies (itself included). The hierarchy is a lattice, not a ladder. */
+const SATISFIES: Record<Role, readonly Role[]> = {
+	admin: ['admin', 'editor', 'viewer', 'tenant_admin', 'tenant_viewer'],
+	editor: ['editor', 'viewer', 'tenant_viewer'],
+	viewer: ['viewer', 'tenant_viewer'],
+	tenant_admin: ['tenant_admin', 'tenant_viewer'],
+	tenant_viewer: ['tenant_viewer']
+};
+
+/** Display order only (labels): the "strongest" role a user holds. Not used for access checks. */
+const RANK: Record<Role, number> = {
+	tenant_viewer: 0,
+	tenant_admin: 1,
+	viewer: 2,
+	editor: 3,
+	admin: 4
+};
+
+/** Roles whose holders see every tenant. The tenant roles are limited to the token's tenants. */
+const PLATFORM_ROLES: readonly Role[] = ['admin', 'editor', 'viewer'];
 
 export const roleLabels: Record<Role, string> = {
 	admin: 'Admin',
 	editor: 'Editor',
 	viewer: 'Viewer',
-	tenant_viewer: 'Tenant viewer'
+	tenant_viewer: 'Tenant viewer',
+	tenant_admin: 'Tenant admin'
 };
 
 /** What each role may do, in the operator's words (login picker, user menu). */
@@ -26,16 +54,17 @@ export const roleSummaries: Record<Role, string> = {
 	admin: 'Everything, including tenants, API keys and breaker force.',
 	editor: 'Publish, roll back, set weights, pause and replay dead letters.',
 	viewer: 'Read everything. No changes.',
-	tenant_viewer: 'Read only, limited to your own tenants.'
+	tenant_viewer: 'Read only, limited to your own tenants.',
+	tenant_admin: 'Your own tenants: read, and finish their setup (rate limit, callback endpoints).'
 };
 
 export function isRole(value: unknown): value is Role {
 	return typeof value === 'string' && (ROLES as readonly string[]).includes(value);
 }
 
-/** True when any of `roles` is at least `min` in the hierarchy. */
+/** True when any of `roles` satisfies `min` in the hierarchy. */
 export function hasRole(roles: readonly Role[], min: Role): boolean {
-	return roles.some((r) => RANK[r] >= RANK[min]);
+	return roles.some((r) => SATISFIES[r].includes(min));
 }
 
 /** The highest role held, or null for none. */
@@ -59,8 +88,10 @@ export interface Access {
 	canMutate: boolean;
 	/** Can run admin-only mutations (tenants, API keys, breaker force). */
 	isAdmin: boolean;
-	/** Only `tenant_viewer`: results are filtered to `tenants`, no vendor/account filters. */
+	/** Only tenant roles (`tenant_viewer`, `tenant_admin`): results are filtered to `tenants`. */
 	tenantScoped: boolean;
+	/** Holds `tenant_admin` (or `admin`): may finish the setup of tenants in scope. */
+	canSetupTenant: boolean;
 }
 
 export function accessFromRoles(roles: readonly Role[], tenants: readonly string[] = []): Access {
@@ -72,7 +103,8 @@ export function accessFromRoles(roles: readonly Role[], tenants: readonly string
 		role,
 		canMutate: hasRole(roles, 'editor'),
 		isAdmin: hasRole(roles, 'admin'),
-		tenantScoped: role === 'tenant_viewer'
+		tenantScoped: roles.length > 0 && !roles.some((r) => PLATFORM_ROLES.includes(r)),
+		canSetupTenant: hasRole(roles, 'tenant_admin')
 	};
 }
 
@@ -87,7 +119,8 @@ export const NO_ACCESS: Access = {
 	role: null,
 	canMutate: false,
 	isAdmin: false,
-	tenantScoped: false
+	tenantScoped: false,
+	canSetupTenant: false
 };
 
 export function accessFromMe(me: ApiResult<Me>): Access {

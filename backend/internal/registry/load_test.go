@@ -177,3 +177,59 @@ func TestLoadMissingDirectoriesAreEmpty(t *testing.T) {
 		t.Fatalf("empty config: %v %+v", err, c)
 	}
 }
+
+func TestLoadTenantISFCFields(t *testing.T) {
+	const id = "6f1c0b2e-3a4d-4c5e-8f60-1a2b3c4d5e6f"
+	linked := "tenant: hl-t\nsetup: pending\nisfc_caller_clients: [billing-backend]\nisfc:\n  tenant_id: " + id +
+		"\n  key: HL\n  name: Home Loans\n  status: ACTIVE\n  linked: true\n  synced_at: 2026-11-11T10:00:00Z\napi_keys: []\n"
+	t.Run("old yaml loads unchanged", func(t *testing.T) {
+		c := mustLoad(t, validFiles)
+		for id, tn := range c.Tenants {
+			if tn.ISFC != nil || tn.Setup != "" || tn.SetupState() != SetupComplete || tn.ISFCCallerClients != nil {
+				t.Errorf("tenant %s gained ISFC fields: %+v", id, tn)
+			}
+		}
+	})
+	t.Run("isfc block loads", func(t *testing.T) {
+		c := mustLoad(t, files(map[string]string{"tenants/hl-t.yaml": linked}))
+		tn := c.Tenants["hl-t"]
+		if tn.SetupState() != SetupPending || tn.ISFC == nil || tn.ISFC.Key != "HL" || !tn.ISFC.Linked ||
+			tn.ISFC.SyncedAt == nil || tn.ISFCCallerClients[0] != "billing-backend" {
+			t.Fatalf("tenant %+v isfc %+v", tn, tn.ISFC)
+		}
+	})
+	tests := []struct{ name, doc, want string }{
+		{"bad setup", "tenant: hl-t\nsetup: done\n", "setup: must be pending or complete"},
+		{"bad uuid", "tenant: hl-t\nisfc: { tenant_id: nope, key: HL, name: x, status: ACTIVE, linked: true }\n", "isfc.tenant_id: must be an ISFC tenant UUID"},
+		{"no key", "tenant: hl-t\nisfc: { tenant_id: " + id + ", name: x, status: ACTIVE, linked: true }\n", "isfc.key: required"},
+		{"bad status", "tenant: hl-t\nisfc: { tenant_id: " + id + ", key: HL, name: x, status: GONE, linked: true }\n", "isfc.status: must be ACTIVE or INACTIVE"},
+		{"empty caller client", "tenant: hl-t\nisfc_caller_clients: ['']\n", "isfc_caller_clients[0]: must not be empty"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Load(sources(t, files(map[string]string{"tenants/hl-t.yaml": tt.doc})))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("want %q, got %v", tt.want, err)
+			}
+		})
+	}
+	t.Run("same ISFC tenant on two Hub tenants", func(t *testing.T) {
+		other := strings.Replace(linked, "tenant: hl-t", "tenant: hl-t-2", 1)
+		_, err := Load(sources(t, files(map[string]string{"tenants/hl-t.yaml": linked, "tenants/hl-t-2.yaml": other})))
+		if err == nil || !strings.Contains(err.Error(), "already linked to Hub tenant") {
+			t.Fatalf("got %v", err)
+		}
+	})
+}
+
+func TestSnapshotIndexesTenantsByISFCID(t *testing.T) {
+	const id = "6F1C0B2E-3A4D-4C5E-8F60-1A2B3C4D5E6F"
+	doc := "tenant: hl-t\nisfc: { tenant_id: " + id + ", key: HL, name: Home Loans, status: ACTIVE, linked: true }\n"
+	s := build(t, files(map[string]string{"tenants/hl-t.yaml": doc}))
+	if tn, ok := s.TenantByISFC(strings.ToLower(id)); !ok || tn.Tenant != "hl-t" {
+		t.Fatalf("TenantByISFC: %v %v", tn, ok)
+	}
+	if _, ok := s.TenantByISFC("00000000-0000-0000-0000-000000000000"); ok {
+		t.Fatal("unknown id found")
+	}
+}

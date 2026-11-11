@@ -8,6 +8,7 @@
 	import Breadcrumbs from '$lib/components/Breadcrumbs.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import SideNav from '$lib/components/SideNav.svelte';
+	import TenantSwitcher from '$lib/components/TenantSwitcher.svelte';
 	import ThemeSwitch from '$lib/components/ThemeSwitch.svelte';
 	import UserMenu from '$lib/components/UserMenu.svelte';
 	import type { LayoutData } from './$types';
@@ -82,6 +83,14 @@
 		</button>
 		<Breadcrumbs pathname={page.url.pathname} />
 		<div class="tools">
+			{#if data.tenantSwitcher}
+				<TenantSwitcher
+					choices={data.tenantSwitcher.choices}
+					currentId={data.tenantSwitcher.currentId}
+					error={data.tenantSwitcher.error}
+					next={page.url.pathname + page.url.search}
+				/>
+			{/if}
 			<ThemeSwitch />
 			<UserMenu
 				me={data.me}

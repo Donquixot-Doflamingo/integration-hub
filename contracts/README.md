@@ -6,17 +6,17 @@ The documents here are the **only** interface between the backend (Go), the admi
 
 | Path | What | Version |
 | --- | --- | --- |
-| `openapi/hub-public.v1.yaml` | **Caller API**: invoke (with pass-through), request status, discovery (operations with their request schemas), dry-run, inbound vendor webhooks (internal), hand-off return (planned), health, and the outbound callbacks (`webhooks:`) | 2.0.0 |
-| `openapi/hub-admin.v1.yaml` | **Control plane** `/admin/v1`: vendors and endpoints (with request schemas), accounts, transformers (with samples), integrations (operations and request schemas in versions), tenants, api-keys, registrar endpoints, snapshots, requests, DLQ, breakers, change log, `me` | 2.0.0 |
+| `openapi/hub-public.v1.yaml` | **Caller API**: invoke (with pass-through), request status, discovery (operations with their request schemas), dry-run, inbound vendor webhooks (internal), hand-off return (planned), health, and the outbound callbacks (`webhooks:`) | 2.1.0 |
+| `openapi/hub-admin.v1.yaml` | **Control plane** `/admin/v1`: vendors and endpoints (with request schemas), accounts, transformers (with samples), integrations (operations and request schemas in versions), tenants, api-keys, registrar endpoints, snapshots, requests, DLQ, breakers, change log, `me` | 2.1.0 |
 | `openapi/mockvendor.v1.yaml` | Control API of `cmd/mockvendor` (test double for every vendor) | 1.0.0 |
 | `schemas/events/` | Outbound callback payloads (`envelope.json`, `request.completed.json`, `request.failed.json`, `request.expired.json`, `delivery.status.json`) and `canonical-error.json`, the canonical error object shared with the public spec | with hub-public |
-| `mcp/hubmcp-tools.json`, `mcp/README.md` | MCP tool contract for `hubmcp` | 2.0.0 |
+| `mcp/hubmcp-tools.json`, `mcp/README.md` | MCP tool contract for `hubmcp` | 2.1.0 |
 | `CHANGELOG.md` | Contract version history | |
 | `notices/` | Contract notices to backend and frontend, one file per round (`docs/process/CONTRACT_CHANGES.md` §6) | |
 | `tools/` | `make contracts-check` toolchain (pinned Redocly CLI + ajv, `check.mjs`, `version-check.mjs`), see "Validate locally" | |
 | `AGENTS.md` | Rules for editing this folder | |
 
-Operation counts: hub-public **14** (10 operations on paths + 4 webhooks), hub-admin **74**, mockvendor **10**, MCP **41 tools** (5 tenant, 20 admin read, 16 admin write; since hubmcp-tools 2.0.0).
+Operation counts: hub-public **14** (10 operations on paths + 4 webhooks), hub-admin **76**, mockvendor **10**, MCP **41 tools** (5 tenant, 20 admin read, 16 admin write; since hubmcp-tools 2.0.0).
 
 ## Freeze policy
 
@@ -85,7 +85,7 @@ Since 2.0.0 (ADR-0023) the schemas live in the registry, not in this folder:
 | --- | --- | --- | --- | --- |
 | `VALIDATION_FAILED` | 400 | no | DESIGN §4.4 | Body or declared caller header fails the operation's `request_schema` (only when `validate_input` is on; `details[].pointer`), bad params |
 | `IDEMPOTENCY_KEY_REQUIRED` | 400 | no | **added** | Integration has `moves_money_or_quota` and no `Idempotency-Key` was sent |
-| `UNAUTHORIZED` | 401 | no | §4.4 | Bad or missing key, or bad inbound-webhook signature |
+| `UNAUTHORIZED` | 401 | no | §4.4 | Bad or missing key (tenant API key, or ISFC `x-isfc-api-key` + `x-isfc-client-id`), tenant not set up or disabled, or bad inbound-webhook signature |
 | `FORBIDDEN` | 403 | no | §4.4 | Not owner or grantee (`reason: not_granted`), missing scope (`reason: missing_scope`) |
 | `INTEGRATION_NOT_FOUND` | 404 | no | §4.4 | Unknown integration (also unknown inbound-webhook route) |
 | `OPERATION_NOT_FOUND` | 404 | no | **added** | The integration declares no such `{operation}` |
@@ -112,7 +112,7 @@ Pass-through (since 2.0.0): an operation without a response transformer returns 
 | Code | HTTP | When |
 | --- | --- | --- |
 | `VALIDATION_FAILED` | 400 | Bad body or params (including missing `reason`, SSRF-guard rejection) |
-| `UNAUTHORIZED` | 401 | Missing or expired OIDC token |
+| `UNAUTHORIZED` | 401 | Missing or expired token, or bad ISFC API key |
 | `FORBIDDEN` | 403 | Role below `x-required-role`, or outside the tenant_viewer scope |
 | `NOT_FOUND` | 404 | Object missing or not visible |
 | `CONFLICT` | 409 | Already exists, `expected_*` mismatch, invalid transition, object in use, draft already exists |
@@ -120,14 +120,18 @@ Pass-through (since 2.0.0): an operation without a response transformer returns 
 | `PRECONDITION_FAILED` | 412 | `If-Match` mismatch |
 | `PUBLISH_VALIDATION_FAILED` | 422 | Publish or transformer-version validation failed. `meta.report` holds the report; sample checks (`goldens_pass`, `endpoint_schema`, `input_schema`) name the `sample` and the `field` (JSON pointer) |
 | `RATE_LIMITED` | 429 | Admin API throttling (reserved, with `retry_after_ms`) |
+| `tenant_managed_by_isfc` | 409 | `createTenant` in ISFC mode: tenants come from ISFC (since hub-admin 2.1.0) |
 | `INTERNAL_ERROR` | 500 | Unexpected |
+| `authz_unavailable` | 503 | The authorization engine could not decide in time; the request is refused (fail closed), retryable (since hub-admin 2.1.0) |
 
 ### Mockvendor
 `VALIDATION_FAILED` (400), `NOT_FOUND` (404), `INTERNAL_ERROR` (500). Same envelope shape, but without `request_id`.
 
 ## RBAC (admin)
 
-`x-required-role` on each operation is the **minimum** role. `admin` ⊃ `editor` ⊃ `viewer`. `tenant_viewer` is `viewer` limited to the tenants in the token's `hub_tenants` claim. `editor` covers transformers, integration drafts, publish, rollback, weights, pause/resume, test-connection and DLQ replay. `admin` covers vendors, accounts, credentials, lifecycle, tenants, API keys, registrar endpoints, breaker force, DLQ purge and unseal.
+`x-required-role` on each operation is the **minimum** role. `admin` ⊃ `editor` ⊃ `viewer`, and `admin` ⊃ `tenant_admin` ⊃ `tenant_viewer` (since 2.1.0; `editor` and `viewer` do not include `tenant_admin`, so today's matrix is unchanged). `tenant_admin` is a tenant-scoped user who finishes the setup of their own tenant: `updateTenant` (display fields, rate limit, `setup: complete`, not `disabled`) and the registrar (callback) endpoint operations.
+
+Since 2.1.0 every operation also carries `x-required-permission`, the ISFC permission the gateway policy checks. Roles bundle permissions exactly as the role matrix did (`docs/tech/AUTH_PLAN.md` §7.4). `check.mjs` fails an operation whose value is not in the catalogue: `HUB_VENDOR:READ|ADMIN`, `HUB_ACCOUNT:READ|TEST|ADMIN`, `HUB_TRANSFORMER:READ|WRITE`, `HUB_INTEGRATION:READ|WRITE`, `HUB_TENANT:READ|SETUP|ADMIN`, `HUB_REQUEST:READ|UNSEAL`, `HUB_DLQ:READ|REPLAY|PURGE`, `HUB_BREAKER:READ|ADMIN`, `HUB_PLATFORM:READ`, and `none` (`getMe`: any authenticated principal). The role check stays as a second layer, so a permission that a tenant role also holds (for example `HUB_TENANT:READ` on `listTenants`) does not widen access: the role still decides. `tenant_viewer` is `viewer` limited to the tenants in the token's `hub_tenants` claim. `editor` covers transformers, integration drafts, publish, rollback, weights, pause/resume, test-connection and DLQ replay. `admin` covers vendors, accounts, credentials, lifecycle, tenants, API keys, registrar endpoints, breaker force, DLQ purge and unseal.
 
 ## Validate locally
 

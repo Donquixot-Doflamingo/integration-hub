@@ -48,7 +48,7 @@ const contractOps = Object.entries(
 
 describe('contract mocks', () => {
 	it('cover every admin operation in the contract', () => {
-		expect(contractOps).toHaveLength(74);
+		expect(contractOps).toHaveLength(76);
 		expect([...operationIds].sort()).toEqual([...contractOps].sort());
 	});
 

@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | Status | Phase 1 (plan); HUB-234 hardening checks in CI and tests |
-| Date | 2026-10-31 (updated 2026-11-07, HUB-234) |
+| Date | 2026-10-31 (updated 2026-11-07, HUB-234; 2026-11-11, HUB-468) |
 | Behaviour source | DESIGN §9 (credentials), §12 (webhooks), §13.2 (payload policies), §16.1 (RBAC), §16.5 (security) |
 
 ## 1. Assets and trust boundaries
@@ -17,6 +17,7 @@
 | Masked/full payloads in the audit trail | high (PII) |
 | Registry config (transformers, integrations) | high (integrity: controls where data goes) |
 | Admin identity (OIDC tokens), console session cookies | high |
+| ISFC caller API keys (planned, EP-15; plaintext in ISFC, hashed by the Hub on read) | critical |
 
 ```mermaid
 flowchart LR
@@ -39,10 +40,21 @@ flowchart LR
   VEN -- "B2 inbound webhooks (signed)" --> GW
   GW & WK -- "B3 egress allowlist, TLS 1.2+" --> VEN
   WK -- "B4 signed callbacks, SSRF guard" --> TEN
-  OPS -- "B5 OIDC" --> CON --> ADM
+  OPS -- "B5 OIDC (dev issuer today; ISFC login planned, EP-15)" --> CON --> ADM
   MCPC -- "B6 tenant key / admin token" --> HM --> GW & ADM
   GW & WK & SCH & ADM -- "B7 service creds" --> DB & RD & KMS & OBJ
 ```
+
+### 1.1 Trust boundaries added by EP-15 (planned, not built)
+Source: [AUTH_PLAN](AUTH_PLAN.md) §4, §7, §8; [ADR-0026](adr/0026-isfc-identity-and-per-operation-admin-policies.md), [ADR-0028](adr/0028-caller-auth-with-isfc-backend-clients-checked-in-memory.md). Today only the existing boundaries above apply.
+
+| Boundary | Crossing | Trust rule |
+| --- | --- | --- |
+| B8: ISFC gateway → `hub admin` | Console and human requests arrive with a Hydra JWT plus `x-isfc-*` headers | The admin listener accepts them only from the gateway (network policy, HUB-497) **and** with a JWT the Hub verified itself (signature against Hydra JWKS, `iss`, `exp`, `nbf`). `sub` must equal `x-isfc-sub-id`, `client_id` must equal `x-isfc-client-id` and the console client id. Headers without a valid token are 401 (gap G5: ISFC's own sidecar trusts them) |
+| B9: automation → `hub admin` | CI, hubctl, hubmcp (HTTP) call directly with `x-isfc-client-id` + `x-isfc-api-key` | OPA checks the key; machine principal `client:<id>`; refused for `unsealRequest` and `purgeDlq` (D7) |
+| B10: `hub admin` → OPA sidecar | `POST /v1/data/integrationhub/decision` per admin call | Fail closed: deny 403, error or timeout 503 `authz_unavailable`. Not used on `/v1` |
+| B11: Hub worker → ISFC auth-service | Reconciler reads tenants, client metadata, client configuration with its own S2S key (`TENANT:READ`, `CLIENT:READ`, ISFC-CR-5) | Read-only; failures keep the last good state and never disable tenants; keys are hashed the moment they are read |
+| B12: caller → `hub gateway` with ISFC credentials | `x-isfc-client-id` + `x-isfc-api-key` on `/v1` | In-memory hashed lookup, no network hop, no OPA, no ISFC call on the request path |
 
 ## 2. Threat model (STRIDE-lite)
 
@@ -58,17 +70,23 @@ flowchart LR
 | Replay of side-effecting calls | T | `Idempotency-Key` mandatory for integrations with `moves_money_or_quota: true` (DESIGN §4.2), enforced at the edge with 400 `IDEMPOTENCY_KEY_REQUIRED` |
 | Request smuggling | T | single HTTP parser (Go), ingress normalises; reject ambiguous `Content-Length`/`Transfer-Encoding` |
 | Repudiation of calls | R | audit `request.received` with tenant key hash + key id |
+| ISFC API keys are plaintext in ISFC and in its OPA bundle (planned, EP-15; G4) | I | The Hub hashes with `registry.HashKey` the moment a key is read and never stores or logs plaintext; logger redacts `x-isfc-api-key` by value; ISFC-CR-4 asks for `key_sha256` so the Hub never receives plaintext |
+| ISFC key revoked but still accepted (planned; G15) | E | Revocation takes effect within `HUB_ISFC_RECONCILE_INTERVAL` (default 5 min) without ISFC events, within seconds once ISFC-CR-2 lands; "Sync now" forces it. Slower than `hk_` keys (≤ 10 s with the snapshot). Documented trade-off (ADR-0028) |
 
 ### 2.2 Admin plane (`/admin/v1`, console, hubctl, B5)
 | Threat | STRIDE | Mitigation |
 | --- | --- | --- |
 | Unauthorised config change redirects data to an attacker host | T/E | RBAC (§7), egress allowlist is part of vendor definitions and itself an admin-only change; publish validation; every mutation in `change_log` with before/after/reason |
-| Token theft from the browser | S | BFF pattern: tokens only server-side in the SvelteKit session (TECH_SPEC §17.3); `HttpOnly`, `Secure`, `SameSite=Lax`; CSRF protection on form actions (SvelteKit origin check); the console server proxies `/admin/v1` and adds the session's token itself, forwarding only contract headers and refusing cross-origin mutations (ADR-0022); its answers carry `cache-control: no-store` unless the API set one, so admin data is not kept in the browser cache (HUB-290) |
+| Token theft from the browser | S | BFF pattern: tokens only server-side in the SvelteKit session (TECH_SPEC §17.3); today the session cookie is HMAC-signed, **not encrypted** (gap G14, HUB-282; AES-GCM planned in HUB-492); `HttpOnly`, `Secure`, `SameSite=Lax`; CSRF protection on form actions (SvelteKit origin check); the console server proxies `/admin/v1` and adds the session's token itself, forwarding only contract headers and refusing cross-origin mutations (ADR-0022); its answers carry `cache-control: no-store` unless the API set one, so admin data is not kept in the browser cache (HUB-290) |
 | Over-broad unseal | I | `admin` only, mandatory reason, audited as an event on the request and in `change_log`; rate-limited; alert on unseal volume |
-| CSRF/XSS in console | T | Svelte auto-escaping, strict CSP (`default-src 'self'`), no `{@html}` with API data; transformer YAML shown in a code viewer, never rendered as HTML |
+| CSRF/XSS in console | T | Svelte auto-escaping, no `{@html}` with API data; a strict nonce-based CSP on every page (HUB-499, gap G12): `default-src 'self'`, `script-src 'self'` plus SvelteKit's per-request nonces (no `unsafe-inline`, no `unsafe-eval`), `style-src 'self'` (inline `style=""` attributes only via `style-src-attr`), `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, and in ISFC mode `connect-src` and `form-action` also allow the `HUB_ISFC_AUTH_URL` origin (the Microsoft step fetches Hydra's flow token from the browser; the login form's 303 to Hydra is checked against `form-action`); set by `kit.csp` in `frontend/svelte.config.js` and `src/lib/server/csp.ts`, with a Playwright check that pages raise no violation; transformer YAML shown in a code viewer, never rendered as HTML |
 | Credentials typed in the console (HUB-291) | I | Account credentials are write-only: password inputs, cleared from page state as soon as the form is submitted (whatever the outcome), posted only to the console's own form action (JavaScript-enhanced submissions only, so no resubmittable plain POST), passed to `createAccount` / `addNextCredential` and never returned; any error text that echoes a submitted value is replaced by `[redacted]` before it reaches the browser (`scrubSecrets`); nothing is logged. The API returns only slot metadata (version, fingerprint, dates) |
 | Insider replays DLQ to a changed transformer | T | replay requires `editor`+, recorded in `change_log`, replay re-resolves through the published (validated) version only |
 | Node impersonation fetching snapshots | S/I | node service credential for `/admin/v1/snapshots/*` (TECH_SPEC §22.6); snapshots contain no secrets |
+| Forged `x-isfc-*` headers reach the admin listener (planned, EP-15; G5) | S/E | JWT verified by the Hub, token/header cross-check, network policy to the gateway (HUB-497); metric `hub_admin_authn_failures_total{reason}` |
+| ISFC platform admin silently becomes Hub admin (planned; G7) | E | Hub `entry.rego` drops ISFC's `ISFC_ADMIN` shortcut (D6); a Hub role is needed in the platform tenant |
+| Weak Microsoft id_token check in ISFC auth-service (planned; G6) | S | Microsoft SSO is built but enabled in production only after ISFC-CR-4 (D9) |
+| OPA unavailable or bypassed (planned) | E/D | Fail closed (503 `authz_unavailable`); `HUB_OPA_DISABLED=true` refused unless `HUB_ENV=test`; in-process `x-required-role` check kept as a second layer |
 
 ### 2.3 Webhooks in (B2) and out (B4)
 | Threat | STRIDE | Mitigation |
@@ -158,35 +176,54 @@ stateDiagram-v2
 - Rotation overlap default 7 days; alerts on keys unused for 90 days.
 
 ## 7. RBAC matrix (`/admin/v1`, DESIGN §16.1)
-Legend: **R** read · **W** create/update · **X** execute action · — denied. `tenant_viewer` sees only objects owned by (or granted to) their tenant and never vendor credentials.
+This matrix is **derived from the contract**: the minimum role of each operation is its `x-required-role` in `contracts/openapi/hub-admin.v1.yaml`, and `TestRBACMatrix` (`backend/internal/control/adminapi/server_test.go`) proves every route against every role (and 401 for no, expired, foreign and garbage tokens), while `TestRoutesMatchContract` checks that route, method and role equal the contract. Ranks: `admin` ⊃ `editor` ⊃ `viewer` ⊃ `tenant_viewer`; a principal holds its highest role. 74 operations: 17 `tenant_viewer`, 19 `viewer`, 15 `editor`, 23 `admin`.
 
-| Resource / action | admin | editor | viewer | tenant_viewer |
+Legend: **R** read · **W** create/update · **X** execute action · — denied. `tenant_viewer` sees only objects owned by (or granted to) their tenant (404 otherwise) and never vendor credentials.
+
+| Resource / operations | admin | editor | viewer | tenant_viewer |
 | --- | --- | --- | --- | --- |
-| vendors | R W | R W | R | — |
-| accounts (metadata) | R W | R W | R | — |
-| accounts: test-connection | X | X | — | — |
-| accounts: rotate credentials / promote `next` | X | — | — | — |
-| accounts: lifecycle (drain, retire) | X | — | — | — |
-| transformers | R W | R W | R | — |
-| transformers: dry-run, run samples | X | X | X | — |
-| integrations, versions, diff | R W | R W | R | R (own) |
-| integrations: publish, rollback, weights | X | X | — | — |
-| integrations: pause / resume | X | X | — | — |
-| tenants | R W | R | R | R (own) |
-| api-keys: create, rotate, revoke | X | X (non-own tenants require admin) | — | — |
-| api-keys: list (metadata) | R | R | R | R (own) |
-| registrar-endpoints | R W | R W | R | R (own) |
-| snapshots | R | R | R | — |
-| requests: search, timeline (policy-filtered) | R | R | R | R (own) |
-| requests: unseal | X (reason required) | — | — | — |
-| dlq: list | R | R | R | R (own) |
-| dlq: replay | X | X | — | — |
-| dlq: purge | X | — | — | — |
-| breakers: state | R | R | R | — |
-| breakers: force-open / force-close | X | — | — | — |
-| change_log | R | R | R | R (own objects) |
+| `getMe` | R | R | R | R |
+| vendors and vendor endpoints: list, get | R | R | R | — |
+| vendors and endpoints: create, update (`createVendor`, `updateVendor`, `createVendorEndpoint`) | W | — | — | — |
+| accounts: list, get (metadata) | R | R | R | — |
+| accounts: create, update, credential `next` / `promote` / `delete-old`, lifecycle | W / X | — | — | — |
+| accounts: `testAccountConnection` | X | X | — | — |
+| transformers and versions: list, get | R | R | R | — |
+| transformers: `createTransformerVersion`, `dryRunTransformer`, `runTransformerGoldens` | X | X | — | — |
+| integrations, versions, diff: list, get | R | R | R | R (own) |
+| integrations: create, update, drafts, validate, publish, rollback, pause / resume, weights | W / X | W / X | — | — |
+| tenants: `listTenants` | R | R | R | — |
+| tenants: `getTenant` | R | R | R | R (own) |
+| tenants: `createTenant`, `updateTenant` | W | — | — | — |
+| api-keys: list, get (metadata) | R | R | R | R (own) |
+| api-keys: create, rotate, revoke | X | — | — | — |
+| registrar-endpoints: list, get | R | R | R | R (own) |
+| registrar-endpoints: create, update, delete, rotate-secret | W / X | — | — | — |
+| snapshots: list, latest, get, blob | R | R | R | — |
+| requests: search, get, timeline, attempts (policy-filtered) | R | R | R | R (own) |
+| requests: `unsealRequest` | X (reason required) | — | — | — |
+| dlq: list, get | R | R | R | R (own) |
+| dlq: `replayDeadLetters` | X | X | — | — |
+| dlq: `purgeDeadLetters` | X | — | — | — |
+| breakers: list, get | R | R | R | — |
+| breakers: force-open / force-close / clear-force | X | — | — | — |
+| change log: list, get | R | R | R | — |
+
+Corrections to the matrix that stood here before 2026-11-11 (gap G12, HUB-468): editors cannot create vendors, accounts, tenants, API keys or registrar endpoints, and cannot run credential or lifecycle actions (those are `admin`); `tenant_viewer` cannot read the change log or list tenants; transformer dry-run and run-samples need `editor`, not `viewer`; the old "api-keys: non-own tenants require admin" rule does not exist because creating keys is `admin` only.
 
 Every W/X writes `change_log` (actor, action, object, before, after, reason). Irreversible actions require a reason (frontend/AGENTS.md). The admin API is the enforcement point; the console only hides controls.
+
+### 7.1 Planned (EP-15): ISFC roles and per-operation policies
+Not built yet ([ADR-0026](adr/0026-isfc-identity-and-per-operation-admin-policies.md)). With `HUB_ADMIN_AUTH_MODE=isfc` the matrix above must not change; it gains a second layer (OPA) and a new role.
+
+| ISFC role | Where it counts | Hub role | Scope |
+| --- | --- | --- | --- |
+| `HUB_ADMIN`, `HUB_EDITOR`, `HUB_VIEWER` | platform tenant | `admin`, `editor`, `viewer` | all tenants (unscoped) |
+| `HUB_TENANT_VIEWER` | a linked tenant | `tenant_viewer` | that tenant only |
+| `HUB_TENANT_ADMIN` (new, D4) | a linked tenant | `tenant_admin`: tenant viewer plus finishing setup and managing callback endpoints of its own tenant | that tenant only |
+| `ISFC_ADMIN` | anywhere | none (D6) | — |
+
+Each operation gets its own Rego policy (generated from the contract, tested by a generated matrix); permissions are per resource (`HUB_VENDOR:READ`, ...) and roles bundle them to reproduce the table above, with `x-required-role` the source of truth. Where AUTH_PLAN §7.4 groups a resource more loosely than the contract (for example tenants, API keys and registrar endpoints are `admin` writes today), the contract wins. Machine principals (ISFC API keys on the admin API) get the highest role their permissions fully cover and can never call `unsealRequest` or `purgeDeadLetters` (D7).
 
 ## 8. Supply chain
 - **Go**: `go.mod`/`go.sum` committed; minimal dependency set (TECH_SPEC §13); `govulncheck` and `gosec` in CI (blocking, §8.1); Renovate/Dependabot weekly with grouped minor updates; `GOFLAGS=-mod=readonly`; the toolchain is pinned in `go.mod` (`toolchain go1.26.10` since HUB-234: go1.26.0 had 36 stdlib vulnerabilities reachable from Hub code, among them crypto/x509, net/url and html/template).

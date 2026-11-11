@@ -1,0 +1,55 @@
+# NetworkPolicy for the Hub admin listener in ISFC mode (AUTH_PLAN §7.1 step 1, HUB-497).
+#
+# The admin trusts x-isfc-* identity headers only because nothing but the ISFC api-gateway can reach
+# it (plus a JWT it verifies itself). So the admin port 8081 accepts traffic from exactly two kinds
+# of client:
+#   1. the ISFC api-gateway pods (console and people, through the route in gateway-route.yaml)
+#   2. allow-listed automation pods (CI runners, hubctl jobs) that call directly with
+#      x-isfc-client-id + x-isfc-api-key. A pod gets in by carrying the label
+#      `integration-hub.io/admin-access: "true"` in a namespace listed below; grant it per
+#      workload, never per namespace. The same label admits the ISFC event sender if ISFC pushes
+#      events to POST /internal/isfc/events (HMAC-signed; ISFC-CR-2).
+# The ops port (9090: /healthz /readyz /metrics) is open to the monitoring namespace only. The OPA
+# sidecar listens on the pod's loopback and is not covered here (a Service never exposes it).
+#
+# Needs a CNI that enforces NetworkPolicy. Namespace and label names are this repo's convention:
+# match them to the cluster (kubectl get ns --show-labels) before applying. Not applied to a
+# cluster by CI.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hub-admin-ingress
+  namespace: integration-hub
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: hub-admin
+  policyTypes: [Ingress]
+  ingress:
+    # 1. The ISFC api-gateway.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: isfc
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+      ports:
+        - { protocol: TCP, port: 8081 }
+    # 2. Allow-listed automation: labelled pods in the CI namespace only.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ci-automation
+          podSelector:
+            matchLabels:
+              integration-hub.io/admin-access: "true"
+      ports:
+        - { protocol: TCP, port: 8081 }
+    # Metrics and health from Prometheus.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - { protocol: TCP, port: 9090 }

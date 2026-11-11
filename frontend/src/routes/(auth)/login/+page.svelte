@@ -1,7 +1,10 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { appName, pageTitle } from '$lib/app-info';
+	import { startMicrosoftSso, type MicrosoftPlan } from '$lib/auth/microsoft';
 	import { ROLES, roleLabels, roleSummaries } from '$lib/auth/roles';
 	import Icon from '$lib/components/Icon.svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -9,12 +12,48 @@
 	const values = $derived(form?.values);
 	const errorFor = (field: string) => (form?.field === field ? form.message : null);
 	const formError = $derived(form && !form.field ? form.message : null);
-	// The tenant field only matters for tenant_viewer. After a failed post, keep the posted role.
+	const method = (id: string) => data.login.methods.find((m) => m.id === id);
+	let microsoftBusy = $state(false);
+	let microsoftError = $state<string | null>(null);
+
+	// Microsoft needs Hydra's CSRF cookie in the browser, so the page (not the server) opens the
+	// flow with the PKCE challenge and state the server just issued (HUB-493). No token is involved.
+	const startMicrosoft: SubmitFunction = () => {
+		microsoftBusy = true;
+		microsoftError = null;
+		return async ({ result }) => {
+			if (result.type === 'success' && result.data?.plan) {
+				try {
+					await startMicrosoftSso(result.data.plan as MicrosoftPlan, {
+						fetch: window.fetch.bind(window),
+						assign: (url) => window.location.assign(url)
+					});
+					return;
+				} catch (e) {
+					microsoftError = e instanceof Error ? e.message : 'Microsoft sign-in failed.';
+				}
+			} else if (result.type === 'failure') {
+				microsoftError = String(result.data?.message ?? 'Microsoft sign-in failed.');
+			} else {
+				microsoftError = 'Microsoft sign-in failed. Try again.';
+			}
+			microsoftBusy = false;
+		};
+	};
+
+	// The tenant field only matters for the tenant roles. After a failed post, keep the posted role.
 	let role = $state<string>('editor');
 	$effect.pre(() => {
 		if (values?.role) role = values.role;
 	});
 </script>
+
+<!-- Back from Entra (bfcache): the page comes back as it was left, so the button must be usable again. -->
+<svelte:window
+	onpageshow={(e) => {
+		if (e.persisted) microsoftBusy = false;
+	}}
+/>
 
 <svelte:head>
 	<title>{pageTitle('Sign in')}</title>
@@ -48,12 +87,21 @@
 		{/if}
 		{#if data.login.notice}<p class="lede">{data.login.notice}</p>{/if}
 
+		{#if data.error}
+			<p class="notice danger" role="alert" data-error-code={data.error.code}>
+				<Icon name="alert" size={16} />
+				{data.error.message}
+			</p>
+		{/if}
 		{#if formError}
 			<p class="notice danger" role="alert"><Icon name="alert" size={16} /> {formError}</p>
 		{/if}
+		{#if microsoftError}
+			<p class="notice danger" role="alert"><Icon name="alert" size={16} /> {microsoftError}</p>
+		{/if}
 
 		{#if data.login.provider === 'dev' && data.login.ready}
-			<form method="POST" novalidate>
+			<form method="POST" action="?/dev" novalidate>
 				<input type="hidden" name="next" value={data.next} />
 				<fieldset aria-describedby={errorFor('role') ? 'role-error' : undefined}>
 					<legend>Role</legend>
@@ -69,8 +117,8 @@
 					{#if errorFor('role')}<p id="role-error" class="field-error">{errorFor('role')}</p>{/if}
 				</fieldset>
 
-				<div class="field" hidden={role !== 'tenant_viewer'}>
-					<label for="tenants">Tenants <span class="hint">(tenant viewer only)</span></label>
+				<div class="field" hidden={role !== 'tenant_viewer' && role !== 'tenant_admin'}>
+					<label for="tenants">Tenants <span class="hint">(tenant roles only)</span></label>
 					<input
 						id="tenants"
 						name="tenants"
@@ -107,6 +155,33 @@
 
 				<button type="submit" class="primary">Sign in</button>
 			</form>
+		{:else if data.login.provider === 'isfc' && data.login.ready}
+			<div class="methods">
+				{#if method('EMAIL_OTP')}
+					<!-- A plain POST: the server answers 303 to ISFC, so it works without JavaScript. -->
+					<form method="POST" action="?/start">
+						<input type="hidden" name="next" value={data.next} />
+						<input type="hidden" name="method" value="EMAIL_OTP" />
+						<button type="submit" class="primary wide"
+							>Sign in with {method('EMAIL_OTP')?.label}</button
+						>
+					</form>
+				{/if}
+				{#if method('MICROSOFT_SSO')}
+					<form method="POST" action="?/start" use:enhance={startMicrosoft}>
+						<input type="hidden" name="next" value={data.next} />
+						<input type="hidden" name="method" value="MICROSOFT_SSO" />
+						<button type="submit" class="primary wide" disabled={microsoftBusy}>
+							{microsoftBusy
+								? 'Opening Microsoft...'
+								: `Sign in with ${method('MICROSOFT_SSO')?.label}`}
+						</button>
+					</form>
+				{/if}
+			</div>
+			<p class="hint">
+				You sign in with your company account at ISFC. The console never sees your password.
+			</p>
 		{:else}
 			<div class="unavailable">
 				<p>Sign-in is unavailable on this server.</p>
@@ -117,8 +192,8 @@
 					</ul>
 				{/if}
 				<p class="hint">
-					For local work run <code>npm run dev:mock</code>, or set
-					<code>PUBLIC_AUTH_MODE=dev</code>.
+					Set <code>PUBLIC_AUTH_MODE=isfc</code> and the ISFC settings. For local work without ISFC
+					run <code>npm run dev:mock</code>.
 				</p>
 			</div>
 		{/if}
@@ -271,6 +346,22 @@
 	}
 	.primary:hover {
 		filter: brightness(1.08);
+	}
+	.methods {
+		display: grid;
+		gap: var(--space-3);
+		margin-top: var(--space-5);
+	}
+	.methods form {
+		margin-top: 0;
+	}
+	.primary.wide {
+		justify-self: stretch;
+		padding: 0.6rem 1.25rem;
+	}
+	.primary:disabled {
+		opacity: 0.7;
+		cursor: progress;
 	}
 	.unavailable {
 		margin-top: var(--space-4);

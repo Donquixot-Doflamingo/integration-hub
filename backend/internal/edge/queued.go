@@ -296,9 +296,15 @@ func targetTimeout(snap *registry.Snapshot, account, endpointRef string) (time.D
 	return 0, errors.New("unknown endpoint")
 }
 
-// getRequestStatus is GET /v1/requests/{request_id}: tenant-scoped, other tenants' ids are 404.
+// getRequestStatus is GET /v1/requests/{request_id}: tenant-scoped, other tenants' ids are 404. It
+// needs the requests_read scope, for Hub keys and ISFC keys (HUB:REQUESTS_READ) alike (HUB-415,
+// HUB-487); a key narrowed to "requests_read:<integration>" reads only that integration's requests.
 func (s *Server) getRequestStatus(w http.ResponseWriter, r *http.Request) {
 	c, _ := CallerFrom(r.Context())
+	if !hasAnyScope(c.Key, ScopeRequestsRead) {
+		WriteError(w, r, missingScope(ScopeRequestsRead))
+		return
+	}
 	notFound := &core.CanonicalError{Code: core.CodeRequestNotFound, Message: "Unknown request"}
 	if !s.queued() {
 		WriteError(w, r, notFound)
@@ -311,6 +317,8 @@ func (s *Server) getRequestStatus(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		s.log.ErrorContext(r.Context(), "request status failed", slog.String("error", err.Error()))
 		WriteError(w, r, &core.CanonicalError{Code: core.CodeInternalError, Message: "Internal error", Retryable: true})
+	case !hasScope(c.Key, ScopeRequestsRead, st.IntegrationID):
+		WriteError(w, r, missingScope(ScopeRequestsRead)) // narrowed to other integrations
 	default:
 		writeJSON(w, http.StatusOK, st)
 	}

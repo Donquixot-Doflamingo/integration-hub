@@ -1,6 +1,8 @@
 # Integration Hub caller API: quick reference
 
-Base: `$HUB_BASE_URL`. Auth: `Authorization: Bearer $HUB_API_KEY` (tenant key) on every call.
+Base: `$HUB_BASE_URL`. Auth, one of two ways per request (both together is a 400):
+- `x-isfc-client-id` + `x-isfc-api-key`: your ISFC backend client's key (preferred; see the onboarding steps in `SKILL.md`). Add `X-Tenant-Id` when the key covers several tenants.
+- `Authorization: Bearer $HUB_API_KEY`: a Hub tenant key (`hk_live_...`), the **legacy** way.
 The authoritative spec is `contracts/openapi/hub-public.v1.yaml` in the Hub repo.
 
 ## Endpoints
@@ -20,7 +22,9 @@ Discovery endpoints never return vendor, account or version. There is no way to 
 ## Request headers
 | Header | Required | Meaning |
 | --- | --- | --- |
-| `Authorization: Bearer <tenant key>` | yes | Identifies your tenant |
+| `Authorization: Bearer <tenant key>` | one credential is required | Legacy: identifies your tenant |
+| `x-isfc-client-id` + `x-isfc-api-key` | one credential is required | Your ISFC backend client and its key; never together with `Authorization` |
+| `X-Tenant-Id` | only when the ISFC key covers several tenants | ISFC tenant UUID. Never selects a vendor, account or version |
 | `Content-Type: application/json` | for bodies | |
 | `Idempotency-Key` | recommended; **mandatory** where money or vendor quota moves | Same key within 24 h returns the stored result |
 | `Prefer: respond-async` | no | You accept a 202 if the vendor circuit is open (only where the integration allows queueing) |
@@ -56,7 +60,7 @@ Discovery endpoints never return vendor, account or version. There is no way to 
 | --- | --- | --- | --- | --- |
 | `VALIDATION_FAILED` | 400 | no | Body or declared headers break the operation's request schema | Fix fields listed as JSON pointers in details |
 | `IDEMPOTENCY_KEY_REQUIRED` | 400 | no | Integration has `moves_money_or_quota` and no key was sent | Send an `Idempotency-Key` |
-| `UNAUTHORIZED` | 401 | no | Bad or revoked key | Check `HUB_API_KEY` |
+| `UNAUTHORIZED` | 401 | no | Bad, revoked or inactive key | Check `HUB_API_KEY`; with ISFC fetch the key again once (rotation), then check the client's key and tenant link |
 | `FORBIDDEN` | 403 | no | Not owner or grantee (`reason: not_granted`), or key lacks a scope (`reason: missing_scope`) | Ask the integration owner / platform for a grant or scope |
 | `INTEGRATION_NOT_FOUND` | 404 | no | Unknown id | List integrations |
 | `OPERATION_NOT_FOUND` | 404 | no | The integration has no such `{op}` | Check operations via discovery |

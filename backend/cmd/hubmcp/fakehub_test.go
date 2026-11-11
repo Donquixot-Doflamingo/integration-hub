@@ -23,6 +23,7 @@ type fakeHub struct {
 	public *contract.Spec
 	admin  *contract.Spec
 	keys   map[string]bool   // accepted tenant API keys
+	isfc   map[string]string // accepted ISFC credentials: client id -> api key
 	roles  map[string]string // hub-admin operationId -> x-required-role
 
 	mu      sync.Mutex
@@ -56,6 +57,7 @@ func newFakeHub(t testing.TB) *fakeHub {
 		public:  contract.Load(t, "hub-public.v1.yaml"),
 		admin:   contract.Load(t, "hub-admin.v1.yaml"),
 		keys:    map[string]bool{testKey: true},
+		isfc:    map[string]string{testISFCClient: testISFCKey},
 		replies: map[string][]reply{},
 	}
 	h.roles = map[string]string{}
@@ -105,7 +107,9 @@ func (h *fakeHub) serve(w http.ResponseWriter, r *http.Request) {
 	h.calls = append(h.calls, hubCall{OperationID: opID, Method: r.Method, Path: r.URL.Path, Query: r.URL.RawQuery, Header: r.Header.Clone(), Body: body})
 	h.mu.Unlock()
 
-	rep := h.next(opID, isAdmin, r.Header.Get("Authorization"))
+	isfcKey := r.Header.Get("x-isfc-api-key")
+	isfcOK := isfcKey != "" && h.isfc[r.Header.Get("x-isfc-client-id")] == isfcKey && r.Header.Get("Authorization") == ""
+	rep := h.next(opID, isAdmin, r.Header.Get("Authorization"), isfcOK)
 	rec := httptest.NewRecorder()
 	rec.Header().Set("Content-Type", "application/json")
 	rec.Header().Set("X-Hub-Request-Id", fakeRequestID)
@@ -128,14 +132,14 @@ func (h *fakeHub) serve(w http.ResponseWriter, r *http.Request) {
 
 // next picks the reply: 401 for a bad credential, 403 for the viewer token on an operation that
 // needs editor or admin (the Hub's RBAC), else the queued reply for the operation.
-func (h *fakeHub) next(opID string, isAdmin bool, authz string) reply {
+func (h *fakeHub) next(opID string, isAdmin bool, authz string, isfcOK bool) reply {
 	key := strings.TrimPrefix(authz, "Bearer ")
 	switch {
 	case isAdmin && key == testViewerToken && (h.roles[opID] == "editor" || h.roles[opID] == "admin"):
 		return reply{status: http.StatusForbidden, body: h.admin.Example(h.t, opID, http.StatusForbidden, "")}
 	case isAdmin && key != testAdminToken && key != testViewerToken:
 		return reply{status: http.StatusUnauthorized, body: h.admin.Example(h.t, opID, http.StatusUnauthorized, "")}
-	case !isAdmin && !h.keys[key]:
+	case !isAdmin && !h.keys[key] && !isfcOK:
 		return reply{status: http.StatusUnauthorized, body: h.public.Example(h.t, opID, http.StatusUnauthorized, "")}
 	}
 	h.mu.Lock()

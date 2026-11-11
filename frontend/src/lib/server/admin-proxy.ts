@@ -1,6 +1,11 @@
 import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { DEFAULT_ADMIN_API_BASE, ETAG_HEADER, REQUEST_ID_HEADER } from '$lib/api/client';
+import { isTokenRefusal, normalizeGatewayError } from './gateway-errors';
+import { isTenantUuid } from '$lib/auth/tenant-choice';
+import { sessionSetCookieHeaders, writeSessionCookie } from './auth/cookie';
+import { refreshForEvent } from './auth/refresh';
+import { sessionSecret } from './auth';
 
 /**
  * Same-origin proxy for the admin API (HUB-286, ADR-0022).
@@ -58,11 +63,27 @@ function plain(status: number, message: string): Response {
 	});
 }
 
+/** Optional behaviour of one forward (ISFC sessions): see `proxyAdminApi`. */
+export interface ForwardHooks {
+	/**
+	 * Called once when the gateway says the access token is no longer valid (`GW_002`, `GW_003`,
+	 * `GW_004`). Returns the refreshed token, or null when the session could not be refreshed.
+	 */
+	refreshToken?: () => Promise<string | null>;
+	/**
+	 * The gateway echoed the tenant it used (`X-Isfc-Tenant-Id`) for a request that named none
+	 * (it fell back to the user's top tenant): the session should adopt it. Never called when the
+	 * request carried an explicit tenant.
+	 */
+	onTenantEcho?: (tenantId: string) => void;
+}
+
 /** Forwards one admin API request upstream with the session token. Never throws. */
 export async function forwardToAdmin(
 	event: Pick<RequestEvent, 'request' | 'url' | 'isSubRequest' | 'locals'>,
 	upstream: string,
-	fetchImpl: typeof fetch = fetch
+	fetchImpl: typeof fetch = fetch,
+	hooks: ForwardHooks = {}
 ): Promise<Response> {
 	if (!sameOrigin(event)) return plain(403, 'Cross-origin admin API call refused.');
 	const { request, url } = event;
@@ -74,23 +95,48 @@ export async function forwardToAdmin(
 	// Always the session's token (or none): a header sent by the browser is never passed on.
 	const token = event.locals.session?.accessToken;
 	if (token) headers.set('authorization', `Bearer ${token}`);
+	// ISFC: the tenant the operator works in (HUB-494). The gateway checks the user may enter it
+	// (403 GW_015 otherwise) and sends the Hub that tenant's roles.
+	const tenant = token ? (event.locals.session?.tenantId ?? null) : null;
+	if (tenant && isTenantUuid(tenant)) headers.set('x-tenant-id', tenant);
 
 	const body = SAFE_METHODS.has(request.method) ? undefined : await request.arrayBuffer();
-	let res: Response;
-	try {
-		res = await fetchImpl(`${upstream}${url.pathname}${url.search}`, {
+	const send = () =>
+		fetchImpl(`${upstream}${url.pathname}${url.search}`, {
 			method: request.method,
 			headers,
 			body,
 			redirect: 'manual',
 			signal: request.signal
 		});
+	let res: Response;
+	try {
+		res = await send();
+		// ISFC: the access token expired or was refused. Refresh it once and repeat the call (the
+		// body was read above, so it can be sent again). A second refusal is the answer.
+		if (res.status === 401 && hooks.refreshToken) {
+			const refused = await res
+				.clone()
+				.json()
+				.then((b: unknown) => isTokenRefusal(res.status, b))
+				.catch(() => false);
+			if (refused) {
+				const fresh = await hooks.refreshToken();
+				if (fresh) {
+					headers.set('authorization', `Bearer ${fresh}`);
+					res = await send();
+				}
+			}
+		}
 	} catch {
 		return plain(
 			502,
 			`The admin API at ${upstream} did not answer. Is the hub admin role running?`
 		);
 	}
+	const echoed = res.headers.get('x-isfc-tenant-id')?.trim().toLowerCase();
+	if (!tenant && echoed && isTenantUuid(echoed)) hooks.onTenantEcho?.(echoed);
+	res = await normalizeGatewayError(res);
 	const out = new Headers();
 	for (const name of RESPONSE_HEADERS) {
 		const v = res.headers.get(name);
@@ -109,7 +155,41 @@ export const proxyAdminApi: Handle = async ({ event, resolve }) => {
 	if (!isAdminPath(event.url.pathname)) return resolve(event);
 	const upstream = adminUpstream();
 	if (!upstream) return resolve(event);
-	return forwardToAdmin(event, upstream);
+	// ISFC sessions refresh once on a gateway "token no longer valid" (HUB-492); the new cookie is
+	// set on this response, so the browser keeps the rotated tokens.
+	const response = await forwardToAdmin(event, upstream, fetch, {
+		onTenantEcho: (tenantId) => {
+			const session = event.locals.session;
+			const secret = sessionSecret();
+			if (!session || session.provider !== 'isfc' || !secret) return;
+			event.locals.session = { ...session, tenantId };
+			event.locals.sessionDirty = true;
+			writeSessionCookie(
+				event.cookies,
+				event.locals.session,
+				secret,
+				event.url.protocol === 'https:'
+			);
+		},
+		refreshToken: async () => {
+			const outcome = await refreshForEvent(event, { fetch: event.fetch, force: true });
+			return outcome === 'refreshed' ? (event.locals.session?.accessToken ?? null) : null;
+		}
+	});
+	// SvelteKit only adds `cookies.set` cookies to responses made by `resolve()`; this one is our
+	// own, so a refreshed or switched session must be put on it by hand (HUB-492).
+	if (event.locals.sessionDirty) {
+		const secure = event.url.protocol === 'https:';
+		for (const h of sessionSetCookieHeaders(
+			event.cookies,
+			event.locals.session,
+			sessionSecret(),
+			secure
+		)) {
+			response.headers.append('set-cookie', h);
+		}
+	}
+	return response;
 };
 
 /**

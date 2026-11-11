@@ -160,3 +160,32 @@ func TestRotatedKeyOverlap(t *testing.T) {
 		})
 	}
 }
+
+// TestPendingTenantRefusedOnlyInISFCMode is HUB-480: a tenant whose setup is pending gets 401
+// only when HUB_TENANT_SOURCE=isfc; the default mode serves it as before.
+func TestPendingTenantRefusedOnlyInISFCMode(t *testing.T) {
+	pending := &registry.Tenant{Tenant: "pend", Setup: registry.SetupPending, APIKeys: []registry.APIKey{{KeyID: "k_p", Hash: HashKey("hk_test_pending"), Scopes: []string{"invoke"}, State: "active"}}}
+	snap := withTenants(t, devSnapshot(t), pending)
+	for _, tt := range []struct {
+		name       string
+		isfcSource bool
+		status     int
+	}{{"local source", false, 403}, {"isfc source", true, 401}} { // 403 not_granted: authenticated, owns nothing
+		t.Run(tt.name, func(t *testing.T) {
+			s := New(Deps{Snapshots: staticSnapshots{snap}, TenantSourceISFC: tt.isfcSource})
+			mux := http.NewServeMux()
+			mux.Handle("POST /v1/integrations/{integration_id}/invoke", s.authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				c, _ := CallerFrom(r.Context())
+				if _, ce := authorizeIntegration(c, r.PathValue("integration_id"), "invoke"); ce != nil {
+					WriteError(w, r, ce)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})))
+			rec := call(t, withRequestID(mux), "int_evt_brandA", "Bearer hk_test_pending")
+			if rec.Code != tt.status {
+				t.Fatalf("status %d body %s", rec.Code, rec.Body)
+			}
+		})
+	}
+}

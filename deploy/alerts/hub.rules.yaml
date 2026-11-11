@@ -164,3 +164,32 @@ groups:
           summary: "Audit events dropped ({{ $labels.reason }})"
           description: "{{ $value | humanize }} audit event(s) were dropped with reason {{ $labels.reason }} in the last 5 minutes; their requests have an incomplete audit trail."
           runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/AuditEventsDropped.md"
+
+  - name: hub-isfc
+    rules:
+      - alert: HubAdminAuthzUnavailable
+        # The admin API asks OPA for every request in HUB_ADMIN_AUTH_MODE=isfc and fails closed: an
+        # OPA error or timeout is a 503 authz_unavailable (AUTH_PLAN §7.1, §11). The metric exists
+        # only on admin processes in that mode; elsewhere the division has no series and stays quiet.
+        expr: |
+          sum(rate(hub_admin_authz_duration_ms_count{decision="error"}[5m]))
+            / sum(rate(hub_admin_authz_duration_ms_count[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Admin authorization (OPA) is failing"
+          description: "More than 1% of admin authorization decisions failed for 5 minutes (OPA unreachable, too slow or erroring). The admin API and the console fail closed with 503 authz_unavailable; the /v1 data plane does not use OPA and is not affected."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/HubAdminAuthzUnavailable.md"
+      - alert: HubIsfcSyncStale
+        # Only the worker that leads the ISFC reconcile loop reports a non-zero lag (followers
+        # report 0). The lag counts from the last successful run, or from becoming leader before a
+        # first success. Three failed runs in a row also fire it (AUTH_PLAN §6.2, §11).
+        expr: max(hub_isfc_sync_lag_seconds) > 900 or max(hub_isfc_sync_consecutive_failures) >= 3
+        for: 1m
+        labels:
+          severity: warn
+        annotations:
+          summary: "ISFC tenant sync is stale or failing"
+          description: "The ISFC reconcile loop has not completed a successful run for more than 15 minutes, or failed 3 runs in a row. The Hub keeps its last good tenants and caller keys; revoked ISFC keys and new tenants take effect late."
+          runbook_url: "https://github.com/Donquixot-Doflamingo/integration-hub/blob/main/docs/runbooks/HubIsfcSyncStale.md"

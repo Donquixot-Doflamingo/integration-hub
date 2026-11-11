@@ -46,8 +46,10 @@ type toolResult struct {
 // app holds what tool handlers need. It never holds a database or snapshot handle: hubmcp is a
 // client of the Hub's contracted HTTP APIs only (F-20 rule 1).
 type app struct {
-	hub     *hubclient.Client // stdio: HUB_API_KEY; nil over HTTP, where each client brings its key
-	newHub  func(key string) (*hubclient.Client, error)
+	hub    *hubclient.Client // stdio: HUB_API_KEY; nil over HTTP, where each client brings its key
+	newHub func(key string) (*hubclient.Client, error)
+	// newISFC builds a client that acts as an ISFC backend client (HUB_ISFC_*, or per request).
+	newISFC func(clientID, apiKey, tenant string) (*hubclient.Client, error)
 	admin   *adminClient // nil when HUB_ADMIN_TOKEN is unset: admin tools are not registered
 	log     *slog.Logger
 	secrets *secretSet
@@ -328,7 +330,7 @@ func (a *app) hubErrorObject(err error) (*errorObject, int) {
 		e.Details = append(e.Details, errorDetail{Pointer: d.Pointer, Keyword: d.Keyword, Message: d.Message})
 	}
 	if he.Code == hubclient.CodeUnauthorized {
-		e.Message += " (check HUB_API_KEY)"
+		e.Message += " (check HUB_API_KEY or HUB_ISFC_API_KEY)"
 	}
 	return e, he.Status
 }

@@ -3,6 +3,30 @@
 Contract versions, newest first. Each document has its own semver (see `README.md` § Versioning).
 Entry format: `- YYYY-MM-DD · <document> <version> · <CCR / HUB-###> · <summary>`.
 
+## 2026-11-11
+
+- 2026-11-11 · `hub-admin` 2.1.1, `hub-public` 2.1.1 · HUB-475 / HUB-487 (change requests from the backend) · Document 403 responses the Hub already returns (patch)
+  - `getMe` (admin): 403 `Forbidden` for a user with no Hub role or a refused machine key.
+  - `getRequestStatus` (public): 403 `Forbidden` when the credential lacks scope `requests_read`.
+- 2026-11-11 · `hub-public` 2.1.0 · HUB-470 (AUTH_PLAN §14) · ISFC S2S credentials and optional `X-Tenant-Id` (additive, minor)
+  - New security schemes `isfcS2S` (apiKey, header `x-isfc-api-key`) and `isfcS2SClientId` (apiKey, header `x-isfc-client-id`), required together in one security requirement, as an alternative to `bearerAuth` on the global `security` and on `dryRunIntegration` (scope `dry_run`).
+  - New optional header parameter `TenantId` (`X-Tenant-Id`, ISFC tenant UUID) on `invokeIntegration`, `invokeIntegrationOperation`, `dryRunIntegration`, `getRequestStatus`, `listIntegrations` and `getIntegration`: only needed when the credential covers several tenants.
+  - `info.description` documents the two authentication ways. No vendor, account, version or transformer field is added; no response changes (D12 check clean).
+- 2026-11-11 · `hub-admin` 2.1.0 · HUB-469 (AUTH_PLAN §14) · ISFC security schemes, per-operation permissions, tenant ISFC fields and sync operations (additive, minor)
+  - Security: `security` now accepts `oidc`, `isfcGateway` (bearer JWT through the ISFC gateway, `X-Tenant-Id` picks the ISFC tenant) or `isfcApiKey` + `isfcApiKeyClientId` (headers `x-isfc-api-key` and `x-isfc-client-id`, required together). `info.description` documents the modes, that machine principals are refused for `unsealRequest` and `purgeDeadLetters`, and fail-closed 503.
+  - `x-required-permission` on all 74 existing operations next to `x-required-role` (catalogue of AUTH_PLAN §7.4: `HUB_VENDOR`, `HUB_ACCOUNT`, `HUB_TRANSFORMER`, `HUB_INTEGRATION`, `HUB_TENANT`, `HUB_REQUEST`, `HUB_DLQ`, `HUB_BREAKER`, `HUB_PLATFORM`, each `:READ`, a write tier or an admin tier; `none` for `getMe`). Today's role matrix is unchanged except the tenant_admin operations below.
+  - Role: new value `tenant_admin` (D4) in the `Role` enum and as an `x-required-role` value. `admin` ⊃ `tenant_admin` ⊃ `tenant_viewer`; `editor` and `viewer` do not satisfy it. It is the minimum role of `updateTenant` and of `createRegistrarEndpoint`, `updateRegistrarEndpoint`, `deleteRegistrarEndpoint` and `rotateRegistrarSecret` (permission `HUB_TENANT:SETUP`, new). A `tenant_admin` gets 403 for `disabled` in `updateTenant`. **Frontend: `gen:api` changes the `Role` union.**
+  - Tenants: new read-only schemas `IsfcTenantLink` (`tenant_id` UUID, `key`, `name`, `status`, `linked`, `synced_at`), `IsfcTenantStatus` and `TenantSetup` (`pending|complete`). `Tenant` and `TenantSummary` gain required `setup` and `isfc` (null when not linked to ISFC). `TenantUpdate` gains `setup` (only `complete`).
+  - New operations `syncTenants` (`POST /tenants/sync`) and `syncTenant` (`POST /tenants/{tenant_id}/sync`), role `admin`, permission `HUB_TENANT:ADMIN`; new schemas `TenantSyncRequest`, `TenantSyncOutcome`, `TenantSyncResult`, `TenantSyncChange`. Hub-admin has 76 operations.
+  - New error codes `tenant_managed_by_isfc` (409, `createTenant` in ISFC mode; new response `TenantConflict`) and `authz_unavailable` (503, new response `AuthzUnavailable`, declared on every operation). `Me` is unchanged.
+  - Tooling: `tools/check.mjs` knows `tenant_admin` and fails an operation whose `x-required-permission` is not in the catalogue.
+- 2026-11-11 · `hubmcp-tools` 2.1.0 · HUB-471 (AUTH_PLAN §14) · ISFC settings for hubmcp (additive, minor)
+  - New env `HUB_TENANT_ID` (`X-Tenant-Id` for credentials that cover several tenants, and the ISFC tenant of admin calls), `HUB_ISFC_CLIENT_ID` and `HUB_ISFC_API_KEY` (secret; the ISFC backend-client credential for tenant tools, the credential for the streamable-http transport).
+  - `HUB_API_KEY` is no longer unconditionally required: it or the ISFC pair must be set, never both. `HUB_ADMIN_BASE_URL` now says that in ISFC mode it is the gateway route to the admin API; `HUB_ADMIN_TOKEN` may be the user's ISFC JWT.
+  - No tool, input or output changes. Admin write tools stay stdio-only and act as the signed-in user; machine admin access is not offered through MCP.
+- 2026-11-11 · `hubmcp-tools` 2.0.1 · HUB-469 · Tool classification follows hub-admin 2.1.0 (patch)
+  - `hub_admin_update_tenant`, `hub_admin_create_registrar_endpoint` and `hub_admin_update_registrar_endpoint` declare `requires.x-required-role: tenant_admin` (the spec's new minimum role). `syncTenants` and `syncTenant` are listed in `not_exposed_operations`. No tool, input or output changes.
+
 ## 2026-11-07
 
 - 2026-11-07 · `hub-admin` 2.0.0 · HUB-432 (ADR-0023) · Capabilities removed; operations and request schemas on integration versions, request schema on vendor endpoints (breaking, major; approved by the product owner 2026-11-07, pre-1.0)

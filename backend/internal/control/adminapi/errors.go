@@ -13,6 +13,21 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
 
+// Error codes added with ISFC mode (hub-admin 2.1.0). Unlike the older upper-case codes these two
+// are lower-case in the contract.
+const (
+	// CodeAuthzUnavailable is 503: the policy engine could not decide, the request is refused.
+	CodeAuthzUnavailable = "authz_unavailable"
+	// CodeTenantManagedByISFC is 409 from createTenant when tenants come from ISFC.
+	CodeTenantManagedByISFC = "tenant_managed_by_isfc"
+)
+
+// authzUnavailable is the fail-closed answer when OPA cannot decide.
+func authzUnavailable() *Error {
+	return &Error{Status: http.StatusServiceUnavailable, Code: CodeAuthzUnavailable, Retryable: true, RetryAfterMS: core.Ptr[int64](1000),
+		Message: "Authorization is temporarily unavailable"}
+}
+
 // controlError maps a control-plane error to the admin envelope; unknown errors stay as they
 // are (fail logs them and answers 500).
 func controlError(err error) error {

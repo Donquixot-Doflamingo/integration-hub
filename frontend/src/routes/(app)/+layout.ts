@@ -9,7 +9,7 @@ import type { LayoutLoad } from './$types';
 // "unknown" and every gated control stays hidden (fail closed); 401 means the API no longer
 // accepts the session, so sign in again.
 export const load: LayoutLoad = async (event) => {
-	const { session } = event.data;
+	const { session, isfcMode, isfcAdminUrl, tenantSwitcher } = event.data;
 	if (__API_MOCKING__) {
 		// Mock mode: make MSW's /me answer as the identity chosen on the dev login page.
 		const { useMockIdentity } = await import('$lib/api/mocks/browser');
@@ -17,5 +17,5 @@ export const load: LayoutLoad = async (event) => {
 	}
 	const me = await consoleApi(event).call((c) => c.GET('/me'));
 	if (!me.ok && me.error.is('UNAUTHORIZED')) redirect(303, loginUrl(event.url, { expired: true }));
-	return { session, me, access: accessFromMe(me) };
+	return { session, isfcMode, isfcAdminUrl, tenantSwitcher, me, access: accessFromMe(me) };
 };

@@ -13,16 +13,21 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/authz"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/control"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/core"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/upstream"
 )
 
@@ -32,9 +37,20 @@ const Base = "/admin/v1"
 // Deps are the admin server's collaborators. Resource handlers use what they need; nil
 // collaborators make their operations answer 500 INTERNAL_ERROR, never panic.
 type Deps struct {
-	Pool      *pgxpool.Pool
-	Redis     *redis.Client
-	Verifier  Verifier // nil: every request is 401 (no issuer configured)
+	Pool     *pgxpool.Pool
+	Redis    *redis.Client
+	Verifier Verifier // nil: every request is 401 (no issuer configured)
+	// ISFC, when set, switches the server to HUB_ADMIN_AUTH_MODE=isfc: identity comes from the
+	// ISFC gateway headers and a verified token instead of Verifier (nil: the jwt mode).
+	ISFC *ISFCAuth
+	// Authz decides every request in ISFC mode (an *authz.Client, or authz.Disabled in tests). nil
+	// in ISFC mode refuses every request with 503 authz_unavailable (fail closed).
+	Authz authz.Decider
+	// Secrets is the process's redaction set; API keys of machine callers are added by value
+	// (HUB-476). nil: nothing is registered.
+	Secrets *telemetry.SecretSet
+	// Metrics receives the auth metrics of the ISFC mode (nil: none are recorded).
+	Metrics   prometheus.Registerer
 	Publisher *control.Publisher
 	Rotator   *control.Rotator
 	Archive   *control.Archive
@@ -47,8 +63,12 @@ type Deps struct {
 	// CallbackHosts allowlists registrar endpoint hosts: "hooks.example.com" matches that host,
 	// ".example.com" any host under it. Empty: any public host (the SSRF guard still applies).
 	CallbackHosts []string
-	Log           *slog.Logger
-	Now           func() time.Time
+	// TenantSource is HUB_TENANT_SOURCE ("isfc": tenants come from ISFC and createTenant answers 409
+	// tenant_managed_by_isfc). Sync runs syncTenants and syncTenant (nil: they answer 409).
+	TenantSource string
+	Sync         TenantSyncer
+	Log          *slog.Logger
+	Now          func() time.Time
 }
 
 // Route is one registered operation.
@@ -65,6 +85,10 @@ type Server struct {
 	d      Deps
 	mux    *http.ServeMux
 	routes []Route
+	authn  *authnMetrics
+	// redacted holds the machine keys already given to Deps.Secrets (see redactKey).
+	redacted  sync.Map
+	redactedN atomic.Int64
 }
 
 // New builds the server with every implemented operation registered.
@@ -76,6 +100,9 @@ func New(d Deps) *Server {
 		d.Now = time.Now
 	}
 	s := &Server{d: d, mux: http.NewServeMux()}
+	if d.ISFC != nil {
+		s.authn = newAuthnMetrics(d.Metrics)
+	}
 	s.registerMe()
 	s.registerChangeLog()
 	for _, reg := range registrars {
@@ -120,11 +147,15 @@ func (s *Server) handle(op string, min Role, mutating bool, pattern string, h ht
 		panic("adminapi: pattern needs a method: " + pattern)
 	}
 	s.routes = append(s.routes, Route{Op: op, Method: method, Path: path, Role: min, Mutating: mutating})
-	s.mux.Handle(method+" "+Base+path, s.authorize(min, h))
+	s.mux.Handle(method+" "+Base+path, s.authorize(op, min, h))
 }
 
-// authorize authenticates the bearer token and enforces the operation's minimum role.
-func (s *Server) authorize(min Role, next http.Handler) http.Handler {
+// authorize authenticates the caller and enforces the operation's minimum role. In ISFC mode the
+// identity comes from the gateway headers (authorizeISFC); otherwise from the bearer token.
+func (s *Server) authorize(op string, min Role, next http.Handler) http.Handler {
+	if s.d.ISFC != nil {
+		return s.authorizeISFC(op, min, next)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if !ok || tok == "" {
@@ -154,6 +185,113 @@ func (s *Server) authorize(min Role, next http.Handler) http.Handler {
 		ctx = control.WithChangeMeta(ctx, p.RoleNames(), RequestID(ctx))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// authorizeISFC is authorize for HUB_ADMIN_AUTH_MODE=isfc: authenticate (token plus gateway
+// headers), ask OPA (a deny is 403, an error or timeout 503 authz_unavailable), then keep the
+// in-process role check as a second layer (AUTH_PLAN §7.1).
+func (s *Server) authorizeISFC(op string, min Role, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p, aerr := s.d.ISFC.authenticate(r)
+		if aerr != nil {
+			s.authn.fail(aerr.reason)
+			writeError(w, r, aerr.err)
+			return
+		}
+		if p.Machine && machineRefused[op] { // human-only operations, whatever the key holds (D7)
+			s.logAuthz(r, p, op, authz.DecisionDeny, "machine principal refused")
+			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: "This operation is for signed-in people; API keys cannot call it"})
+			return
+		}
+		if !p.Machine && len(p.Roles) == 0 {
+			s.authn.fail(authnNoRoles)
+			s.logAuthz(r, p, op, authz.DecisionDeny, "no Hub role in this tenant")
+			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: "No Hub role in this tenant"})
+			return
+		}
+		if s.d.Authz == nil {
+			s.logAuthz(r, p, op, authz.DecisionError, "no policy engine configured")
+			writeError(w, r, authzUnavailable())
+			return
+		}
+		if p.Machine {
+			s.redactKey(r.Header.Get(hdrISFCAPIKey))
+		}
+		d, err := s.d.Authz.Decide(r.Context(), s.opaInput(r, p))
+		if err != nil {
+			s.logAuthz(r, p, op, authz.DecisionError, err.Error())
+			writeError(w, r, authzUnavailable())
+			return
+		}
+		if !d.Allow {
+			s.logAuthz(r, p, op, authz.DecisionDeny, d.Reason)
+			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: "Not permitted by the authorization policy"})
+			return
+		}
+		s.logAuthz(r, p, op, authz.DecisionAllow, d.Reason)
+		if p.Machine {
+			// A key holds permissions, not a role: OPA has checked the one this operation needs, and
+			// the roles only describe the key (/me, change log).
+			applyKeyPermissions(&p, d.Meta)
+		} else if !p.Allows(min) {
+			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: fmt.Sprintf("Requires role '%s'", min)})
+			return
+		}
+		ctx := context.WithValue(r.Context(), principalKey{}, p)
+		ctx = control.WithChangeMeta(ctx, p.RoleNames(), RequestID(ctx))
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// maxRedactedKeys bounds the redaction set that machine keys grow: a client that sends endless
+// distinct keys must not grow it (or its rebuilt replacer) without limit.
+const maxRedactedKeys = 256
+
+// redactKey registers a machine's API key with the logger's redaction set, once, so no log line
+// can carry it by value (AGENTS §3.5, HUB-476).
+func (s *Server) redactKey(key string) {
+	if s.d.Secrets == nil || key == "" {
+		return
+	}
+	if _, seen := s.redacted.Load(key); seen || s.redactedN.Load() >= maxRedactedKeys {
+		return
+	}
+	s.redacted.Store(key, struct{}{})
+	s.redactedN.Add(1)
+	s.d.Secrets.Add(key)
+}
+
+// opaInput is the sidecar-compatible policy input of one request: the subject with its gateway
+// attributes, the path the Hub sees, the client, and the tenant of the request.
+func (s *Server) opaInput(r *http.Request, p Principal) authz.Input {
+	sub := make(map[string]any, len(p.SubAttrs)+2)
+	for k, v := range p.SubAttrs {
+		sub[k] = v
+	}
+	sub["id"], sub["type"] = p.Subject, p.SubType
+	in := authz.Input{Sub: sub, HTTP: authz.HTTP{Method: r.Method, Path: r.URL.Path}, Client: authz.Caller{ClientID: p.ClientID}}
+	if p.Machine { // the sidecar sets sub.id to the caller's client id for an API key request
+		sub["id"] = p.ClientID
+		in.Client.APIKey = authz.APIKey(r.Header.Get(hdrISFCAPIKey))
+	}
+	if p.ISFCTenantID != "" {
+		in.Tenant = &authz.Tenant{ID: p.ISFCTenantID}
+	}
+	return in
+}
+
+// logAuthz is the admin.authz log: who, where, which operation and the decision. It never
+// carries a token, the attributes or a key.
+func (s *Server) logAuthz(r *http.Request, p Principal, op, decision, reason string) {
+	level := slog.LevelDebug
+	switch decision {
+	case authz.DecisionDeny:
+		level = slog.LevelInfo
+	case authz.DecisionError:
+		level = slog.LevelWarn
+	}
+	s.d.Log.Log(r.Context(), level, "admin.authz", slog.String("subject", p.Subject), slog.String("client", p.ClientID),
+		slog.String("tenant", p.ISFCTenantID), slog.String("operation", op), slog.String("decision", decision), slog.String("reason", reason))
 }
 
 type requestIDKey struct{}

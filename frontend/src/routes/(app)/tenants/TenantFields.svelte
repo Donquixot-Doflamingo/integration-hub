@@ -22,7 +22,7 @@
 		errors = {},
 		values = $bindable()
 	}: {
-		mode: 'create' | 'edit';
+		mode: 'create' | 'edit' | 'setup';
 		/** The values the dialog opened with (the tenant as loaded, for edit). */
 		before?: FieldValues;
 		errors?: FieldErrors;
@@ -34,7 +34,7 @@
 	let touched = $state<Partial<Record<keyof FieldValues, boolean>>>({});
 
 	const found = $derived(problems(values, mode));
-	const changed = $derived(mode === 'create' || hasChanges(values, before));
+	const changed = $derived(mode !== 'edit' || hasChanges(values, before));
 
 	function errorFor(key: keyof FieldValues): string | null {
 		const api = key === 'rps' || key === 'burst' ? null : errors[key];
@@ -53,7 +53,7 @@
 	{/if}
 {/snippet}
 
-{#if mode === 'edit'}
+{#if mode !== 'create'}
 	{#each FIELD_NAMES as key (key)}
 		<input type="hidden" name="{BEFORE_PREFIX}{key}" value={before[key]} />
 	{/each}

@@ -124,3 +124,19 @@ What the numbers say:
 ## 6. Gate status
 
 The gate judges the requirement (caller p99 ≤ V + 10 ms) and what the Hub adds over direct calls in the same run (p50 ≤ 2 ms, ≤ 3 ms keyed; p99 ≤ 10 ms). The earlier absolute "p50 ≤ V + 2 ms" bound was removed: it charged the mock vendor's own ~0.9 ms jitter to the Hub. In clean runs on the shared development container the Hub added 1.2 ms (sync) and 2.0 ms (keyed) at p50, and p99 stayed at or below 110 ms. On that container, runs taken while other builds use both CPUs are noisy (load average above 3, p99 up to 111 ms), so the dedicated `latency-budget` CI job is the reference. Ways to add margin: HUB-409 (audit masking off the request goroutine, about half of the Hub's own CPU per request). **Wait mode** (D3 default) persists the request before the attempt. On the CI runner it adds 1.7 ms p50 and 4.2 ms p99 (5.1); on the loaded development container it measured about 5.5 ms p50 and 10–15 ms p99. It is reported, not gated.
+
+## 7. Auth stage with 10,000 ISFC keys (HUB-490)
+
+ISFC backend-client credentials are checked on the sync path with no OPA and no network hop (ADR-0028, D2): one SHA-256, one map lookup in `isfc.KeyMap`, two constant-time compares, a short scan of the key's tenants against the snapshot's ISFC index, and the tenant-state checks (`edge.authenticateISFC`). The auth stage budget is DESIGN §18.5 rule 5 and §18.6: every middleware under 100 µs p99.
+
+**How to run it:** `make bench-auth` (`BenchmarkAuthISFC10k`, `BenchmarkAuthHubKeys10k`, and the older `BenchmarkAuthMiddleware`, `-count=3`, never with `-race`). Each benchmark times the whole auth middleware, `TimedMiddleware` stage metric included, one request per iteration, stepping through 10,000 distinct keys with a prime stride so no key stays hot. The ISFC setup has 200 ISFC-linked tenants; one key in ten covers three tenants and sends `X-Tenant-Id`, the rest cover one. The benchmark fails above 100 µs p99. `make bench` runs them with everything else.
+
+| Benchmark (10,000 keys) | p50 | p99 | Time per request | Allocations |
+| --- | --- | --- | --- | --- |
+| `BenchmarkAuthISFC10k` (ISFC key, 3 runs) | 0.83 to 0.92 µs | **2.4 to 2.8 µs** | 0.93 to 1.08 µs | 13, 1.15 KB |
+| `BenchmarkAuthHubKeys10k` (Hub tenant key, same stage, 3 runs) | 0.71 to 1.04 µs | 2.5 to 2.9 µs | 0.84 to 1.20 µs | 13, 1.15 KB |
+| `BenchmarkAuthMiddleware` (the older one: one key, includes building the request and the recorder) | n/a | 27 to 31 µs | 2.8 to 3.3 µs | 43, 8.3 KB |
+
+Machine: Apple M4 (10 cores), Go 1.27.3, 2026-11-11, one developer machine, not the CI runner. The ISFC path costs the same as a Hub key path within noise, and about 2.5 % of the 100 µs budget at p99. The 13 allocations are the shared middleware chain (request fields, context values, the stage timer), not the key check: looking up a key and resolving its tenant allocate nothing.
+
+What it does not cover: the reload of the key map (a background goroutine swapping an atomic pointer, 10,000 entries rebuilt off the request path) and the `hub.isfc_caller_keys` read that feeds it. **No embedded OPA was benchmarked**: D2 is the in-memory check, and embedded OPA on `/v1` was only an option if this benchmark had missed the budget. It did not (AUTH_PLAN §8.3).

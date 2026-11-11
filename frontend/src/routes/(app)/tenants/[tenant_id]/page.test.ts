@@ -63,7 +63,7 @@ describe('tenant detail', () => {
 
 	it.each<Role>(['editor', 'viewer', 'tenant_viewer'])('%s gets a read-only note', async (role) => {
 		const head = await renderDetail(accessFromRoles([role], role === 'tenant_viewer' ? [ID] : []));
-		expect(within(head).getByRole('note')).toHaveTextContent('needs the Admin role');
+		expect(within(head).getByRole('note')).toHaveTextContent('needs the Tenant admin role');
 		expect(within(head).queryByRole('button')).toBeNull();
 	});
 

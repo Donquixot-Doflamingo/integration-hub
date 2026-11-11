@@ -154,7 +154,11 @@ func TestLoadConfig(t *testing.T) {
 		wantErr   string
 		wantAdmin string
 	}{
-		{name: "ok, admin URL defaults to base + /admin/v1", env: base, wantAdmin: "http://hub:8080/admin/v1"},
+		{name: "no admin token, no admin URL", env: base, wantAdmin: ""},
+		{name: "admin token on a local gateway: the dev admin port", env: map[string]string{"HUB_BASE_URL": "http://localhost:8080", "HUB_API_KEY": testKey, "HUB_ADMIN_TOKEN": testAdminToken}, wantAdmin: "http://localhost:8081/admin/v1"},
+		{name: "admin token on a loopback IP", env: map[string]string{"HUB_BASE_URL": "http://127.0.0.1:8080/", "HUB_API_KEY": testKey, "HUB_ADMIN_TOKEN": testAdminToken}, wantAdmin: "http://127.0.0.1:8081/admin/v1"},
+		{name: "admin token on a remote gateway needs the admin URL (G16)", env: map[string]string{"HUB_BASE_URL": "https://hub.example.com", "HUB_API_KEY": testKey, "HUB_ADMIN_TOKEN": testAdminToken}, wantErr: "HUB_ADMIN_BASE_URL is required"},
+		{name: "admin token with the gateway route", env: map[string]string{"HUB_BASE_URL": "https://hub.example.com", "HUB_API_KEY": testKey, "HUB_ADMIN_TOKEN": testAdminToken, "HUB_ADMIN_BASE_URL": "https://gw.example.com/hub/admin/v1/"}, wantAdmin: "https://gw.example.com/hub/admin/v1"},
 		{name: "admin URL override", env: map[string]string{"HUB_BASE_URL": "http://hub:8080", "HUB_API_KEY": testKey, "HUB_ADMIN_BASE_URL": "http://adm:8081/admin/v1"}, wantAdmin: "http://adm:8081/admin/v1"},
 		{name: "no base URL", env: map[string]string{"HUB_API_KEY": testKey}, wantErr: "HUB_BASE_URL is required"},
 		{name: "no key", env: map[string]string{"HUB_BASE_URL": "http://hub"}, wantErr: "HUB_API_KEY is required"},

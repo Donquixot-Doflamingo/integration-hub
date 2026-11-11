@@ -41,11 +41,15 @@
 		denied?: Snippet<[string]>;
 	} = $props();
 
-	const needed = $derived<Role>(
-		highestRole([...(op ? [op] : []), ...(ops ?? [])].map(requiredRole).concat(min ?? [])) ??
-			'editor'
-	);
-	const allowed = $derived(access.known && hasRole(access.roles, needed));
+	const required = $derived.by<Role[]>(() => {
+		const r = [...(op ? [op] : []), ...(ops ?? [])].map(requiredRole).concat(min ?? []);
+		return r.length ? r : ['editor'];
+	});
+	// The roles form a lattice (`tenant_admin` is not above `editor`), so every requirement is
+	// checked on its own; the note names the strongest role among the ones that are not met.
+	const unmet = $derived(required.filter((r) => !hasRole(access.roles, r)));
+	const needed = $derived<Role>(highestRole(unmet.length ? unmet : required) ?? 'editor');
+	const allowed = $derived(access.known && unmet.length === 0);
 </script>
 
 {#if allowed}

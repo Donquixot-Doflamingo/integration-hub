@@ -6,6 +6,173 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `fix(frontend)` · Regenerate the typed client and role table for contract 2.1.1; correct the hubmcp README (HUB-469) · HUB-469 · F-24
+  - `npm run gen:api` output matches contract hub-admin 2.1.1 again, so the two generated-file freshness tests pass
+  - `contracts/mcp/README.md` states that `HUB_ADMIN_BASE_URL` is required with `HUB_ADMIN_TOKEN` (except on a loopback gateway) and that the ISFC key env form is loopback-only
+- 2026-11-11 · `docs(tickets)` · Set EP-15 ticket statuses from the branch history and mark the OBSERVABILITY ISFC signals implemented (HUB-460) · HUB-460 · F-24
+  - HUB-461 and HUB-469 to HUB-497 move from todo to in-review with acceptance boxes ticked only where tests exist; boxes stay open for real ISFC, promtool, the policy copy to the ISFC repo, the QA Entra check, the CI-runner benchmark and `e2e-real`; HUB-462 to HUB-464 stay blocked
+  - OBSERVABILITY section 15 and the F-25 tenant surface now say what is implemented (the HubAdminAuthzUnavailable alert exists); ticket counters recomputed
+- 2026-11-11 · `feat(frontend)` · Add a nonce-based Content-Security-Policy to the console (HUB-499) · HUB-499 · F-24
+  - Every console page now sends `default-src 'self'`, script nonces from SvelteKit (no `unsafe-inline`), `frame-ancestors 'none'`, `object-src 'none'` and `base-uri 'self'`; in ISFC mode `connect-src` and `form-action` also allow the `HUB_ISFC_AUTH_URL` origin for the Microsoft step and the login redirect
+  - New Playwright spec `csp.test.ts` checks the header and that signed-in pages raise no violation; the mock e2e suite passes (117 tests); SECURITY §2.2 now describes the policy as implemented (gap G12)
+- 2026-11-11 · `feat(hubctl)` · Add hubctl tenants link and a report of Hub tenants with no ISFC link (HUB-498) · HUB-498 · F-25
+  - `hubctl tenants link <hub-id> <isfc-uuid>` writes `isfc.tenant_id` into an existing tenant file in the config tree (comments kept), so the ISFC sync updates that tenant instead of creating a duplicate; it refuses unknown tenants, bad UUIDs, a UUID linked elsewhere, and a relink without `-force`
+  - `hubctl tenants link --report` lists Hub tenants without an ISFC link (exit 3 when there are some)
+  - `hubctl apply` now refuses an ISFC-link change with a clear message: the admin API cannot carry it (a contract change request is open); HUB-498 is split, the console CSP is HUB-499
+- 2026-11-11 · `test(roles)` · Register the admin authz metric in the metrics catalogue tests (HUB-474) · HUB-474 · F-24
+  - `TestAlertRulesUseExportedMetrics` knows `hub_admin_authz_duration_ms`, so the `HubAdminAuthzUnavailable` alert query is checked against an exported metric
+- 2026-11-11 · `chore(deploy)` · Add ISFC deployment manifests, the HubAdminAuthzUnavailable alert, the ISFC runbook and dev-up --isfc (HUB-497) · HUB-497 · F-24
+  - deploy/isfc holds the OPA sidecar values (opa.enabled, platform integration-hub), the gateway route and a NetworkPolicy that opens the admin port to the ISFC gateway and labelled automation only
+  - New alert HubAdminAuthzUnavailable (OPA errors above 1% for 5 minutes) with promtool tests and a runbook; docs/runbooks/isfc-auth.md covers OPA down, sync stale and key revocation
+  - `scripts/dev-up.sh --isfc` starts the admin in ISFC mode and the console with PUBLIC_AUTH_MODE=isfc from ISFC_* URLs and refuses to start without them; the default stack now starts the console with NODE_ENV=test because the console refuses the dev role picker otherwise
+- 2026-11-11 · `contract(admin)` · Document the 403 responses of getMe and getRequestStatus (HUB-469) · HUB-469 · F-24
+  - `hub-admin` and `hub-public` 2.1.1 list 403 where the Hub already returns it (no Hub role; credential without `requests_read`)
+- 2026-11-11 · `feat(frontend)` · Restrict the dev login to mock builds and tests, and refuse it at start-up (HUB-495) · HUB-495 · F-24
+  - `PUBLIC_AUTH_MODE=dev` works only in mock builds (`HUB_API_MOCKING=true`) and when `NODE_ENV=test`; in a deployment it stops the console from starting, and an unset or unknown mode starts but nobody can sign in (the login page says why)
+  - A session made by the other provider is not accepted (a dev cookie after a switch to ISFC, or the reverse), even though it decrypts
+  - The mock e2e suite (115 Playwright tests in 29 spec files) stays green; frontend README documents the ISFC settings
+  - Heads-up: `scripts/dev-up.sh` still starts the console with `PUBLIC_AUTH_MODE=dev`; it needs `NODE_ENV=test` or the ISFC mode (owned outside the console)
+- 2026-11-11 · `chore(isfc)` · Fix lint findings in the ISFC client, mock, sync and wiring (HUB-482) · HUB-482 · F-25
+  - No behaviour change; the events webhook trigger now receives the request context, mockisfc has no unused state, and the ISFC test helpers pass the context
+- 2026-11-11 · `fix(frontend)` · Put refreshed session cookies on proxied admin responses (HUB-492) · HUB-492 · F-24
+  - A refreshed ISFC session (rotated tokens) or a tenant adopted from the gateway now reaches the browser on `/admin/v1` responses too; before, SvelteKit dropped the cookie on the proxy's own response and the next refresh would have used a spent token
+  - Deleting a cookie on plain http no longer sends `Secure`, which browsers ignore
+- 2026-11-11 · `feat(hubctl)` · Add hubctl login -isfc, ISFC machine mode, HUB_TENANT_ID and a fixed hubmcp admin URL (HUB-496) · HUB-496 · F-24
+  - `hubctl login -isfc` signs in with ISFC (PKCE, loopback redirect on the public hubctl client) and saves the token at 0600; `login -dev` is unchanged
+  - With HUBCTL_ISFC_CLIENT_ID and HUBCTL_ISFC_CLIENT_SECRET (and HUBCTL_ISFC_AUTH_URL) hubctl fetches the client's key and calls the admin directly with x-isfc-client-id and x-isfc-api-key, refreshing it once on 401 or 403; HUB_TENANT_ID sends X-Tenant-Id
+  - hubmcp no longer guesses the admin URL as HUB_BASE_URL + /admin/v1: HUB_ADMIN_BASE_URL is required with HUB_ADMIN_TOKEN (a loopback gateway defaults to the same host on :8081), and HUB_TENANT_ID is sent on hub_admin_* calls
+- 2026-11-11 · `feat(mcp)` · Add the ISFC credential to the Go SDK and hubmcp and onboard teams in the consumer skill (HUB-489) · HUB-489 · F-24
+  - `hubclient.WithISFC(clientID, secret, authURL)` fetches, caches and refreshes the caller's ISFC key (once on 401 or 403); `WithISFCKey` and `WithTenantID` cover a held key and a multi-tenant key
+  - hubmcp reads HUB_ISFC_CLIENT_ID, HUB_ISFC_API_KEY and HUB_TENANT_ID; the HTTP transport accepts x-isfc-client-id and x-isfc-api-key per request, and a loopback server may hold one in its environment
+  - The consumer skill explains onboarding a calling team (ISFC client, key, tenant grants) and marks `hk_live_` keys as legacy
+- 2026-11-11 · `feat(frontend)` · Add the tenant switcher and send X-Tenant-Id through the admin proxy (HUB-494) · HUB-494 · F-24
+  - A tenant switcher in the top bar lists the tenants ISFC gives the operator for the console (`GET {gateway}/auth/oauth2/panels`), the platform tenant first; the choice is kept in the encrypted session and checked against ISFC on the server
+  - The admin proxy sends the chosen tenant as `X-Tenant-Id`, adopts the tenant the gateway used when none was chosen (`X-Isfc-Tenant-Id`), and never forwards a tenant header from the browser
+  - Switching reloads every page load and `/me`, so the roles of the new tenant apply at once; `GW_015` (no access to that tenant) is shown with its own message and a pointer to the switcher
+  - New settings `HUB_ISFC_GATEWAY_URL` and `HUB_ISFC_PLATFORM_TENANT_ID`
+- 2026-11-11 · `perf(edge)` · Benchmark the auth stage with 10k ISFC keys and record the result (HUB-490) · HUB-490 · F-24
+  - `make bench-auth` times the whole auth middleware over 10,000 ISFC keys (and 10,000 Hub keys for comparison) and fails above 100 µs p99; measured p99 is about 2.5 µs, the same as a Hub key
+  - LATENCY.md §7 records the numbers and what the benchmark does not cover; embedded OPA on /v1 stays unneeded
+- 2026-11-11 · `feat(adminapi)` · Add Sync now for ISFC tenants, the events webhook and tenant setup in the admin API (HUB-484) · HUB-484 · F-25
+  - `syncTenants` and `syncTenant` run the reconciler on demand and answer with created, updated, disabled and unchanged counts; an unreachable ISFC is 200 `result: failed` and disables nothing; a second sync at the same time is 409; the change log names the operator
+  - With `HUB_TENANT_SOURCE=isfc`, `createTenant` answers 409 `tenant_managed_by_isfc`; tenants show `setup` and the read-only `isfc` copy, and the ISFC name is the display name unless the Hub sets one
+  - A `tenant_admin` finishes setup of its own tenant (`setup: complete`, one way; `disabled` stays platform-only); the signed webhook `POST /internal/isfc/events` (`HUB_ISFC_EVENTS_SECRET`) only triggers a reconcile, and duplicate or reordered events are harmless
+- 2026-11-11 · `docs(tech)` · List HUB_OPA_CLIENT_ID in the TECH_SPEC settings (HUB-477) · HUB-477 · F-24
+  - TECH_SPEC section on environment variables gains `HUB_OPA_CLIENT_ID`, the client id whose id without `-` is the Rego package of the admin policies
+- 2026-11-11 · `test(frontend)` · Cover the Microsoft SSO round trip against a fake provider (HUB-493) · HUB-493 · F-24
+  - The Microsoft button asks the server for the PKCE challenge and state, opens Hydra's flow in the browser with credentials, goes to Entra, and lands on `/auth/callback`, where the server checks `state` and exchanges the code; the whole chain is tested against fakes (no real ISFC or Entra)
+  - The button shows ISFC and network failures and becomes usable again, also after the browser's back button from Entra; production still waits for ISFC-CR-4 (D9)
+- 2026-11-11 · `chore(hubmcp)` · Re-sync the embedded hubmcp tool contract to 2.1.0 (HUB-471) · HUB-471 · F-24
+  - `backend/cmd/hubmcp/hubmcp-tools.json` is again a byte copy of `contracts/mcp/hubmcp-tools.json` (`go generate ./cmd/hubmcp`); the hubmcp tests, including the operation classification that now lists syncTenants and syncTenant, pass
+- 2026-11-11 · `feat(frontend)` · Refresh ISFC tokens once, end expired sessions at /login?expired=1 and log out at ISFC (HUB-492) · HUB-492 · F-24
+  - The session cookie is AES-GCM encrypted (key `HUB_SESSION_SECRET`): the access and refresh tokens cannot be read from its value, and a login cookie cannot be used as a session
+  - The server refreshes the access token a minute before it expires, or once after the gateway refuses it, single-flight per refresh token; a 409 from ISFC is retried once after 300 ms; the rotated tokens go into the new cookie
+  - When ISFC refuses the refresh token the session ends and the page goes to `/login?expired=1`; an ISFC outage does not sign anyone out
+  - Sign out calls `POST {ISFC_AUTH}/api/v1/logout` and always clears the cookie; ISFC gateway errors (`GW_015`, `GW_007`, ...) reach the pages as readable Hub errors
+- 2026-11-11 · `test(authz)` · Add the 76 admin policies and the Rego RBAC matrix tests (HUB-479) · HUB-479 · F-24
+  - `authz-policies/integration-hub/policies/admin/v1/` has one generated policy per operationId (76 of hub-admin 2.1.0); the generated `tests/rbac_matrix_test.rego` checks every operation against every role and API key, `tests/entry_test.rego` covers scopes, clients, `ISFC_ADMIN` (not an admin), shadowing and keys
+  - `opa test` runs 94 tests, all passing (executed in docker with opa 1.4.2); an integration test runs the Go ISFC-mode matrix and the machine matrix through the real policies in a real OPA container
+  - A Go test keeps `catalogue.json` and the Go role bundles in step
+- 2026-11-11 · `feat(edge)` · Record the ISFC caller client and key id on request.received (HUB-488) · HUB-488 · F-24
+  - For an ISFC credential the `request.received` audit event adds `caller_client_id`, `isfc_key_id` and `auth_method`, next to the key hash; Hub-key requests record what they did before
+  - The `x-isfc-api-key` value is never in an audit event, a record, a response or a log line; a test proves it on success, on a validation failure and on a refused credential
+- 2026-11-11 · `feat(authz)` · Generate one Rego policy per admin operation from the contract (HUB-478) · HUB-478 · F-24
+  - `scripts/gen-authz.mjs` reads `x-required-role` and `x-required-permission` from `hub-admin.v1.yaml` and writes one policy per operationId (path regex with gin-style shadowing exclusions, permission, scope, human-only for unseal and purge), `catalogue.json` and the generated RBAC matrix test; it refuses a contract whose roles and permissions drift apart
+  - `--check` fails on a missing, stale or disagreeing policy (hand edits that keep path, permission and scope are allowed); `make authz-check` and the `authz` workflow run it with `opa check --strict` and `opa test` (docker when opa is not installed)
+- 2026-11-11 · `feat(edge)` · Enforce requests_read on request status and map ISFC permissions to scopes (HUB-487) · HUB-487 · F-24
+  - `GET /v1/requests/{id}` now needs the `requests_read` scope (or `requests_read:<integration>` for that integration's requests) for Hub keys and ISFC keys alike; a key with only `invoke` gets 403 `missing_scope` there (fixes HUB-415)
+  - ISFC permissions `HUB:INVOKE`, `HUB:DRY_RUN` and `HUB:REQUESTS_READ` give the scopes `invoke`, `dry_run` and `requests_read`; any other permission grants nothing
+- 2026-11-11 · `feat(authz)` · Add entry.rego, the permission catalogue and the ISFC seed script for integration-hub (HUB-477) · HUB-477 · F-24
+  - `authz-policies/integration-hub/entry.rego` is the ISFC panel template with the `ISFC_ADMIN` shortcut removed and `platform_scope`, `tenant_scope` and API-key helpers added (a key is judged as a key, the decision meta reports `key_permissions`); `metadata.yaml` and `catalogue.json` (the HUB_* roles and permissions of AUTH_PLAN section 7.4)
+  - `scripts/isfc-seed-hub.py` creates, idempotently and through auth-service's admin APIs only, the console and backend clients, permissions, roles, the platform tenant, mapping, EMAIL_OTP and an optional automation client with a `HUB_CI` key; it never prints a token, secret or key (tested against a fake auth-service)
+  - New setting `HUB_OPA_CLIENT_ID` (default `integration-hub`): the Rego package is the id without `-`, as in the ISFC sidecar
+- 2026-11-11 · `feat(edge)` · Accept ISFC S2S credentials at the edge behind HUB_EDGE_ISFC_AUTH (HUB-486) · HUB-486 · F-24
+  - With `HUB_EDGE_ISFC_AUTH=on` a caller may send `x-isfc-client-id` + `x-isfc-api-key` instead of a Hub key; the key is looked up by hash in memory (no database, no ISFC call) and must belong to that client; both credential kinds in one request is a 400
+  - The tenant is the one the key covers, or the one named by `X-Tenant-Id` when it covers several (missing 400, not covered 403); a pending, disabled or ISFC-inactive tenant is 401, a suspended one 403; the key's permissions give the scopes
+  - `hub_edge_auth_total{method,result}` counts both kinds; gateways reload their key map on a Redis ping and every minute; `hk_` keys behave exactly as before
+- 2026-11-11 · `feat(frontend)` · Add the ISFC login: Email OTP, Microsoft and the callback code exchange (HUB-491) · HUB-491 · F-24
+  - The login page lists Email OTP and Microsoft from ISFC's `/oauth2/method/integration-hub-console` (every other method is ignored); with `PUBLIC_AUTH_MODE=isfc` the dev role picker is gone
+  - A sign-in generates PKCE (S256), `state` and `nonce` on the server and keeps them in a 10-minute encrypted httpOnly cookie; `/auth/callback` checks `state`, exchanges the code at ISFC with the browser's `x-device-id` and User-Agent, sets the session and removes the code from the URL
+  - Sign-in errors have their own messages (`AS_FB_21` no tenant access, `AS_VE_34` email domain not allowed, `GW_007` session ended, `GW_015` no access to the tenant); nothing from the URL is echoed
+  - The HUB-282 OIDC stub is replaced; new settings `HUB_ISFC_AUTH_URL`, `HUB_ISFC_CLIENT_ID`, `HUB_ISFC_REDIRECT_URI`; the Microsoft button opens Hydra's flow in the browser with the server's PKCE challenge (HUB-493 adds its fake-provider tests)
+- 2026-11-11 · `feat(isfcsync)` · Sync ISFC caller keys into hashed rows and rebuild the gateway key map (HUB-483) · HUB-483 · F-24
+  - Each reconcile reads the keys the Hub backend client issued, hashes them while decoding and stores them in `hub.isfc_caller_keys` (the plaintext is never stored or logged); a key that leaves ISFC's configuration becomes REVOKED
+  - A key's tenants come from the tenants' interim `isfc_caller_clients` lists until ISFC-CR-1; permissions `HUB:INVOKE`, `HUB:DRY_RUN`, `HUB:REQUESTS_READ` map to the existing scopes
+  - A change publishes a Redis ping on `hub:isfc:keys` and never a snapshot or a change-log row; gateways reload an in-memory map (`isfc.KeyMap`, lock-free lookups) and `hub_isfc_caller_keys{status}` reports the counts
+- 2026-11-11 · `feat(isfcsync)` · Add the ISFC tenant reconciler with a leader-only loop in the worker (HUB-482) · HUB-482 · F-25
+  - With `HUB_TENANT_SOURCE=isfc` the worker leader pulls ISFC every `HUB_ISFC_RECONCILE_INTERVAL` (5 min): tenants linked to the console client are created `setup: pending`, renames and key changes update the isfc copy only, INACTIVE, unlinked or deleted tenants are disabled (never deleted), re-activated ones are re-enabled and keep a Hub suspension
+  - Hub tenant ids are derived once from the ISFC key (padded with `-t`, `-2`, `-3` on collision) and never change; the platform tenant is skipped; `HUB_ISFC_SYNC_DRY_RUN=true` only logs
+  - Every change is written as actor `isfc-sync`; ISFC down keeps the last state and disables nothing; metrics `hub_isfc_sync_runs_total`, `_failures_total`, `_lag_seconds`, `_consecutive_failures` and alert `HubIsfcSyncStale`
+- 2026-11-11 · `feat(adminapi)` · Accept ISFC API keys as machine principals on the admin API (HUB-476) · HUB-476 · F-24
+  - Automation (CI, hubctl) can call the admin directly with `x-isfc-client-id` + `x-isfc-api-key`: OPA checks the key and its permission, the principal is `client:<id>` (also the change log actor) with the roles its key covers, and it has platform scope
+  - `unsealRequest` and `purgeDeadLetters` are refused for machines whatever the key holds (403, OPA is not asked); a revoked key, another client's key or an unknown key is 403, a missing client id or bearer plus key is 401
+  - The logger redacts `x-isfc-api-key` by value (the key joins the redaction set, bounded at 256 keys)
+- 2026-11-11 · `feat(adminapi)` · Wire ISFC mode into the admin server, /me and the RBAC matrix (HUB-475) · HUB-475 · F-24
+  - In `HUB_ADMIN_AUTH_MODE=isfc` every admin request goes authenticate, OPA (deny 403, error or timeout 503 `authz_unavailable`, no engine also 503), then the in-process role check; the change log actor is the email
+  - `/me` keeps its shape (mapped Hub roles, the Hub id of the tenant for tenant scope); new UI gates `tenants:setup` and `tenants:sync`, and `registrar:write` now needs `tenant_admin`
+  - A `tenant_admin` can create, change, delete and rotate registrar endpoints of its own tenant only; `TestRBACMatrix` covers tenant_admin and runs in both modes (jwt, and isfc with RS256 tokens, generated gateway headers and a catalogue OPA)
+- 2026-11-11 · `feat(authz)` · Add the OPA decision client for the admin API (HUB-474) · HUB-474 · F-24
+  - New `internal/authz`: a sidecar-compatible OPA input (`sub`, `http`, `client`, `tenant`), deny is a decision and a timeout, error or missing decision is `ErrUnavailable` (fail closed); the API key prints as `***`
+  - Settings `HUB_OPA_URL`, `HUB_OPA_TIMEOUT` (default 200ms), `HUB_OPA_DISABLED` (refused unless `HUB_ENV=test`); metric `hub_admin_authz_duration_ms{decision}` and span `admin.authz.opa`
+  - `internal/testkit/opa` starts a real OPA container for integration tests (skips without docker)
+- 2026-11-11 · `feat(frontend)` · Show ISFC-managed tenants and add the setup flow and Sync now (HUB-485) · HUB-485 · F-25
+  - The tenant list and page show the ISFC key, name, status, link and last synced as read-only copies (with a link to change them in ISFC) and a "Setup pending" badge; "Create tenant" is hidden when `PUBLIC_AUTH_MODE=isfc`
+  - Admins get "Sync now" (`syncTenants` on the list, `syncTenant` on a tenant) with a reason; a sync that could not reach ISFC is shown as a warning, and a tenant that ISFC deactivated or unlinked reads "Disabled in ISFC"
+  - A tenant admin finishes a pending tenant with "Complete setup" (display name, rate limit, callback endpoints checklist, then `setup: complete`); tenant admins can also edit their tenant and manage its callback endpoints but cannot disable it
+  - Role model follows contract 2.1.0: new `tenant_admin` (admin ⊃ tenant_admin ⊃ tenant_viewer; editor and viewer do not satisfy it); `gen:api` regenerated the client, mocks and role table, and the dev login offers the new role
+- 2026-11-11 · `feat(isfc)` · Add the ISFC auth-service client and the mockisfc fake (HUB-481) · HUB-481 · F-25
+  - `internal/isfc` fetches the Hub's own key with client credentials, refreshes it once on 401 or 403, and reads tenants, client metadata and client configuration with timeouts; API keys are hashed while decoded and no secret reaches an error or a log
+  - `cmd/mockisfc` (and `internal/isfc/mockisfc`) is a fake auth-service: tenants, client metadata, configuration, key fetch, client-credentials token mint and an RS256 JWKS; every ISFC test uses it, none calls a real ISFC
+- 2026-11-11 · `feat(adminapi)` · Map ISFC gateway identity to a Principal behind HUB_ADMIN_AUTH_MODE (HUB-473) · HUB-473 · F-24
+  - `HUB_ADMIN_AUTH_MODE=jwt|isfc` (default `jwt`, unchanged): in `isfc` the admin verifies the Hydra token, cross-checks `x-isfc-sub-id` and `x-isfc-client-id` against it and maps the roles of `x-isfc-sub-attrs` (platform tenant: HUB_ADMIN/EDITOR/VIEWER; linked tenant: HUB_TENANT_ADMIN/VIEWER); `ISFC_ADMIN` is not a Hub admin
+  - New role `tenant_admin` (admin ⊃ tenant_admin ⊃ tenant_viewer; editor and viewer do not satisfy it); malformed attributes or an unknown tenant give no roles (403)
+  - New settings `HUB_ISFC_CONSOLE_CLIENT_ID`, `HUB_ISFC_PLATFORM_TENANT_ID`; new metric `hub_admin_authn_failures_total{reason}`
+- 2026-11-11 · `feat(registry)` · Add ISFC and setup fields to tenants, sync tables and the pending-setup edge check (HUB-480) · HUB-480 · F-25
+  - A tenant file may carry `setup: pending|complete`, an `isfc` block (tenant_id, key, name, status, linked, synced_at) and the interim `isfc_caller_clients` list; the loader validates them and rejects two Hub tenants linked to one ISFC tenant; files without them load unchanged
+  - Migration 00012 adds `hub.isfc_sync_runs` and `hub.isfc_caller_keys` (hash-only key column)
+  - With `HUB_TENANT_SOURCE=isfc` the edge answers 401 for a tenant whose setup is pending; the default mode is unchanged
+- 2026-11-11 · `feat(adminapi)` · Verify RS256 tokens and RSA JWKS keys in the admin JWT verifier (HUB-472) · HUB-472 · F-24
+  - The admin API accepts RS256 (Hydra) as well as ES256 tokens; RSA keys under 2048 bits are skipped and an RSA key can never verify an ES256 token or the reverse
+  - `none`, HS* and every other alg stay refused; the dev issuer and `jwt` mode are unchanged
+- 2026-11-11 · `docs(agents)` · Make ISFC the documented identity and tenant source and ban real ISFC in tests (HUB-468) · HUB-468 · F-24
+  - AGENTS.md and CLAUDE.md add the rule: ISFC is the identity and tenant source (planned, EP-15), tests never call a real ISFC or Entra (use mockisfc), ISFC keys are never stored or logged in plaintext, and /v1 makes no OPA or ISFC call
+  - CLAUDE.md points at AUTH_PLAN, F-24, F-25 and ADR-0026 to ADR-0028; HUB-465 to HUB-468 are in review
+- 2026-11-11 · `docs(tech)` · Document the ISFC signals and the mockisfc test rule (HUB-468) · HUB-468 · F-24
+  - OBSERVABILITY §15 lists the planned authz, authn, edge-auth and sync metrics, logs, span and alerts
+  - TESTING_STRATEGY §5.1 describes mockisfc and the rule that tests never call a real ISFC or Entra
+- 2026-11-11 · `docs(tech)` · Fix the RBAC matrix and docs drift, add ISFC trust boundaries and env vars (HUB-468) · HUB-468 · F-24
+  - SECURITY §7 now matches the contract's x-required-role and TestRBACMatrix (74 operations); it no longer lets editors create vendors, accounts, tenants or keys, and no longer shows tenant_viewer reading the change log
+  - SECURITY lists the planned ISFC trust boundaries and gaps G4, G5, G6, G15, and says plainly that the console has no CSP yet and its session cookie is signed, not encrypted
+  - TECH_SPEC drops the oidc-stub compose service and the /auth/login routes that do not exist, fixes hub_tenant to hub_tenants, and lists the planned HUB_ADMIN_AUTH_MODE, HUB_EDGE_ISFC_AUTH, HUB_TENANT_SOURCE, HUB_OPA_* and HUB_ISFC_* settings
+- 2026-11-11 · `docs(features)` · Add feature docs F-24 and F-25 for ISFC identity and tenants (HUB-468) · HUB-468 · F-24
+  - F-24 (ISFC identity and authorization) and F-25 (Tenants from ISFC) exist from the template, status in-progress, every behaviour marked planned (EP-15)
+  - The feature index and dependency graph list both features
+- 2026-11-11 · `contract(mcp)` · Add ISFC settings for hubmcp (HUB-471) · HUB-471 · F-24
+  - hubmcp-tools 2.1.0: env `HUB_TENANT_ID`, `HUB_ISFC_CLIENT_ID`, `HUB_ISFC_API_KEY`; `HUB_ADMIN_BASE_URL` is the ISFC gateway route in ISFC mode; no tool changes
+- 2026-11-11 · `contract(public)` · Add ISFC S2S security scheme and optional X-Tenant-Id (HUB-470) · HUB-470 · F-24
+  - hub-public 2.1.0: callers may authenticate with `x-isfc-api-key` + `x-isfc-client-id` instead of a tenant API key, and send `X-Tenant-Id` when the credential covers several tenants; no vendor, account or version leak
+- 2026-11-11 · `docs(product)` · Add the ISFC identity and tenant stories and requirements (HUB-468) · HUB-468 · F-24
+  - USER_STORIES gains US-2401 to US-2405 (F-24) and US-2501 to US-2503 (F-25) with Given/When/Then, all marked planned (EP-15)
+  - PRD gains deviation DV-8 (ISFC owns identity and tenants, platform tenant), FR-54 to FR-58 and NFR-19, NFR-20
+- 2026-11-11 · `contract(admin)` · Add ISFC security schemes, permissions, tenant ISFC fields and sync operations (HUB-469) · HUB-469 · F-24, F-25
+  - hub-admin 2.1.0: `x-required-permission` on all operations, role `tenant_admin`, security schemes `isfcGateway` and `isfcApiKey`, read-only `isfc` and `setup` on tenants, operations `syncTenants` and `syncTenant`, error codes `tenant_managed_by_isfc` and `authz_unavailable`
+  - hubmcp-tools 2.0.1 classifies the new operations; `make contracts-check` checks the permission catalogue
+- 2026-11-11 · `docs(adr)` · Add ADR-0028 caller auth with ISFC backend clients checked in memory (HUB-467) · HUB-467 · F-24
+  - ADR-0028 records ISFC S2S credentials for callers checked in memory with no OPA hop on the sync path (DESIGN §18.5), the revocation delay and the legacy hk_live_ cut-off rule (planned, EP-15); OPA latency numbers are pending HUB-463
+- 2026-11-11 · `docs(adr)` · Add ADR-0027 tenants owned by ISFC with a synced Hub copy (HUB-466) · HUB-466 · F-25
+  - ADR-0027 records the ownership table, tenant lifecycle, derived immutable Hub tenant ids, the pull-based reconciler that events only trigger, and the failure behaviour (planned, EP-15)
+- 2026-11-11 · `docs(adr)` · Add ADR-0026 ISFC identity and per-operation admin policies (HUB-465) · HUB-465 · F-24
+  - ADR-0026 records ISFC as the identity provider, the platform tenant, gateway identity plus one OPA policy per admin operation, and the machine-principal rules (planned, EP-15)
+  - ADR-0005 and ADR-0022 are marked partly superseded (auth parts only)
+- 2026-11-11 · `docs(tickets)` · Move the ISFC auth plan tickets into the backlog and record decisions D1-D9 (HUB-460) · HUB-460 · F-24
+  - `docs/tickets/TICKETS.md` gains epic EP-15 with tickets HUB-460 to HUB-498 (HUB-461 port work is todo, HUB-462 to HUB-464 are blocked on a live ISFC stack); the ID-range and feature tables list EP-15, F-24 and F-25
+  - `docs/tech/AUTH_PLAN.md` records the accepted answer to each of D1-D9 and is marked approved; HUB-460 is in review
+- 2026-11-11 · `chore(infra)` · Make the dev Postgres and Redis ports configurable (HUB-461) · HUB-461 · F-24
+  - `HUB_PG_PORT` and `HUB_REDIS_PORT` move the compose Postgres and Redis host ports; `HUB_GATEWAY_PORT` and `HUB_ADMIN_PORT` are aliases of the existing `DEV_*` variables; defaults are unchanged
+  - `docs/runbooks/isfc-local.md` describes running the ISFC local stack beside the Hub
+- 2026-11-11 · `docs(tech)` · Add the ISFC identity, tenancy and authorization plan (HUB-460) · HUB-460 · F-24
+  - `docs/tech/AUTH_PLAN.md` proposes ISFC login (Email OTP, Microsoft) for the console, one OPA policy per admin operation, tenants owned by ISFC and synced into the Hub, and callers as ISFC backend clients
+  - Lists 16 gaps found in ISFC and the Hub, six ISFC change requests, the contract changes, decisions D1–D9 and 39 draft tickets (HUB-460 to HUB-498, epic EP-15); nothing is built yet
 - 2026-11-08 · `test(scripts)` · Add make test-scripts and close out HUB-456 (HUB-456) · HUB-456 · F-23
   - `make test-scripts` runs the hermetic shell tests for the dev tooling; HUB-456 is in review with what was and was not run
 - 2026-11-08 · `fix(examples)` · Keep the examples off the dev stack's ports and processes (HUB-456) · HUB-456 · F-23

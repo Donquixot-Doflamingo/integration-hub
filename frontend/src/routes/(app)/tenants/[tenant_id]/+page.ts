@@ -10,7 +10,7 @@ import type { PageLoad } from './$types';
 // 404 the API would answer, without the call.
 export const load: PageLoad = async (event) => {
 	const tenantId = event.params.tenant_id;
-	const { access } = await event.parent();
+	const { access, isfcAdminUrl } = await event.parent();
 	if (access.tenantScoped && !access.tenants.includes(tenantId)) {
 		error(404, { message: `Tenant ${tenantId} is not one of your tenants.`, code: 'NOT_FOUND' });
 	}
@@ -22,6 +22,7 @@ export const load: PageLoad = async (event) => {
 		: undefined;
 	return {
 		tenantId,
+		isfcAdminUrl: (isfcAdminUrl as string | null | undefined) ?? null,
 		keyState,
 		keys: collectPages((cursor) =>
 			api.call((c) =>

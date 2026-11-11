@@ -914,7 +914,7 @@ export interface paths {
         put?: never;
         /**
          * Create a tenant
-         * @description Creates a tenant. API keys and registrar endpoints are created separately.
+         * @description Creates a tenant. API keys and registrar endpoints are created separately. In ISFC mode tenants come from ISFC and this answers 409 `tenant_managed_by_isfc`; link the tenant to the Integration Hub client in ISFC and run `syncTenants`.
          */
         post: operations["createTenant"];
         delete?: never;
@@ -948,9 +948,65 @@ export interface paths {
         head?: never;
         /**
          * Update a tenant
-         * @description Merge-patch of display fields, rate limit and `disabled`. A disabled tenant's keys get 401.
+         * @description Merge-patch of display fields, rate limit, `disabled` and `setup`. A disabled tenant's keys get 401.
+         *     A `tenant_admin` may change `display_name`, `description`, `contact`, `rate_limit` and `setup`
+         *     (only to `complete`) of its own tenant, and gets 403 for `disabled`. ISFC fields (`isfc`) are
+         *     read-only and cannot be sent.
          */
         patch: operations["updateTenant"];
+        trace?: never;
+    };
+    "/tenants/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync tenants from ISFC now
+         * @description Runs the ISFC reconciler once for all tenants ("Sync now"; since 2.1.0). It pulls the full
+         *     current state from ISFC and applies it: new linked tenants are created with `setup: pending`,
+         *     changed names and statuses are copied, tenants that ISFC reports INACTIVE or unlinked are
+         *     disabled (never deleted). If ISFC is unreachable the Hub keeps its last good state, nothing is
+         *     disabled, and the answer is 200 with `result: failed`. A manual run always writes one
+         *     change-log entry. 409 `CONFLICT` while another sync is running.
+         */
+        post: operations["syncTenants"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/{tenant_id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant id.
+                 * @example orders-service
+                 */
+                tenant_id: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync one tenant from ISFC now
+         * @description Runs the reconciler for one tenant (since 2.1.0): refreshes its `isfc` copy and applies the
+         *     same rules as `syncTenants`. 404 `NOT_FOUND` for an unknown tenant. 409 `CONFLICT` if the
+         *     tenant has no ISFC link, or a sync is running. A failed fetch is 200 with `result: failed`.
+         */
+        post: operations["syncTenant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api-keys": {
@@ -1666,8 +1722,12 @@ export interface components {
         ChangeRef: {
             change_id: components["schemas"]["ChangeId"];
         };
-        /** @enum {string} */
-        Role: "admin" | "editor" | "viewer" | "tenant_viewer";
+        /**
+         * @description `tenant_admin` since 2.1.0. `admin` ⊃ `editor` ⊃ `viewer`; `admin` ⊃ `tenant_admin` ⊃
+         *     `tenant_viewer`. `editor` and `viewer` do not include `tenant_admin`.
+         * @enum {string}
+         */
+        Role: "admin" | "editor" | "viewer" | "tenant_viewer" | "tenant_admin";
         /** @enum {string} */
         DeliveryMode: "sync" | "wait" | "async" | "async_callback";
         /** @enum {string} */
@@ -1685,7 +1745,7 @@ export interface components {
         /** @description Same shape as the caller CanonicalError (`../schemas/events/canonical-error.json`), with the admin code superset and an optional `meta` object. */
         AdminError: {
             /** @enum {string} */
-            code: "VALIDATION_FAILED" | "UNAUTHORIZED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "PRECONDITION_FAILED" | "PUBLISH_VALIDATION_FAILED" | "RETIRE_BLOCKED" | "RATE_LIMITED" | "INTERNAL_ERROR";
+            code: "VALIDATION_FAILED" | "UNAUTHORIZED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "PRECONDITION_FAILED" | "PUBLISH_VALIDATION_FAILED" | "RETIRE_BLOCKED" | "RATE_LIMITED" | "INTERNAL_ERROR" | "tenant_managed_by_isfc" | "authz_unavailable";
             message: string;
             retryable: boolean;
             retry_after_ms?: number | null;
@@ -1715,7 +1775,7 @@ export interface components {
             email?: string | null;
             name?: string | null;
             roles: components["schemas"]["Role"][];
-            /** @description Tenant scope for tenant_viewer. Empty means all tenants (non-tenant roles). */
+            /** @description Tenant scope for tenant_viewer and tenant_admin. Empty means all tenants (platform roles). */
             tenants: components["schemas"]["Slug"][];
             /** @description Derived action permissions (`<area>:<action>`) for UI gating. The server always re-checks. */
             permissions: string[];
@@ -2553,8 +2613,44 @@ export interface components {
             rps?: number;
             burst?: number;
         };
+        /**
+         * @description Status of the tenant in ISFC, copied by the sync.
+         * @enum {string}
+         */
+        IsfcTenantStatus: "ACTIVE" | "INACTIVE";
+        /**
+         * @description Read-only copy of the tenant's ISFC record (since 2.1.0), written only by the sync.
+         *     `null` on tenants that are not linked to ISFC (legacy tenants, or `HUB_TENANT_SOURCE` other
+         *     than `isfc`). Never settable through this API.
+         */
+        IsfcTenantLink: {
+            /**
+             * Format: uuid
+             * @description ISFC tenant UUID. This is the link.
+             */
+            tenant_id: string;
+            /** @description ISFC tenant key (for example `HL`). */
+            key: string;
+            /** @description ISFC tenant name. */
+            name: string;
+            status: components["schemas"]["IsfcTenantStatus"];
+            /** @description Whether the tenant is in the Hub client's tenants list in ISFC. */
+            linked: boolean;
+            /**
+             * Format: date-time
+             * @description When the sync last refreshed this copy.
+             */
+            synced_at: string;
+        };
+        /**
+         * @description `pending`: created by the sync, the tenant admin has not finished setup, calls are refused.
+         *     `complete`: normal. Tenants created before 2.1.0 are `complete`.
+         * @enum {string}
+         */
+        TenantSetup: "pending" | "complete";
         Tenant: {
             tenant_id: components["schemas"]["Slug"];
+            /** @description The Hub override if one is set, otherwise the ISFC name. */
             display_name: string;
             description?: string | null;
             contact?: string | null;
@@ -2562,6 +2658,8 @@ export interface components {
             disabled: boolean;
             integrations_owned: number;
             active_api_keys: number;
+            setup: components["schemas"]["TenantSetup"];
+            isfc: components["schemas"]["IsfcTenantLink"] | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -2573,6 +2671,8 @@ export interface components {
             disabled: boolean;
             integrations_owned: number;
             active_api_keys: number;
+            setup: components["schemas"]["TenantSetup"];
+            isfc: components["schemas"]["IsfcTenantLink"] | null;
             /** Format: date-time */
             updated_at: string;
         };
@@ -2592,12 +2692,49 @@ export interface components {
             description?: string | null;
             contact?: string | null;
             rate_limit?: components["schemas"]["RateLimit"];
+            /** @description Platform admins only. A `tenant_admin` sending it gets 403. */
             disabled?: boolean;
+            /**
+             * @description Only `complete` is accepted: finishes setup. There is no way back to `pending`.
+             * @constant
+             */
+            setup?: "complete";
             reason: components["schemas"]["Reason"];
         };
         TenantChange: {
             change_id: components["schemas"]["ChangeId"];
             tenant: components["schemas"]["Tenant"];
+        };
+        TenantSyncRequest: {
+            reason: components["schemas"]["Reason"];
+        };
+        /**
+         * @description `ok`: every step worked. `partial`: some tenants failed, the rest were applied. `failed`: ISFC was unreachable or refused; the last good state is kept and nothing is disabled.
+         * @enum {string}
+         */
+        TenantSyncOutcome: "ok" | "partial" | "failed";
+        TenantSyncResult: {
+            change_id: components["schemas"]["ChangeId"];
+            result: components["schemas"]["TenantSyncOutcome"];
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            finished_at: string;
+            /** @description Tenants created (`setup: pending`). */
+            created: number;
+            /** @description Tenants whose ISFC copy changed. */
+            updated: number;
+            /** @description Tenants disabled because ISFC says INACTIVE or unlinked. */
+            disabled: number;
+            unchanged: number;
+            /** @description Short reason when `result` is not `ok`. */
+            error: string | null;
+        };
+        TenantSyncChange: {
+            change_id: components["schemas"]["ChangeId"];
+            result: components["schemas"]["TenantSyncOutcome"];
+            tenant: components["schemas"]["Tenant"];
+            error: string | null;
         };
         /** @enum {string} */
         ApiKeyState: "active" | "expiring" | "revoked" | "expired";
@@ -3108,6 +3245,39 @@ export interface components {
                 "application/json": components["schemas"]["AdminErrorEnvelope"];
             };
         };
+        /** @description The authorization engine could not decide in time (since 2.1.0). The request is refused (fail closed) and is safe to retry. */
+        AuthzUnavailable: {
+            headers: {
+                "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "authz_unavailable",
+                 *         "message": "Authorization is temporarily unavailable",
+                 *         "retryable": true,
+                 *         "retry_after_ms": 1000,
+                 *         "details": [],
+                 *         "meta": null,
+                 *         "request_id": "req_01J9Z3M1A5B7C9D1E3F5G7H9KM"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminErrorEnvelope"];
+            };
+        };
+        /** @description The tenant already exists, or tenants are managed by ISFC. */
+        TenantConflict: {
+            headers: {
+                "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AdminErrorEnvelope"];
+            };
+        };
         /** @description If-Match did not match the current ETag. */
         PreconditionFailed: {
             headers: {
@@ -3361,7 +3531,9 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listVendors: {
@@ -3423,6 +3595,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     createVendor: {
@@ -3497,6 +3670,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getVendor: {
@@ -3609,6 +3783,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     updateVendor: {
@@ -3714,6 +3889,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listVendorEndpoints: {
@@ -3802,6 +3978,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     createVendorEndpoint: {
@@ -3882,6 +4059,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getVendorEndpoint: {
@@ -3959,6 +4137,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listAccounts: {
@@ -4053,6 +4232,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     createAccount: {
@@ -4117,6 +4297,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getAccount: {
@@ -4187,6 +4368,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     updateAccount: {
@@ -4272,6 +4454,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     testAccountConnection: {
@@ -4328,6 +4511,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     addNextCredential: {
@@ -4397,6 +4581,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     promoteNextCredential: {
@@ -4462,6 +4647,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     deleteOldCredential: {
@@ -4520,6 +4706,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     transitionAccountLifecycle: {
@@ -4588,6 +4775,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["LifecycleConflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listTransformers: {
@@ -4662,6 +4850,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     dryRunTransformer: {
@@ -4746,6 +4935,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     runTransformerGoldens: {
@@ -4781,6 +4971,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getTransformer: {
@@ -4859,6 +5050,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listTransformerVersions: {
@@ -4926,6 +5118,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     createTransformerVersion: {
@@ -5019,6 +5212,7 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getTransformerVersion: {
@@ -5091,6 +5285,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listIntegrations: {
@@ -5197,6 +5392,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     createIntegration: {
@@ -5260,6 +5456,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getIntegration: {
@@ -5422,6 +5619,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     updateIntegration: {
@@ -5497,6 +5695,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listIntegrationVersions: {
@@ -5574,6 +5773,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     createIntegrationDraft: {
@@ -5733,6 +5933,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getIntegrationVersion: {
@@ -5769,6 +5970,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     updateIntegrationDraft: {
@@ -6043,6 +6245,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     validateIntegrationVersion: {
@@ -6157,6 +6360,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     publishIntegrationVersion: {
@@ -6216,6 +6420,7 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["PublishValidationFailed"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     rollbackIntegration: {
@@ -6272,6 +6477,7 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["PublishValidationFailed"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     diffIntegrationVersions: {
@@ -6353,6 +6559,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     pauseIntegration: {
@@ -6415,6 +6622,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     resumeIntegration: {
@@ -6477,6 +6685,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     updateIntegrationWeights: {
@@ -6545,6 +6754,7 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["PublishValidationFailed"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listTenants: {
@@ -6588,6 +6798,15 @@ export interface operations {
                      *           "disabled": false,
                      *           "integrations_owned": 3,
                      *           "active_api_keys": 2,
+                     *           "setup": "complete",
+                     *           "isfc": {
+                     *             "tenant_id": "6f1c0b2e-3a4d-4c5e-8f60-1a2b3c4d5e6f",
+                     *             "key": "ORDERS",
+                     *             "name": "Orders service",
+                     *             "status": "ACTIVE",
+                     *             "linked": true,
+                     *             "synced_at": "2026-10-30T11:55:00Z"
+                     *           },
                      *           "updated_at": "2026-10-30T12:00:00Z"
                      *         }
                      *       ],
@@ -6601,6 +6820,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     createTenant: {
@@ -6652,6 +6872,8 @@ export interface operations {
                      *         "disabled": false,
                      *         "integrations_owned": 0,
                      *         "active_api_keys": 0,
+                     *         "setup": "complete",
+                     *         "isfc": null,
                      *         "created_at": "2026-10-31T09:00:00Z",
                      *         "updated_at": "2026-10-31T09:00:00Z"
                      *       }
@@ -6663,8 +6885,9 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["TenantConflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getTenant: {
@@ -6703,6 +6926,15 @@ export interface operations {
                      *       "disabled": false,
                      *       "integrations_owned": 3,
                      *       "active_api_keys": 2,
+                     *       "setup": "complete",
+                     *       "isfc": {
+                     *         "tenant_id": "6f1c0b2e-3a4d-4c5e-8f60-1a2b3c4d5e6f",
+                     *         "key": "ORDERS",
+                     *         "name": "Orders service",
+                     *         "status": "ACTIVE",
+                     *         "linked": true,
+                     *         "synced_at": "2026-10-30T11:55:00Z"
+                     *       },
                      *       "created_at": "2026-06-01T10:00:00Z",
                      *       "updated_at": "2026-10-30T12:00:00Z"
                      *     }
@@ -6714,6 +6946,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     updateTenant: {
@@ -6743,6 +6976,7 @@ export interface operations {
                  *         "rps": 300,
                  *         "burst": 600
                  *       },
+                 *       "setup": "complete",
                  *       "reason": "Festive season traffic"
                  *     }
                  */
@@ -6773,6 +7007,15 @@ export interface operations {
                      *         "disabled": false,
                      *         "integrations_owned": 3,
                      *         "active_api_keys": 2,
+                     *         "setup": "complete",
+                     *         "isfc": {
+                     *           "tenant_id": "6f1c0b2e-3a4d-4c5e-8f60-1a2b3c4d5e6f",
+                     *           "key": "ORDERS",
+                     *           "name": "Orders service",
+                     *           "status": "ACTIVE",
+                     *           "linked": true,
+                     *           "synced_at": "2026-10-30T11:55:00Z"
+                     *         },
                      *         "created_at": "2026-06-01T10:00:00Z",
                      *         "updated_at": "2026-10-31T10:00:00Z"
                      *       }
@@ -6787,6 +7030,130 @@ export interface operations {
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
+        };
+    };
+    syncTenants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "reason": "New tenant linked in ISFC"
+                 *     }
+                 */
+                "application/json": components["schemas"]["TenantSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description The sync ran. `result` says how it went. */
+            200: {
+                headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0NC",
+                     *       "result": "ok",
+                     *       "started_at": "2026-10-31T10:00:00Z",
+                     *       "finished_at": "2026-10-31T10:00:02Z",
+                     *       "created": 1,
+                     *       "updated": 0,
+                     *       "disabled": 0,
+                     *       "unchanged": 4,
+                     *       "error": null
+                     *     }
+                     */
+                    "application/json": components["schemas"]["TenantSyncResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
+        };
+    };
+    syncTenant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant id.
+                 * @example orders-service
+                 */
+                tenant_id: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "reason": "Name changed in ISFC"
+                 *     }
+                 */
+                "application/json": components["schemas"]["TenantSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description The sync ran. `result` says how it went. */
+            200: {
+                headers: {
+                    "X-Hub-Request-Id": components["headers"]["X-Hub-Request-Id"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "change_id": "chg_01J9Z4B2C3D4E5F6G7H8J9K0ND",
+                     *       "result": "ok",
+                     *       "error": null,
+                     *       "tenant": {
+                     *         "tenant_id": "orders-service",
+                     *         "display_name": "Orders service",
+                     *         "description": "Order lifecycle events and notifications",
+                     *         "contact": "orders-team@example.com",
+                     *         "rate_limit": {
+                     *           "rps": 300,
+                     *           "burst": 600
+                     *         },
+                     *         "disabled": false,
+                     *         "integrations_owned": 3,
+                     *         "active_api_keys": 2,
+                     *         "setup": "complete",
+                     *         "isfc": {
+                     *           "tenant_id": "6f1c0b2e-3a4d-4c5e-8f60-1a2b3c4d5e6f",
+                     *           "key": "ORDERS",
+                     *           "name": "Orders service",
+                     *           "status": "ACTIVE",
+                     *           "linked": true,
+                     *           "synced_at": "2026-10-31T10:00:02Z"
+                     *         },
+                     *         "created_at": "2026-06-01T10:00:00Z",
+                     *         "updated_at": "2026-10-31T10:00:02Z"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["TenantSyncChange"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listApiKeys: {
@@ -6854,6 +7221,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     createApiKey: {
@@ -6915,6 +7283,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getApiKey: {
@@ -6962,6 +7331,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     revokeApiKey: {
@@ -7023,6 +7393,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     rotateApiKey: {
@@ -7100,6 +7471,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listRegistrarEndpoints: {
@@ -7160,6 +7532,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     createRegistrarEndpoint: {
@@ -7218,6 +7591,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getRegistrarEndpoint: {
@@ -7264,6 +7638,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     deleteRegistrarEndpoint: {
@@ -7308,6 +7683,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     updateRegistrarEndpoint: {
@@ -7375,6 +7751,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     rotateRegistrarSecret: {
@@ -7435,6 +7812,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listSnapshots: {
@@ -7488,6 +7866,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getLatestSnapshot: {
@@ -7547,6 +7926,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getSnapshot: {
@@ -7599,6 +7979,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getSnapshotBlob: {
@@ -7641,6 +8022,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     searchRequests: {
@@ -7751,6 +8133,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getRequest: {
@@ -7821,6 +8204,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getRequestTimeline: {
@@ -7944,6 +8328,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listRequestAttempts: {
@@ -7996,6 +8381,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     unsealRequest: {
@@ -8070,6 +8456,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listDeadLetters: {
@@ -8166,6 +8553,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getDeadLetter: {
@@ -8250,6 +8638,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     replayDeadLetters: {
@@ -8301,6 +8690,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     purgeDeadLetters: {
@@ -8348,6 +8738,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listBreakers: {
@@ -8422,6 +8813,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getBreaker: {
@@ -8510,6 +8902,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     forceOpenBreaker: {
@@ -8579,6 +8972,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     forceCloseBreaker: {
@@ -8648,6 +9042,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     clearBreakerForce: {
@@ -8717,6 +9112,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     listChangeLog: {
@@ -8803,6 +9199,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
     getChangeLogEntry: {
@@ -8855,6 +9252,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthzUnavailable"];
         };
     };
 }
