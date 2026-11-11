@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `test(frontend)` · Cover the Microsoft SSO round trip against a fake provider (HUB-493) · HUB-493 · F-24
+  - The Microsoft button asks the server for the PKCE challenge and state, opens Hydra's flow in the browser with credentials, goes to Entra, and lands on `/auth/callback`, where the server checks `state` and exchanges the code; the whole chain is tested against fakes (no real ISFC or Entra)
+  - The button shows ISFC and network failures and becomes usable again, also after the browser's back button from Entra; production still waits for ISFC-CR-4 (D9)
 - 2026-11-11 · `chore(hubmcp)` · Re-sync the embedded hubmcp tool contract to 2.1.0 (HUB-471) · HUB-471 · F-24
   - `backend/cmd/hubmcp/hubmcp-tools.json` is again a byte copy of `contracts/mcp/hubmcp-tools.json` (`go generate ./cmd/hubmcp`); the hubmcp tests, including the operation classification that now lists syncTenants and syncTenant, pass
 - 2026-11-11 · `feat(frontend)` · Refresh ISFC tokens once, end expired sessions at /login?expired=1 and log out at ISFC (HUB-492) · HUB-492 · F-24

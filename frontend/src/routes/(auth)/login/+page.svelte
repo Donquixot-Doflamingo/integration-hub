@@ -48,6 +48,13 @@
 	});
 </script>
 
+<!-- Back from Entra (bfcache): the page comes back as it was left, so the button must be usable again. -->
+<svelte:window
+	onpageshow={(e) => {
+		if (e.persisted) microsoftBusy = false;
+	}}
+/>
+
 <svelte:head>
 	<title>{pageTitle('Sign in')}</title>
 </svelte:head>
