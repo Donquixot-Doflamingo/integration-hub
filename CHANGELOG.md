@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(edge)` · Accept ISFC S2S credentials at the edge behind HUB_EDGE_ISFC_AUTH (HUB-486) · HUB-486 · F-24
+  - With `HUB_EDGE_ISFC_AUTH=on` a caller may send `x-isfc-client-id` + `x-isfc-api-key` instead of a Hub key; the key is looked up by hash in memory (no database, no ISFC call) and must belong to that client; both credential kinds in one request is a 400
+  - The tenant is the one the key covers, or the one named by `X-Tenant-Id` when it covers several (missing 400, not covered 403); a pending, disabled or ISFC-inactive tenant is 401, a suspended one 403; the key's permissions give the scopes
+  - `hub_edge_auth_total{method,result}` counts both kinds; gateways reload their key map on a Redis ping and every minute; `hk_` keys behave exactly as before
 - 2026-11-11 · `feat(frontend)` · Add the ISFC login: Email OTP, Microsoft and the callback code exchange (HUB-491) · HUB-491 · F-24
   - The login page lists Email OTP and Microsoft from ISFC's `/oauth2/method/integration-hub-console` (every other method is ignored); with `PUBLIC_AUTH_MODE=isfc` the dev role picker is gone
   - A sign-in generates PKCE (S256), `state` and `nonce` on the server and keeps them in a 10-minute encrypted httpOnly cookie; `/auth/callback` checks `state`, exchanges the code at ISFC with the browser's `x-device-id` and User-Agent, sets the session and removes the code from the URL

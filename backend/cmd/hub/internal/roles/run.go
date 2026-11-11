@@ -166,6 +166,9 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	if isync != nil {
 		wg.Go(func() { isync.run(loopCtx, st.rdb) }) // leader-only inside (AUTH_PLAN §6.2)
 	}
+	if dp != nil && dp.isfcKeys != nil {
+		wg.Go(func() { runCallerKeyLoader(loopCtx, st, dp.isfcKeys, log) })
+	}
 	for _, l := range lns {
 		wg.Go(func() {
 			if err := l.srv.Serve(l.ln); err != nil && !errors.Is(err, http.ErrServerClosed) {

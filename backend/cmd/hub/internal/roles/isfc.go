@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 
@@ -84,4 +85,58 @@ func (s *isfcSync) run(ctx context.Context, rdb *redis.Client) {
 		})
 	}
 	s.loop.Run(ctx)
+}
+
+// keyPoll is the key-table poll that backs up the hub:isfc:keys ping (a var: tests shorten it).
+var keyPoll = time.Minute
+
+// runCallerKeyLoader keeps the gateway's ISFC caller-key map current (AUTH_PLAN §6.2): it loads the
+// table at start (retrying until the first load succeeds, so a node never serves with a map it has
+// not read), reloads on every hub:isfc:keys ping and every keyPoll, and keeps the last good map
+// when the database cannot be read. It touches no registry snapshot. It returns when ctx ends.
+func runCallerKeyLoader(ctx context.Context, st *stores, km *isfc.KeyMap, log *slog.Logger) {
+	load := func() bool {
+		lctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if err := isfcsync.LoadKeyMap(lctx, st.pg, km); err != nil {
+			if ctx.Err() == nil {
+				log.WarnContext(ctx, "isfc caller keys not loaded: keeping the current map", slog.String("error", err.Error()))
+			}
+			return false
+		}
+		return true
+	}
+	ping := make(<-chan *redis.Message)
+	if st.rdb != nil {
+		sub := st.rdb.Subscribe(ctx, ISFCKeysChannel)
+		defer func() { _ = sub.Close() }()
+		ping = sub.Channel()
+	}
+	for !load() { // until the first load: ISFC credentials get 503 NOT_READY meanwhile
+		sleepCtx(ctx, 2*time.Second)
+		if ctx.Err() != nil {
+			return
+		}
+	}
+	log.InfoContext(ctx, "isfc caller keys loaded", slog.Int("keys", km.Len()))
+	t := time.NewTicker(keyPoll)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ping:
+		case <-t.C:
+		}
+		load()
+	}
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
 }

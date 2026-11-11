@@ -475,7 +475,7 @@ Also new for the load runs: `net/http/pprof` is mounted on the ops port of every
 | Metric | `hub_admin_authz_duration_ms` | `decision=allow\|deny\|error` |
 | Metric | `hub_admin_authn_failures_total` | `reason=no_token\|bad_signature\|header_mismatch\|no_roles` |
 | Metric | `hub_stage_duration_ms{stage="auth"}` | unchanged; the ISFC credential path is included |
-| Metric | `hub_edge_auth_total` | `method=isfc\|hub_key`, `result` (tracks the retirement of legacy keys) |
+| Metric | `hub_edge_auth_total` | `method=isfc\|hub_key`, `result=ok\|unauthorized\|forbidden\|bad_request\|not_ready` (tracks the retirement of legacy keys; implemented in HUB-486) |
 | Metric | `hub_isfc_sync_runs_total`, `hub_isfc_sync_failures_total`, `hub_isfc_sync_lag_seconds` | `trigger=event\|tick\|manual` |
 | Metric | `hub_isfc_sync_consecutive_failures` (gauge, HUB-482) | none. Failed runs in a row on the leader; 0 on followers. `hub_isfc_sync_runs_total` also has `result=ok\|partial\|failed`; `hub_isfc_sync_lag_seconds` has no label and is 0 on followers (implemented, HUB-482) |
 | Metric | `hub_isfc_caller_keys` (gauge) | none |

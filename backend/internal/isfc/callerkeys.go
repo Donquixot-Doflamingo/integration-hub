@@ -3,6 +3,8 @@ package isfc
 import (
 	"strings"
 	"sync/atomic"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 )
 
 // ISFC permissions on a caller key that the Hub maps to its key scopes (AUTH_PLAN §8.2).
@@ -51,6 +53,9 @@ type CallerEntry struct {
 	ClientID  string   // the caller client the key was issued to
 	TenantIDs []string // ISFC tenant UUIDs, lower case
 	Scopes    []string // Hub scopes (ScopesFromPermissions)
+	// Key is the entry as the edge's Caller carries it (built by KeyMap.Replace): an active key
+	// with the scopes above, so a request allocates nothing to authenticate.
+	Key registry.APIKey
 }
 
 // KeyMap is the gateway's in-memory map of ACTIVE ISFC caller keys by hash. Readers call Lookup
@@ -76,6 +81,7 @@ func (k *KeyMap) Replace(entries []CallerEntry) {
 	m := make(map[string]*CallerEntry, len(entries))
 	for i := range entries {
 		e := entries[i]
+		e.Key = registry.APIKey{KeyID: e.KeyID, Hash: e.Hash, Scopes: e.Scopes, State: registry.KeyActive}
 		m[e.Hash] = &e
 	}
 	k.m.Store(&m)

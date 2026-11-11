@@ -23,6 +23,7 @@ import (
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/delivery"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/edge"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/idempotency"
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/isfc"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/queue"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/registry"
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/telemetry"
@@ -47,6 +48,7 @@ type dataPlane struct {
 	limiter     *upstream.AccountLimiter
 	rdb         *redis.Client      // hub:creds pings (credential rotation)
 	shadow      *delivery.Shadower // gateway: shadow copies (DESIGN §6.4)
+	isfcKeys    *isfc.KeyMap       // gateway with HUB_EDGE_ISFC_AUTH=on: ISFC caller keys (HUB-486)
 	wg          sync.WaitGroup
 	stop        context.CancelFunc
 }
@@ -124,11 +126,17 @@ func newDataPlane(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 		if err := idem.Warm(ctx); err != nil {
 			log.WarnContext(ctx, "idempotency scripts not preloaded (falls back to EVAL)", slog.String("error", err.Error()))
 		}
-		dp.edge = edge.New(edge.Deps{
+		deps := edge.Deps{
 			Snapshots: &reg.store, Creds: cache, Upstream: client, Breakers: dp.breakers, Limiter: limiter, Audit: dp.audit, Masker: masker, Sealer: sealer, Metrics: m, Log: log,
 			DebugHeaders: cfg.DebugHeaders, Idempotency: idem, Shadow: dp.shadow,
-			Queueing: &edge.Queueing{DB: st.pg, Queue: q, Settler: settler, Name: dp.name},
-		})
+			Queueing:         &edge.Queueing{DB: st.pg, Queue: q, Settler: settler, Name: dp.name},
+			TenantSourceISFC: cfg.ISFC.FromISFC(),
+		}
+		if cfg.ISFC.EdgeAuth { // ISFC S2S credentials next to Hub keys (AUTH_PLAN §8.2)
+			dp.isfcKeys = &isfc.KeyMap{}
+			deps.ISFCKeys = dp.isfcKeys
+		}
+		dp.edge = edge.New(deps)
 	case Worker:
 		dp.worker = &delivery.Worker{
 			Name: dp.name, Pool: cfg.WorkerPool, DB: st.pg, Queue: q, Transitions: dp.transitions, Snapshots: &reg.store,
