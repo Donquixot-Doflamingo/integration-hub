@@ -17,6 +17,10 @@ Entry format: `- YYYY-MM-DD · <document> <version> · <CCR / HUB-###> · <summa
   - New operations `syncTenants` (`POST /tenants/sync`) and `syncTenant` (`POST /tenants/{tenant_id}/sync`), role `admin`, permission `HUB_TENANT:ADMIN`; new schemas `TenantSyncRequest`, `TenantSyncOutcome`, `TenantSyncResult`, `TenantSyncChange`. Hub-admin has 76 operations.
   - New error codes `tenant_managed_by_isfc` (409, `createTenant` in ISFC mode; new response `TenantConflict`) and `authz_unavailable` (503, new response `AuthzUnavailable`, declared on every operation). `Me` is unchanged.
   - Tooling: `tools/check.mjs` knows `tenant_admin` and fails an operation whose `x-required-permission` is not in the catalogue.
+- 2026-11-11 · `hubmcp-tools` 2.1.0 · HUB-471 (AUTH_PLAN §14) · ISFC settings for hubmcp (additive, minor)
+  - New env `HUB_TENANT_ID` (`X-Tenant-Id` for credentials that cover several tenants, and the ISFC tenant of admin calls), `HUB_ISFC_CLIENT_ID` and `HUB_ISFC_API_KEY` (secret; the ISFC backend-client credential for tenant tools, the credential for the streamable-http transport).
+  - `HUB_API_KEY` is no longer unconditionally required: it or the ISFC pair must be set, never both. `HUB_ADMIN_BASE_URL` now says that in ISFC mode it is the gateway route to the admin API; `HUB_ADMIN_TOKEN` may be the user's ISFC JWT.
+  - No tool, input or output changes. Admin write tools stay stdio-only and act as the signed-in user; machine admin access is not offered through MCP.
 - 2026-11-11 · `hubmcp-tools` 2.0.1 · HUB-469 · Tool classification follows hub-admin 2.1.0 (patch)
   - `hub_admin_update_tenant`, `hub_admin_create_registrar_endpoint` and `hub_admin_update_registrar_endpoint` declare `requires.x-required-role: tenant_admin` (the spec's new minimum role). `syncTenants` and `syncTenant` are listed in `not_exposed_operations`. No tool, input or output changes.
 

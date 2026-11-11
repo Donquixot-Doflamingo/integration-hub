@@ -10,7 +10,7 @@ The documents here are the **only** interface between the backend (Go), the admi
 | `openapi/hub-admin.v1.yaml` | **Control plane** `/admin/v1`: vendors and endpoints (with request schemas), accounts, transformers (with samples), integrations (operations and request schemas in versions), tenants, api-keys, registrar endpoints, snapshots, requests, DLQ, breakers, change log, `me` | 2.1.0 |
 | `openapi/mockvendor.v1.yaml` | Control API of `cmd/mockvendor` (test double for every vendor) | 1.0.0 |
 | `schemas/events/` | Outbound callback payloads (`envelope.json`, `request.completed.json`, `request.failed.json`, `request.expired.json`, `delivery.status.json`) and `canonical-error.json`, the canonical error object shared with the public spec | with hub-public |
-| `mcp/hubmcp-tools.json`, `mcp/README.md` | MCP tool contract for `hubmcp` | 2.0.1 |
+| `mcp/hubmcp-tools.json`, `mcp/README.md` | MCP tool contract for `hubmcp` | 2.1.0 |
 | `CHANGELOG.md` | Contract version history | |
 | `notices/` | Contract notices to backend and frontend, one file per round (`docs/process/CONTRACT_CHANGES.md` §6) | |
 | `tools/` | `make contracts-check` toolchain (pinned Redocly CLI + ajv, `check.mjs`, `version-check.mjs`), see "Validate locally" | |
