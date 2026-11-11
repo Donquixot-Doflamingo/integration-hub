@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `chore(isfc)` · Fix lint findings in the ISFC client, mock, sync and wiring (HUB-482) · HUB-482 · F-25
+  - No behaviour change; the events webhook trigger now receives the request context, mockisfc has no unused state, and the ISFC test helpers pass the context
 - 2026-11-11 · `fix(frontend)` · Put refreshed session cookies on proxied admin responses (HUB-492) · HUB-492 · F-24
   - A refreshed ISFC session (rotated tokens) or a tenant adopted from the gateway now reaches the browser on `/admin/v1` responses too; before, SvelteKit dropped the cookie on the proxy's own response and the next refresh would have used a spent token
   - Deleting a cookie on plain http no longer sends `Secure`, which browsers ignore

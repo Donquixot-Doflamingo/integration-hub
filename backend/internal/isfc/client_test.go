@@ -209,7 +209,7 @@ func TestBadCredentialsAndNoSecretInErrorsOrLogs(t *testing.T) {
 	}
 	var logs bytes.Buffer
 	secret := isfc.Secret("super-secret-value")
-	slog.New(slog.NewTextHandler(&logs, nil)).Info("cfg", "secret", secret, "cfg", fmt.Sprintf("%v %+v %#v", secret, secret, secret))
+	slog.New(slog.NewTextHandler(&logs, nil)).InfoContext(t.Context(), "cfg", slog.Any("secret", secret), slog.String("cfg", fmt.Sprintf("%v %+v %#v", secret, secret, secret)))
 	if strings.Contains(logs.String(), "super-secret-value") {
 		t.Fatalf("secret logged: %s", logs.String())
 	}
@@ -225,8 +225,10 @@ func TestNewValidatesConfig(t *testing.T) {
 
 func TestMockTokenAndJWKS(t *testing.T) {
 	_, _, ts := setup(t)
-	resp, err := http.Post(ts.URL+"/oauth2/token", "application/json",
+	treq, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.URL+"/oauth2/token",
 		strings.NewReader(`{"client_id":"`+consoleCli+`","client_secret":"console-secret","grant_type":"client_credentials"}`))
+	treq.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(treq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +236,8 @@ func TestMockTokenAndJWKS(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("token status %d", resp.StatusCode)
 	}
-	jr, err := http.Get(ts.URL + "/.well-known/jwks.json")
+	jreq, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.URL+"/.well-known/jwks.json", nil)
+	jr, err := http.DefaultClient.Do(jreq)
 	if err != nil {
 		t.Fatal(err)
 	}

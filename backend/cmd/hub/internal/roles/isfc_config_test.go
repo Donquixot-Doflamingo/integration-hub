@@ -77,7 +77,7 @@ func TestLoadISFCConfig(t *testing.T) {
 }
 
 func TestNewISFCSyncIsOffByDefault(t *testing.T) {
-	s, err := newISFCSync(Config{}, nil, nil, nil, nil, nil, nil)
+	s, err := newISFCSync(Config{}, nil, nil, nil, nil, nil)
 	if s != nil || err != nil {
 		t.Fatalf("local source built a reconciler: %v %v", s, err)
 	}

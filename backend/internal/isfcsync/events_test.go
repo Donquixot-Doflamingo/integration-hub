@@ -55,7 +55,7 @@ func TestWebhookAcceptsOnlySignedFreshEvents(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var fired atomic.Int32
-			h := &WebhookHandler{Secret: tt.secret, Trigger: func(Event) { fired.Add(1) }, Now: func() time.Time { return now }}
+			h := &WebhookHandler{Secret: tt.secret, Trigger: func(context.Context, Event) { fired.Add(1) }, Now: func() time.Time { return now }}
 			req := signedRequest(t, secret, now, tt.body)
 			if tt.mutate != nil {
 				tt.mutate(req)

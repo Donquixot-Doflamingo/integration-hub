@@ -74,7 +74,7 @@ func (s PGStore) TryRunLock(ctx context.Context) (func(), bool, error) {
 	if err != nil || !ok {
 		return nil, false, err
 	}
-	return func() { unlockConn(conn, lockRun) }, true, nil
+	return func() { unlockConn(conn, lockRun) }, true, nil //nolint:contextcheck // release must work after the caller's context ended
 }
 
 // RecordRun implements Store.

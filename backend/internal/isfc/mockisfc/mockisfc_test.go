@@ -26,7 +26,8 @@ func TestMintedTokenVerifiesAgainstJWKS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := http.Get(ts.URL + "/.well-known/jwks.json")
+	jreq, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.URL+"/.well-known/jwks.json", nil)
+	resp, err := http.DefaultClient.Do(jreq)
 	if err != nil {
 		t.Fatal(err)
 	}

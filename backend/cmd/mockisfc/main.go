@@ -30,7 +30,9 @@ func env(key, def string) string {
 	return def
 }
 
-func main() {
+func main() { os.Exit(run()) }
+
+func run() int {
 	fs := flag.NewFlagSet("mockisfc", flag.ExitOnError)
 	addr := fs.String("addr", env("MOCKISFC_ADDR", "127.0.0.1:8199"), "listen address")
 	hub := fs.String("hub-client", env("MOCKISFC_HUB_CLIENT", "integration-hub"), "the Hub backend client id")
@@ -49,11 +51,12 @@ func main() {
 		<-ctx.Done()
 		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = srv.Shutdown(sctx)
+		_ = srv.Shutdown(sctx) //nolint:contextcheck // a fresh context: ctx has ended
 	}()
-	log.Info("mockisfc listening (test double, no real security)", slog.String("addr", *addr), slog.String("hub_client", *hub))
+	log.InfoContext(ctx, "mockisfc listening (test double, no real security)", slog.String("addr", *addr), slog.String("hub_client", *hub))
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintln(os.Stderr, "mockisfc:", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

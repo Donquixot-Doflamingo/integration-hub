@@ -86,8 +86,8 @@ func Sign(secret []byte, ts time.Time, body []byte) string {
 type WebhookHandler struct {
 	// Secret signs the requests; it is never logged. An empty secret refuses everything.
 	Secret []byte
-	// Trigger is called once per accepted event (cheap, non-blocking).
-	Trigger func(Event)
+	// Trigger is called once per accepted event (cheap, non-blocking), with the request's context.
+	Trigger func(context.Context, Event)
 	// Tolerance is how far a timestamp may be from now (default 5 minutes): old requests are not
 	// replayable beyond it.
 	Tolerance time.Duration
@@ -136,7 +136,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.Trigger != nil {
-		h.Trigger(ev)
+		h.Trigger(r.Context(), ev)
 	}
 	w.WriteHeader(http.StatusAccepted)
 }

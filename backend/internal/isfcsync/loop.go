@@ -138,7 +138,7 @@ type pgLease struct{ conn *pgxpool.Conn }
 
 // TryLead implements Elector.
 func (e PGElector) TryLead(ctx context.Context) (Lease, bool, error) {
-	conn, ok, err := PGStore{Pool: e.Pool}.TryLock(ctx, lockLeader)
+	conn, ok, err := PGStore(e).TryLock(ctx, lockLeader)
 	if err != nil || !ok {
 		return nil, false, err
 	}

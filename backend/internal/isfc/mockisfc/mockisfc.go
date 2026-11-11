@@ -76,7 +76,6 @@ type Key struct {
 type Server struct {
 	opts Options
 	mu   sync.Mutex
-	seq  int
 
 	tenants map[string]*Tenant
 	clients map[string]*client
@@ -109,11 +108,6 @@ func New(o Options) *Server {
 }
 
 // ---- state (Go API) ----
-
-func (s *Server) next(prefix string) string {
-	s.seq++
-	return fmt.Sprintf("%s%d", prefix, s.seq)
-}
 
 func newUUID() string {
 	var b [16]byte

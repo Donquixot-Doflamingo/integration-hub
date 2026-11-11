@@ -102,7 +102,7 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger, opts Options) error 
 	reg.load(ctx)
 	var isync *isfcSync // the worker's ISFC reconciler (HUB_TENANT_SOURCE=isfc)
 	if cfg.Role == Worker {
-		if isync, err = newISFCSync(cfg, metrics, log, secrets, st, reg, isfcsync.NewMetrics(metrics.Registry, nil)); err != nil {
+		if isync, err = newISFCSync(cfg, log, secrets, st, reg, isfcsync.NewMetrics(metrics.Registry, nil)); err != nil {
 			_ = tp.Shutdown(ctx)
 			return err
 		}

@@ -33,7 +33,7 @@ type isfcSync struct {
 
 // newISFCSync builds the reconciler for cfg, or returns nil when tenants are not from ISFC. The
 // client secret joins the redaction set before anything can log.
-func newISFCSync(cfg Config, m *telemetry.Metrics, log *slog.Logger, secrets *telemetry.SecretSet, st *stores, reg *roleRegistry, metrics *isfcsync.Metrics) (*isfcSync, error) {
+func newISFCSync(cfg Config, log *slog.Logger, secrets *telemetry.SecretSet, st *stores, reg *roleRegistry, metrics *isfcsync.Metrics) (*isfcSync, error) {
 	if !cfg.ISFC.FromISFC() {
 		return nil, nil
 	}
@@ -179,15 +179,15 @@ func newISFCAdmin(cfg Config, m *telemetry.Metrics, log *slog.Logger, secrets *t
 	if !cfg.ISFC.FromISFC() {
 		return nil, nil, nil
 	}
-	s, err := newISFCSync(cfg, m, log, secrets, st, reg, isfcsync.NewMetrics(m.Registry, nil))
+	s, err := newISFCSync(cfg, log, secrets, st, reg, isfcsync.NewMetrics(m.Registry, nil))
 	if err != nil {
 		return nil, nil, err
 	}
 	var events http.Handler
 	if cfg.ISFC.EventsSecret != "" {
 		secrets.Add(string(cfg.ISFC.EventsSecret))
-		events = &isfcsync.WebhookHandler{Secret: []byte(cfg.ISFC.EventsSecret), Trigger: func(isfcsync.Event) {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		events = &isfcsync.WebhookHandler{Secret: []byte(cfg.ISFC.EventsSecret), Trigger: func(ctx context.Context, _ isfcsync.Event) {
+			ctx, cancel := context.WithTimeout(ctx, time.Second)
 			defer cancel()
 			if err := st.rdb.Publish(ctx, ISFCSyncChannel, "event").Err(); err != nil {
 				log.WarnContext(ctx, "isfc event ping failed: the next scheduled reconcile picks the change up", slog.String("error", err.Error()))
