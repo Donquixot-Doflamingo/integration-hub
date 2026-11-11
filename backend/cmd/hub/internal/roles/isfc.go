@@ -48,7 +48,13 @@ func newISFCSync(cfg Config, m *telemetry.Metrics, log *slog.Logger, secrets *te
 		},
 	}
 	store := isfcsync.PGStore{Pool: st.pg}
-	rec := &isfcsync.Reconciler{Source: client, Editor: pub, Store: store, Metrics: metrics, Log: log,
+	keys := &isfcsync.KeySync{Source: client, Store: store, BackendClientID: cfg.ISFC.BackendClientID, Metrics: metrics, Log: log,
+		Notify: func(ctx context.Context) { // gateways reload their key map; polling is the fallback
+			if err := st.rdb.Publish(ctx, ISFCKeysChannel, "keys").Err(); err != nil {
+				log.WarnContext(ctx, "isfc key ping failed: gateways reload on their next poll", slog.String("error", err.Error()))
+			}
+		}}
+	rec := &isfcsync.Reconciler{Source: client, Editor: pub, Store: store, Metrics: metrics, Log: log, Keys: keys,
 		Config: isfcsync.Config{ConsoleClientID: cfg.consoleClientID(), BackendClientID: cfg.ISFC.BackendClientID,
 			PlatformTenantID: cfg.ISFCPlatformTenantID, DryRun: cfg.ISFC.SyncDryRun}}
 	return &isfcSync{rec: rec, loop: &isfcsync.Loop{Runner: rec, Elector: isfcsync.PGElector{Pool: st.pg},

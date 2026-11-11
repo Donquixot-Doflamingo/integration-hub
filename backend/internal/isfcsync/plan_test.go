@@ -304,3 +304,15 @@ func TestSetKeysKeepsCommentsAndOtherKeys(t *testing.T) {
 		t.Fatalf("round trip: %v %+v", err, back)
 	}
 }
+
+func TestCallerTenantsResolvesTheInterimMapping(t *testing.T) {
+	a := hubTenant("hl-t", uHL, "HL", "Home Loans", "ACTIVE", true)
+	a.ISFCCallerClients = []string{"billing-backend", "crm-backend"}
+	b := hubTenant("pl-t", strings.ToUpper(uPL), "PL", "Personal", "ACTIVE", true)
+	b.ISFCCallerClients = []string{"billing-backend"}
+	legacy := &registry.Tenant{Tenant: "orders-service", ISFCCallerClients: []string{"ghost-backend"}} // no ISFC link: not a tenant callers can name
+	got := CallerTenants(snapOf(t, a, b, legacy))
+	if strings.Join(got["billing-backend"], ",") != uHL+","+uPL || strings.Join(got["crm-backend"], ",") != uHL || got["ghost-backend"] != nil {
+		t.Fatalf("mapping %v", got)
+	}
+}

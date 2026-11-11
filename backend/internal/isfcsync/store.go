@@ -24,13 +24,14 @@ type RunRecord struct {
 }
 
 // Store is the sync's database: the run log, the change log for runs that change no config, the
-// and the run lock. PGStore is the real one.
+// the run lock and the caller keys. PGStore is the real one.
 type Store interface {
 	// TryRunLock takes the cluster-wide lock that makes two reconciles (the leader's loop and an
 	// admin "Sync now") run one at a time. ok false: another run holds it.
 	TryRunLock(ctx context.Context) (unlock func(), ok bool, err error)
 	RecordRun(ctx context.Context, r RunRecord) error
 	RecordChange(ctx context.Context, c control.Change) (string, error)
+	KeyStore
 }
 
 // Advisory lock ids (hub.isfc_*): leader election and the run lock. Arbitrary but fixed.

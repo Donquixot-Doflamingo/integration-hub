@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(isfcsync)` · Sync ISFC caller keys into hashed rows and rebuild the gateway key map (HUB-483) · HUB-483 · F-24
+  - Each reconcile reads the keys the Hub backend client issued, hashes them while decoding and stores them in `hub.isfc_caller_keys` (the plaintext is never stored or logged); a key that leaves ISFC's configuration becomes REVOKED
+  - A key's tenants come from the tenants' interim `isfc_caller_clients` lists until ISFC-CR-1; permissions `HUB:INVOKE`, `HUB:DRY_RUN`, `HUB:REQUESTS_READ` map to the existing scopes
+  - A change publishes a Redis ping on `hub:isfc:keys` and never a snapshot or a change-log row; gateways reload an in-memory map (`isfc.KeyMap`, lock-free lookups) and `hub_isfc_caller_keys{status}` reports the counts
 - 2026-11-11 · `feat(isfcsync)` · Add the ISFC tenant reconciler with a leader-only loop in the worker (HUB-482) · HUB-482 · F-25
   - With `HUB_TENANT_SOURCE=isfc` the worker leader pulls ISFC every `HUB_ISFC_RECONCILE_INTERVAL` (5 min): tenants linked to the console client are created `setup: pending`, renames and key changes update the isfc copy only, INACTIVE, unlinked or deleted tenants are disabled (never deleted), re-activated ones are re-enabled and keep a Hub suspension
   - Hub tenant ids are derived once from the ISFC key (padded with `-t`, `-2`, `-3` on collision) and never change; the platform tenant is skipped; `HUB_ISFC_SYNC_DRY_RUN=true` only logs
