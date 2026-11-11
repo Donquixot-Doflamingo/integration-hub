@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `docs(adr)` · Add ADR-0027 tenants owned by ISFC with a synced Hub copy (HUB-466) · HUB-466 · F-25
+  - ADR-0027 records the ownership table, tenant lifecycle, derived immutable Hub tenant ids, the pull-based reconciler that events only trigger, and the failure behaviour (planned, EP-15)
 - 2026-11-11 · `docs(adr)` · Add ADR-0026 ISFC identity and per-operation admin policies (HUB-465) · HUB-465 · F-24
   - ADR-0026 records ISFC as the identity provider, the platform tenant, gateway identity plus one OPA policy per admin operation, and the machine-principal rules (planned, EP-15)
   - ADR-0005 and ADR-0022 are marked partly superseded (auth parts only)

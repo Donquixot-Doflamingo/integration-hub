@@ -3726,11 +3726,11 @@ Progress: ADR-0026 written (Accepted 2026-11-11); ADR-0005 and ADR-0022 marked p
 
 ### HUB-466 — ADR-0027: tenants owned by ISFC, Hub keeps a synced copy
 - **Epic:** EP-15 · **Type:** docs · **Area:** docs
-- **Status:** todo · **Depends on:** HUB-464 · **Feature:** F-25 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-464 · **Feature:** F-25 · **Stories:** —
 - **Branch:** `docs/HUB-466-adr-isfc-tenants`
 
 **Acceptance criteria**
-- [ ] ADR-0027 Accepted, covering source-of-truth table, lifecycle, id derivation, reconcile vs events, failure behaviour.
+- [x] ADR-0027 Accepted, covering source-of-truth table, lifecycle, id derivation, reconcile vs events, failure behaviour.
 
 ### HUB-467 — ADR-0028: caller auth with ISFC backend clients, checked in memory
 - **Epic:** EP-15 · **Type:** docs · **Area:** docs
