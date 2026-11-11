@@ -5,6 +5,10 @@ Entry format: `- YYYY-MM-DD · <document> <version> · <CCR / HUB-###> · <summa
 
 ## 2026-11-11
 
+- 2026-11-11 · `hub-public` 2.1.0 · HUB-470 (AUTH_PLAN §14) · ISFC S2S credentials and optional `X-Tenant-Id` (additive, minor)
+  - New security schemes `isfcS2S` (apiKey, header `x-isfc-api-key`) and `isfcS2SClientId` (apiKey, header `x-isfc-client-id`), required together in one security requirement, as an alternative to `bearerAuth` on the global `security` and on `dryRunIntegration` (scope `dry_run`).
+  - New optional header parameter `TenantId` (`X-Tenant-Id`, ISFC tenant UUID) on `invokeIntegration`, `invokeIntegrationOperation`, `dryRunIntegration`, `getRequestStatus`, `listIntegrations` and `getIntegration`: only needed when the credential covers several tenants.
+  - `info.description` documents the two authentication ways. No vendor, account, version or transformer field is added; no response changes (D12 check clean).
 - 2026-11-11 · `hub-admin` 2.1.0 · HUB-469 (AUTH_PLAN §14) · ISFC security schemes, per-operation permissions, tenant ISFC fields and sync operations (additive, minor)
   - Security: `security` now accepts `oidc`, `isfcGateway` (bearer JWT through the ISFC gateway, `X-Tenant-Id` picks the ISFC tenant) or `isfcApiKey` + `isfcApiKeyClientId` (headers `x-isfc-api-key` and `x-isfc-client-id`, required together). `info.description` documents the modes, that machine principals are refused for `unsealRequest` and `purgeDeadLetters`, and fail-closed 503.
   - `x-required-permission` on all 74 existing operations next to `x-required-role` (catalogue of AUTH_PLAN §7.4: `HUB_VENDOR`, `HUB_ACCOUNT`, `HUB_TRANSFORMER`, `HUB_INTEGRATION`, `HUB_TENANT`, `HUB_REQUEST`, `HUB_DLQ`, `HUB_BREAKER`, `HUB_PLATFORM`, each `:READ`, a write tier or an admin tier; `none` for `getMe`). Today's role matrix is unchanged except the tenant_admin operations below.

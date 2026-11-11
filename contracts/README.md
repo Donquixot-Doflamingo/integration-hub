@@ -6,7 +6,7 @@ The documents here are the **only** interface between the backend (Go), the admi
 
 | Path | What | Version |
 | --- | --- | --- |
-| `openapi/hub-public.v1.yaml` | **Caller API**: invoke (with pass-through), request status, discovery (operations with their request schemas), dry-run, inbound vendor webhooks (internal), hand-off return (planned), health, and the outbound callbacks (`webhooks:`) | 2.0.0 |
+| `openapi/hub-public.v1.yaml` | **Caller API**: invoke (with pass-through), request status, discovery (operations with their request schemas), dry-run, inbound vendor webhooks (internal), hand-off return (planned), health, and the outbound callbacks (`webhooks:`) | 2.1.0 |
 | `openapi/hub-admin.v1.yaml` | **Control plane** `/admin/v1`: vendors and endpoints (with request schemas), accounts, transformers (with samples), integrations (operations and request schemas in versions), tenants, api-keys, registrar endpoints, snapshots, requests, DLQ, breakers, change log, `me` | 2.1.0 |
 | `openapi/mockvendor.v1.yaml` | Control API of `cmd/mockvendor` (test double for every vendor) | 1.0.0 |
 | `schemas/events/` | Outbound callback payloads (`envelope.json`, `request.completed.json`, `request.failed.json`, `request.expired.json`, `delivery.status.json`) and `canonical-error.json`, the canonical error object shared with the public spec | with hub-public |
@@ -85,7 +85,7 @@ Since 2.0.0 (ADR-0023) the schemas live in the registry, not in this folder:
 | --- | --- | --- | --- | --- |
 | `VALIDATION_FAILED` | 400 | no | DESIGN §4.4 | Body or declared caller header fails the operation's `request_schema` (only when `validate_input` is on; `details[].pointer`), bad params |
 | `IDEMPOTENCY_KEY_REQUIRED` | 400 | no | **added** | Integration has `moves_money_or_quota` and no `Idempotency-Key` was sent |
-| `UNAUTHORIZED` | 401 | no | §4.4 | Bad or missing key, or bad inbound-webhook signature |
+| `UNAUTHORIZED` | 401 | no | §4.4 | Bad or missing key (tenant API key, or ISFC `x-isfc-api-key` + `x-isfc-client-id`), tenant not set up or disabled, or bad inbound-webhook signature |
 | `FORBIDDEN` | 403 | no | §4.4 | Not owner or grantee (`reason: not_granted`), missing scope (`reason: missing_scope`) |
 | `INTEGRATION_NOT_FOUND` | 404 | no | §4.4 | Unknown integration (also unknown inbound-webhook route) |
 | `OPERATION_NOT_FOUND` | 404 | no | **added** | The integration declares no such `{operation}` |

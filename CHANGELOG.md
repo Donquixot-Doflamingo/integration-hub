@@ -6,6 +6,8 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `contract(public)` · Add ISFC S2S security scheme and optional X-Tenant-Id (HUB-470) · HUB-470 · F-24
+  - hub-public 2.1.0: callers may authenticate with `x-isfc-api-key` + `x-isfc-client-id` instead of a tenant API key, and send `X-Tenant-Id` when the credential covers several tenants; no vendor, account or version leak
 - 2026-11-11 · `docs(product)` · Add the ISFC identity and tenant stories and requirements (HUB-468) · HUB-468 · F-24
   - USER_STORIES gains US-2401 to US-2405 (F-24) and US-2501 to US-2503 (F-25) with Given/When/Then, all marked planned (EP-15)
   - PRD gains deviation DV-8 (ISFC owns identity and tenants, platform tenant), FR-54 to FR-58 and NFR-19, NFR-20
