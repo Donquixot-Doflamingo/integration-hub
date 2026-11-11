@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `perf(edge)` · Benchmark the auth stage with 10k ISFC keys and record the result (HUB-490) · HUB-490 · F-24
+  - `make bench-auth` times the whole auth middleware over 10,000 ISFC keys (and 10,000 Hub keys for comparison) and fails above 100 µs p99; measured p99 is about 2.5 µs, the same as a Hub key
+  - LATENCY.md §7 records the numbers and what the benchmark does not cover; embedded OPA on /v1 stays unneeded
 - 2026-11-11 · `feat(adminapi)` · Add Sync now for ISFC tenants, the events webhook and tenant setup in the admin API (HUB-484) · HUB-484 · F-25
   - `syncTenants` and `syncTenant` run the reconciler on demand and answer with created, updated, disabled and unchanged counts; an unreachable ISFC is 200 `result: failed` and disables nothing; a second sync at the same time is 409; the change log names the operator
   - With `HUB_TENANT_SOURCE=isfc`, `createTenant` answers 409 `tenant_managed_by_isfc`; tenants show `setup` and the read-only `isfc` copy, and the ISFC name is the display name unless the Hub sets one
