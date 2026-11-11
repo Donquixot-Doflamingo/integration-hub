@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(edge)` · Record the ISFC caller client and key id on request.received (HUB-488) · HUB-488 · F-24
+  - For an ISFC credential the `request.received` audit event adds `caller_client_id`, `isfc_key_id` and `auth_method`, next to the key hash; Hub-key requests record what they did before
+  - The `x-isfc-api-key` value is never in an audit event, a record, a response or a log line; a test proves it on success, on a validation failure and on a refused credential
 - 2026-11-11 · `feat(authz)` · Generate one Rego policy per admin operation from the contract (HUB-478) · HUB-478 · F-24
   - `scripts/gen-authz.mjs` reads `x-required-role` and `x-required-permission` from `hub-admin.v1.yaml` and writes one policy per operationId (path regex with gin-style shadowing exclusions, permission, scope, human-only for unseal and purge), `catalogue.json` and the generated RBAC matrix test; it refuses a contract whose roles and permissions drift apart
   - `--check` fails on a missing, stale or disagreeing policy (hand edits that keep path, permission and scope are allowed); `make authz-check` and the `authz` workflow run it with `opa check --strict` and `opa test` (docker when opa is not installed)

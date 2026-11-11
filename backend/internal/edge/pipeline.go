@@ -159,10 +159,14 @@ func transformersMeta(pair registry.TransformerPair) map[string]any {
 }
 
 // receivedMeta is the request.received context: the tenant key appears only as its id and hash
-// (DESIGN §13.1).
+// (DESIGN §13.1). An ISFC credential adds the caller client and the ISFC key id (HUB-488); the
+// x-isfc-api-key value is never recorded, and no other header is copied than the ones listed.
 func receivedMeta(r *http.Request, c Caller) map[string]any {
 	m := map[string]any{"method": r.Method, "path": r.URL.Path, "key_id": c.Key.KeyID, "key_hash": c.Key.Hash,
 		"content_type": r.Header.Get("Content-Type")}
+	if c.Method == MethodISFC {
+		m["auth_method"], m["caller_client_id"], m["isfc_key_id"] = MethodISFC, c.ClientID, c.Key.KeyID
+	}
 	for _, h := range []string{"Idempotency-Key", "Prefer", "X-Request-Deadline", "Traceparent"} {
 		if v := r.Header.Get(h); v != "" {
 			m[h] = v
