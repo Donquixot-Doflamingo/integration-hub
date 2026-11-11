@@ -6,6 +6,9 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(frontend)` · Add a nonce-based Content-Security-Policy to the console (HUB-499) · HUB-499 · F-24
+  - Every console page now sends `default-src 'self'`, script nonces from SvelteKit (no `unsafe-inline`), `frame-ancestors 'none'`, `object-src 'none'` and `base-uri 'self'`; in ISFC mode `connect-src` and `form-action` also allow the `HUB_ISFC_AUTH_URL` origin for the Microsoft step and the login redirect
+  - New Playwright spec `csp.test.ts` checks the header and that signed-in pages raise no violation; the mock e2e suite passes (117 tests); SECURITY §2.2 now describes the policy as implemented (gap G12)
 - 2026-11-11 · `feat(hubctl)` · Add hubctl tenants link and a report of Hub tenants with no ISFC link (HUB-498) · HUB-498 · F-25
   - `hubctl tenants link <hub-id> <isfc-uuid>` writes `isfc.tenant_id` into an existing tenant file in the config tree (comments kept), so the ISFC sync updates that tenant instead of creating a duplicate; it refuses unknown tenants, bad UUIDs, a UUID linked elsewhere, and a relink without `-force`
   - `hubctl tenants link --report` lists Hub tenants without an ISFC link (exit 3 when there are some)

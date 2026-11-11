@@ -3,14 +3,16 @@ import { sequence } from '@sveltejs/kit/hooks';
 import { proxyAdminApi, serializeAdminHeaders } from '$lib/server/admin-proxy';
 import { assertAuthModeAtStartup } from '$lib/server/auth';
 import { attachAdminToken, authenticate } from '$lib/server/auth/hooks';
+import { widenCsp } from '$lib/server/csp';
 import { rejectDoubleSlashPaths } from '$lib/server/security';
 
-// Order matters: path hygiene first (ADR-0009), then the session (HUB-253), then the same-origin
+// Order matters: the CSP header widening wraps everything (HUB-499), then path hygiene first (ADR-0009), then the session (HUB-253), then the same-origin
 // admin API proxy, which needs the session's token (HUB-286, ADR-0022; a no-op unless
 // HUB_ADMIN_UPSTREAM is set), then the SSR header list for admin responses (HUB-289).
 // The login redirect itself lives in routes/(app)/+layout.server.ts so it works for SSR and for
 // client-side navigations (data requests) alike.
 export const handle = sequence(
+	widenCsp,
 	rejectDoubleSlashPaths,
 	authenticate,
 	proxyAdminApi,

@@ -126,6 +126,7 @@ backend-for-frontend, **tokens never reach page JavaScript** ([ADR-0005](../docs
   `HUB_ISFC_REDIRECT_URI` (default `<origin>/auth/callback`), `HUB_ISFC_GATEWAY_URL` (tenant switcher),
   `HUB_ISFC_PLATFORM_TENANT_ID`, `HUB_SESSION_SECRET`, `HUB_ADMIN_UPSTREAM` (the ISFC gateway route of the Hub admin).
   Public: `PUBLIC_AUTH_MODE`, optional `PUBLIC_ISFC_ADMIN_URL` (link to change ISFC-owned tenant data).
+- CSP (HUB-499): every page carries a nonce-based Content-Security-Policy (`kit.csp` in `svelte.config.js`); in ISFC mode `src/lib/server/csp.ts` adds the `HUB_ISFC_AUTH_URL` origin to `connect-src` and `form-action`. Inline scripts in `app.html` need `nonce="%sveltekit.nonce%"`.
 - Tests never call a real ISFC or Entra: `src/lib/testing/fake-isfc.ts` is the fake auth-service and gateway.
 - Gating: `/me` (awaited in `(app)/+layout.ts`) gives `data.access`; wrap mutation controls in `RoleGate`
   (hidden for viewer and tenant viewer, and for everyone when `/me` failed). Roles follow contract 2.1.0:

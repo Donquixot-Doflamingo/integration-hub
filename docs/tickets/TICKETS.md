@@ -4036,15 +4036,17 @@ The link tool works on the tenant YAML tree (`-config-dir`), offline. The admin 
 
 ### HUB-499 — Console Content-Security-Policy (G12)
 - **Epic:** EP-15 · **Type:** feat · **Area:** frontend
-- **Status:** in-progress · **Depends on:** HUB-495 · **Feature:** F-24 · **Stories:** —
+- **Status:** in-review · **Depends on:** HUB-495 · **Feature:** F-24 · **Stories:** —
 - **Branch:** `phase-15/isfc-auth`
 
 Split from HUB-498. SECURITY §2.2 names a strict CSP as the control for console XSS; none was set (gap G12).
 
 **Acceptance criteria**
-- [ ] The console sends a nonce-based CSP (no `unsafe-inline` for scripts; `default-src 'self'`, `frame-ancestors 'none'`, `form-action` and `connect-src` limited to what the ISFC login needs).
-- [ ] `npm run check && npm test` and the mock Playwright e2e pass with no CSP violation in the browser console.
-- [ ] `docs/tech/SECURITY.md` describes the policy as implemented.
+- [x] The console sends a nonce-based CSP (no `unsafe-inline` for scripts; `default-src 'self'`, `frame-ancestors 'none'`, `form-action` and `connect-src` limited to self plus the ISFC auth origin in ISFC mode). Unit-tested; the ISFC-mode origins are not exercised against a real ISFC.
+- [x] `npm run check` and the mock Playwright e2e (117 tests, including the new `csp.test.ts`) pass with no CSP violation reported by the browser.
+- [ ] `npm test` is green: 1992 of 1994 pass; the 2 failures (`roles.gen.ts` and `contract.gen.ts` freshness) predate this ticket and need `npm run gen:api` after the 2.1.1 contract commit.
+- [x] `docs/tech/SECURITY.md` describes the policy as implemented.
+- [ ] Checked in a browser against the real ISFC login (Microsoft step) on QA.
 
 ## Parallel tracks
 
