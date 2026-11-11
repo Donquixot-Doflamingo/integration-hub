@@ -13,6 +13,7 @@
 		changeId,
 		requestId = null,
 		link,
+		tone = 'ok',
 		ondismiss
 	}: {
 		/** "Published v8. It is now the active version." */
@@ -22,12 +23,14 @@
 		requestId?: string | null;
 		/** A follow-up view of what changed, e.g. the replayed dead letters. */
 		link?: { href: string; label: string };
+		/** `warn`: the call worked but the outcome needs attention (a sync that could not reach ISFC). */
+		tone?: 'ok' | 'warn';
 		ondismiss?: () => void;
 	} = $props();
 </script>
 
-<div class="notice" role="status">
-	<Icon name="check" />
+<div class="notice {tone}" role="status">
+	<Icon name={tone === 'warn' ? 'alert' : 'check'} />
 	<div class="body">
 		<p class="message">{message}</p>
 		{#if link}
@@ -69,6 +72,13 @@
 		border-radius: var(--radius-md);
 		background: var(--status-ok-wash);
 		max-width: 72rem;
+	}
+	.notice.warn {
+		border-color: var(--status-warn);
+		background: var(--status-warn-wash);
+	}
+	.notice.warn > :global(.icon) {
+		color: var(--status-warn);
 	}
 	.notice > :global(.icon) {
 		flex: none;

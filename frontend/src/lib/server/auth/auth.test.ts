@@ -132,7 +132,11 @@ describe('guards', () => {
 	it('gives the page the token-free session', () => {
 		const s = session({ accessToken: 'tok' });
 		const out = appLayoutLoad({ locals: { session: s }, url: new URL('http://c.test/') } as never);
-		expect(out).toEqual({ session: toPublicSession(s) });
+		expect(out).toEqual({
+			session: toPublicSession(s),
+			isfcMode: false,
+			isfcAdminUrl: null
+		});
 	});
 
 	it('authenticate drops a cookie that does not verify', async () => {

@@ -6,6 +6,11 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(frontend)` · Show ISFC-managed tenants and add the setup flow and Sync now (HUB-485) · HUB-485 · F-25
+  - The tenant list and page show the ISFC key, name, status, link and last synced as read-only copies (with a link to change them in ISFC) and a "Setup pending" badge; "Create tenant" is hidden when `PUBLIC_AUTH_MODE=isfc`
+  - Admins get "Sync now" (`syncTenants` on the list, `syncTenant` on a tenant) with a reason; a sync that could not reach ISFC is shown as a warning, and a tenant that ISFC deactivated or unlinked reads "Disabled in ISFC"
+  - A tenant admin finishes a pending tenant with "Complete setup" (display name, rate limit, callback endpoints checklist, then `setup: complete`); tenant admins can also edit their tenant and manage its callback endpoints but cannot disable it
+  - Role model follows contract 2.1.0: new `tenant_admin` (admin ⊃ tenant_admin ⊃ tenant_viewer; editor and viewer do not satisfy it); `gen:api` regenerated the client, mocks and role table, and the dev login offers the new role
 - 2026-11-11 · `feat(isfc)` · Add the ISFC auth-service client and the mockisfc fake (HUB-481) · HUB-481 · F-25
   - `internal/isfc` fetches the Hub's own key with client credentials, refreshes it once on 401 or 403, and reads tenants, client metadata and client configuration with timeouts; API keys are hashed while decoded and no secret reaches an error or a log
   - `cmd/mockisfc` (and `internal/isfc/mockisfc`) is a fake auth-service: tenants, client metadata, configuration, key fetch, client-credentials token mint and an RS256 JWKS; every ISFC test uses it, none calls a real ISFC

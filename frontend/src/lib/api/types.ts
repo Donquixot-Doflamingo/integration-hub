@@ -105,6 +105,12 @@ export type Tenant = Schemas['Tenant'];
 export type TenantCreate = Schemas['TenantCreate'];
 export type TenantUpdate = Schemas['TenantUpdate'];
 export type TenantChange = Schemas['TenantChange'];
+// Tenants from ISFC (HUB-485, contract 2.1.0).
+export type IsfcTenantLink = Schemas['IsfcTenantLink'];
+export type TenantSetup = Schemas['TenantSetup'];
+export type TenantSyncResult = Schemas['TenantSyncResult'];
+export type TenantSyncChange = Schemas['TenantSyncChange'];
+export type TenantSyncOutcome = Schemas['TenantSyncOutcome'];
 export type RateLimit = Schemas['RateLimit'];
 /** Query parameters of `listTenants`. */
 export type ListTenantsQuery = NonNullable<Operations['listTenants']['parameters']['query']>;

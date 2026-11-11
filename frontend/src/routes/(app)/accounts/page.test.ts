@@ -6,7 +6,7 @@ import { contractMocks } from '$lib/api/mocks/contract.gen';
 import { mockError, mockOperation, mswPath } from '$lib/api/mocks/handlers';
 import { server } from '$lib/api/mocks/server';
 import type { Role } from '$lib/api/types';
-import { accessFromRoles, type Access } from '$lib/auth/roles';
+import { accessFromRoles, hasRole, type Access } from '$lib/auth/roles';
 import { takeFlash } from '$lib/stores/flash.svelte';
 import { runAction, useActions } from '$lib/testing/forms';
 import { captureConsole, NOWHERE, secretTraces } from '$lib/testing/secrets';
@@ -416,7 +416,6 @@ describe('roles (x-required-role: testAccountConnection = editor, everything els
 		{ name: /^Return to active$/, min: 'admin' },
 		{ name: /^Test connection$/, min: 'editor' }
 	] as const;
-	const RANK: Record<Role, number> = { tenant_viewer: 0, viewer: 1, editor: 2, admin: 3 };
 
 	it.each<Role>(['admin', 'editor', 'viewer'])(
 		'%s sees exactly the controls its role allows',
@@ -426,7 +425,7 @@ describe('roles (x-required-role: testAccountConnection = editor, everything els
 				const found = screen.queryAllByRole('button', { name: c.name });
 				expect({ control: String(c.name), shown: found.length > 0 }).toEqual({
 					control: String(c.name),
-					shown: RANK[role] >= RANK[c.min]
+					shown: hasRole([role], c.min)
 				});
 			}
 		}

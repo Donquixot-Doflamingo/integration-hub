@@ -21,7 +21,10 @@ describe('extract-roles', () => {
 
 	it.each([
 		['purgeDeadLetters', 'admin'],
-		['deleteRegistrarEndpoint', 'admin'],
+		['deleteRegistrarEndpoint', 'tenant_admin'],
+		['updateTenant', 'tenant_admin'],
+		['syncTenants', 'admin'],
+		['syncTenant', 'admin'],
 		['revokeApiKey', 'admin'],
 		['unsealRequest', 'admin'],
 		['forceOpenBreaker', 'admin'],
@@ -31,6 +34,18 @@ describe('extract-roles', () => {
 		['getIntegration', 'tenant_viewer']
 	])('%s needs %s', (op, role) => {
 		expect(requiredRoles[op as keyof typeof requiredRoles]).toBe(role);
+	});
+
+	it('accepts tenant_admin (contract 2.1.0) and still refuses unknown roles', () => {
+		const ok = {
+			paths: { '/t': { patch: { operationId: 'setupT', 'x-required-role': 'tenant_admin' } } }
+		};
+		expect(buildRoles(ok)).toEqual([['setupT', 'tenant_admin']]);
+		expect(() =>
+			buildRoles({
+				paths: { '/t': { get: { operationId: 'x', 'x-required-role': 'tenant_owner' } } }
+			})
+		).toThrow(/tenant_owner/);
 	});
 
 	it('refuses an operation without a valid x-required-role', () => {

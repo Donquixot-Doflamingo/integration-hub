@@ -117,6 +117,37 @@ export const presets: Record<string, () => HttpHandler[]> = {
 		(['createRegistrarEndpoint', 'updateRegistrarEndpoint'] as const).map((op) =>
 			mockError(op, 400, { details: [SSRF_DETAIL] })
 		),
+	/**
+	 * A tenant just created by the ISFC sync (HUB-485): `setup: pending`, so the detail page shows
+	 * the "Complete setup" checklist. Built from the tenant examples with `setup` changed.
+	 */
+	'tenant-pending': () => {
+		const list = contractMocks.listTenants.example;
+		return [
+			mockOperation('getTenant', { ...contractMocks.getTenant.example, setup: 'pending' }),
+			mockOperation('listTenants', {
+				...list,
+				items: list.items.map((t) => ({ ...t, setup: 'pending' as const }))
+			})
+		];
+	},
+	/** "Sync now" when ISFC cannot be reached: the contract answers 200 with `result: failed`. */
+	'sync-failed': () => [
+		mockOperation('syncTenants', {
+			...contractMocks.syncTenants.example,
+			result: 'failed',
+			created: 0,
+			updated: 0,
+			disabled: 0,
+			unchanged: 0,
+			error: 'ISFC auth-service did not answer'
+		}),
+		mockOperation('syncTenant', {
+			...contractMocks.syncTenant.example,
+			result: 'failed',
+			error: 'ISFC auth-service did not answer'
+		})
+	],
 	/** After the force-open example: the board's breaker is held open by an operator. */
 	'breaker-forced': () => [
 		mockOperation('listBreakers', {

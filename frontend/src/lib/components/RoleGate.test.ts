@@ -34,7 +34,18 @@ describe('RoleGate', () => {
 		{ op: 'purgeDeadLetters', role: 'editor', visible: false, needed: 'Admin' },
 		{ op: 'replayDeadLetters', role: 'editor', visible: true, needed: 'Editor' },
 		{ op: 'replayDeadLetters', role: 'viewer', visible: false, needed: 'Editor' },
-		{ op: 'deleteRegistrarEndpoint', role: 'editor', visible: false, needed: 'Admin' },
+		{ op: 'deleteRegistrarEndpoint', role: 'editor', visible: false, needed: 'Tenant admin' },
+		{ op: 'deleteRegistrarEndpoint', role: 'viewer', visible: false, needed: 'Tenant admin' },
+		{
+			op: 'deleteRegistrarEndpoint',
+			role: 'tenant_viewer',
+			visible: false,
+			needed: 'Tenant admin'
+		},
+		{ op: 'deleteRegistrarEndpoint', role: 'tenant_admin', visible: true, needed: 'Tenant admin' },
+		{ op: 'deleteRegistrarEndpoint', role: 'admin', visible: true, needed: 'Tenant admin' },
+		{ op: 'purgeDeadLetters', role: 'tenant_admin', visible: false, needed: 'Admin' },
+		{ op: 'getMe', role: 'tenant_admin', visible: true, needed: 'Tenant viewer' },
 		{ op: 'getMe', role: 'tenant_viewer', visible: true, needed: 'Tenant viewer' }
 	])('op=$op for $role: visible=$visible', ({ op, role, visible, needed }) => {
 		render(RoleGateHarness, { props: { access: accessFromRoles([role]), op } });

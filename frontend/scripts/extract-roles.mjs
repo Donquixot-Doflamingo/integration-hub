@@ -14,7 +14,7 @@ const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const SPEC = join(root, '..', 'contracts', 'openapi', 'hub-admin.v1.yaml');
 const OUT = join(root, 'src', 'lib', 'api', 'roles.gen.ts');
 const METHODS = ['get', 'put', 'post', 'patch', 'delete'];
-const ROLES = ['tenant_viewer', 'viewer', 'editor', 'admin'];
+const ROLES = ['tenant_viewer', 'tenant_admin', 'viewer', 'editor', 'admin'];
 
 /**
  * @param {any} doc parsed OpenAPI document

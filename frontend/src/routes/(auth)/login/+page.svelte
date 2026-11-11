@@ -9,7 +9,7 @@
 	const values = $derived(form?.values);
 	const errorFor = (field: string) => (form?.field === field ? form.message : null);
 	const formError = $derived(form && !form.field ? form.message : null);
-	// The tenant field only matters for tenant_viewer. After a failed post, keep the posted role.
+	// The tenant field only matters for the tenant roles. After a failed post, keep the posted role.
 	let role = $state<string>('editor');
 	$effect.pre(() => {
 		if (values?.role) role = values.role;
@@ -69,8 +69,8 @@
 					{#if errorFor('role')}<p id="role-error" class="field-error">{errorFor('role')}</p>{/if}
 				</fieldset>
 
-				<div class="field" hidden={role !== 'tenant_viewer'}>
-					<label for="tenants">Tenants <span class="hint">(tenant viewer only)</span></label>
+				<div class="field" hidden={role !== 'tenant_viewer' && role !== 'tenant_admin'}>
+					<label for="tenants">Tenants <span class="hint">(tenant roles only)</span></label>
 					<input
 						id="tenants"
 						name="tenants"

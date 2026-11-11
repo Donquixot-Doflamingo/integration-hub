@@ -80,7 +80,7 @@ const NUMBER = /^\d+(\.\d+)?$/;
 const INTEGER = /^\d+$/;
 
 /** Problems with the values, by field name; empty when the form can be sent. */
-export function problems(v: FieldValues, mode: 'create' | 'edit'): FieldErrors {
+export function problems(v: FieldValues, mode: 'create' | 'edit' | 'setup'): FieldErrors {
 	const out: FieldErrors = {};
 	if (mode === 'create') {
 		const id = v.tenant_id.trim();
@@ -154,6 +154,24 @@ export function updateBody(
 	return { ok: true, body };
 }
 
+/**
+ * "Complete setup" (HUB-485, tenant_admin): the same merge-patch as an edit, plus `setup:
+ * 'complete'`. Unlike `updateBody`, nothing changed is fine: a tenant that is right as synced from
+ * ISFC is finished with just the reason. There is no way back to `pending` (contract).
+ */
+export function setupBody(
+	v: FieldValues,
+	before: FieldValues,
+	reason: string
+): Built<TenantUpdate> {
+	const fields = problems(v, 'setup');
+	if (Object.keys(fields).length) return { ok: false, fields };
+	const edit = updateBody(v, before, reason);
+	const body: TenantUpdate = edit.ok ? edit.body : { reason };
+	body.setup = 'complete';
+	return { ok: true, body };
+}
+
 /** True when `updateBody` would send something (the dialog's Confirm). */
 export function hasChanges(v: FieldValues, before: FieldValues): boolean {
 	const r = updateBody(v, before, 'x');
@@ -161,9 +179,13 @@ export function hasChanges(v: FieldValues, before: FieldValues): boolean {
 }
 
 /** The dialog's Confirm: no problems, and (edit) something changed. */
-export function canSend(v: FieldValues, before: FieldValues, mode: 'create' | 'edit'): boolean {
+export function canSend(
+	v: FieldValues,
+	before: FieldValues,
+	mode: 'create' | 'edit' | 'setup'
+): boolean {
 	if (Object.keys(problems(v, mode)).length) return false;
-	return mode === 'create' || hasChanges(v, before);
+	return mode !== 'edit' || hasChanges(v, before);
 }
 
 /** "200 requests/s, burst 400" / "No limit set". */

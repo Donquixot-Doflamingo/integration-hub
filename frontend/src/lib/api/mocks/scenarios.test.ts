@@ -187,7 +187,7 @@ describe('mockAdminFetch (server side, mock builds)', () => {
 			})
 		);
 		expect(res?.status).toBe(403);
-		expect(createHandlers().length).toBe(74);
+		expect(createHandlers().length).toBe(76);
 	});
 });
 

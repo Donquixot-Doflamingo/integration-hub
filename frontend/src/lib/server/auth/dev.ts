@@ -88,7 +88,7 @@ function readIdentity(
 		};
 	}
 	let tenants: string[] = [];
-	if (role === 'tenant_viewer') {
+	if (role === 'tenant_viewer' || role === 'tenant_admin') {
 		tenants = text(form, 'tenants')
 			.split(/[\s,]+/)
 			.filter(Boolean);
@@ -114,7 +114,7 @@ function readIdentity(
 }
 
 /**
- * Dev/mock sign-in: the operator picks a role (and tenants for `tenant_viewer`); no password.
+ * Dev/mock sign-in: the operator picks a role (and tenants for the tenant roles); no password.
  * In mock mode there is no identity provider and no token. Against a running Hub, the admin's
  * dev issuer mints the token (`issuer`). Only active in mock builds or with
  * `PUBLIC_AUTH_MODE=dev` (see `authProvider()`).

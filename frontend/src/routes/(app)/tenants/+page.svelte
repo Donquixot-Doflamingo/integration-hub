@@ -2,7 +2,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { ActionSuccessData } from '$lib/api/actions';
-	import type { TenantChange } from '$lib/api/types';
+	import type { TenantChange, TenantSummary, TenantSyncResult } from '$lib/api/types';
 	import ChangeNotice from '$lib/components/ChangeNotice.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -13,6 +13,13 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { sectionFor } from '$lib/nav';
 	import { formatNumber, formatUtc } from '$lib/utils/format';
+	import {
+		hasIsfcTenants,
+		isfcState,
+		lastSyncedText,
+		latestSync,
+		syncSummary
+	} from '$lib/utils/isfc';
 	import { DEFAULT_PAGE_SIZE, PAGE_SIZES, type Paging } from '$lib/utils/paging';
 	import type { PageData } from './$types';
 	import type { Unavailable } from './+page';
@@ -44,6 +51,27 @@
 		};
 	});
 
+	// The rows on screen, to know whether any tenant comes from ISFC (then "Sync now" is offered).
+	let rows = $state.raw<TenantSummary[]>([]);
+	$effect(() => {
+		let live = true;
+		rows = [];
+		data.list.then((r) => {
+			if (live) rows = r.ok ? r.data.items : [];
+		});
+		return () => {
+			live = false;
+		};
+	});
+	const fromIsfc = $derived(data.isfcMode || hasIsfcTenants(rows));
+	const synced = $derived(latestSync(rows));
+
+	let syncOpen = $state(false);
+	function onSynced(d: ActionSuccessData) {
+		const s = syncSummary(d.result as TenantSyncResult);
+		notice = { message: s.message, tone: s.tone, changeId: d.changeId, requestId: d.requestId };
+	}
+
 	let createOpen = $state(false);
 	let createValues = $state<FieldValues>({ ...EMPTY_VALUES });
 	// A fresh form each time the dialog opens.
@@ -55,6 +83,7 @@
 		changeId: string | null;
 		requestId: string | null;
 		link?: { href: string; label: string };
+		tone?: 'ok' | 'warn';
 	} | null>(null);
 
 	function onCreated(d: ActionSuccessData) {
@@ -106,12 +135,34 @@
 			<a class="clear" href={hrefFor(undefined)}>Clear search</a>
 		{/if}
 	</form>
-	<RoleGate access={data.access} op="createTenant">
-		<button type="button" class="primary" onclick={() => (createOpen = true)}>
-			Create tenant
-		</button>
-	</RoleGate>
+	<div class="buttons">
+		{#if fromIsfc}
+			<RoleGate access={data.access} op="syncTenants">
+				<button type="button" class="secondary" onclick={() => (syncOpen = true)}>
+					<Icon name="retry" size={16} />Sync now
+				</button>
+			</RoleGate>
+		{/if}
+		<!-- ISFC owns tenant creation: a tenant is linked to the Integration Hub client in ISFC. -->
+		{#if !data.isfcMode}
+			<RoleGate access={data.access} op="createTenant">
+				<button type="button" class="primary" onclick={() => (createOpen = true)}>
+					Create tenant
+				</button>
+			</RoleGate>
+		{/if}
+	</div>
 </div>
+
+{#if fromIsfc}
+	<p class="note" data-testid="isfc-note">
+		Tenants come from ISFC: their ISFC fields are read-only copies{#if data.isfcAdminUrl}
+			(change them <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external ISFC URL -->
+			<a href={data.isfcAdminUrl} rel="noreferrer">in ISFC</a>){:else}
+			(change them in ISFC){/if}.
+		{#if synced}Last synced {lastSyncedText(synced)}.{/if}
+	</p>
+{/if}
 
 {#if data.scoped}
 	<p class="note" role="note">You see the tenants your role is limited to.</p>
@@ -132,6 +183,7 @@
 		{ label: 'Tenant' },
 		{ label: 'Name' },
 		{ label: 'Status' },
+		{ label: 'ISFC' },
 		{ label: 'Integrations owned', numeric: true },
 		{ label: 'Active API keys', numeric: true },
 		{ label: 'Updated' }
@@ -146,6 +198,19 @@
 				<StatusBadge tone="neutral" icon="pause" label="Disabled" />
 			{:else}
 				<StatusBadge tone="ok" icon="closed" label="Active" />
+			{/if}
+			{#if t.setup === 'pending'}
+				<StatusBadge tone="warn" icon="alert" label="Setup pending" />
+			{/if}
+		</td>
+		<td>
+			{#if t.isfc}
+				{@const st = isfcState(t.isfc)}
+				<code class="id">{t.isfc.key}</code>
+				<StatusBadge tone={st.tone} icon={st.icon} label={st.label} />
+				<span class="meta">Synced {formatUtc(t.isfc.synced_at)}</span>
+			{:else}
+				<span class="meta">Hub only</span>
 			{/if}
 		</td>
 		<td class="numeric">{formatNumber(t.integrations_owned)}</td>
@@ -191,6 +256,25 @@
 		</ul>
 	</div>
 {/if}
+
+<ConfirmDialog
+	bind:open={syncOpen}
+	title="Sync tenants from ISFC"
+	verb="Sync now"
+	busyVerb="Syncing..."
+	action="?/syncAll"
+	tone="primary"
+	subject="the tenant list"
+	conflictIsStale={false}
+	onsuccess={onSynced}
+>
+	<p>
+		Pulls the current state of every tenant linked to the Integration Hub from ISFC: new tenants are
+		created with setup pending, changed names and statuses are copied, and tenants ISFC reports
+		inactive or unlinked are disabled (never deleted). If ISFC cannot be reached, the last good
+		state is kept and nothing is disabled.
+	</p>
+</ConfirmDialog>
 
 <ConfirmDialog
 	bind:open={createOpen}
@@ -256,6 +340,24 @@
 		border-radius: var(--radius-sm);
 		background: var(--surface);
 		font-size: var(--text-sm);
+	}
+	.buttons {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+	.secondary {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+		height: 2.125rem;
+		padding: 0 1rem;
+		border: 1px solid var(--rule-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		color: var(--ink);
+		font-weight: 700;
+		cursor: pointer;
 	}
 	.apply,
 	.primary {

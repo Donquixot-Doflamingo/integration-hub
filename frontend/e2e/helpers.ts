@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page } from '@playwright/test';
 
-export type Role = 'admin' | 'editor' | 'viewer' | 'tenant_viewer';
+export type Role = 'admin' | 'editor' | 'viewer' | 'tenant_viewer' | 'tenant_admin';
 
 /** Signs in through the dev login page (mock builds use the dev provider, HUB-253). */
 export async function signIn(
@@ -20,9 +20,13 @@ export async function signIn(
 }
 
 export function roleLabel(role: Role): string {
-	return { admin: 'Admin', editor: 'Editor', viewer: 'Viewer', tenant_viewer: 'Tenant viewer' }[
-		role
-	];
+	return {
+		admin: 'Admin',
+		editor: 'Editor',
+		viewer: 'Viewer',
+		tenant_viewer: 'Tenant viewer',
+		tenant_admin: 'Tenant admin'
+	}[role];
 }
 
 export async function expectNoSeriousA11yViolations(page: Page) {

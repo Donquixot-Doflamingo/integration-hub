@@ -17,11 +17,12 @@ export interface Unavailable {
 // of their own tenants with `getTenant` (tenant_viewer) instead, and lists only those.
 export const load: PageLoad = async (event) => {
 	const state = parseListState(event.url.searchParams);
-	const { access } = await event.parent();
+	const { access, isfcMode } = await event.parent();
 	const api = consoleApi(event);
 	if (!access.tenantScoped) {
 		return {
 			state,
+			isfcMode: !!isfcMode,
 			scoped: false,
 			list: api.call((c) => c.GET('/tenants', { params: { query: state.query } })),
 			unavailable: Promise.resolve([] as Unavailable[])
@@ -62,5 +63,5 @@ export const load: PageLoad = async (event) => {
 				: []
 		)
 	);
-	return { state, scoped: true, list, unavailable };
+	return { state, isfcMode: !!isfcMode, scoped: true, list, unavailable };
 };

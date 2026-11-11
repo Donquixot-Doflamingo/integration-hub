@@ -74,7 +74,7 @@ const DESTRUCTIVE: { path: string; name: RegExp; min: Role; role?: 'button' | 'l
 	{ path: '/dlq', name: /^Replay matching/, min: 'editor' },
 	{ path: '/health', name: /^Force open$/, min: 'admin' },
 	{ path: '/integrations/int_evt_brandA', name: /Pause integration/, min: 'editor' },
-	{ path: '/tenants/orders-service', name: /^Delete reg_/, min: 'admin' },
+	{ path: '/tenants/orders-service', name: /^Delete reg_/, min: 'tenant_admin' },
 	{ path: '/tenants/orders-service', name: /^Revoke hk_/, min: 'admin' },
 	{ path: '/tenants/orders-service', name: /^Disable tenant$/, min: 'admin' },
 	{ path: '/vendors/clevertap', name: /^Add endpoint$/, min: 'admin', role: 'link' },
@@ -83,20 +83,27 @@ const DESTRUCTIVE: { path: string; name: RegExp; min: Role; role?: 'button' | 'l
 	{ path: '/accounts/ct-brandA-in', name: /^Start draining$/, min: 'admin' },
 	{ path: '/accounts/ct-brandA-in', name: /^Test connection$/, min: 'editor' }
 ];
-const RANK: Record<Role, number> = { tenant_viewer: 0, viewer: 1, editor: 2, admin: 3 };
+// Which minimum roles each role satisfies (hub-admin 2.1.0: tenant_admin is not above editor).
+const SATISFIES: Record<Role, Role[]> = {
+	admin: ['admin', 'editor', 'viewer', 'tenant_admin', 'tenant_viewer'],
+	editor: ['editor', 'viewer', 'tenant_viewer'],
+	viewer: ['viewer', 'tenant_viewer'],
+	tenant_admin: ['tenant_admin', 'tenant_viewer'],
+	tenant_viewer: ['tenant_viewer']
+};
 
-for (const role of ['admin', 'editor', 'viewer', 'tenant_viewer'] as const) {
+for (const role of ['admin', 'editor', 'viewer', 'tenant_viewer', 'tenant_admin'] as const) {
 	test(`${role} sees only the destructive controls its role allows`, async ({ page }) => {
 		await signIn(page, {
 			role,
-			tenants: role === 'tenant_viewer' ? 'orders-service' : undefined
+			tenants: role === 'tenant_viewer' || role === 'tenant_admin' ? 'orders-service' : undefined
 		});
 		for (const c of DESTRUCTIVE) {
 			await page.goto(c.path);
 			await expect(page.locator('main h1')).toBeVisible();
 			await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
 			const control = page.getByRole(c.role ?? 'button', { name: c.name });
-			if (RANK[role] >= RANK[c.min]) await expect(control.first()).toBeVisible();
+			if (SATISFIES[role].includes(c.min)) await expect(control.first()).toBeVisible();
 			else await expect(control).toHaveCount(0);
 		}
 	});
