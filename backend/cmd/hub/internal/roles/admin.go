@@ -22,7 +22,16 @@ func adminHandler(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 	}
 	var verifier adminapi.Verifier
 	var dev *adminapi.DevIssuer
+	var isfc *adminapi.ISFCAuth
 	switch {
+	case cfg.AdminAuthMode == adminapi.AuthModeISFC:
+		// Identity comes from the ISFC gateway headers plus a Hydra token verified here (RS256 or ES256).
+		isfc = &adminapi.ISFCAuth{
+			Tokens:           &adminapi.JWTVerifier{Issuer: cfg.OIDCIssuer, Audience: cfg.OIDCAudience, Keys: adminapi.RemoteKeys(cfg.OIDCIssuer, nil)},
+			ConsoleClientID:  cfg.ISFCConsoleClientID,
+			PlatformTenantID: cfg.ISFCPlatformTenantID,
+		}
+		log.InfoContext(ctx, "admin auth mode isfc", slog.String("issuer", cfg.OIDCIssuer), slog.String("console_client", cfg.ISFCConsoleClientID))
 	case cfg.AdminDevOIDC:
 		var err error
 		if dev, err = adminapi.NewDevIssuer(cfg.AdminPublicURL); err != nil {
@@ -53,7 +62,7 @@ func adminHandler(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 	} else {
 		log.WarnContext(ctx, "no credential store: rotation endpoints answer 500 until `hubctl creds init-key`", slog.String("error", err.Error()))
 	}
-	api := adminapi.New(adminapi.Deps{Pool: st.pg, Redis: st.rdb, Verifier: verifier, Publisher: pub, Rotator: rot, Archive: reg.archive,
+	api := adminapi.New(adminapi.Deps{Pool: st.pg, Redis: st.rdb, Verifier: verifier, ISFC: isfc, Metrics: m.Registry, Publisher: pub, Rotator: rot, Archive: reg.archive,
 		Snapshot: reg.store.Snapshot, Log: log, Sealer: auditSealer(ctx, cfg, log), Upstream: probe,
 		CallbackHosts: cfg.CallbackHosts})
 	mux := http.NewServeMux()

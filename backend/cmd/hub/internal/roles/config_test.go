@@ -111,6 +111,11 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 			[]string{"worker-concurrency", "worker-claim-batch"}},
 		{"target cap above concurrency", Worker, map[string]string{"HUB_PG_DSN": "x"}, []string{"-worker-concurrency=8", "-worker-target-cap=9"},
 			[]string{"must not exceed"}},
+		{"unknown admin auth mode", Admin, map[string]string{"HUB_PG_DSN": "x", "HUB_ADMIN_AUTH_MODE": "saml"}, nil, []string{"admin-auth-mode"}},
+		{"isfc mode needs issuer and console client", Admin, map[string]string{"HUB_PG_DSN": "x", "HUB_ADMIN_AUTH_MODE": "isfc"}, nil,
+			[]string{"HUB_OIDC_ISSUER", "HUB_ISFC_CONSOLE_CLIENT_ID"}},
+		{"isfc mode refuses the dev issuer", Admin, map[string]string{"HUB_PG_DSN": "x", "HUB_ADMIN_AUTH_MODE": "isfc", "HUB_ADMIN_DEV_OIDC": "true",
+			"HUB_ISFC_CONSOLE_CLIENT_ID": "c"}, nil, []string{"dev OIDC stub"}},
 		{"unknown flag", Gateway, map[string]string{"HUB_PG_DSN": "x"}, []string{"-nope"}, []string{"parse flags"}},
 		{"stray argument", Gateway, map[string]string{"HUB_PG_DSN": "x"}, []string{"extra"}, []string{"unexpected arguments"}},
 	}
@@ -126,6 +131,20 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestAdminAuthModeDefaultsToJWT: HUB_ADMIN_AUTH_MODE is jwt unless set, and isfc mode loads when
+// its settings are present (HUB-473).
+func TestAdminAuthModeDefaultsToJWT(t *testing.T) {
+	c, err := Load(Admin, nil, envMap(map[string]string{"HUB_PG_DSN": "x"}), io.Discard)
+	if err != nil || c.AdminAuthMode != "jwt" {
+		t.Fatalf("%+v %v", c, err)
+	}
+	c, err = Load(Admin, nil, envMap(map[string]string{"HUB_PG_DSN": "x", "HUB_ADMIN_AUTH_MODE": "isfc", "HUB_OIDC_ISSUER": "https://hydra.test",
+		"HUB_ISFC_CONSOLE_CLIENT_ID": "console", "HUB_ISFC_PLATFORM_TENANT_ID": "uuid-1"}), io.Discard)
+	if err != nil || c.AdminAuthMode != "isfc" || c.ISFCConsoleClientID != "console" || c.ISFCPlatformTenantID != "uuid-1" {
+		t.Fatalf("%+v %v", c, err)
 	}
 }
 

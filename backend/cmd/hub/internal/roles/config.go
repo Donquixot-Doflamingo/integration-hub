@@ -97,6 +97,15 @@ type Config struct {
 	OIDCAudience   string
 	AdminDevOIDC   bool
 	AdminPublicURL string // the admin's external base URL (the dev issuer's iss)
+	// AdminAuthMode is HUB_ADMIN_AUTH_MODE: "jwt" (default; OIDCIssuer or the dev issuer, claims
+	// hub_roles / hub_tenants) or "isfc" (ISFC gateway identity, AUTH_PLAN §7). In isfc mode
+	// OIDCIssuer is the Hydra issuer whose RS256 tokens are verified.
+	AdminAuthMode string
+	// ISFCConsoleClientID is the ISFC client id of the Hub console (isfc mode: token client_id and
+	// x-isfc-client-id must equal it). ISFCPlatformTenantID is the ISFC UUID of the platform
+	// tenant: a request in it has platform scope (AUTH_PLAN §2.2).
+	ISFCConsoleClientID  string
+	ISFCPlatformTenantID string
 	// CallbackHosts allowlists registrar endpoint hosts at the admin ("h" or ".suffix"); empty
 	// accepts any public host (the SSRF guard still applies).
 	CallbackHosts []string
@@ -146,6 +155,9 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	fs.StringVar(&c.OIDCIssuer, "oidc-issuer", env("HUB_OIDC_ISSUER", ""), "admin: OIDC issuer URL whose tokens are accepted")
 	fs.StringVar(&c.OIDCAudience, "oidc-audience", env("HUB_OIDC_AUDIENCE", ""), "admin: required token audience (optional)")
 	fs.BoolVar(&devID, "admin-dev-oidc", env("HUB_ADMIN_DEV_OIDC", "false") == "true", "dev only: run the admin OIDC issuer stub")
+	fs.StringVar(&c.AdminAuthMode, "admin-auth-mode", env("HUB_ADMIN_AUTH_MODE", "jwt"), "admin: jwt (default) or isfc (ISFC gateway identity, AUTH_PLAN §7)")
+	fs.StringVar(&c.ISFCConsoleClientID, "isfc-console-client-id", env("HUB_ISFC_CONSOLE_CLIENT_ID", ""), "admin (isfc mode): ISFC client id of the Hub console")
+	fs.StringVar(&c.ISFCPlatformTenantID, "isfc-platform-tenant-id", env("HUB_ISFC_PLATFORM_TENANT_ID", ""), "admin (isfc mode): ISFC tenant UUID of the platform tenant")
 	fs.StringVar(&c.AdminPublicURL, "admin-public-url", env("HUB_ADMIN_PUBLIC_URL", "http://localhost:8081"), "admin: external base URL (dev issuer iss)")
 	var callbackHosts, traceVendors, concurrency, claimBatch, targetCap string
 	fs.StringVar(&concurrency, "worker-concurrency", env("HUB_WORKER_CONCURRENCY", "0"), "worker: attempts in flight (0: 256 messaging, 64 llm)")
@@ -206,10 +218,34 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	if c.AdminDevOIDC && c.OIDCIssuer != "" {
 		errs = append(errs, errors.New("admin-dev-oidc and oidc-issuer are exclusive: the stub would shadow the real issuer"))
 	}
+	switch c.AdminAuthMode {
+	case "jwt":
+	case "isfc":
+		if role == Admin {
+			errs = append(errs, validateISFCAuth(c)...)
+		}
+	default:
+		errs = append(errs, fmt.Errorf("admin-auth-mode: want jwt or isfc, got %q", c.AdminAuthMode))
+	}
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, err
 	}
 	return c, nil
+}
+
+// validateISFCAuth lists what the admin needs in HUB_ADMIN_AUTH_MODE=isfc.
+func validateISFCAuth(c Config) []error {
+	var errs []error
+	if c.OIDCIssuer == "" {
+		errs = append(errs, errors.New("HUB_ADMIN_AUTH_MODE=isfc needs HUB_OIDC_ISSUER (the Hydra issuer that signs the access tokens)"))
+	}
+	if c.AdminDevOIDC {
+		errs = append(errs, errors.New("HUB_ADMIN_AUTH_MODE=isfc cannot run the dev OIDC stub (admin-dev-oidc)"))
+	}
+	if c.ISFCConsoleClientID == "" {
+		errs = append(errs, errors.New("HUB_ADMIN_AUTH_MODE=isfc needs HUB_ISFC_CONSOLE_CLIENT_ID"))
+	}
+	return errs
 }
 
 // splitList splits a comma-separated flag value, dropping blanks.

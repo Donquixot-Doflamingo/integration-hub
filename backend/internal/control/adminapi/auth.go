@@ -20,29 +20,47 @@ import (
 	"time"
 )
 
-// Role is an admin RBAC role (DESIGN §16.1). admin ⊃ editor ⊃ viewer; tenant_viewer is a viewer
-// restricted to the tenants of its token.
+// Role is an admin RBAC role (DESIGN §16.1). admin ⊃ editor ⊃ viewer ⊃ tenant_viewer and
+// admin ⊃ tenant_admin ⊃ tenant_viewer. tenant_viewer and tenant_admin are restricted to the
+// tenants of the principal; editor and viewer do not satisfy tenant_admin (hub-admin 2.1.0).
 type Role string
 
 const (
 	RoleAdmin        Role = "admin"
 	RoleEditor       Role = "editor"
 	RoleViewer       Role = "viewer"
+	RoleTenantAdmin  Role = "tenant_admin"
 	RoleTenantViewer Role = "tenant_viewer"
 )
 
+// rank orders roles for Top (-1: not a role). It is not the hierarchy: see satisfies.
 func (r Role) rank() int {
 	switch r {
 	case RoleAdmin:
-		return 3
+		return 4
 	case RoleEditor:
-		return 2
+		return 3
 	case RoleViewer:
+		return 2
+	case RoleTenantAdmin:
 		return 1
 	case RoleTenantViewer:
 		return 0
 	}
 	return -1
+}
+
+// satisfies reports whether holding r meets an operation's minimum role need.
+func (r Role) satisfies(need Role) bool {
+	switch {
+	case r.rank() < 0 || need.rank() < 0:
+		return false
+	case r == need || r == RoleAdmin || need == RoleTenantViewer:
+		return true
+	case r == RoleEditor:
+		return need == RoleViewer
+	}
+	return false // viewer and tenant_viewer hold nothing more; tenant_admin holds only tenant_viewer
 }
 
 // Principal is the authenticated caller of one admin request.
@@ -51,8 +69,21 @@ type Principal struct {
 	Email     string
 	Name      string
 	Roles     []Role
-	Tenants   []string // tenant_viewer scope; empty for the other roles
+	Tenants   []string // tenant_viewer and tenant_admin scope; empty for the platform roles
 	ExpiresAt time.Time
+
+	// The fields below are set by the ISFC mode only (HUB_ADMIN_AUTH_MODE=isfc).
+
+	// ISFCTenantID is the ISFC tenant of the request (x-isfc-tenant-id).
+	ISFCTenantID string
+	// Machine marks an automation client that sent an ISFC API key (Subject is "client:<id>").
+	Machine bool
+	// ClientID is the ISFC client of the request (x-isfc-client-id).
+	ClientID string
+	// SubType and SubAttrs are the gateway's x-isfc-sub-type and decoded x-isfc-sub-attrs, kept
+	// for the policy input.
+	SubType  string
+	SubAttrs map[string]any
 }
 
 // Top is the highest role the principal holds (-1 rank when none is known).
@@ -68,15 +99,15 @@ func (p Principal) Top() Role {
 
 // Allows reports whether the principal meets an operation's x-required-role.
 func (p Principal) Allows(min Role) bool {
-	top := p.Top()
-	if top.rank() < 0 {
-		return false
-	}
-	return top.rank() >= min.rank()
+	return slices.ContainsFunc(p.Roles, func(r Role) bool { return r.satisfies(min) })
 }
 
-// Scoped reports whether results must be filtered to Tenants (a pure tenant_viewer).
-func (p Principal) Scoped() bool { return p.Top() == RoleTenantViewer }
+// Scoped reports whether results must be filtered to Tenants (a pure tenant_viewer or
+// tenant_admin: no platform role).
+func (p Principal) Scoped() bool {
+	top := p.Top()
+	return top == RoleTenantViewer || top == RoleTenantAdmin
+}
 
 // SeesTenant reports whether a scoped principal may see tenant's objects.
 func (p Principal) SeesTenant(tenant string) bool {

@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(adminapi)` · Map ISFC gateway identity to a Principal behind HUB_ADMIN_AUTH_MODE (HUB-473) · HUB-473 · F-24
+  - `HUB_ADMIN_AUTH_MODE=jwt|isfc` (default `jwt`, unchanged): in `isfc` the admin verifies the Hydra token, cross-checks `x-isfc-sub-id` and `x-isfc-client-id` against it and maps the roles of `x-isfc-sub-attrs` (platform tenant: HUB_ADMIN/EDITOR/VIEWER; linked tenant: HUB_TENANT_ADMIN/VIEWER); `ISFC_ADMIN` is not a Hub admin
+  - New role `tenant_admin` (admin ⊃ tenant_admin ⊃ tenant_viewer; editor and viewer do not satisfy it); malformed attributes or an unknown tenant give no roles (403)
+  - New settings `HUB_ISFC_CONSOLE_CLIENT_ID`, `HUB_ISFC_PLATFORM_TENANT_ID`; new metric `hub_admin_authn_failures_total{reason}`
 - 2026-11-11 · `feat(registry)` · Add ISFC and setup fields to tenants, sync tables and the pending-setup edge check (HUB-480) · HUB-480 · F-25
   - A tenant file may carry `setup: pending|complete`, an `isfc` block (tenant_id, key, name, status, linked, synced_at) and the interim `isfc_caller_clients` list; the loader validates them and rejects two Hub tenants linked to one ISFC tenant; files without them load unchanged
   - Migration 00012 adds `hub.isfc_sync_runs` and `hub.isfc_caller_keys` (hash-only key column)

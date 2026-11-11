@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/audit"
@@ -32,9 +33,14 @@ const Base = "/admin/v1"
 // Deps are the admin server's collaborators. Resource handlers use what they need; nil
 // collaborators make their operations answer 500 INTERNAL_ERROR, never panic.
 type Deps struct {
-	Pool      *pgxpool.Pool
-	Redis     *redis.Client
-	Verifier  Verifier // nil: every request is 401 (no issuer configured)
+	Pool     *pgxpool.Pool
+	Redis    *redis.Client
+	Verifier Verifier // nil: every request is 401 (no issuer configured)
+	// ISFC, when set, switches the server to HUB_ADMIN_AUTH_MODE=isfc: identity comes from the
+	// ISFC gateway headers and a verified token instead of Verifier (nil: the jwt mode).
+	ISFC *ISFCAuth
+	// Metrics receives the auth metrics of the ISFC mode (nil: none are recorded).
+	Metrics   prometheus.Registerer
 	Publisher *control.Publisher
 	Rotator   *control.Rotator
 	Archive   *control.Archive
@@ -65,6 +71,7 @@ type Server struct {
 	d      Deps
 	mux    *http.ServeMux
 	routes []Route
+	authn  *authnMetrics
 }
 
 // New builds the server with every implemented operation registered.
@@ -76,6 +83,9 @@ func New(d Deps) *Server {
 		d.Now = time.Now
 	}
 	s := &Server{d: d, mux: http.NewServeMux()}
+	if d.ISFC != nil {
+		s.authn = newAuthnMetrics(d.Metrics)
+	}
 	s.registerMe()
 	s.registerChangeLog()
 	for _, reg := range registrars {
@@ -120,11 +130,15 @@ func (s *Server) handle(op string, min Role, mutating bool, pattern string, h ht
 		panic("adminapi: pattern needs a method: " + pattern)
 	}
 	s.routes = append(s.routes, Route{Op: op, Method: method, Path: path, Role: min, Mutating: mutating})
-	s.mux.Handle(method+" "+Base+path, s.authorize(min, h))
+	s.mux.Handle(method+" "+Base+path, s.authorize(op, min, h))
 }
 
-// authorize authenticates the bearer token and enforces the operation's minimum role.
-func (s *Server) authorize(min Role, next http.Handler) http.Handler {
+// authorize authenticates the caller and enforces the operation's minimum role. In ISFC mode the
+// identity comes from the gateway headers (authorizeISFC); otherwise from the bearer token.
+func (s *Server) authorize(op string, min Role, next http.Handler) http.Handler {
+	if s.d.ISFC != nil {
+		return s.authorizeISFC(op, min, next)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if !ok || tok == "" {
@@ -144,6 +158,31 @@ func (s *Server) authorize(min Role, next http.Handler) http.Handler {
 				s.d.Log.WarnContext(r.Context(), "token verification failed", slog.String("error", err.Error()))
 			}
 			writeError(w, r, &Error{Status: http.StatusUnauthorized, Code: CodeUnauthorized, Message: msg})
+			return
+		}
+		if !p.Allows(min) {
+			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: fmt.Sprintf("Requires role '%s'", min)})
+			return
+		}
+		ctx := context.WithValue(r.Context(), principalKey{}, p)
+		ctx = control.WithChangeMeta(ctx, p.RoleNames(), RequestID(ctx))
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// authorizeISFC is authorize for HUB_ADMIN_AUTH_MODE=isfc: authenticate (token plus gateway
+// headers), then the in-process role check.
+func (s *Server) authorizeISFC(_ string, min Role, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p, aerr := s.d.ISFC.authenticate(r)
+		if aerr != nil {
+			s.authn.fail(aerr.reason)
+			writeError(w, r, aerr.err)
+			return
+		}
+		if len(p.Roles) == 0 {
+			s.authn.fail(authnNoRoles)
+			writeError(w, r, &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: "No Hub role in this tenant"})
 			return
 		}
 		if !p.Allows(min) {
