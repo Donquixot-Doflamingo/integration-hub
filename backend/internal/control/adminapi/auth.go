@@ -2,9 +2,11 @@ package adminapi
 
 import (
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -116,24 +118,50 @@ var ErrBadToken = errors.New("invalid token")
 
 // claims are the OIDC access-token claims the Hub reads.
 type claims struct {
-	Iss     string   `json:"iss"`
-	Sub     string   `json:"sub"`
-	Aud     any      `json:"aud"`
-	Exp     int64    `json:"exp"`
-	Nbf     int64    `json:"nbf"`
-	Email   string   `json:"email"`
-	Name    string   `json:"name"`
-	Roles   []string `json:"hub_roles"`
-	Tenants []string `json:"hub_tenants"`
+	Iss string `json:"iss"`
+	Sub string `json:"sub"`
+	// ClientID is the OAuth client the token was issued to (Hydra: client_id); the ISFC mode
+	// checks it against the console client.
+	ClientID string   `json:"client_id,omitempty"`
+	Aud      any      `json:"aud"`
+	Exp      int64    `json:"exp"`
+	Nbf      int64    `json:"nbf"`
+	Email    string   `json:"email"`
+	Name     string   `json:"name"`
+	Roles    []string `json:"hub_roles"`
+	Tenants  []string `json:"hub_tenants"`
 }
 
-// JWTVerifier checks ES256 tokens from one issuer against its JSON Web Key Set.
+// Signing algorithms the verifier accepts: an explicit allow-list (never "none", never HS*).
+// ES256 keys are P-256; RS256 keys are RSA of at least minRSABits bits.
+const (
+	algES256   = "ES256"
+	algRS256   = "RS256"
+	minRSABits = 2048
+)
+
+// TokenClaims are the verified claims of a token that the ISFC mode cross-checks against the
+// gateway headers.
+type TokenClaims struct {
+	Subject   string
+	ClientID  string
+	Email     string
+	ExpiresAt time.Time
+}
+
+// TokenVerifier checks a bearer token's signature, issuer and times and returns its claims.
+type TokenVerifier interface {
+	VerifyToken(ctx context.Context, token string) (TokenClaims, error)
+}
+
+// JWTVerifier checks ES256 and RS256 tokens from one issuer against its JSON Web Key Set.
 type JWTVerifier struct {
 	Issuer string
 	// Audience, when set, must appear in the token's aud claim.
 	Audience string
-	// Keys returns the issuer's signing keys by kid; refresh asks for a re-fetch (unknown kid).
-	Keys func(ctx context.Context, refresh bool) (map[string]*ecdsa.PublicKey, error)
+	// Keys returns the issuer's signing keys by kid (*ecdsa.PublicKey or *rsa.PublicKey);
+	// refresh asks for a re-fetch (unknown kid).
+	Keys func(ctx context.Context, refresh bool) (map[string]crypto.PublicKey, error)
 	Now  func() time.Time
 	// Leeway tolerates clock skew on exp and nbf (default 30 s).
 	Leeway time.Duration
@@ -148,58 +176,9 @@ func (v *JWTVerifier) now() time.Time {
 
 // Verify implements Verifier.
 func (v *JWTVerifier) Verify(ctx context.Context, token string) (Principal, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return Principal{}, fmt.Errorf("%w: malformed", ErrBadToken)
-	}
-	var hdr struct {
-		Alg string `json:"alg"`
-		Kid string `json:"kid"`
-	}
-	if err := decodeSegment(parts[0], &hdr); err != nil || hdr.Alg != "ES256" {
-		return Principal{}, fmt.Errorf("%w: unsupported header", ErrBadToken)
-	}
-	keys, err := v.Keys(ctx, false)
+	c, err := v.verify(ctx, token)
 	if err != nil {
-		return Principal{}, fmt.Errorf("signing keys: %w", err)
-	}
-	key, ok := keys[hdr.Kid]
-	if !ok {
-		if keys, err = v.Keys(ctx, true); err != nil {
-			return Principal{}, fmt.Errorf("signing keys: %w", err)
-		}
-		if key, ok = keys[hdr.Kid]; !ok {
-			return Principal{}, fmt.Errorf("%w: unknown signing key", ErrBadToken)
-		}
-	}
-	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil || len(sig) != 64 {
-		return Principal{}, fmt.Errorf("%w: bad signature", ErrBadToken)
-	}
-	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
-	if !ecdsa.Verify(key, digest[:], new(big.Int).SetBytes(sig[:32]), new(big.Int).SetBytes(sig[32:])) {
-		return Principal{}, fmt.Errorf("%w: bad signature", ErrBadToken)
-	}
-	var c claims
-	if err := decodeSegment(parts[1], &c); err != nil {
-		return Principal{}, fmt.Errorf("%w: bad claims", ErrBadToken)
-	}
-	leeway := v.Leeway
-	if leeway == 0 {
-		leeway = 30 * time.Second
-	}
-	now := v.now()
-	switch {
-	case c.Iss != v.Issuer:
-		return Principal{}, fmt.Errorf("%w: wrong issuer", ErrBadToken)
-	case c.Sub == "":
-		return Principal{}, fmt.Errorf("%w: no subject", ErrBadToken)
-	case c.Exp == 0 || now.After(time.Unix(c.Exp, 0).Add(leeway)):
-		return Principal{}, fmt.Errorf("%w: token expired", ErrBadToken)
-	case c.Nbf != 0 && now.Add(leeway).Before(time.Unix(c.Nbf, 0)):
-		return Principal{}, fmt.Errorf("%w: token not yet valid", ErrBadToken)
-	case v.Audience != "" && !audienceHas(c.Aud, v.Audience):
-		return Principal{}, fmt.Errorf("%w: wrong audience", ErrBadToken)
+		return Principal{}, err
 	}
 	p := Principal{Subject: c.Sub, Email: c.Email, Name: c.Name, Tenants: c.Tenants, ExpiresAt: time.Unix(c.Exp, 0).UTC()}
 	for _, r := range c.Roles {
@@ -211,6 +190,92 @@ func (v *JWTVerifier) Verify(ctx context.Context, token string) (Principal, erro
 		p.Tenants = []string{}
 	}
 	return p, nil
+}
+
+// VerifyToken implements TokenVerifier: the same checks as Verify, returning the claims the ISFC
+// mode needs instead of a principal.
+func (v *JWTVerifier) VerifyToken(ctx context.Context, token string) (TokenClaims, error) {
+	c, err := v.verify(ctx, token)
+	if err != nil {
+		return TokenClaims{}, err
+	}
+	return TokenClaims{Subject: c.Sub, ClientID: c.ClientID, Email: c.Email, ExpiresAt: time.Unix(c.Exp, 0).UTC()}, nil
+}
+
+// verify checks signature, issuer, subject, times and audience of a token.
+func (v *JWTVerifier) verify(ctx context.Context, token string) (*claims, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("%w: malformed", ErrBadToken)
+	}
+	var hdr struct {
+		Alg string `json:"alg"`
+		Kid string `json:"kid"`
+	}
+	if err := decodeSegment(parts[0], &hdr); err != nil || (hdr.Alg != algES256 && hdr.Alg != algRS256) {
+		return nil, fmt.Errorf("%w: unsupported header", ErrBadToken)
+	}
+	keys, err := v.Keys(ctx, false)
+	if err != nil {
+		return nil, fmt.Errorf("signing keys: %w", err)
+	}
+	key, ok := keys[hdr.Kid]
+	if !ok {
+		if keys, err = v.Keys(ctx, true); err != nil {
+			return nil, fmt.Errorf("signing keys: %w", err)
+		}
+		if key, ok = keys[hdr.Kid]; !ok {
+			return nil, fmt.Errorf("%w: unknown signing key", ErrBadToken)
+		}
+	}
+	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return nil, fmt.Errorf("%w: bad signature", ErrBadToken)
+	}
+	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
+	if !verifySignature(hdr.Alg, key, digest[:], sig) {
+		return nil, fmt.Errorf("%w: bad signature", ErrBadToken)
+	}
+	var c claims
+	if err := decodeSegment(parts[1], &c); err != nil {
+		return nil, fmt.Errorf("%w: bad claims", ErrBadToken)
+	}
+	leeway := v.Leeway
+	if leeway == 0 {
+		leeway = 30 * time.Second
+	}
+	now := v.now()
+	switch {
+	case c.Iss != v.Issuer:
+		return nil, fmt.Errorf("%w: wrong issuer", ErrBadToken)
+	case c.Sub == "":
+		return nil, fmt.Errorf("%w: no subject", ErrBadToken)
+	case c.Exp == 0 || now.After(time.Unix(c.Exp, 0).Add(leeway)):
+		return nil, fmt.Errorf("%w: token expired", ErrBadToken)
+	case c.Nbf != 0 && now.Add(leeway).Before(time.Unix(c.Nbf, 0)):
+		return nil, fmt.Errorf("%w: token not yet valid", ErrBadToken)
+	case v.Audience != "" && !audienceHas(c.Aud, v.Audience):
+		return nil, fmt.Errorf("%w: wrong audience", ErrBadToken)
+	}
+	return &c, nil
+}
+
+// verifySignature checks sig over digest with key for one allow-listed alg. The key type must
+// match the alg, so an RSA key can never validate an ES256 token or the reverse.
+func verifySignature(alg string, key crypto.PublicKey, digest, sig []byte) bool {
+	switch k := key.(type) {
+	case *ecdsa.PublicKey:
+		if alg != algES256 || len(sig) != 64 {
+			return false
+		}
+		return ecdsa.Verify(k, digest, new(big.Int).SetBytes(sig[:32]), new(big.Int).SetBytes(sig[32:]))
+	case *rsa.PublicKey:
+		if alg != algRS256 || k.N.BitLen() < minRSABits {
+			return false
+		}
+		return rsa.VerifyPKCS1v15(k, crypto.SHA256, digest, sig) == nil
+	}
+	return false
 }
 
 func audienceHas(aud any, want string) bool {
@@ -235,27 +300,44 @@ func decodeSegment(seg string, v any) error {
 	return json.Unmarshal(b, v)
 }
 
-// jwk is one P-256 key of a JSON Web Key Set.
+// jwk is one key of a JSON Web Key Set: P-256 (x, y) or RSA (n, e).
 type jwk struct {
 	Kty string `json:"kty"`
-	Crv string `json:"crv"`
+	Crv string `json:"crv,omitempty"`
 	Kid string `json:"kid"`
 	Use string `json:"use,omitempty"`
 	Alg string `json:"alg,omitempty"`
-	X   string `json:"x"`
-	Y   string `json:"y"`
+	X   string `json:"x,omitempty"`
+	Y   string `json:"y,omitempty"`
+	N   string `json:"n,omitempty"`
+	E   string `json:"e,omitempty"`
 }
 
-// ParseJWKS reads the P-256 keys of a JWKS document; other key types are skipped.
-func ParseJWKS(b []byte) (map[string]*ecdsa.PublicKey, error) {
+// ParseJWKS reads the P-256 and RSA signing keys of a JWKS document. Other key types, encryption
+// keys (use "enc") and RSA keys under 2048 bits are skipped, so a weak or foreign key in the set
+// can never verify a token.
+func ParseJWKS(b []byte) (map[string]crypto.PublicKey, error) {
 	var set struct {
 		Keys []jwk `json:"keys"`
 	}
 	if err := json.Unmarshal(b, &set); err != nil {
 		return nil, fmt.Errorf("jwks: %w", err)
 	}
-	out := map[string]*ecdsa.PublicKey{}
+	out := map[string]crypto.PublicKey{}
 	for _, k := range set.Keys {
+		if k.Use == "enc" {
+			continue
+		}
+		if k.Kty == "RSA" {
+			pub, err := parseRSAKey(k)
+			if err != nil {
+				return nil, err
+			}
+			if pub != nil {
+				out[k.Kid] = pub
+			}
+			continue
+		}
 		if k.Kty != "EC" || k.Crv != "P-256" {
 			continue
 		}
@@ -273,6 +355,22 @@ func ParseJWKS(b []byte) (map[string]*ecdsa.PublicKey, error) {
 	return out, nil
 }
 
+// parseRSAKey reads an RSA JWK. A key under minRSABits (or with an unusable exponent) is
+// skipped (nil, nil); undecodable parameters are an error like the EC ones.
+func parseRSAKey(k jwk) (*rsa.PublicKey, error) {
+	n, errN := base64.RawURLEncoding.DecodeString(k.N)
+	e, errE := base64.RawURLEncoding.DecodeString(k.E)
+	if errN != nil || errE != nil || len(n) == 0 || len(e) == 0 || len(e) > 4 {
+		return nil, fmt.Errorf("jwks: key %q: bad RSA parameters", k.Kid)
+	}
+	mod := new(big.Int).SetBytes(n)
+	exp := int(new(big.Int).SetBytes(e).Int64())
+	if mod.BitLen() < minRSABits || exp < 3 || exp%2 == 0 {
+		return nil, nil
+	}
+	return &rsa.PublicKey{N: mod, E: exp}, nil
+}
+
 func pad32(b []byte) []byte {
 	if len(b) >= 32 {
 		return b
@@ -280,15 +378,15 @@ func pad32(b []byte) []byte {
 	return append(make([]byte, 32-len(b)), b...)
 }
 
-// RemoteKeys fetches the issuer's JWKS through OIDC discovery, caches it and re-fetches on an
+// RemoteKeys fetches the issuer's JWKS (P-256 and RSA keys) through OIDC discovery, caches it and re-fetches on an
 // unknown kid at most once a minute.
-func RemoteKeys(issuer string, client *http.Client) func(context.Context, bool) (map[string]*ecdsa.PublicKey, error) {
+func RemoteKeys(issuer string, client *http.Client) func(context.Context, bool) (map[string]crypto.PublicKey, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
 	var (
 		mu      sync.Mutex
-		keys    map[string]*ecdsa.PublicKey
+		keys    map[string]crypto.PublicKey
 		fetched time.Time
 	)
 	get := func(ctx context.Context, url string, v any) error {
@@ -306,7 +404,7 @@ func RemoteKeys(issuer string, client *http.Client) func(context.Context, bool) 
 		}
 		return json.NewDecoder(http.MaxBytesReader(nil, resp.Body, 1<<20)).Decode(v)
 	}
-	return func(ctx context.Context, refresh bool) (map[string]*ecdsa.PublicKey, error) {
+	return func(ctx context.Context, refresh bool) (map[string]crypto.PublicKey, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		if keys != nil && (!refresh || time.Since(fetched) < time.Minute) {
@@ -361,8 +459,8 @@ func (d *DevIssuer) now() time.Time {
 
 // Verifier verifies this stub's tokens.
 func (d *DevIssuer) Verifier() *JWTVerifier {
-	keys := map[string]*ecdsa.PublicKey{d.kid: &d.key.PublicKey}
-	return &JWTVerifier{Issuer: d.Issuer, Now: d.Now, Keys: func(context.Context, bool) (map[string]*ecdsa.PublicKey, error) { return keys, nil }}
+	keys := map[string]crypto.PublicKey{d.kid: &d.key.PublicKey}
+	return &JWTVerifier{Issuer: d.Issuer, Now: d.Now, Keys: func(context.Context, bool) (map[string]crypto.PublicKey, error) { return keys, nil }}
 }
 
 // Mint signs a token for p, valid for ttl.
