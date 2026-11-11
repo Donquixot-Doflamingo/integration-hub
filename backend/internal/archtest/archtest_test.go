@@ -38,8 +38,11 @@ var allowed = map[string][]string{
 	"isfc":     {"registry"},
 	"isfcsync": {"registry", "control", "isfc"},
 	"webhooks": {"registry", "transform", "audit", "callbacks"},
-	// control/adminapi reuses the callbacks SSRF guard to vet registrar URLs (HUB-206).
-	"control": {"registry", "transform", "resolve", "creds", "upstream", "queue", "audit", "sessions", "callbacks"},
+	// authz is the OPA decision client of the admin plane (HUB-474); it imports nothing internal.
+	"authz": {},
+	// control/adminapi reuses the callbacks SSRF guard to vet registrar URLs (HUB-206) and asks
+	// authz for admin decisions in ISFC mode (HUB-475).
+	"control": {"registry", "transform", "resolve", "creds", "upstream", "queue", "audit", "sessions", "callbacks", "authz"},
 	// testkit holds test-only helpers (in-process mockvendor, fixtures). Production code never imports it.
 	"testkit": {},
 }

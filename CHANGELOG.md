@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(authz)` · Add the OPA decision client for the admin API (HUB-474) · HUB-474 · F-24
+  - New `internal/authz`: a sidecar-compatible OPA input (`sub`, `http`, `client`, `tenant`), deny is a decision and a timeout, error or missing decision is `ErrUnavailable` (fail closed); the API key prints as `***`
+  - Settings `HUB_OPA_URL`, `HUB_OPA_TIMEOUT` (default 200ms), `HUB_OPA_DISABLED` (refused unless `HUB_ENV=test`); metric `hub_admin_authz_duration_ms{decision}` and span `admin.authz.opa`
+  - `internal/testkit/opa` starts a real OPA container for integration tests (skips without docker)
 - 2026-11-11 · `feat(frontend)` · Show ISFC-managed tenants and add the setup flow and Sync now (HUB-485) · HUB-485 · F-25
   - The tenant list and page show the ISFC key, name, status, link and last synced as read-only copies (with a link to change them in ISFC) and a "Setup pending" badge; "Create tenant" is hidden when `PUBLIC_AUTH_MODE=isfc`
   - Admins get "Sync now" (`syncTenants` on the list, `syncTenant` on a tenant) with a reason; a sync that could not reach ISFC is shown as a warning, and a tenant that ISFC deactivated or unlinked reads "Disabled in ISFC"

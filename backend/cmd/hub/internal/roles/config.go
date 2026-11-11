@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Donquixot-Doflamingo/integration-hub/backend/internal/authz"
 )
 
 // Role is one of the Hub's runtime roles. All roles share one binary and one code base.
@@ -106,6 +108,14 @@ type Config struct {
 	// tenant: a request in it has platform scope (AUTH_PLAN §2.2).
 	ISFCConsoleClientID  string
 	ISFCPlatformTenantID string
+	// OPAURL is the OPA sidecar base URL of the admin authorization (HUB_OPA_URL, isfc mode);
+	// OPATimeout bounds one decision (HUB_OPA_TIMEOUT, default 200ms). OPADisabled
+	// (HUB_OPA_DISABLED) skips authorization and is refused unless Env is "test".
+	OPAURL      string
+	OPATimeout  time.Duration
+	OPADisabled bool
+	// Env is HUB_ENV ("test" in tests only; anything else is a real deployment).
+	Env string
 	// CallbackHosts allowlists registrar endpoint hosts at the admin ("h" or ".suffix"); empty
 	// accepts any public host (the SSRF guard still applies).
 	CallbackHosts []string
@@ -158,6 +168,11 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	fs.StringVar(&c.AdminAuthMode, "admin-auth-mode", env("HUB_ADMIN_AUTH_MODE", "jwt"), "admin: jwt (default) or isfc (ISFC gateway identity, AUTH_PLAN §7)")
 	fs.StringVar(&c.ISFCConsoleClientID, "isfc-console-client-id", env("HUB_ISFC_CONSOLE_CLIENT_ID", ""), "admin (isfc mode): ISFC client id of the Hub console")
 	fs.StringVar(&c.ISFCPlatformTenantID, "isfc-platform-tenant-id", env("HUB_ISFC_PLATFORM_TENANT_ID", ""), "admin (isfc mode): ISFC tenant UUID of the platform tenant")
+	var opaTimeout string
+	var opaDisabled bool
+	fs.StringVar(&c.OPAURL, "opa-url", env("HUB_OPA_URL", ""), "admin (isfc mode): OPA sidecar base URL, e.g. http://localhost:8181")
+	fs.StringVar(&opaTimeout, "opa-timeout", env("HUB_OPA_TIMEOUT", "200ms"), "admin (isfc mode): timeout of one OPA decision")
+	fs.BoolVar(&opaDisabled, "opa-disabled", env("HUB_OPA_DISABLED", "false") == "true", "tests only: skip OPA (refused unless HUB_ENV=test)")
 	fs.StringVar(&c.AdminPublicURL, "admin-public-url", env("HUB_ADMIN_PUBLIC_URL", "http://localhost:8081"), "admin: external base URL (dev issuer iss)")
 	var callbackHosts, traceVendors, concurrency, claimBatch, targetCap string
 	fs.StringVar(&concurrency, "worker-concurrency", env("HUB_WORKER_CONCURRENCY", "0"), "worker: attempts in flight (0: 256 messaging, 64 llm)")
@@ -169,6 +184,7 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
 	c.ConfigWatch, c.DebugHeaders, c.CallbackAllowLoopback, c.AdminDevOIDC = watch, debugHeaders, cbLoopback, devID
+	c.OPADisabled, c.Env = opaDisabled, getenv("HUB_ENV")
 	c.CallbackHosts, c.TraceForwardVendors = splitList(callbackHosts), splitList(traceVendors)
 	if fs.NArg() > 0 {
 		return Config{}, fmt.Errorf("unexpected arguments: %v", fs.Args())
@@ -218,6 +234,12 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	if c.AdminDevOIDC && c.OIDCIssuer != "" {
 		errs = append(errs, errors.New("admin-dev-oidc and oidc-issuer are exclusive: the stub would shadow the real issuer"))
 	}
+	if err := authz.CheckDisabled(c.OPADisabled, c.Env); err != nil {
+		errs = append(errs, err)
+	}
+	if c.OPATimeout, err = time.ParseDuration(opaTimeout); err != nil || c.OPATimeout <= 0 {
+		errs = append(errs, fmt.Errorf("opa-timeout: want a positive duration, got %q", opaTimeout))
+	}
 	switch c.AdminAuthMode {
 	case "jwt":
 	case "isfc":
@@ -244,6 +266,9 @@ func validateISFCAuth(c Config) []error {
 	}
 	if c.ISFCConsoleClientID == "" {
 		errs = append(errs, errors.New("HUB_ADMIN_AUTH_MODE=isfc needs HUB_ISFC_CONSOLE_CLIENT_ID"))
+	}
+	if c.OPAURL == "" && !c.OPADisabled {
+		errs = append(errs, errors.New("HUB_ADMIN_AUTH_MODE=isfc needs HUB_OPA_URL (the OPA sidecar that decides every admin request)"))
 	}
 	return errs
 }
