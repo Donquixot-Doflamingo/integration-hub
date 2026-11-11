@@ -235,6 +235,15 @@ func TestNewValidates(t *testing.T) {
 	}
 }
 
+func TestPackageOf(t *testing.T) {
+	if got := PackageOf("integration-hub"); got != DefaultPackage {
+		t.Fatalf("%q", got)
+	}
+	if got := PackageOf("client_ab-cd-ef"); got != "client_abcdef" {
+		t.Fatalf("%q", got)
+	}
+}
+
 func TestCheckDisabled(t *testing.T) {
 	tests := []struct {
 		disabled bool

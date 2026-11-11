@@ -1,0 +1,8 @@
+# Client id of the Integration Hub's backend_services client in ISFC, per environment. The bundle
+# package is the client id with '-' removed (integrationhub). Empty = no bundle in that environment.
+# Locally the id comes from scripts/isfc-seed-hub.py.
+local_client_id: ""
+qa_client_id: ""
+stage_client_id: ""
+prod_client_id: ""
+bundle_path_prefix: integration-hub

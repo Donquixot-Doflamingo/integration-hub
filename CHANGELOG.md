@@ -6,6 +6,10 @@ Find the SHA for an entry with `git log --grep "<summary>"`. Contract versions a
 
 ## [Unreleased]
 
+- 2026-11-11 · `feat(authz)` · Add entry.rego, the permission catalogue and the ISFC seed script for integration-hub (HUB-477) · HUB-477 · F-24
+  - `authz-policies/integration-hub/entry.rego` is the ISFC panel template with the `ISFC_ADMIN` shortcut removed and `platform_scope`, `tenant_scope` and API-key helpers added (a key is judged as a key, the decision meta reports `key_permissions`); `metadata.yaml` and `catalogue.json` (the HUB_* roles and permissions of AUTH_PLAN section 7.4)
+  - `scripts/isfc-seed-hub.py` creates, idempotently and through auth-service's admin APIs only, the console and backend clients, permissions, roles, the platform tenant, mapping, EMAIL_OTP and an optional automation client with a `HUB_CI` key; it never prints a token, secret or key (tested against a fake auth-service)
+  - New setting `HUB_OPA_CLIENT_ID` (default `integration-hub`): the Rego package is the id without `-`, as in the ISFC sidecar
 - 2026-11-11 · `feat(edge)` · Accept ISFC S2S credentials at the edge behind HUB_EDGE_ISFC_AUTH (HUB-486) · HUB-486 · F-24
   - With `HUB_EDGE_ISFC_AUTH=on` a caller may send `x-isfc-client-id` + `x-isfc-api-key` instead of a Hub key; the key is looked up by hash in memory (no database, no ISFC call) and must belong to that client; both credential kinds in one request is a 400
   - The tenant is the one the key covers, or the one named by `X-Tenant-Id` when it covers several (missing 400, not covered 403); a pending, disabled or ISFC-inactive tenant is 401, a suspended one 403; the key's permissions give the scopes

@@ -111,7 +111,10 @@ type Config struct {
 	// OPAURL is the OPA sidecar base URL of the admin authorization (HUB_OPA_URL, isfc mode);
 	// OPATimeout bounds one decision (HUB_OPA_TIMEOUT, default 200ms). OPADisabled
 	// (HUB_OPA_DISABLED) skips authorization and is refused unless Env is "test".
-	OPAURL      string
+	OPAURL string
+	// OPAClientID is the ISFC client id of the Hub backend client (HUB_OPA_CLIENT_ID, default
+	// "integration-hub"); its Rego package is the id with '-' removed, as in the ISFC sidecar.
+	OPAClientID string
 	OPATimeout  time.Duration
 	OPADisabled bool
 	// ISFC is the ISFC tenant and caller plane (HUB_TENANT_SOURCE, HUB_EDGE_ISFC_AUTH, HUB_ISFC_*):
@@ -174,6 +177,7 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	var opaTimeout string
 	var opaDisabled bool
 	fs.StringVar(&c.OPAURL, "opa-url", env("HUB_OPA_URL", ""), "admin (isfc mode): OPA sidecar base URL, e.g. http://localhost:8181")
+	fs.StringVar(&c.OPAClientID, "opa-client-id", env("HUB_OPA_CLIENT_ID", "integration-hub"), "admin (isfc mode): ISFC client id of the Hub backend client; its Rego package is the id without '-'")
 	fs.StringVar(&opaTimeout, "opa-timeout", env("HUB_OPA_TIMEOUT", "200ms"), "admin (isfc mode): timeout of one OPA decision")
 	fs.BoolVar(&opaDisabled, "opa-disabled", env("HUB_OPA_DISABLED", "false") == "true", "tests only: skip OPA (refused unless HUB_ENV=test)")
 	fs.StringVar(&c.AdminPublicURL, "admin-public-url", env("HUB_ADMIN_PUBLIC_URL", "http://localhost:8081"), "admin: external base URL (dev issuer iss)")
@@ -239,6 +243,9 @@ func Load(role Role, args []string, getenv func(string) string, stderr io.Writer
 	}
 	if err := authz.CheckDisabled(c.OPADisabled, c.Env); err != nil {
 		errs = append(errs, err)
+	}
+	if c.OPAClientID == "" || strings.ContainsAny(strings.ReplaceAll(c.OPAClientID, "-", ""), "/?# ") {
+		errs = append(errs, fmt.Errorf("opa-client-id: want a client id (letters, digits, '_' and '-'), got %q", c.OPAClientID))
 	}
 	if c.OPATimeout, err = time.ParseDuration(opaTimeout); err != nil || c.OPATimeout <= 0 {
 		errs = append(errs, fmt.Errorf("opa-timeout: want a positive duration, got %q", opaTimeout))

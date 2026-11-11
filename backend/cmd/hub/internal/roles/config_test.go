@@ -116,6 +116,7 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 			[]string{"HUB_OIDC_ISSUER", "HUB_ISFC_CONSOLE_CLIENT_ID", "HUB_OPA_URL"}},
 		{"OPA cannot be disabled outside tests", Admin, map[string]string{"HUB_PG_DSN": "x", "HUB_OPA_DISABLED": "true"}, nil, []string{"HUB_OPA_DISABLED=true is refused"}},
 		{"OPA cannot be disabled in prod", Admin, map[string]string{"HUB_PG_DSN": "x", "HUB_OPA_DISABLED": "true", "HUB_ENV": "prod"}, nil, []string{"HUB_OPA_DISABLED=true is refused"}},
+		{"bad OPA client id", Admin, map[string]string{"HUB_PG_DSN": "x", "HUB_OPA_CLIENT_ID": "a/b"}, nil, []string{"opa-client-id"}},
 		{"bad OPA timeout", Admin, map[string]string{"HUB_PG_DSN": "x", "HUB_OPA_TIMEOUT": "fast"}, nil, []string{"opa-timeout"}},
 		{"isfc mode refuses the dev issuer", Admin, map[string]string{"HUB_PG_DSN": "x", "HUB_ADMIN_AUTH_MODE": "isfc", "HUB_ADMIN_DEV_OIDC": "true",
 			"HUB_ISFC_CONSOLE_CLIENT_ID": "c"}, nil, []string{"dev OIDC stub"}},
@@ -145,14 +146,14 @@ func TestAdminAuthModeDefaultsToJWT(t *testing.T) {
 		t.Fatalf("%+v %v", c, err)
 	}
 	c, err = Load(Admin, nil, envMap(map[string]string{"HUB_PG_DSN": "x", "HUB_ADMIN_AUTH_MODE": "isfc", "HUB_OIDC_ISSUER": "https://hydra.test",
-		"HUB_ISFC_CONSOLE_CLIENT_ID": "console", "HUB_ISFC_PLATFORM_TENANT_ID": "uuid-1", "HUB_OPA_URL": "http://localhost:8181", "HUB_OPA_TIMEOUT": "50ms"}), io.Discard)
-	if err != nil || c.AdminAuthMode != "isfc" || c.ISFCConsoleClientID != "console" || c.ISFCPlatformTenantID != "uuid-1" || c.OPAURL != "http://localhost:8181" || c.OPATimeout != 50*time.Millisecond {
+		"HUB_ISFC_CONSOLE_CLIENT_ID": "console", "HUB_ISFC_PLATFORM_TENANT_ID": "uuid-1", "HUB_OPA_URL": "http://localhost:8181", "HUB_OPA_TIMEOUT": "50ms", "HUB_OPA_CLIENT_ID": "client_x-y"}), io.Discard)
+	if err != nil || c.AdminAuthMode != "isfc" || c.ISFCConsoleClientID != "console" || c.ISFCPlatformTenantID != "uuid-1" || c.OPAURL != "http://localhost:8181" || c.OPATimeout != 50*time.Millisecond || c.OPAClientID != "client_x-y" {
 		t.Fatalf("%+v %v", c, err)
 	}
 	// HUB_OPA_DISABLED is accepted only with HUB_ENV=test, and then OPA needs no URL.
 	c, err = Load(Admin, nil, envMap(map[string]string{"HUB_PG_DSN": "x", "HUB_ADMIN_AUTH_MODE": "isfc", "HUB_OIDC_ISSUER": "https://hydra.test",
 		"HUB_ISFC_CONSOLE_CLIENT_ID": "console", "HUB_OPA_DISABLED": "true", "HUB_ENV": "test"}), io.Discard)
-	if err != nil || !c.OPADisabled || c.OPATimeout != 200*time.Millisecond {
+	if err != nil || !c.OPADisabled || c.OPATimeout != 200*time.Millisecond || c.OPAClientID != "integration-hub" {
 		t.Fatalf("%+v %v", c, err)
 	}
 }

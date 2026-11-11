@@ -40,7 +40,7 @@ func adminHandler(ctx context.Context, cfg Config, m *telemetry.Metrics, log *sl
 			decider = authz.Disabled{}
 			log.WarnContext(ctx, "admin authorization is DISABLED (HUB_OPA_DISABLED, HUB_ENV=test): every request that authenticates is allowed")
 		} else {
-			c, err := authz.New(authz.Config{URL: cfg.OPAURL, Timeout: cfg.OPATimeout, Metrics: authz.NewMetrics(m.Registry), Tracer: tp.Tracer("hub/admin")})
+			c, err := authz.New(authz.Config{URL: cfg.OPAURL, Package: authz.PackageOf(cfg.OPAClientID), Timeout: cfg.OPATimeout, Metrics: authz.NewMetrics(m.Registry), Tracer: tp.Tracer("hub/admin")})
 			if err != nil {
 				return nil, err
 			}

@@ -27,6 +27,10 @@ const (
 	maxBody        = 1 << 20
 )
 
+// PackageOf is the Rego package of an ISFC client id: the id with '-' removed, the rule the
+// sidecar middleware uses to build /v1/data/<package>/decision.
+func PackageOf(clientID string) string { return strings.ReplaceAll(clientID, "-", "") }
+
 // SpanName is the span around one OPA call (OBSERVABILITY: admin.authz.opa).
 const SpanName = "admin.authz.opa"
 
